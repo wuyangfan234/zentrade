@@ -1,0 +1,144 @@
+{
+ "contract": "swing-desk-tight-v1",
+ "settle_contract": "swing-settle-v2",
+ "window": [
+  "2023-01-03",
+  "2026-09-18"
+ ],
+ "rules": {
+  "long": [
+   "volume_price_surge",
+   "tv_smc_structure",
+   "ibs_mean_reversion"
+  ],
+  "short": [
+   "tv_smc_structure",
+   "tv_chandelier_exit",
+   "tv_halftrend"
+  ]
+ },
+ "universe": "watchlist 58 (2026-10-15)",
+ "r_unit": "per-share R vs plan risk (zone mid to stop), incl. 5bps slippage, no fees, no account limits",
+ "alpha": 0.05,
+ "source": "offline premarket replay calibration (2026-10)",
+ "generated": "2026-10-19T17:18:27+08:00",
+ "long": {
+  "cards": 2302,
+  "filled": 1377,
+  "fill": {
+   "p": 0.5982,
+   "ci": [
+    0.5632,
+    0.6332
+   ],
+   "k": 1377,
+   "n": 2302
+  },
+  "win": {
+   "p": 0.512,
+   "ci": [
+    0.4677,
+    0.5562
+   ],
+   "k": 705,
+   "n": 1377
+  },
+  "target": {
+   "p": 0.2033,
+   "ci": [
+    0.1591,
+    0.2476
+   ],
+   "k": 280,
+   "n": 1377
+  },
+  "stop": {
+   "p": 0.3232,
+   "ci": [
+    0.2789,
+    0.3674
+   ],
+   "k": 445,
+   "n": 1377
+  },
+  "time": {
+   "p": 0.4735,
+   "ci": [
+    0.4292,
+    0.5178
+   ],
+   "k": 652,
+   "n": 1377
+  },
+  "mean_r": {
+   "v": 0.2706,
+   "ci": [
+    -0.0187,
+    0.5125
+   ],
+   "n": 1377
+  }
+ },
+ "short": {
+  "cards": 384,
+  "filled": 265,
+  "fill": {
+   "p": 0.6901,
+   "ci": [
+    0.6104,
+    0.7698
+   ],
+   "k": 265,
+   "n": 384
+  },
+  "win": {
+   "p": 0.5019,
+   "ci": [
+    0.4071,
+    0.5966
+   ],
+   "k": 133,
+   "n": 265
+  },
+  "target": {
+   "p": 0.2189,
+   "ci": [
+    0.1241,
+    0.3136
+   ],
+   "k": 58,
+   "n": 265
+  },
+  "stop": {
+   "p": 0.3358,
+   "ci": [
+    0.2411,
+    0.4306
+   ],
+   "k": 89,
+   "n": 265
+  },
+  "time": {
+   "p": 0.4453,
+   "ci": [
+    0.3505,
+    0.54
+   ],
+   "k": 118,
+   "n": 265
+  },
+  "mean_r": {
+   "v": 0.1477,
+   "ci": [
+    -0.4145,
+    0.7225
+   ],
+   "n": 265
+  }
+ },
+ "void_rule": "long day-1: last premarket 30m close (04:00-09:00 ET) < stop -> card void",
+ "void_cards": {
+  "long": 24,
+  "short": 0
+ }
+}

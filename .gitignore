@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.python-version
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+.uv/
+
+# Node / pnpm / Vite
+node_modules/
+.pnpm-store/
+.pnpm-debug.log*
+.npm/
+*.log
+frontend/dist/
+frontend/.vite/
+frontend/tsconfig*.tsbuildinfo
+backend/static/
+backend/app/static/
+
+# IDE and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+._*
+.playwright-mcp/
+.trae/
+.zcode/
+.cursor/debug-*.log
+
+# Runtime data and user-generated content
+data/**
+!data/.gitkeep
+backend/data/**
+!backend/data/.gitkeep
+backend/user_prompts/
+*.xlsx
+
+# Secrets and local environment files
+.env
+.env.*
+!.env.example
+backend/.env
+
+# Temporary research, reports and debugging output
+reports/
+backend._recheck*.py
+backend/_verify*.py
+backend/_desktop_run.log

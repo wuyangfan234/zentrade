@@ -1,0 +1,55 @@
+{
+  "version": 1,
+  "revision": 3,
+  "updated_at": "2026-10-02",
+  "note": "revision 3: 修复突破形态整理期<15天时ATR记0、收缩检查被跳过的问题(ATR按实际可用根数算,至少5根;算不出则不成卡;排序下限0.3)；其余阈值不变",
+  "universe": {
+    "min_price": 5.0,
+    "min_atr_pct": 0.5,
+    "min_adv_usd": 20000000,
+    "min_history_days": 130,
+    "min_days_low_price": 3.0,
+    "no_reverse_split_days": 365
+  },
+  "breakout": {
+    "leg_min_gain_pct": 30.0,
+    "leg_window_days": 60,
+    "leg_max_days": 30,
+    "cons_min_days": 10,
+    "cons_max_days": 40,
+    "cons_max_retrace_frac": 0.5,
+    "cons_atr_shrink": 0.7,
+    "ma10_tolerance_pct": 2.0,
+    "entry_zone_above_pct": [
+      0.5,
+      1.5
+    ],
+    "min_reward_risk": 2.0
+  },
+  "pullback": {
+    "trend_ma": 50,
+    "rs_top_pct": 20,
+    "retrace_pct": [
+      5.0,
+      12.0
+    ],
+    "lookback_high_days": 20,
+    "volume_dryup_ratio": 0.8,
+    "volume_ma_days": 20,
+    "entry_zone_pct": 1.0,
+    "min_reward_risk": 2.0
+  },
+  "portfolio": {
+    "daily_new_cards_max": 5,
+    "same_symbol_cooldown_days": 3,
+    "sector_max_active": 2,
+    "max_portfolio_risk_pct": 6.0,
+    "watchlist_promotion_days": 5
+  },
+  "market_gate": {
+    "index_symbol": "SPY",
+    "ma_days": 200,
+    "caution_card_max": 2,
+    "caution_risk_pct": 3.0
+  }
+}

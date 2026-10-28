@@ -1,0 +1,10 @@
+name: sec_edgar
+display_name: "SEC EDGAR (美股财务)"
+runtime: none
+entry: app.plugins.sec_edgar.provider:SecEdgarProvider
+check: app.plugins.sec_edgar.provider:availability
+datasets: [financial]
+hidden: false
+description: "SEC 官方 XBRL companyfacts：三大报表、关键指标与总股本，按首次申报日点时对齐；免费、无需 Key。EDGAR 拿不到的标的由 Finnhub（已有 Key）补指标与股本。每晚盘后轮转同步。"
+install_hint: ""
+homepage: "https://www.sec.gov/search-filings/edgar-application-programming-interfaces"

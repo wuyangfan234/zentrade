@@ -1,0 +1,11 @@
+name: qveris
+display_name: "QVeris (付费金融数据)"
+runtime: none
+entry: app.plugins.qveris.provider:QverisProvider
+check: app.plugins.qveris.provider:availability
+datasets: []
+api_key_env: QVERIS_API_KEY
+hidden: false
+description: "QVeris 按次计费的金融数据路由（1 积分约 $0.002）。ZenTrade 只用三项：美股期权全链（含希腊值与隐含波动率，Alpha Vantage，1 积分/次，个股弹窗点击才查）、财报一致预期（EPS/营收共识与修正，1 积分/次，点击或每日自动查 10 个交易日内有财报的持仓与候选）、财报电话会全文（1 积分/次，点击才查，永久缓存）。每日积分上限、缓存命中免费、扣费调用不自动重试。只展示与辅助判断，不参与开仓。"
+install_hint: ""
+homepage: "https://qveris.ai"

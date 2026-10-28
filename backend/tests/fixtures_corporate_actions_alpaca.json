@@ -1,0 +1,747 @@
+{
+  "hist_2024": {
+    "corporate_actions": {
+      "cash_dividends": [
+        {
+          "cusip": "11135F101",
+          "ex_date": "2024-06-24",
+          "foreign": false,
+          "id": "0cc501cc-789c-45ef-841f-f43a4f7e7a3c",
+          "payable_date": "2024-06-28",
+          "process_date": "2024-06-28",
+          "rate": 5.25,
+          "record_date": "2024-06-24",
+          "special": false,
+          "symbol": "AVGO"
+        },
+        {
+          "cusip": "67066G104",
+          "ex_date": "2024-06-11",
+          "foreign": false,
+          "id": "034a1fb6-d381-451f-aa76-ae3f1e151fed",
+          "payable_date": "2024-06-28",
+          "process_date": "2024-06-28",
+          "rate": 0.01,
+          "record_date": "2024-06-11",
+          "special": false,
+          "symbol": "NVDA"
+        }
+      ],
+      "forward_splits": [
+        {
+          "cusip": "11135F101",
+          "due_bill_redemption_date": "2024-07-15",
+          "ex_date": "2024-07-15",
+          "id": "ab22e5df-2b84-427e-84c7-c0e6e24c4696",
+          "new_rate": 10,
+          "old_rate": 1,
+          "payable_date": "2024-07-12",
+          "process_date": "2024-07-15",
+          "record_date": "2024-07-11",
+          "symbol": "AVGO"
+        },
+        {
+          "cusip": "169656105",
+          "due_bill_redemption_date": "2024-06-26",
+          "ex_date": "2024-06-26",
+          "id": "61d0f2ba-e010-44e6-a53f-63d8d14a3f5f",
+          "new_rate": 50,
+          "old_rate": 1,
+          "payable_date": "2024-06-25",
+          "process_date": "2024-06-26",
+          "record_date": "2024-06-18",
+          "symbol": "CMG"
+        },
+        {
+          "cusip": "67066G104",
+          "due_bill_redemption_date": "2024-06-10",
+          "ex_date": "2024-06-10",
+          "id": "50199fac-0af8-43ef-9846-eaf64c6d322d",
+          "new_rate": 10,
+          "old_rate": 1,
+          "payable_date": "2024-06-10",
+          "process_date": "2024-06-10",
+          "record_date": "2024-06-07",
+          "symbol": "NVDA"
+        }
+      ]
+    },
+    "next_page_token": null
+  },
+  "next_14d_all_types": {
+    "corporate_actions": {
+      "cash_dividends": [
+        {
+          "cusip": "46144X610",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "04375ede-f90e-4670-acc2-bfd2ef6a18d4",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.08919,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AAA"
+        },
+        {
+          "cusip": "69344A727",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "c542a59e-42d4-44ad-a341-ea7d78197d02",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.18795,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AAAD"
+        },
+        {
+          "cusip": "69384J604",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "a3fc59c8-467b-4375-a30c-1eb365c4127a",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.124175,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AAAP"
+        },
+        {
+          "cusip": "001317205",
+          "ex_date": "2026-09-04",
+          "foreign": true,
+          "id": "f07e6b49-9468-457b-8df2-4e7114d55f68",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.244331,
+          "record_date": "2026-09-04",
+          "special": false,
+          "symbol": "AAGIY"
+        },
+        {
+          "cusip": "03076K108",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "ceba0fea-a5f6-4cbc-b466-aa39d30a5579",
+          "payable_date": "2026-10-05",
+          "process_date": "2026-10-05",
+          "rate": 0.2,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ABCB"
+        },
+        {
+          "cusip": "69384J885",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "234e43ff-5ef2-456a-90ed-219f6b6e5d7d",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.1432,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ACBE"
+        },
+        {
+          "cusip": "69384J802",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "9f955ebb-16b9-4a3b-b935-8174c07980e4",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.2102,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ACBH"
+        },
+        {
+          "cusip": "45784N593",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "7f9bc7e4-d45f-4f5d-9286-5a9762b7e5b3",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.255083,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ACEI"
+        },
+        {
+          "cusip": "45784N585",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "033b17ed-e8f1-4ad3-b184-a744a82b1bbb",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.207847,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ACII"
+        },
+        {
+          "cusip": "649604824",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "65fc1acc-4bb7-4f88-a639-0da8a08a49f8",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.570313,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ADAMG"
+        },
+        {
+          "cusip": "649604816",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "0d89bf36-bdb7-4540-bec6-fb5ac5d1aa46",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.617188,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ADAMH"
+        },
+        {
+          "cusip": "649604832",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "fc19fc89-ce6f-486a-a967-bf352207054c",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.570313,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ADAMI"
+        },
+        {
+          "cusip": "00547J207",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "4bec3468-561e-4eeb-904f-b81e09446767",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.313333,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ADAMK"
+        },
+        {
+          "cusip": "00547J108",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "4a708394-b756-4a59-9f26-cb880c59a5cb",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.578125,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ADAMO"
+        },
+        {
+          "cusip": "008492100",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "e0e0d6f0-6281-4949-b797-ab214347c489",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 0.267,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ADC"
+        },
+        {
+          "cusip": "008492209",
+          "ex_date": "2026-09-21",
+          "foreign": false,
+          "id": "4a703934-aa46-4da1-ac58-ea61556df49d",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.08854,
+          "record_date": "2026-09-21",
+          "special": false,
+          "symbol": "ADC.PRA"
+        },
+        {
+          "cusip": "053015103",
+          "ex_date": "2026-09-11",
+          "foreign": false,
+          "id": "419bc197-70bb-4898-bdb8-eeaa3718c15e",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 1.7,
+          "record_date": "2026-09-11",
+          "special": false,
+          "symbol": "ADP"
+        },
+        {
+          "cusip": "00090Q103",
+          "ex_date": "2026-09-10",
+          "foreign": false,
+          "id": "c6ca79df-9459-490c-9ab8-b0275f3419dd",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.055,
+          "record_date": "2026-09-10",
+          "special": false,
+          "symbol": "ADT"
+        },
+        {
+          "cusip": "00762V109",
+          "ex_date": "2026-09-22",
+          "foreign": true,
+          "id": "38108270-472b-4f3f-a3f3-b7c5389aec10",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.144375,
+          "record_date": "2026-09-22",
+          "special": false,
+          "symbol": "AEGXF"
+        },
+        {
+          "cusip": "001201201",
+          "ex_date": "2026-08-26",
+          "foreign": true,
+          "id": "42aca13e-bbcb-415f-b2fa-c4dcf4a86276",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.162751,
+          "record_date": "2026-08-26",
+          "special": false,
+          "symbol": "AGLXY"
+        },
+        {
+          "cusip": "00123Q104",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "a51da16b-177d-475d-8088-7fc0d75e1fc1",
+          "payable_date": "2026-10-09",
+          "process_date": "2026-10-09",
+          "rate": 0.12,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AGNC"
+        },
+        {
+          "cusip": "015857501",
+          "ex_date": "2026-09-15",
+          "foreign": true,
+          "id": "c5e383cc-a7bd-425c-a6ea-16f46531f725",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.3071754,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AGQPF"
+        },
+        {
+          "cusip": "00400T102",
+          "ex_date": "2026-09-18",
+          "foreign": true,
+          "id": "6f4bf1d7-fb2c-40f8-996e-c9357b563f54",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.814473,
+          "record_date": "2026-09-18",
+          "special": false,
+          "symbol": "AGRPY"
+        },
+        {
+          "cusip": "G05384162",
+          "ex_date": "2026-09-15",
+          "foreign": true,
+          "id": "17273860-404e-4055-af29-b6a72b89c0af",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.3516,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AHL.PRD"
+        },
+        {
+          "cusip": "G05384204",
+          "ex_date": "2026-09-15",
+          "foreign": true,
+          "id": "b79dc95b-8ecd-44aa-a6fb-96c660f08d0e",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.35156,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AHL.PRE"
+        },
+        {
+          "cusip": "G05384170",
+          "ex_date": "2026-09-15",
+          "foreign": true,
+          "id": "6ad6b1ea-2da8-4a96-b156-e2f9921bd74f",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.4375,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AHL.PRF"
+        },
+        {
+          "cusip": "04208T108",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "3d2983d2-aa1f-481d-878b-628137caf8a2",
+          "payable_date": "2026-10-08",
+          "process_date": "2026-10-08",
+          "rate": 0.14,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AHRT"
+        },
+        {
+          "cusip": "012348108",
+          "ex_date": "2026-09-01",
+          "foreign": false,
+          "id": "d11028e9-5ab9-41ea-8867-99f8953592c2",
+          "payable_date": "2026-10-07",
+          "process_date": "2026-10-07",
+          "rate": 0.28,
+          "record_date": "2026-09-01",
+          "special": false,
+          "symbol": "AIN"
+        },
+        {
+          "cusip": "26923N538",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "8d684b35-e68d-438a-9e56-4e96ea059c8f",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.25014,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AIPI"
+        },
+        {
+          "cusip": "012653101",
+          "ex_date": "2026-09-11",
+          "foreign": false,
+          "id": "e0464945-039f-4bce-819e-01b124e4b540",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.41,
+          "record_date": "2026-09-11",
+          "special": false,
+          "symbol": "ALB"
+        },
+        {
+          "cusip": "Q02024117",
+          "ex_date": "2026-09-08",
+          "foreign": true,
+          "id": "f7f0fe7d-2374-47b4-a3bc-ffc9333e5a2c",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.0144556,
+          "record_date": "2026-09-08",
+          "special": false,
+          "symbol": "ALKEF"
+        },
+        {
+          "cusip": "020002101",
+          "ex_date": "2026-08-31",
+          "foreign": false,
+          "id": "85cd9b95-1dba-4d86-a7af-1e61441fba0e",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 1.08,
+          "record_date": "2026-08-31",
+          "special": false,
+          "symbol": "ALL"
+        },
+        {
+          "cusip": "01446U103",
+          "ex_date": "2026-09-25",
+          "foreign": false,
+          "id": "dbb44ae5-8d36-48af-a8fb-5d8c3adbfe2c",
+          "payable_date": "2026-10-09",
+          "process_date": "2026-10-09",
+          "rate": 0.22,
+          "record_date": "2026-09-25",
+          "special": false,
+          "symbol": "ALRS"
+        },
+        {
+          "cusip": "024343105",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "921bd544-1d25-47ef-ade4-a50b7bb0985b",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.16,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AMBK"
+        },
+        {
+          "cusip": "023477300",
+          "ex_date": "2026-10-07",
+          "foreign": false,
+          "id": "a6d7c323-bd40-47b5-aecf-0eb37feceedf",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 12.5,
+          "record_date": "2026-10-07",
+          "special": false,
+          "symbol": "AMEN"
+        },
+        {
+          "cusip": "04964G100",
+          "ex_date": "2026-09-29",
+          "foreign": true,
+          "id": "65c95c8f-84c8-41ac-845d-ae7dc363db7e",
+          "payable_date": "2026-10-09",
+          "process_date": "2026-10-09",
+          "rate": 0.0567122,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AMIVF"
+        },
+        {
+          "cusip": "03662P107",
+          "ex_date": "2026-09-09",
+          "foreign": true,
+          "id": "87ee5e74-aa33-43f3-afad-9f0e11abdbbe",
+          "payable_date": "2026-10-07",
+          "process_date": "2026-10-07",
+          "rate": 4.742804,
+          "record_date": "2026-09-09",
+          "special": false,
+          "symbol": "ANPDY"
+        },
+        {
+          "cusip": "03634M208",
+          "ex_date": "2026-09-03",
+          "foreign": true,
+          "id": "3ad6290f-f02b-4f57-8961-374762175cb6",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 1.577125,
+          "record_date": "2026-09-03",
+          "special": false,
+          "symbol": "ANSLY"
+        },
+        {
+          "cusip": "03463K745",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "ee5d482a-4aa7-4988-9802-2e27f05c4255",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.062842,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "AOHY"
+        },
+        {
+          "cusip": "032095101",
+          "ex_date": "2026-09-22",
+          "foreign": false,
+          "id": "372fea2d-044b-4b11-84a4-19f3f21164d8",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 0.125,
+          "record_date": "2026-09-22",
+          "special": false,
+          "symbol": "APH"
+        },
+        {
+          "cusip": "03759W106",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "670de7d1-023a-489d-b996-f3dd49a08d6c",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.58,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "APLO"
+        },
+        {
+          "cusip": "45783Y624",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "3ff3dd00-c9d1-4ab4-9c12-3c5bf430d2cc",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.52321,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "APRH"
+        },
+        {
+          "cusip": "45783Y616",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "3de13c01-13c4-47e8-a8c4-feaf6ec725a9",
+          "payable_date": "2026-10-02",
+          "process_date": "2026-10-02",
+          "rate": 0.426012,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "APRJ"
+        },
+        {
+          "cusip": "011764206",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "37387b74-9196-4400-b9f7-dea965704b1c",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 0.4375,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "APTL"
+        },
+        {
+          "cusip": "015857808",
+          "ex_date": "2026-09-15",
+          "foreign": true,
+          "id": "dd23e3c7-a388-43ee-ac99-ea12df2297d8",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.505892,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "AQNB"
+        },
+        {
+          "cusip": "042765719",
+          "ex_date": "2026-09-30",
+          "foreign": false,
+          "id": "87432089-5ef4-4085-9257-cfe175b11df0",
+          "payable_date": "2026-10-05",
+          "process_date": "2026-10-05",
+          "rate": 0.3049,
+          "record_date": "2026-09-30",
+          "special": false,
+          "symbol": "ARCM"
+        },
+        {
+          "cusip": "03990B309",
+          "ex_date": "2026-09-15",
+          "foreign": false,
+          "id": "06cb80b7-c12c-4c1a-b06a-91956ba737ba",
+          "payable_date": "2026-10-01",
+          "process_date": "2026-10-01",
+          "rate": 0.84375,
+          "record_date": "2026-09-15",
+          "special": false,
+          "symbol": "ARES.PRB"
+        },
+        {
+          "cusip": "03074G109",
+          "ex_date": "2026-09-21",
+          "foreign": true,
+          "id": "f25bc65f-f7ef-4a74-b9b5-9b7c05eb6b98",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 0.1575,
+          "record_date": "2026-09-21",
+          "special": false,
+          "symbol": "ARREF"
+        },
+        {
+          "cusip": "00402L107",
+          "ex_date": "2026-09-16",
+          "foreign": false,
+          "id": "da5f8bd1-e92b-4af7-bfa3-d7d734affdef",
+          "payable_date": "2026-10-14",
+          "process_date": "2026-10-14",
+          "rate": 0.15,
+          "record_date": "2026-09-16",
+          "special": false,
+          "symbol": "ASO"
+        }
+      ],
+      "stock_dividends": [
+        {
+          "cusip": "09175M861",
+          "ex_date": "2026-10-06",
+          "id": "002c15e2-f6be-4409-a9ff-1d2f0d33a844",
+          "payable_date": "2026-10-06",
+          "process_date": "2026-10-06",
+          "rate": 1.03894043087,
+          "record_date": "2026-09-15",
+          "symbol": "09175M861"
+        }
+      ]
+    },
+    "next_page_token": "next-page-placeholder"
+  },
+  "mergers_2025": {
+    "corporate_actions": {
+      "cash_mergers": [
+        {
+          "acquiree_cusip": "096ESC017",
+          "acquiree_symbol": "096ESC017",
+          "effective_date": "2025-06-26",
+          "id": "c42e17a3-2902-42ca-9fc6-6dc3393c9261",
+          "payable_date": "2025-06-26",
+          "process_date": "2025-06-26",
+          "rate": 3
+        },
+        {
+          "acquiree_cusip": "381ESC011",
+          "acquiree_symbol": "381ESC011",
+          "effective_date": "2025-06-04",
+          "id": "d5ea74dc-adb1-4776-b75d-90da85b9f243",
+          "payable_date": "2025-06-04",
+          "process_date": "2025-06-04",
+          "rate": 0.291
+        }
+      ],
+      "spin_offs": [
+        {
+          "ex_date": "2025-06-18",
+          "id": "8231af08-24ad-4712-bb17-ee649c2d9402",
+          "new_cusip": "21874A106",
+          "new_rate": 0.00787304,
+          "new_symbol": "CORZ",
+          "payable_date": "2025-06-18",
+          "process_date": "2025-06-18",
+          "record_date": "2025-06-18",
+          "source_cusip": "218ESC010",
+          "source_rate": 1,
+          "source_symbol": "218ESC010"
+        }
+      ],
+      "stock_and_cash_mergers": [
+        {
+          "acquiree_cusip": "096ESC017",
+          "acquiree_rate": 1,
+          "acquiree_symbol": "096ESC017",
+          "acquirer_cusip": "096CVR030",
+          "acquirer_rate": 1,
+          "acquirer_symbol": "096CVR030",
+          "cash_rate": 3,
+          "effective_date": "2025-06-26",
+          "id": "7613ebe4-015b-4378-921b-bd967619a765",
+          "payable_date": "2025-06-26",
+          "process_date": "2025-06-26"
+        }
+      ],
+      "stock_mergers": [
+        {
+          "acquiree_cusip": "218ESC010",
+          "acquiree_rate": 1,
+          "acquiree_symbol": "218ESC010",
+          "acquirer_cusip": "21874A106",
+          "acquirer_rate": 0.00787304,
+          "acquirer_symbol": "CORZ",
+          "effective_date": "2025-06-17",
+          "id": "081cb55a-d959-4e84-b79d-482b75a13374",
+          "payable_date": "2025-06-17",
+          "process_date": "2025-06-17"
+        }
+      ]
+    },
+    "next_page_token": "next-page-placeholder"
+  }
+}

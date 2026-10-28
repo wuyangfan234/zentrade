@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.gz binary
+*.parquet binary
+
+backend/uv.lock text eol=lf
+frontend/pnpm-lock.yaml text eol=lf

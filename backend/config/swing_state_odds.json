@@ -1,0 +1,1407 @@
+{
+ "contract": "swing-desk-tight-v1",
+ "settle_contract": "swing-settle-v2",
+ "window": [
+  "2023-01-03",
+  "2026-09-18"
+ ],
+ "rules": {
+  "long": [
+   "volume_price_surge",
+   "tv_smc_structure",
+   "ibs_mean_reversion"
+  ],
+  "short": [
+   "tv_smc_structure",
+   "tv_chandelier_exit",
+   "tv_halftrend"
+  ]
+ },
+ "universe": "watchlist 58 (2026-10-15)",
+ "unit": "hang EV = per-share R of the card if it fills from this state on (0 if never fills), plan risk = zone mid to stop, incl. 5bps slippage, no fees, no account limits",
+ "bins": {
+  "gt1": ">1A",
+  "0.5-1": "0.5-1A",
+  "0.25-0.5": "0.25-0.5A",
+  "0-0.25": "0-0.25A",
+  "in_zone": "in zone",
+  "below_zone": "zone..stop",
+  "beyond_stop": "beyond stop"
+ },
+ "phases": {
+  "pre": "<09:30 ET",
+  "open": "09:30-10:30",
+  "am": "10:30-12:30",
+  "pm": "12:30-15:30"
+ },
+ "void_rule": "long day-1: last premarket 30m close (04:00-09:00 ET) < stop -> card void",
+ "source": "offline premarket replay calibration (2026-10)",
+ "generated": "2026-10-19T17:18:27+08:00",
+ "cells": {
+  "long|1|pre|gt1": {
+   "n": 100,
+   "fill": 0.24,
+   "ev": 0.107,
+   "ci": [
+    -0.032,
+    0.253
+   ],
+   "ev_train": 0.072,
+   "ev_hold": 0.14,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|0.5-1": {
+   "n": 522,
+   "fill": 0.402,
+   "ev": 0.078,
+   "ci": [
+    -0.017,
+    0.18
+   ],
+   "ev_train": 0.023,
+   "ev_hold": 0.122,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|0.25-0.5": {
+   "n": 934,
+   "fill": 0.576,
+   "ev": 0.183,
+   "ci": [
+    0.098,
+    0.276
+   ],
+   "ev_train": 0.147,
+   "ev_hold": 0.219,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|0-0.25": {
+   "n": 738,
+   "fill": 0.729,
+   "ev": 0.165,
+   "ci": [
+    0.035,
+    0.288
+   ],
+   "ev_train": 0.121,
+   "ev_hold": 0.21,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|in_zone": {
+   "n": 330,
+   "fill": 0.764,
+   "ev": 0.217,
+   "ci": [
+    0.036,
+    0.405
+   ],
+   "ev_train": 0.19,
+   "ev_hold": 0.24,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|below_zone": {
+   "n": 158,
+   "fill": 0.728,
+   "ev": 0.221,
+   "ci": [
+    -0.052,
+    0.508
+   ],
+   "ev_train": 0.345,
+   "ev_hold": 0.127,
+   "level": "day+phase+dist"
+  },
+  "long|1|pre|beyond_stop": {
+   "n": 24,
+   "fill": 0.25,
+   "ev": -0.245,
+   "ci": [
+    -0.46,
+    -0.08
+   ],
+   "ev_train": -0.258,
+   "ev_hold": -0.236,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|gt1": {
+   "n": 102,
+   "fill": 0.245,
+   "ev": 0.044,
+   "ci": [
+    -0.121,
+    0.217
+   ],
+   "ev_train": 0.133,
+   "ev_hold": -0.042,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|0.5-1": {
+   "n": 461,
+   "fill": 0.382,
+   "ev": 0.079,
+   "ci": [
+    -0.038,
+    0.204
+   ],
+   "ev_train": 0.055,
+   "ev_hold": 0.101,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|0.25-0.5": {
+   "n": 699,
+   "fill": 0.582,
+   "ev": 0.099,
+   "ci": [
+    0.011,
+    0.189
+   ],
+   "ev_train": 0.045,
+   "ev_hold": 0.159,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|0-0.25": {
+   "n": 603,
+   "fill": 0.728,
+   "ev": 0.273,
+   "ci": [
+    0.13,
+    0.415
+   ],
+   "ev_train": 0.251,
+   "ev_hold": 0.298,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|in_zone": {
+   "n": 282,
+   "fill": 0.77,
+   "ev": 0.175,
+   "ci": [
+    -0.001,
+    0.346
+   ],
+   "ev_train": 0.238,
+   "ev_hold": 0.11,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|below_zone": {
+   "n": 146,
+   "fill": 0.74,
+   "ev": 0.262,
+   "ci": [
+    0.013,
+    0.534
+   ],
+   "ev_train": 0.248,
+   "ev_hold": 0.273,
+   "level": "day+phase+dist"
+  },
+  "long|1|open|beyond_stop": {
+   "n": 162,
+   "fill": 0.228,
+   "ev": 0.232,
+   "ci": [
+    0.011,
+    0.52
+   ],
+   "ev_train": 0.235,
+   "ev_hold": 0.229,
+   "level": "day+dist"
+  },
+  "long|1|am|gt1": {
+   "n": 385,
+   "fill": 0.109,
+   "ev": 0.03,
+   "ci": [
+    -0.031,
+    0.09
+   ],
+   "ev_train": 0.018,
+   "ev_hold": 0.04,
+   "level": "day+phase+dist"
+  },
+  "long|1|am|0.5-1": {
+   "n": 739,
+   "fill": 0.3,
+   "ev": 0.032,
+   "ci": [
+    -0.039,
+    0.101
+   ],
+   "ev_train": -0.0,
+   "ev_hold": 0.067,
+   "level": "day+phase+dist"
+  },
+  "long|1|am|0.25-0.5": {
+   "n": 600,
+   "fill": 0.502,
+   "ev": 0.158,
+   "ci": [
+    0.06,
+    0.257
+   ],
+   "ev_train": 0.079,
+   "ev_hold": 0.25,
+   "level": "day+phase+dist"
+  },
+  "long|1|am|0-0.25": {
+   "n": 369,
+   "fill": 0.762,
+   "ev": 0.163,
+   "ci": [
+    0.006,
+    0.338
+   ],
+   "ev_train": -0.02,
+   "ev_hold": 0.373,
+   "level": "day+phase+dist"
+  },
+  "long|1|am|in_zone": {
+   "n": 614,
+   "fill": 0.767,
+   "ev": 0.198,
+   "ci": [
+    0.037,
+    0.366
+   ],
+   "ev_train": 0.206,
+   "ev_hold": 0.189,
+   "level": "day+dist"
+  },
+  "long|1|am|below_zone": {
+   "n": 168,
+   "fill": 0.524,
+   "ev": 0.332,
+   "ci": [
+    0.062,
+    0.615
+   ],
+   "ev_train": 0.483,
+   "ev_hold": 0.198,
+   "level": "day+phase+dist"
+  },
+  "long|1|am|beyond_stop": {
+   "n": 56,
+   "fill": 0.25,
+   "ev": 0.439,
+   "ci": [
+    0.065,
+    0.86
+   ],
+   "ev_train": 0.547,
+   "ev_hold": 0.296,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|gt1": {
+   "n": 452,
+   "fill": 0.084,
+   "ev": 0.023,
+   "ci": [
+    -0.023,
+    0.073
+   ],
+   "ev_train": 0.008,
+   "ev_hold": 0.036,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|0.5-1": {
+   "n": 698,
+   "fill": 0.266,
+   "ev": 0.048,
+   "ci": [
+    -0.018,
+    0.118
+   ],
+   "ev_train": 0.007,
+   "ev_hold": 0.092,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|0.25-0.5": {
+   "n": 467,
+   "fill": 0.486,
+   "ev": 0.155,
+   "ci": [
+    0.038,
+    0.28
+   ],
+   "ev_train": 0.102,
+   "ev_hold": 0.216,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|0-0.25": {
+   "n": 246,
+   "fill": 0.711,
+   "ev": 0.257,
+   "ci": [
+    0.066,
+    0.463
+   ],
+   "ev_train": 0.103,
+   "ev_hold": 0.43,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|in_zone": {
+   "n": 614,
+   "fill": 0.767,
+   "ev": 0.198,
+   "ci": [
+    0.037,
+    0.366
+   ],
+   "ev_train": 0.206,
+   "ev_hold": 0.189,
+   "level": "day+dist"
+  },
+  "long|1|pm|below_zone": {
+   "n": 120,
+   "fill": 0.417,
+   "ev": 0.267,
+   "ci": [
+    -0.037,
+    0.617
+   ],
+   "ev_train": 0.531,
+   "ev_hold": 0.02,
+   "level": "day+phase+dist"
+  },
+  "long|1|pm|beyond_stop": {
+   "n": 73,
+   "fill": 0.164,
+   "ev": 0.126,
+   "ci": [
+    -0.051,
+    0.326
+   ],
+   "ev_train": -0.024,
+   "ev_hold": 0.317,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|gt1": {
+   "n": 419,
+   "fill": 0.045,
+   "ev": 0.011,
+   "ci": [
+    -0.021,
+    0.044
+   ],
+   "ev_train": -0.024,
+   "ev_hold": 0.037,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|0.5-1": {
+   "n": 372,
+   "fill": 0.191,
+   "ev": 0.031,
+   "ci": [
+    -0.042,
+    0.112
+   ],
+   "ev_train": -0.009,
+   "ev_hold": 0.076,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|0.25-0.5": {
+   "n": 174,
+   "fill": 0.408,
+   "ev": -0.005,
+   "ci": [
+    -0.171,
+    0.152
+   ],
+   "ev_train": -0.1,
+   "ev_hold": 0.092,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|0-0.25": {
+   "n": 107,
+   "fill": 0.664,
+   "ev": 0.173,
+   "ci": [
+    -0.101,
+    0.428
+   ],
+   "ev_train": 0.141,
+   "ev_hold": 0.2,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|in_zone": {
+   "n": 48,
+   "fill": 0.625,
+   "ev": 0.294,
+   "ci": [
+    -0.005,
+    0.579
+   ],
+   "ev_train": 0.406,
+   "ev_hold": 0.19,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|below_zone": {
+   "n": 85,
+   "fill": 0.4,
+   "ev": 0.16,
+   "ci": [
+    -0.146,
+    0.508
+   ],
+   "ev_train": 0.292,
+   "ev_hold": 0.073,
+   "level": "day+phase+dist"
+  },
+  "long|2|pre|beyond_stop": {
+   "n": 64,
+   "fill": 0.078,
+   "ev": 0.06,
+   "ci": [
+    -0.062,
+    0.208
+   ],
+   "ev_train": 0.033,
+   "ev_hold": 0.092,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|gt1": {
+   "n": 416,
+   "fill": 0.031,
+   "ev": 0.013,
+   "ci": [
+    -0.012,
+    0.04
+   ],
+   "ev_train": -0.005,
+   "ev_hold": 0.028,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|0.5-1": {
+   "n": 348,
+   "fill": 0.187,
+   "ev": 0.044,
+   "ci": [
+    -0.018,
+    0.104
+   ],
+   "ev_train": 0.002,
+   "ev_hold": 0.094,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|0.25-0.5": {
+   "n": 148,
+   "fill": 0.432,
+   "ev": -0.007,
+   "ci": [
+    -0.202,
+    0.195
+   ],
+   "ev_train": -0.146,
+   "ev_hold": 0.162,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|0-0.25": {
+   "n": 90,
+   "fill": 0.544,
+   "ev": 0.268,
+   "ci": [
+    0.03,
+    0.518
+   ],
+   "ev_train": 0.44,
+   "ev_hold": 0.111,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|in_zone": {
+   "n": 48,
+   "fill": 0.771,
+   "ev": 0.062,
+   "ci": [
+    -0.343,
+    0.423
+   ],
+   "ev_train": 0.164,
+   "ev_hold": -0.025,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|below_zone": {
+   "n": 72,
+   "fill": 0.458,
+   "ev": 0.216,
+   "ci": [
+    -0.107,
+    0.569
+   ],
+   "ev_train": 0.236,
+   "ev_hold": 0.199,
+   "level": "day+phase+dist"
+  },
+  "long|2|open|beyond_stop": {
+   "n": 69,
+   "fill": 0.072,
+   "ev": 0.105,
+   "ci": [
+    -0.0,
+    0.252
+   ],
+   "ev_train": 0.045,
+   "ev_hold": 0.175,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|gt1": {
+   "n": 510,
+   "fill": 0.008,
+   "ev": -0.01,
+   "ci": [
+    -0.034,
+    0.009
+   ],
+   "ev_train": -0.026,
+   "ev_hold": 0.005,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|0.5-1": {
+   "n": 406,
+   "fill": 0.091,
+   "ev": -0.047,
+   "ci": [
+    -0.102,
+    0.004
+   ],
+   "ev_train": -0.058,
+   "ev_hold": -0.034,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|0.25-0.5": {
+   "n": 225,
+   "fill": 0.276,
+   "ev": 0.037,
+   "ci": [
+    -0.082,
+    0.167
+   ],
+   "ev_train": -0.028,
+   "ev_hold": 0.105,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|0-0.25": {
+   "n": 108,
+   "fill": 0.62,
+   "ev": 0.008,
+   "ci": [
+    -0.267,
+    0.281
+   ],
+   "ev_train": -0.133,
+   "ev_hold": 0.149,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|in_zone": {
+   "n": 96,
+   "fill": 0.698,
+   "ev": 0.178,
+   "ci": [
+    -0.117,
+    0.474
+   ],
+   "ev_train": 0.288,
+   "ev_hold": 0.08,
+   "level": "day+dist"
+  },
+  "long|2|am|below_zone": {
+   "n": 67,
+   "fill": 0.328,
+   "ev": 0.389,
+   "ci": [
+    0.094,
+    0.74
+   ],
+   "ev_train": 0.455,
+   "ev_hold": 0.317,
+   "level": "day+phase+dist"
+  },
+  "long|2|am|beyond_stop": {
+   "n": 82,
+   "fill": 0.012,
+   "ev": 0.016,
+   "ci": [
+    0.0,
+    0.052
+   ],
+   "ev_train": 0.0,
+   "ev_hold": 0.032,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|gt1": {
+   "n": 534,
+   "fill": 0.004,
+   "ev": 0.003,
+   "ci": [
+    -0.004,
+    0.013
+   ],
+   "ev_train": 0.0,
+   "ev_hold": 0.005,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|0.5-1": {
+   "n": 395,
+   "fill": 0.028,
+   "ev": -0.031,
+   "ci": [
+    -0.066,
+    -0.004
+   ],
+   "ev_train": -0.028,
+   "ev_hold": -0.034,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|0.25-0.5": {
+   "n": 212,
+   "fill": 0.142,
+   "ev": -0.054,
+   "ci": [
+    -0.153,
+    0.035
+   ],
+   "ev_train": -0.079,
+   "ev_hold": -0.025,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|0-0.25": {
+   "n": 92,
+   "fill": 0.435,
+   "ev": -0.084,
+   "ci": [
+    -0.349,
+    0.184
+   ],
+   "ev_train": -0.198,
+   "ev_hold": 0.026,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|in_zone": {
+   "n": 96,
+   "fill": 0.698,
+   "ev": 0.178,
+   "ci": [
+    -0.117,
+    0.474
+   ],
+   "ev_train": 0.288,
+   "ev_hold": 0.08,
+   "level": "day+dist"
+  },
+  "long|2|pm|below_zone": {
+   "n": 57,
+   "fill": 0.14,
+   "ev": 0.299,
+   "ci": [
+    0.015,
+    0.725
+   ],
+   "ev_train": 0.373,
+   "ev_hold": 0.205,
+   "level": "day+phase+dist"
+  },
+  "long|2|pm|beyond_stop": {
+   "n": 81,
+   "fill": 0.012,
+   "ev": 0.016,
+   "ci": [
+    0.0,
+    0.053
+   ],
+   "ev_train": 0.0,
+   "ev_hold": 0.03,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|gt1": {
+   "n": 20,
+   "fill": 0.25,
+   "ev": 0.236,
+   "ci": null,
+   "ev_train": -0.105,
+   "ev_hold": 0.419,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|0.5-1": {
+   "n": 74,
+   "fill": 0.554,
+   "ev": 0.013,
+   "ci": [
+    -0.284,
+    0.301
+   ],
+   "ev_train": 0.19,
+   "ev_hold": -0.108,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|0.25-0.5": {
+   "n": 105,
+   "fill": 0.648,
+   "ev": 0.07,
+   "ci": [
+    -0.155,
+    0.293
+   ],
+   "ev_train": 0.1,
+   "ev_hold": 0.041,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|0-0.25": {
+   "n": 149,
+   "fill": 0.752,
+   "ev": -0.084,
+   "ci": [
+    -0.373,
+    0.223
+   ],
+   "ev_train": -0.035,
+   "ev_hold": -0.122,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|in_zone": {
+   "n": 97,
+   "fill": 0.845,
+   "ev": 0.023,
+   "ci": [
+    -0.395,
+    0.398
+   ],
+   "ev_train": 0.229,
+   "ev_hold": -0.163,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|below_zone": {
+   "n": 33,
+   "fill": 0.788,
+   "ev": 0.723,
+   "ci": [
+    -0.168,
+    1.473
+   ],
+   "ev_train": 0.908,
+   "ev_hold": 0.525,
+   "level": "day+phase+dist"
+  },
+  "short|1|pre|beyond_stop": {
+   "n": 23,
+   "fill": 0.217,
+   "ev": 0.269,
+   "ci": [
+    -0.046,
+    0.818
+   ],
+   "ev_train": 0.378,
+   "ev_hold": 0.128,
+   "level": "day+dist"
+  },
+  "short|1|open|gt1": {
+   "n": 21,
+   "fill": 0.19,
+   "ev": 0.149,
+   "ci": [
+    0.0,
+    0.471
+   ],
+   "ev_train": 0.249,
+   "ev_hold": 0.073,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|0.5-1": {
+   "n": 54,
+   "fill": 0.463,
+   "ev": 0.119,
+   "ci": [
+    -0.118,
+    0.37
+   ],
+   "ev_train": 0.154,
+   "ev_hold": 0.095,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|0.25-0.5": {
+   "n": 84,
+   "fill": 0.583,
+   "ev": 0.006,
+   "ci": [
+    -0.307,
+    0.362
+   ],
+   "ev_train": -0.066,
+   "ev_hold": 0.086,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|0-0.25": {
+   "n": 112,
+   "fill": 0.804,
+   "ev": 0.087,
+   "ci": [
+    -0.229,
+    0.405
+   ],
+   "ev_train": 0.047,
+   "ev_hold": 0.137,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|in_zone": {
+   "n": 76,
+   "fill": 0.921,
+   "ev": 0.013,
+   "ci": [
+    -0.488,
+    0.469
+   ],
+   "ev_train": 0.275,
+   "ev_hold": -0.223,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|below_zone": {
+   "n": 36,
+   "fill": 0.75,
+   "ev": 0.509,
+   "ci": [
+    -0.181,
+    1.179
+   ],
+   "ev_train": 1.088,
+   "ev_hold": 0.045,
+   "level": "day+phase+dist"
+  },
+  "short|1|open|beyond_stop": {
+   "n": 23,
+   "fill": 0.217,
+   "ev": 0.269,
+   "ci": [
+    -0.046,
+    0.818
+   ],
+   "ev_train": 0.378,
+   "ev_hold": 0.128,
+   "level": "day+dist"
+  },
+  "short|1|am|gt1": {
+   "n": 46,
+   "fill": 0.239,
+   "ev": 0.097,
+   "ci": [
+    -0.162,
+    0.341
+   ],
+   "ev_train": 0.044,
+   "ev_hold": 0.126,
+   "level": "day+phase+dist"
+  },
+  "short|1|am|0.5-1": {
+   "n": 107,
+   "fill": 0.364,
+   "ev": -0.011,
+   "ci": [
+    -0.277,
+    0.254
+   ],
+   "ev_train": -0.086,
+   "ev_hold": 0.035,
+   "level": "day+phase+dist"
+  },
+  "short|1|am|0.25-0.5": {
+   "n": 86,
+   "fill": 0.593,
+   "ev": -0.115,
+   "ci": [
+    -0.392,
+    0.15
+   ],
+   "ev_train": -0.143,
+   "ev_hold": -0.081,
+   "level": "day+phase+dist"
+  },
+  "short|1|am|0-0.25": {
+   "n": 63,
+   "fill": 0.794,
+   "ev": -0.193,
+   "ci": [
+    -0.703,
+    0.226
+   ],
+   "ev_train": -0.098,
+   "ev_hold": -0.337,
+   "level": "day+phase+dist"
+  },
+  "short|1|am|in_zone": {
+   "n": 174,
+   "fill": 0.879,
+   "ev": 0.033,
+   "ci": [
+    -0.401,
+    0.422
+   ],
+   "ev_train": 0.249,
+   "ev_hold": -0.159,
+   "level": "day+dist"
+  },
+  "short|1|am|below_zone": {
+   "n": 34,
+   "fill": 0.647,
+   "ev": 0.159,
+   "ci": [
+    -0.436,
+    0.76
+   ],
+   "ev_train": 0.263,
+   "ev_hold": 0.067,
+   "level": "day+phase+dist"
+  },
+  "short|1|am|beyond_stop": {
+   "n": 23,
+   "fill": 0.217,
+   "ev": 0.269,
+   "ci": [
+    -0.046,
+    0.818
+   ],
+   "ev_train": 0.378,
+   "ev_hold": 0.128,
+   "level": "day+dist"
+  },
+  "short|1|pm|gt1": {
+   "n": 54,
+   "fill": 0.148,
+   "ev": -0.054,
+   "ci": [
+    -0.284,
+    0.102
+   ],
+   "ev_train": -0.032,
+   "ev_hold": -0.071,
+   "level": "day+phase+dist"
+  },
+  "short|1|pm|0.5-1": {
+   "n": 108,
+   "fill": 0.343,
+   "ev": -0.092,
+   "ci": [
+    -0.312,
+    0.165
+   ],
+   "ev_train": -0.198,
+   "ev_hold": -0.016,
+   "level": "day+phase+dist"
+  },
+  "short|1|pm|0.25-0.5": {
+   "n": 75,
+   "fill": 0.467,
+   "ev": -0.249,
+   "ci": [
+    -0.438,
+    -0.056
+   ],
+   "ev_train": -0.298,
+   "ev_hold": -0.213,
+   "level": "day+phase+dist"
+  },
+  "short|1|pm|0-0.25": {
+   "n": 40,
+   "fill": 0.525,
+   "ev": -0.003,
+   "ci": [
+    -0.385,
+    0.349
+   ],
+   "ev_train": 0.131,
+   "ev_hold": -0.138,
+   "level": "day+phase+dist"
+  },
+  "short|1|pm|in_zone": {
+   "n": 174,
+   "fill": 0.879,
+   "ev": 0.033,
+   "ci": [
+    -0.401,
+    0.422
+   ],
+   "ev_train": 0.249,
+   "ev_hold": -0.159,
+   "level": "day+dist"
+  },
+  "short|1|pm|below_zone": {
+   "n": 22,
+   "fill": 0.591,
+   "ev": 0.343,
+   "ci": [
+    -0.534,
+    1.14
+   ],
+   "ev_train": 0.551,
+   "ev_hold": 0.224,
+   "level": "day+phase+dist"
+  },
+  "short|1|pm|beyond_stop": {
+   "n": 23,
+   "fill": 0.217,
+   "ev": 0.269,
+   "ci": [
+    -0.046,
+    0.818
+   ],
+   "ev_train": 0.378,
+   "ev_hold": 0.128,
+   "level": "day+dist"
+  },
+  "short|2|pre|gt1": {
+   "n": 41,
+   "fill": 0.098,
+   "ev": 0.055,
+   "ci": [
+    -0.093,
+    0.184
+   ],
+   "ev_train": 0.111,
+   "ev_hold": 0.024,
+   "level": "day+phase+dist"
+  },
+  "short|2|pre|0.5-1": {
+   "n": 48,
+   "fill": 0.229,
+   "ev": -0.126,
+   "ci": [
+    -0.35,
+    0.098
+   ],
+   "ev_train": -0.087,
+   "ev_hold": -0.147,
+   "level": "day+phase+dist"
+  },
+  "short|2|pre|0.25-0.5": {
+   "n": 32,
+   "fill": 0.375,
+   "ev": -0.091,
+   "ci": [
+    -0.471,
+    0.403
+   ],
+   "ev_train": -0.041,
+   "ev_hold": -0.117,
+   "level": "day+phase+dist"
+  },
+  "short|2|pre|0-0.25": {
+   "n": 26,
+   "fill": 0.577,
+   "ev": 0.076,
+   "ci": [
+    -0.494,
+    0.739
+   ],
+   "ev_train": -0.274,
+   "ev_hold": 0.333,
+   "level": "day+phase+dist"
+  },
+  "short|2|pre|in_zone": {
+   "n": 26,
+   "fill": 0.731,
+   "ev": -0.103,
+   "ci": [
+    -0.598,
+    0.47
+   ],
+   "ev_train": -0.117,
+   "ev_hold": -0.092,
+   "level": "day+dist"
+  },
+  "short|2|pre|below_zone": {
+   "n": 57,
+   "fill": 0.456,
+   "ev": -0.117,
+   "ci": [
+    -0.915,
+    0.592
+   ],
+   "ev_train": -0.189,
+   "ev_hold": -0.064,
+   "level": "day+dist"
+  },
+  "short|2|pre|beyond_stop": {
+   "n": 59,
+   "fill": 0.119,
+   "ev": -0.015,
+   "ci": [
+    -0.271,
+    0.286
+   ],
+   "ev_train": -0.191,
+   "ev_hold": 0.194,
+   "level": "day+dist"
+  },
+  "short|2|open|gt1": {
+   "n": 40,
+   "fill": 0.1,
+   "ev": 0.057,
+   "ci": [
+    -0.091,
+    0.194
+   ],
+   "ev_train": 0.111,
+   "ev_hold": 0.025,
+   "level": "day+phase+dist"
+  },
+  "short|2|open|0.5-1": {
+   "n": 46,
+   "fill": 0.239,
+   "ev": -0.122,
+   "ci": [
+    -0.334,
+    0.095
+   ],
+   "ev_train": -0.139,
+   "ev_hold": -0.109,
+   "level": "day+phase+dist"
+  },
+  "short|2|open|0.25-0.5": {
+   "n": 37,
+   "fill": 0.432,
+   "ev": 0.04,
+   "ci": [
+    -0.346,
+    0.437
+   ],
+   "ev_train": 0.129,
+   "ev_hold": -0.036,
+   "level": "day+phase+dist"
+  },
+  "short|2|open|0-0.25": {
+   "n": 77,
+   "fill": 0.571,
+   "ev": 0.03,
+   "ci": [
+    -0.415,
+    0.484
+   ],
+   "ev_train": 0.033,
+   "ev_hold": 0.028,
+   "level": "day+dist"
+  },
+  "short|2|open|in_zone": {
+   "n": 26,
+   "fill": 0.731,
+   "ev": -0.103,
+   "ci": [
+    -0.598,
+    0.47
+   ],
+   "ev_train": -0.117,
+   "ev_hold": -0.092,
+   "level": "day+dist"
+  },
+  "short|2|open|below_zone": {
+   "n": 57,
+   "fill": 0.456,
+   "ev": -0.117,
+   "ci": [
+    -0.915,
+    0.592
+   ],
+   "ev_train": -0.189,
+   "ev_hold": -0.064,
+   "level": "day+dist"
+  },
+  "short|2|open|beyond_stop": {
+   "n": 59,
+   "fill": 0.119,
+   "ev": -0.015,
+   "ci": [
+    -0.271,
+    0.286
+   ],
+   "ev_train": -0.191,
+   "ev_hold": 0.194,
+   "level": "day+dist"
+  },
+  "short|2|am|gt1": {
+   "n": 57,
+   "fill": 0.0,
+   "ev": 0.0,
+   "ci": [
+    0.0,
+    0.0
+   ],
+   "ev_train": 0.0,
+   "ev_hold": 0.0,
+   "level": "day+phase+dist"
+  },
+  "short|2|am|0.5-1": {
+   "n": 58,
+   "fill": 0.121,
+   "ev": -0.014,
+   "ci": [
+    -0.122,
+    0.115
+   ],
+   "ev_train": 0.057,
+   "ev_hold": -0.068,
+   "level": "day+phase+dist"
+  },
+  "short|2|am|0.25-0.5": {
+   "n": 39,
+   "fill": 0.385,
+   "ev": -0.196,
+   "ci": [
+    -0.495,
+    0.112
+   ],
+   "ev_train": -0.116,
+   "ev_hold": -0.259,
+   "level": "day+phase+dist"
+  },
+  "short|2|am|0-0.25": {
+   "n": 24,
+   "fill": 0.625,
+   "ev": -0.25,
+   "ci": [
+    -0.762,
+    0.209
+   ],
+   "ev_train": -0.057,
+   "ev_hold": -0.442,
+   "level": "day+phase+dist"
+  },
+  "short|2|am|in_zone": {
+   "n": 26,
+   "fill": 0.731,
+   "ev": -0.103,
+   "ci": [
+    -0.598,
+    0.47
+   ],
+   "ev_train": -0.117,
+   "ev_hold": -0.092,
+   "level": "day+dist"
+  },
+  "short|2|am|below_zone": {
+   "n": 57,
+   "fill": 0.456,
+   "ev": -0.117,
+   "ci": [
+    -0.915,
+    0.592
+   ],
+   "ev_train": -0.189,
+   "ev_hold": -0.064,
+   "level": "day+dist"
+  },
+  "short|2|am|beyond_stop": {
+   "n": 59,
+   "fill": 0.119,
+   "ev": -0.015,
+   "ci": [
+    -0.271,
+    0.286
+   ],
+   "ev_train": -0.191,
+   "ev_hold": 0.194,
+   "level": "day+dist"
+  },
+  "short|2|pm|gt1": {
+   "n": 50,
+   "fill": 0.0,
+   "ev": 0.0,
+   "ci": [
+    0.0,
+    0.0
+   ],
+   "ev_train": 0.0,
+   "ev_hold": 0.0,
+   "level": "day+phase+dist"
+  },
+  "short|2|pm|0.5-1": {
+   "n": 64,
+   "fill": 0.016,
+   "ev": 0.011,
+   "ci": [
+    0.0,
+    0.037
+   ],
+   "ev_train": 0.023,
+   "ev_hold": 0.0,
+   "level": "day+phase+dist"
+  },
+  "short|2|pm|0.25-0.5": {
+   "n": 33,
+   "fill": 0.242,
+   "ev": -0.125,
+   "ci": [
+    -0.384,
+    0.094
+   ],
+   "ev_train": 0.104,
+   "ev_hold": -0.34,
+   "level": "day+phase+dist"
+  },
+  "short|2|pm|0-0.25": {
+   "n": 77,
+   "fill": 0.571,
+   "ev": 0.03,
+   "ci": [
+    -0.415,
+    0.484
+   ],
+   "ev_train": 0.033,
+   "ev_hold": 0.028,
+   "level": "day+dist"
+  },
+  "short|2|pm|in_zone": {
+   "n": 26,
+   "fill": 0.731,
+   "ev": -0.103,
+   "ci": [
+    -0.598,
+    0.47
+   ],
+   "ev_train": -0.117,
+   "ev_hold": -0.092,
+   "level": "day+dist"
+  },
+  "short|2|pm|below_zone": {
+   "n": 57,
+   "fill": 0.456,
+   "ev": -0.117,
+   "ci": [
+    -0.915,
+    0.592
+   ],
+   "ev_train": -0.189,
+   "ev_hold": -0.064,
+   "level": "day+dist"
+  },
+  "short|2|pm|beyond_stop": {
+   "n": 59,
+   "fill": 0.119,
+   "ev": -0.015,
+   "ci": [
+    -0.271,
+    0.286
+   ],
+   "ev_train": -0.191,
+   "ev_hold": 0.194,
+   "level": "day+dist"
+  },
+  "long|1|birth": {
+   "n": 2326,
+   "fill": 0.592,
+   "ev": 0.16,
+   "ci": [
+    0.089,
+    0.233
+   ],
+   "ev_train": 0.146,
+   "ev_hold": 0.175,
+   "level": "day"
+  },
+  "short|1|birth": {
+   "n": 384,
+   "fill": 0.69,
+   "ev": 0.102,
+   "ci": [
+    -0.129,
+    0.322
+   ],
+   "ev_train": 0.173,
+   "ev_hold": 0.032,
+   "level": "day"
+  }
+ }
+}

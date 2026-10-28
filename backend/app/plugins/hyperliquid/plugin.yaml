@@ -1,0 +1,10 @@
+name: hyperliquid
+display_name: "Hyperliquid xyz (盘前参考价)"
+runtime: none
+entry: app.plugins.hyperliquid.provider:HyperliquidProvider
+check: app.plugins.hyperliquid.provider:availability
+datasets: []
+hidden: false
+description: "Hyperliquid xyz 美股永续合约中间价，免费无 Key，24/7。只用于盘前/周末跳空预警（实测 09:15 ET 价与开盘跳空相关 0.998，09:00 为 0.966）；永续价不是股票成交价，永不进入撮合、日K或实时行情。只覆盖约 110 只大盘热门股（ZenTrade 历史交易约 4.6% 的标的）。"
+install_hint: ""
+homepage: "https://app.hyperliquid.xyz"

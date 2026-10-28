@@ -1,0 +1,237 @@
+{
+ "window": [
+  "2023-01-03",
+  "2026-09-18"
+ ],
+ "universe": "watchlist 58 (2026-10-15)",
+ "days": 931,
+ "source": "offline rule-hit-rate replay (2026-10)",
+ "generated": "2026-10-18T22:13:11+08:00",
+ "rules": {
+  "boll_breakout": {
+   "mean_per_day": 1.244,
+   "p_zero_day": 0.452,
+   "max_zero_run": 21
+  },
+  "breakout_new_high_60d": {
+   "mean_per_day": 1.546,
+   "p_zero_day": 0.403,
+   "max_zero_run": 36
+  },
+  "bullish_alignment": {
+   "mean_per_day": 15.528,
+   "p_zero_day": 0.03,
+   "max_zero_run": 20
+  },
+  "connors_rsi2": {
+   "mean_per_day": 3.175,
+   "p_zero_day": 0.275,
+   "max_zero_run": 29
+  },
+  "five_day_low_overnight": {
+   "mean_per_day": 1.537,
+   "p_zero_day": 0.568,
+   "max_zero_run": 15
+  },
+  "ibs_mean_reversion": {
+   "mean_per_day": 10.252,
+   "p_zero_day": 0.063,
+   "max_zero_run": 2
+  },
+  "long_lower_shadow_reversal": {
+   "mean_per_day": 0.232,
+   "p_zero_day": 0.888,
+   "max_zero_run": 60
+  },
+  "low_volatility_leader": {
+   "mean_per_day": 7.027,
+   "p_zero_day": 0.037,
+   "max_zero_run": 20
+  },
+  "ma_convergence_breakout": {
+   "mean_per_day": 0.647,
+   "p_zero_day": 0.624,
+   "max_zero_run": 57
+  },
+  "ma_golden_cross": {
+   "mean_per_day": 0.371,
+   "p_zero_day": 0.752,
+   "max_zero_run": 33
+  },
+  "macd_below_zero_revival": {
+   "mean_per_day": 0.366,
+   "p_zero_day": 0.793,
+   "max_zero_run": 73
+  },
+  "macd_golden": {
+   "mean_per_day": 0.452,
+   "p_zero_day": 0.7,
+   "max_zero_run": 23
+  },
+  "mdd_multi_down_days": {
+   "mean_per_day": 4.253,
+   "p_zero_day": 0.142,
+   "max_zero_run": 7
+  },
+  "n_day_low_reversal": {
+   "mean_per_day": 0.062,
+   "p_zero_day": 0.956,
+   "max_zero_run": 147
+  },
+  "oversold_bounce": {
+   "mean_per_day": 0.078,
+   "p_zero_day": 0.956,
+   "max_zero_run": 124
+  },
+  "oversold_reversal": {
+   "mean_per_day": 0.017,
+   "p_zero_day": 0.984,
+   "max_zero_run": 269
+  },
+  "platform_consolidation_breakout": {
+   "mean_per_day": 0.462,
+   "p_zero_day": 0.708,
+   "max_zero_run": 22
+  },
+  "pullback_ma20_bounce": {
+   "mean_per_day": 1.4,
+   "p_zero_day": 0.36,
+   "max_zero_run": 14
+  },
+  "pullback_to_support": {
+   "mean_per_day": 1.718,
+   "p_zero_day": 0.344,
+   "max_zero_run": 39
+  },
+  "rsi_midline_pullback": {
+   "mean_per_day": 3.546,
+   "p_zero_day": 0.177,
+   "max_zero_run": 26
+  },
+  "strong_open": {
+   "mean_per_day": 1.519,
+   "p_zero_day": 0.519,
+   "max_zero_run": 13
+  },
+  "three_down_days_overnight": {
+   "mean_per_day": 5.132,
+   "p_zero_day": 0.137,
+   "max_zero_run": 8
+  },
+  "trend_breakout": {
+   "mean_per_day": 0.573,
+   "p_zero_day": 0.663,
+   "max_zero_run": 42
+  },
+  "tv_chandelier_exit": {
+   "mean_per_day": 1.023,
+   "p_zero_day": 0.507,
+   "max_zero_run": 13
+  },
+  "tv_halftrend": {
+   "mean_per_day": 1.545,
+   "p_zero_day": 0.45,
+   "max_zero_run": 13
+  },
+  "tv_phantom_shift": {
+   "mean_per_day": 0.692,
+   "p_zero_day": 0.607,
+   "max_zero_run": 13
+  },
+  "tv_phantom_trail": {
+   "mean_per_day": 1.845,
+   "p_zero_day": 0.313,
+   "max_zero_run": 8
+  },
+  "tv_smc_structure": {
+   "mean_per_day": 0.089,
+   "p_zero_day": 0.927,
+   "max_zero_run": 64
+  },
+  "tv_squeeze_momentum": {
+   "mean_per_day": 0.665,
+   "p_zero_day": 0.575,
+   "max_zero_run": 21
+  },
+  "tv_supertrend": {
+   "mean_per_day": 0.743,
+   "p_zero_day": 0.602,
+   "max_zero_run": 17
+  },
+  "tv_ut_bot": {
+   "mean_per_day": 3.445,
+   "p_zero_day": 0.23,
+   "max_zero_run": 5
+  },
+  "tv_wavetrend": {
+   "mean_per_day": 0.166,
+   "p_zero_day": 0.899,
+   "max_zero_run": 82
+  },
+  "tv_zlsma_cross": {
+   "mean_per_day": 3.664,
+   "p_zero_day": 0.155,
+   "max_zero_run": 3
+  },
+  "volume_price_surge": {
+   "mean_per_day": 0.211,
+   "p_zero_day": 0.837,
+   "max_zero_run": 26
+  },
+  "williams_r2_reversion": {
+   "mean_per_day": 5.068,
+   "p_zero_day": 0.187,
+   "max_zero_run": 6
+  },
+  "tv_chandelier_exit:short": {
+   "mean_per_day": 1.039,
+   "p_zero_day": 0.522,
+   "max_zero_run": 11
+  },
+  "tv_halftrend:short": {
+   "mean_per_day": 1.584,
+   "p_zero_day": 0.44,
+   "max_zero_run": 10
+  },
+  "tv_phantom_shift:short": {
+   "mean_per_day": 0.701,
+   "p_zero_day": 0.649,
+   "max_zero_run": 20
+  },
+  "tv_phantom_trail:short": {
+   "mean_per_day": 1.896,
+   "p_zero_day": 0.299,
+   "max_zero_run": 9
+  },
+  "tv_smc_structure:short": {
+   "mean_per_day": 0.088,
+   "p_zero_day": 0.929,
+   "max_zero_run": 80
+  },
+  "tv_squeeze_momentum:short": {
+   "mean_per_day": 25.684,
+   "p_zero_day": 0.006,
+   "max_zero_run": 6
+  },
+  "tv_supertrend:short": {
+   "mean_per_day": 0.754,
+   "p_zero_day": 0.618,
+   "max_zero_run": 18
+  },
+  "tv_ut_bot:short": {
+   "mean_per_day": 3.542,
+   "p_zero_day": 0.209,
+   "max_zero_run": 5
+  },
+  "tv_wavetrend:short": {
+   "mean_per_day": 0.889,
+   "p_zero_day": 0.567,
+   "max_zero_run": 33
+  },
+  "tv_zlsma_cross:short": {
+   "mean_per_day": 3.787,
+   "p_zero_day": 0.153,
+   "max_zero_run": 4
+  }
+ }
+}

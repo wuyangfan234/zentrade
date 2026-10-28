@@ -1,0 +1,1653 @@
+{
+"contract": "intel-v1",
+"generated_at": "2026-10-26T06:20:16-04:00",
+"phase": {
+"phase": "premarket",
+"label": "盘前",
+"at": "2026-10-26T06:20-04:00"
+},
+"settings": {
+"macro_impact": "high_medium"
+},
+"mood": {
+"now": "2026-10-26T06:20-04:00",
+"expected_day": "2026-10-23",
+"next_at": "2026-10-26T08:35-04:00",
+"judgment": {
+"day": "2026-10-23",
+"generated_at": "2026-10-23T08:35:00-04:00",
+"prompt_version": "mm-1",
+"model": "antigravity/gemini-3.8-flash",
+"mode": "llm",
+"error": null,
+"probs": {
+"up": 25,
+"down": 50,
+"range": 25
+},
+"main": "down",
+"stance": "down",
+"stars": 3,
+"panic": "none",
+"summary": "科技板块重挫且趋势破位，长端利率大跌难掩盘面下行惯性。",
+"guards": [],
+"items": [
+{
+"key": "trend",
+"label": "趋势",
+"raw": {
+"QQQ": {
+"close": 704.47,
+"chg_pct": -2.86,
+"vs_ma20_pct": -4.44,
+"as_of": "2026-10-22"
+},
+"SPY": {
+"close": 763.96,
+"chg_pct": -1.18,
+"vs_ma20_pct": -0.87,
+"as_of": "2026-10-22"
+},
+"as_of": "2026-10-22"
+},
+"text": "QQQ 704.47 -2.86%，距 MA20 -4.44%  SPY 763.96 -1.18%，距 MA20 -0.87%",
+"status": "ok",
+"as_of": "2026-10-22",
+"lean": "down",
+"note": "QQQ大跌2.86%收于704.47且距MA20偏离-4.44%，破位态势明显"
+}
+]
+},
+"is_today": false,
+"is_latest": true,
+"stale_items": [],
+"missing_items": [],
+"last_score": {
+"day": "2026-10-22",
+"close": 704.47,
+"chg_pct": -2.86,
+"outcome": "down",
+"main": "down",
+"stance": "down",
+"hit": true,
+"p_outcome": 40,
+"scored_at": "2026-10-22T23:32:56-04:00"
+},
+"stats": {
+"n": 9,
+"hit": 6,
+"hit_rate": 67,
+"by_main": {
+"up": {
+"n": 2,
+"hit": 2
+},
+"down": {
+"n": 7,
+"hit": 4
+},
+"range": {
+"n": 0,
+"hit": 0
+}
+},
+"outcomes": {
+"up": 2,
+"down": 4,
+"range": 3
+}
+},
+"score": {
+"day": "2026-10-23",
+"close": 704.4,
+"chg_pct": -0.01,
+"outcome": "range",
+"main": "down",
+"stance": "down",
+"hit": false,
+"p_outcome": 25,
+"scored_at": "2026-10-23T18:00:00-04:00"
+}
+},
+"tape": {
+"indexes": [
+{
+"symbol": "SPY",
+"name": "标普500",
+"price": 759.83,
+"chg_pct": -0.55,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": null
+},
+{
+"symbol": "QQQ",
+"name": "纳指100",
+"price": 704.21,
+"chg_pct": -0.05,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": null
+},
+{
+"symbol": "DIA",
+"name": "道指",
+"price": 521.365,
+"chg_pct": -1.24,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": null
+},
+{
+"symbol": "IWM",
+"name": "罗素2000",
+"price": 275.72,
+"chg_pct": -0.33,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": null
+}
+],
+"sectors": [
+{
+"symbol": "XLK",
+"name": "科技",
+"price": 183.24,
+"chg_pct": 0.5,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -0.13
+},
+{
+"symbol": "SMH",
+"name": "半导体",
+"price": 527.17,
+"chg_pct": 0.75,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -2.33
+},
+{
+"symbol": "XLC",
+"name": "通信",
+"price": 105.53,
+"chg_pct": -1.77,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -4.36
+},
+{
+"symbol": "XLY",
+"name": "可选消费",
+"price": 113.12,
+"chg_pct": -1.65,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.57
+},
+{
+"symbol": "XLF",
+"name": "金融",
+"price": 55.905,
+"chg_pct": -1.33,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.68
+},
+{
+"symbol": "XLI",
+"name": "工业",
+"price": 164.61,
+"chg_pct": -1.29,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -1.87
+},
+{
+"symbol": "XLE",
+"name": "能源",
+"price": 69.32,
+"chg_pct": 2.57,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 1.6
+},
+{
+"symbol": "XLV",
+"name": "医疗",
+"price": 179.25,
+"chg_pct": -1.15,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 1.45
+},
+{
+"symbol": "XLP",
+"name": "必需消费",
+"price": 88.27,
+"chg_pct": -1.89,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.73
+},
+{
+"symbol": "XLU",
+"name": "公用事业",
+"price": 42.565,
+"chg_pct": -0.69,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.83
+},
+{
+"symbol": "XLB",
+"name": "材料",
+"price": 51.3,
+"chg_pct": -0.79,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.77
+},
+{
+"symbol": "XLRE",
+"name": "地产",
+"price": 42.575,
+"chg_pct": 0.11,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.97
+}
+],
+"cross": [
+{
+"symbol": "TLT",
+"name": "长债",
+"price": 81.335,
+"chg_pct": -0.48,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 1.61
+},
+{
+"symbol": "HYG",
+"name": "高收益债",
+"price": 77.05,
+"chg_pct": -0.05,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.25
+},
+{
+"symbol": "UUP",
+"name": "美元",
+"price": 28.955,
+"chg_pct": 0.22,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 0.14
+},
+{
+"symbol": "GLD",
+"name": "黄金",
+"price": 366.61,
+"chg_pct": -0.67,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -4.03
+},
+{
+"symbol": "USO",
+"name": "原油",
+"price": 169.55,
+"chg_pct": 4.34,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": 4.8
+},
+{
+"symbol": "IBIT",
+"name": "比特币",
+"price": 45.95,
+"chg_pct": -0.2,
+"as_of": "2026-10-23T04:00:00Z",
+"day": "2026-10-23",
+"live": false,
+"d5": -0.41
+}
+],
+"fetched_at": "2026-10-26T06:20:16-04:00",
+"age_min": 0.0,
+"source": "Alpaca IEX 单所报价",
+"d5_day": "2026-10-23"
+},
+"vol": {
+"vix": {
+"value": 19.23,
+"prev_close": 19.45,
+"chg_pct": -1.13,
+"as_of": "2026-10-23T16:15:01"
+},
+"vix3m": {
+"value": 20.48,
+"prev_close": 20.48,
+"chg_pct": 0.0,
+"as_of": "2026-10-23T16:15:01"
+},
+"vix9d": {
+"value": 18.7,
+"prev_close": 18.7,
+"chg_pct": 0.0,
+"as_of": "2026-10-23T16:15:01"
+},
+"ratio": 0.939,
+"source": "CBOE 延迟报价 (约 15 分钟)",
+"fetched_at": "2026-10-26T06:20:16-04:00",
+"age_min": 0.0
+},
+"rates": {
+"us10y": 5.0,
+"as_of": "2026-10-23",
+"us10y_chg_bp": 4,
+"hy_oas": 3.4,
+"hy_as_of": "2026-10-22",
+"hy_chg_bp": 13,
+"fetched_at": "2026-10-26T06:20:16-04:00",
+"source": "美国财政部 10Y · FRED 高收益利差"
+},
+"pcr": {
+"day": "2026-10-23",
+"total": 0.93,
+"index": 1.1,
+"etp": 0.95,
+"equity": 0.67,
+"spx": 1.25,
+"equity_avg20": 0.57,
+"n_hist": 20,
+"series": [
+{
+"day": "2026-10-21",
+"equity": 0.52,
+"total": 0.87
+},
+{
+"day": "2026-10-22",
+"equity": 0.69,
+"total": 0.94
+},
+{
+"day": "2026-10-23",
+"equity": 0.67,
+"total": 0.93
+}
+],
+"source": "CBOE 每日期权统计 (收盘后)"
+},
+"breadth": {
+"day": "2026-10-23",
+"universe": 3100,
+"adv": 1082,
+"dec": 1984,
+"up_pct": 34.9,
+"above_ma20_pct": 55.2,
+"above_ma50_pct": 42.4,
+"above_ma200_pct": 49.4,
+"new_highs": 104,
+"new_lows": 115,
+"as_of": "2026-10-23",
+"series": [
+{
+"day": "2026-10-19",
+"universe": 3109,
+"adv": 1313,
+"dec": 1754,
+"up_pct": 42.2,
+"above_ma20_pct": 43.0,
+"above_ma50_pct": 30.2,
+"above_ma200_pct": 45.2,
+"new_highs": 34,
+"new_lows": 102
+},
+{
+"day": "2026-10-20",
+"universe": 3106,
+"adv": 2362,
+"dec": 705,
+"up_pct": 76.0,
+"above_ma20_pct": 55.0,
+"above_ma50_pct": 36.4,
+"above_ma200_pct": 48.3,
+"new_highs": 86,
+"new_lows": 75
+},
+{
+"day": "2026-10-21",
+"universe": 3106,
+"adv": 1614,
+"dec": 1443,
+"up_pct": 52.0,
+"above_ma20_pct": 55.1,
+"above_ma50_pct": 38.3,
+"above_ma200_pct": 48.9,
+"new_highs": 81,
+"new_lows": 54
+},
+{
+"day": "2026-10-22",
+"universe": 3105,
+"adv": 1799,
+"dec": 1279,
+"up_pct": 57.9,
+"above_ma20_pct": 58.1,
+"above_ma50_pct": 43.7,
+"above_ma200_pct": 50.3,
+"new_highs": 149,
+"new_lows": 106
+},
+{
+"day": "2026-10-23",
+"universe": 3100,
+"adv": 1082,
+"dec": 1984,
+"up_pct": 34.9,
+"above_ma20_pct": 55.2,
+"above_ma50_pct": 42.4,
+"above_ma200_pct": 49.4,
+"new_highs": 104,
+"new_lows": 115
+}
+],
+"computed_at": "2026-10-26T06:21:20-04:00",
+"rule": "普通股与 ADR, 收盘 ≥ $3, 20 日均成交额 ≥ $2M",
+"live": null
+},
+"calendar": {
+"events": [
+{
+"kind": "earnings",
+"day": "2026-10-27",
+"time": "08:00",
+"symbol": "GLW",
+"role": "自选",
+"timing": "bmo",
+"title": "GLW 财报 · 盘前",
+"past": false,
+"at": "2026-10-27T08:00"
+},
+{
+"kind": "macro",
+"at": "2026-10-27T10:00-04:00",
+"day": "2026-10-27",
+"time": "10:00",
+"title": "CB Consumer Confidence",
+"title_zh": "谘商会消费者信心",
+"impact": "medium",
+"forecast": "80.5",
+"previous": "81.9",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "earnings",
+"day": "2026-10-27",
+"time": "16:05",
+"symbol": "HOOD",
+"role": "自选",
+"timing": "amc",
+"title": "HOOD 财报 · 盘后",
+"past": false,
+"at": "2026-10-27T16:05"
+},
+{
+"kind": "macro",
+"at": "2026-10-28T14:00-04:00",
+"day": "2026-10-28",
+"time": "14:00",
+"title": "Federal Funds Rate",
+"title_zh": "联邦基金利率",
+"impact": "high",
+"forecast": "4.00%",
+"previous": "4.00%",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "macro",
+"at": "2026-10-28T14:00-04:00",
+"day": "2026-10-28",
+"time": "14:00",
+"title": "FOMC Statement",
+"title_zh": "FOMC 声明",
+"impact": "high",
+"forecast": null,
+"previous": null,
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "macro",
+"at": "2026-10-28T14:30-04:00",
+"day": "2026-10-28",
+"time": "14:30",
+"title": "FOMC Press Conference",
+"title_zh": "FOMC 新闻发布会",
+"impact": "high",
+"forecast": null,
+"previous": null,
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "earnings",
+"day": "2026-10-28",
+"time": "16:05",
+"symbol": "GOOGL",
+"role": "自选",
+"timing": "amc",
+"title": "GOOGL 财报 · 盘后",
+"past": false,
+"at": "2026-10-28T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-28",
+"time": "16:05",
+"symbol": "MSFT",
+"role": "自选",
+"timing": "amc",
+"title": "MSFT 财报 · 盘后",
+"past": false,
+"at": "2026-10-28T16:05"
+},
+{
+"kind": "macro",
+"at": "2026-10-29T08:30-04:00",
+"day": "2026-10-29",
+"time": "08:30",
+"title": "Advance GDP q/q",
+"title_zh": "GDP 季环比年化 (初值)",
+"impact": "high",
+"forecast": "3.2%",
+"previous": "1.5%",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "macro",
+"at": "2026-10-29T08:30-04:00",
+"day": "2026-10-29",
+"time": "08:30",
+"title": "Core PCE Price Index m/m",
+"title_zh": "核心 PCE 环比",
+"impact": "high",
+"forecast": "0.3%",
+"previous": "0.2%",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "macro",
+"at": "2026-10-29T08:30-04:00",
+"day": "2026-10-29",
+"time": "08:30",
+"title": "Advance GDP Price Index q/q",
+"title_zh": "GDP 价格指数 (初值)",
+"impact": "medium",
+"forecast": "3.5%",
+"previous": "6.2%",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "macro",
+"at": "2026-10-29T08:30-04:00",
+"day": "2026-10-29",
+"time": "08:30",
+"title": "Unemployment Claims",
+"title_zh": "初请失业金人数",
+"impact": "medium",
+"forecast": "198K",
+"previous": "194K",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "AMZN",
+"role": "自选",
+"timing": "amc",
+"title": "AMZN 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "AXTI",
+"role": "自选",
+"timing": "amc",
+"title": "AXTI 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "COIN",
+"role": "自选",
+"timing": "amc",
+"title": "COIN 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "INTC",
+"role": "自选",
+"timing": "amc",
+"title": "INTC 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "MSTR",
+"role": "自选",
+"timing": "amc",
+"title": "MSTR 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-10-29",
+"time": "16:05",
+"symbol": "SNDK",
+"role": "自选",
+"timing": "amc",
+"title": "SNDK 财报 · 盘后",
+"past": false,
+"at": "2026-10-29T16:05"
+},
+{
+"kind": "macro",
+"at": "2026-10-30T08:30-04:00",
+"day": "2026-10-30",
+"time": "08:30",
+"title": "Employment Cost Index q/q",
+"title_zh": "雇佣成本指数季环比",
+"impact": "medium",
+"forecast": "0.8%",
+"previous": "0.9%",
+"past": false,
+"actual": null,
+"actual_source": null,
+"surprise": null,
+"actual_status": null
+},
+{
+"kind": "earnings",
+"day": "2026-11-02",
+"time": "16:05",
+"symbol": "AAPL",
+"role": "自选",
+"timing": "amc",
+"title": "AAPL 财报 · 盘后",
+"past": false,
+"at": "2026-11-02T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-02",
+"time": "16:05",
+"symbol": "PLTR",
+"role": "自选",
+"timing": "amc",
+"title": "PLTR 财报 · 盘后",
+"past": false,
+"at": "2026-11-02T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-03",
+"time": "16:05",
+"symbol": "AMD",
+"role": "自选",
+"timing": "amc",
+"title": "AMD 财报 · 盘后",
+"past": false,
+"at": "2026-11-03T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-03",
+"time": "16:05",
+"symbol": "SMCI",
+"role": "自选",
+"timing": "amc",
+"title": "SMCI 财报 · 盘后",
+"past": false,
+"at": "2026-11-03T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-04",
+"time": "08:00",
+"symbol": "CRCL",
+"role": "自选",
+"timing": "bmo",
+"title": "CRCL 财报 · 盘前",
+"past": false,
+"at": "2026-11-04T08:00"
+},
+{
+"kind": "earnings",
+"day": "2026-11-04",
+"time": "16:05",
+"symbol": "ARM",
+"role": "自选",
+"timing": "amc",
+"title": "ARM 财报 · 盘后",
+"past": false,
+"at": "2026-11-04T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-04",
+"time": "16:05",
+"symbol": "COHR",
+"role": "自选",
+"timing": "amc",
+"title": "COHR 财报 · 盘后",
+"past": false,
+"at": "2026-11-04T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-04",
+"time": "16:05",
+"symbol": "QCOM",
+"role": "自选",
+"timing": "amc",
+"title": "QCOM 财报 · 盘后",
+"past": false,
+"at": "2026-11-04T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-05",
+"time": "16:05",
+"symbol": "AAOI",
+"role": "自选",
+"timing": "amc",
+"title": "AAOI 财报 · 盘后",
+"past": false,
+"at": "2026-11-05T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-05",
+"time": "16:05",
+"symbol": "LITE",
+"role": "自选",
+"timing": "amc",
+"title": "LITE 财报 · 盘后",
+"past": false,
+"at": "2026-11-05T16:05"
+},
+{
+"kind": "earnings",
+"day": "2026-11-05",
+"time": "",
+"symbol": "IREN",
+"role": "自选",
+"timing": "unknown",
+"title": "IREN 财报 · 时间未定",
+"past": false,
+"at": "2026-11-05T12:00"
+}
+],
+"days": [
+"2026-10-26",
+"2026-10-27",
+"2026-10-28",
+"2026-10-29",
+"2026-10-30",
+"2026-11-02",
+"2026-11-03",
+"2026-11-04",
+"2026-11-05"
+],
+"today": "2026-10-26",
+"level": "high_medium",
+"fetched_at": "2026-10-26T06:20:16-04:00",
+"error": null,
+"source": "ForexFactory 本周日历 · 实际值 FRED",
+"is_trading_day": true,
+"session_close": "16:00"
+},
+"earnings": {
+"rows": [
+{
+"symbol": "GLW",
+"role": "自选",
+"date": "2026-10-27",
+"timing": "bmo",
+"days": 1,
+"eps_forecast": 0.89,
+"n_est": 5.0,
+"last_year_eps": 0.67,
+"fiscal_quarter": "Sep/2026",
+"qveris": {
+"eps_avg": 0.8772,
+"eps_change_30d_pct": 0.0048,
+"rev_avg": 5021662250.0,
+"period": "2026-09-30",
+"fetched_at": "2026-10-14T12:45:08Z",
+"eps_up_30d": 1.0,
+"eps_down_30d": 0.0
+},
+"hist": {
+"n": 8,
+"median_abs_move": 1.12,
+"max_abs_move": 4.47,
+"beat_n": 7,
+"surprise_n": 7
+},
+"last": {
+"date": "2026-07-28",
+"timing": "unknown",
+"eps": 0.78,
+"forecast": 0.76,
+"surprise_pct": 2.63,
+"react_day": "2026-07-29",
+"move_pct": -1.56
+},
+"reports": [
+{
+"date": "2026-07-28",
+"timing": "unknown",
+"eps": 0.78,
+"forecast": 0.76,
+"surprise_pct": 2.63,
+"react_day": "2026-07-29",
+"move_pct": -1.56
+},
+{
+"date": "2026-04-28",
+"timing": "unknown",
+"eps": 0.7,
+"forecast": 0.7,
+"surprise_pct": null,
+"react_day": "2026-04-29",
+"move_pct": -0.75
+},
+{
+"date": "2026-01-28",
+"timing": "unknown",
+"eps": 0.72,
+"forecast": 0.7,
+"surprise_pct": 2.86,
+"react_day": "2026-01-29",
+"move_pct": -1.23
+},
+{
+"date": "2025-10-28",
+"timing": "unknown",
+"eps": 0.67,
+"forecast": 0.66,
+"surprise_pct": 1.52,
+"react_day": "2025-10-29",
+"move_pct": 4.47
+}
+],
+"implied": null
+},
+{
+"symbol": "HOOD",
+"role": "自选",
+"date": "2026-10-27",
+"timing": "amc",
+"days": 1,
+"eps_forecast": 0.56,
+"n_est": 8.0,
+"last_year_eps": 0.61,
+"fiscal_quarter": "Sep/2026",
+"qveris": {
+"eps_avg": 0.5427,
+"eps_change_30d_pct": 0.066,
+"rev_avg": 1414571440.0,
+"period": "2026-09-30",
+"fetched_at": "2026-10-14T12:47:28Z",
+"eps_up_30d": 4.0,
+"eps_down_30d": 0.0
+},
+"hist": {
+"n": 8,
+"median_abs_move": 9.86,
+"max_abs_move": 16.73,
+"beat_n": 5,
+"surprise_n": 7
+},
+"last": {
+"date": "2026-07-29",
+"timing": "unknown",
+"eps": 0.62,
+"forecast": 0.44,
+"surprise_pct": 40.91,
+"react_day": "2026-07-30",
+"move_pct": -3.61
+},
+"reports": [
+{
+"date": "2026-07-29",
+"timing": "unknown",
+"eps": 0.62,
+"forecast": 0.44,
+"surprise_pct": 40.91,
+"react_day": "2026-07-30",
+"move_pct": -3.61
+},
+{
+"date": "2026-04-28",
+"timing": "unknown",
+"eps": 0.38,
+"forecast": 0.4,
+"surprise_pct": -5.0,
+"react_day": "2026-04-29",
+"move_pct": -13.24
+},
+{
+"date": "2026-02-10",
+"timing": "amc",
+"eps": null,
+"forecast": 0.62,
+"surprise_pct": null,
+"react_day": "2026-02-11",
+"move_pct": -8.91
+},
+{
+"date": "2025-11-05",
+"timing": "unknown",
+"eps": 0.61,
+"forecast": 0.51,
+"surprise_pct": 19.61,
+"react_day": "2025-11-06",
+"move_pct": -10.81
+}
+],
+"implied": null
+},
+{
+"symbol": "GOOGL",
+"role": "自选",
+"date": "2026-10-28",
+"timing": "amc",
+"days": 2,
+"eps_forecast": 2.94,
+"n_est": 14.0,
+"last_year_eps": 2.87,
+"fiscal_quarter": "Sep/2026",
+"qveris": null,
+"hist": {
+"n": 8,
+"median_abs_move": 2.67,
+"max_abs_move": 9.96,
+"beat_n": 8,
+"surprise_n": 8
+},
+"last": {
+"date": "2026-07-22",
+"timing": "unknown",
+"eps": 9.11,
+"forecast": 2.88,
+"surprise_pct": 216.32,
+"react_day": "2026-07-23",
+"move_pct": -7.13
+},
+"reports": [
+{
+"date": "2026-07-22",
+"timing": "unknown",
+"eps": 9.11,
+"forecast": 2.88,
+"surprise_pct": 216.32,
+"react_day": "2026-07-23",
+"move_pct": -7.13
+},
+{
+"date": "2026-04-29",
+"timing": "unknown",
+"eps": 5.11,
+"forecast": 2.64,
+"surprise_pct": 93.56,
+"react_day": "2026-04-30",
+"move_pct": 9.96
+},
+{
+"date": "2026-02-04",
+"timing": "unknown",
+"eps": 2.82,
+"forecast": 2.57,
+"surprise_pct": 9.73,
+"react_day": "2026-02-05",
+"move_pct": -0.54
+},
+{
+"date": "2025-10-29",
+"timing": "unknown",
+"eps": 2.87,
+"forecast": 2.26,
+"surprise_pct": 26.99,
+"react_day": "2025-10-30",
+"move_pct": 2.52
+}
+],
+"implied": null
+},
+{
+"symbol": "MSFT",
+"role": "自选",
+"date": "2026-10-28",
+"timing": "amc",
+"days": 2,
+"eps_forecast": 4.71,
+"n_est": 14.0,
+"last_year_eps": 4.13,
+"fiscal_quarter": "Sep/2026",
+"qveris": {
+"eps_avg": 4.7184,
+"eps_change_30d_pct": -0.0013,
+"rev_avg": 90706507470.0,
+"period": "2026-09-30",
+"fetched_at": "2026-10-23T12:45:00Z",
+"eps_up_30d": 2.0,
+"eps_down_30d": 1.0
+},
+"hist": {
+"n": 8,
+"median_abs_move": 6.12,
+"max_abs_move": 15.51,
+"beat_n": 8,
+"surprise_n": 8
+},
+"last": {
+"date": "2026-07-29",
+"timing": "unknown",
+"eps": 4.74,
+"forecast": 4.21,
+"surprise_pct": 12.59,
+"react_day": "2026-07-30",
+"move_pct": 15.51
+},
+"reports": [
+{
+"date": "2026-07-29",
+"timing": "unknown",
+"eps": 4.74,
+"forecast": 4.21,
+"surprise_pct": 12.59,
+"react_day": "2026-07-30",
+"move_pct": 15.51
+},
+{
+"date": "2026-04-29",
+"timing": "unknown",
+"eps": 4.27,
+"forecast": 4.07,
+"surprise_pct": 4.91,
+"react_day": "2026-04-30",
+"move_pct": -3.93
+},
+{
+"date": "2026-01-28",
+"timing": "unknown",
+"eps": 4.14,
+"forecast": 3.88,
+"surprise_pct": 6.7,
+"react_day": "2026-01-29",
+"move_pct": -9.99
+},
+{
+"date": "2025-10-29",
+"timing": "unknown",
+"eps": 4.13,
+"forecast": 3.65,
+"surprise_pct": 13.15,
+"react_day": "2025-10-30",
+"move_pct": -2.92
+}
+],
+"implied": {
+"expected_move_pct": 5.3,
+"atm_iv": 0.6342,
+"expiration": "2026-10-30",
+"spot": 524.51,
+"as_of": "2026-10-26T04:00:53Z",
+"source": "Alpaca 期权链 (免费)"
+}
+},
+{
+"symbol": "AMZN",
+"role": "自选",
+"date": "2026-10-29",
+"timing": "amc",
+"days": 3,
+"eps_forecast": 2.01,
+"n_est": 14.0,
+"last_year_eps": 1.95,
+"fiscal_quarter": "Sep/2026",
+"qveris": {
+"eps_avg": 1.952,
+"eps_change_30d_pct": -0.0014,
+"rev_avg": 202022776300.0,
+"period": "2026-09-30",
+"fetched_at": "2026-10-15T12:45:00Z",
+"eps_up_30d": 4.0,
+"eps_down_30d": 1.0
+},
+"hist": {
+"n": 8,
+"median_abs_move": 5.87,
+"max_abs_move": 15.32,
+"beat_n": 6,
+"surprise_n": 8
+},
+"last": {
+"date": "2026-07-30",
+"timing": "unknown",
+"eps": 1.88,
+"forecast": 1.83,
+"surprise_pct": 2.73,
+"react_day": "2026-07-31",
+"move_pct": 15.32
+},
+"reports": [
+{
+"date": "2026-07-30",
+"timing": "unknown",
+"eps": 1.88,
+"forecast": 1.83,
+"surprise_pct": 2.73,
+"react_day": "2026-07-31",
+"move_pct": 15.32
+},
+{
+"date": "2026-04-29",
+"timing": "unknown",
+"eps": 1.56,
+"forecast": 1.6,
+"surprise_pct": -2.5,
+"react_day": "2026-04-30",
+"move_pct": 0.77
+},
+{
+"date": "2026-02-05",
+"timing": "unknown",
+"eps": 1.95,
+"forecast": 1.98,
+"surprise_pct": -1.52,
+"react_day": "2026-02-06",
+"move_pct": -5.55
+},
+{
+"date": "2025-10-30",
+"timing": "unknown",
+"eps": 1.95,
+"forecast": 1.58,
+"surprise_pct": 23.42,
+"react_day": "2025-10-31",
+"move_pct": 9.58
+}
+],
+"implied": {
+"expected_move_pct": 7.93,
+"atm_iv": 0.9474,
+"expiration": "2026-10-30",
+"spot": 248.0,
+"as_of": "2026-10-26T04:01:23Z",
+"source": "Alpaca 期权链 (免费)"
+}
+},
+{
+"symbol": "AXTI",
+"role": "自选",
+"date": "2026-10-29",
+"timing": "amc",
+"days": 3,
+"eps_forecast": 0.3,
+"n_est": 3.0,
+"last_year_eps": -0.04,
+"fiscal_quarter": "Sep/2026",
+"qveris": null,
+"hist": {
+"n": 8,
+"median_abs_move": 19.62,
+"max_abs_move": 31.0,
+"beat_n": 4,
+"surprise_n": 7
+},
+"last": {
+"date": "2026-07-30",
+"timing": "unknown",
+"eps": 0.17,
+"forecast": 0.05,
+"surprise_pct": 240.0,
+"react_day": "2026-07-31",
+"move_pct": 28.74
+},
+"reports": [
+{
+"date": "2026-07-30",
+"timing": "unknown",
+"eps": 0.17,
+"forecast": 0.05,
+"surprise_pct": 240.0,
+"react_day": "2026-07-31",
+"move_pct": 28.74
+},
+{
+"date": "2026-04-30",
+"timing": "unknown",
+"eps": -0.03,
+"forecast": -0.06,
+"surprise_pct": 50.0,
+"react_day": "2026-05-01",
+"move_pct": 21.18
+},
+{
+"date": "2026-02-19",
+"timing": "amc",
+"eps": null,
+"forecast": -0.06,
+"surprise_pct": null,
+"react_day": "2026-02-20",
+"move_pct": 24.65
+},
+{
+"date": "2025-10-30",
+"timing": "unknown",
+"eps": -0.04,
+"forecast": -0.13,
+"surprise_pct": 69.23,
+"react_day": "2025-10-31",
+"move_pct": 8.61
+}
+],
+"implied": null
+}
+],
+"fetched_at": "2026-10-26T06:21:42-04:00",
+"hist_at": "2026-10-26T06:21:46-04:00",
+"source": "Nasdaq 一致预期 · 历史反应=日K · 隐含波动=期权链"
+},
+"actions": [
+{
+"symbol": "ASML",
+"role": "自选",
+"type": "cash_dividend",
+"date": "2026-10-27",
+"rate": 1.791518,
+"special": false
+}
+],
+"news": {
+"items": [
+{
+"id": "alpaca:62583711",
+"symbol": "CRWV",
+"published_at": "2026-10-26T10:14:13Z",
+"age_hours": 0.1,
+"headline": "IREN、CRWV、NBIS股价盘前下跌，分析师重申Elon Musk关于新型云数据中心债务的警告：“仅将GPU作为抵押品已经不够了”",
+"summary": "AI基础设施股下跌，成本上升、每日500万美元延迟罚款及融资收紧威胁新型云数据中心行业整合。",
+"original_headline": "IREN, CRWV, NBIS, APLD Stocks Fall Pre-Market as Analyst Echoes Elon Musk’s Neocloud Debt Warning: ‘Putting GPUs as Collateral Isn’t Enough Anymore'",
+"translated": true,
+"tagged": true,
+"tag_mode": "llm",
+"relevance": "primary",
+"event_type": "macro",
+"event_label": "宏观/行业",
+"direction": "bearish",
+"importance": "medium",
+"rehash": false,
+"mention": "headline",
+"scope": "broad",
+"sources": [
+"Benzinga"
+],
+"url": "https://www.benzinga.com/markets/equities/26/10/62583711/iren-crwv-nbis-apld-stocks-fall-pre-market-as-analyst-echoes-elon-musks-neocloud-debt-warning-putting-gpus-as-collateral-isnt-enough-anymore",
+"other_symbols": [
+"APLD",
+"IREN",
+"NBIS",
+"NVDA",
+"SPCX"
+],
+"role": "自选"
+},
+{
+"id": "finnhub:143194617",
+"symbol": "GOOGL",
+"published_at": "2026-10-26T09:30:01Z",
+"age_hours": 0.8,
+"headline": "Alphabet拥有5140亿美元的云订单。10月28日，这个数字背后的因素更重要",
+"summary": "这家科技巨头将在收盘后公布第三季度财报。",
+"original_headline": "Alphabet Has $514 Billion in Cloud Orders. Here’s What Matters More Than That Number on Oct. 28.",
+"translated": true,
+"tagged": true,
+"tag_mode": "llm",
+"relevance": "primary",
+"event_type": "earnings",
+"event_label": "财报",
+"direction": "neutral",
+"importance": "medium",
+"rehash": false,
+"mention": "headline",
+"scope": "focused",
+"sources": [
+"Finnhub"
+],
+"url": "https://finnhub.io/api/news?id=07e46062f376b8c589d852e8c67550155451a7a40d973e5beec7d09e3f2db9e2",
+"other_symbols": [],
+"role": "自选"
+},
+{
+"id": "finnhub:143194639",
+"symbol": "META",
+"published_at": "2026-10-26T09:20:06Z",
+"age_hours": 1.0,
+"headline": "Meta的420亿美元罚款是AI行业的一记警钟",
+"summary": "诉讼浪潮正波及Meta，近期罚款和和解金额达420亿美元，提醒AI公司即使监管滞后也可能面临司法追责。",
+"original_headline": "Meta's $42B in penalties is a warning to AI",
+"translated": true,
+"tagged": true,
+"tag_mode": "llm",
+"relevance": "primary",
+"event_type": "litigation",
+"event_label": "诉讼",
+"direction": "bearish",
+"importance": "high",
+"rehash": false,
+"mention": "headline",
+"scope": "focused",
+"sources": [
+"Finnhub"
+],
+"url": "https://finnhub.io/api/news?id=670e293e188edc58aa9d2bbf0dd868fba858f7e7b7aba67bc1df5e7ec0b1dd95",
+"other_symbols": [],
+"role": "自选"
+},
+{
+"id": "finnhub:143194685",
+"symbol": "COIN",
+"published_at": "2026-10-26T09:20:02Z",
+"age_hours": 1.0,
+"headline": "CME Group 对比 Coinbase Global：稳健增长遭遇加密货币的繁荣与萧条周期",
+"summary": "Coinbase 两年收入下降近50%，而 CME 保持稳定，这种分化引发了外界对二者竞争地位的讨论。",
+"original_headline": "CME Group vs. Coinbase Global: Steady Growth Meets Crypto's Boom-and-Bust Cycle",
+"translated": true,
+"tagged": true,
+"tag_mode": "llm",
+"relevance": "primary",
+"event_type": "other",
+"event_label": "其他",
+"direction": "bearish",
+"importance": "medium",
+"rehash": false,
+"mention": "headline",
+"scope": "focused",
+"sources": [
+"Finnhub"
+],
+"url": "https://finnhub.io/api/news?id=cedf4fc0ade5889b7b30dcbd4167e141b23a2b3967915755bcdc788dbf7475f5",
+"other_symbols": [],
+"role": "自选"
+},
+{
+"id": "alpaca:62582768",
+"symbol": "AAPL",
+"published_at": "2026-10-26T08:56:10Z",
+"age_hours": 1.4,
+"headline": "报告称：Apple设计团队不想推出触控屏Mac，但Tim Cook和John Ternus另有想法",
+"summary": "据报道，在Tim Cook和John Ternus克服内部设计团队反对后，Apple将推出配备触控屏的MacBook Pro。",
+"original_headline": "Apple's Design Team Didn't Want Touchscreen Macs, But Tim Cook and John Ternus Had Other Ideas: Report",
+"translated": true,
+"tagged": true,
+"tag_mode": "llm",
+"relevance": "primary",
+"event_type": "product",
+"event_label": "产品/技术",
+"direction": "neutral",
+"importance": "medium",
+"rehash": false,
+"mention": "headline",
+"scope": "focused",
+"sources": [
+"Benzinga"
+],
+"url": "https://www.benzinga.com/markets/tech/26/10/62582768/apple-touchscreen-macbook-pro-2",
+"other_symbols": [],
+"role": "自选"
+},
+{
+"id": "finnhub:143193786",
+"symbol": "INTC",
+"published_at": "2026-10-26T08:47:26Z",
+"age_hours": 1.5,
+"headline": "Stocktwits 科技观察：更多大型财报、Apple 触摸屏 MacBook 和 Intel 业绩备受关注",
+"summary": "随着财报季进入关键阶段，投资者将审视云业务增长、AI 支出计划和芯片需求。",
+"original_headline": "Stocktwits Tech Watch: More Big Earnings, Apple’s Touch-Screen MacBook And Intel Results In Focus",
+"translated": true,
+"tagged": false,
+"tag_mode": "llm",
+"relevance": null,
+"event_type": null,
+"event_label": null,
+"direction": null,
+"importance": null,
+"rehash": false,
+"mention": "headline",
+"scope": "focused",
+"sources": [
+"Finnhub"
+],
+"url": "https://finnhub.io/api/news?id=1e0f150fc9ea54a8bafb84405cd51ce4b86953b3206e67b3b4da9258a8aa238d",
+"other_symbols": [
+"AAPL"
+],
+"role": "自选"
+}
+],
+"total": 62,
+"tone": {
+"CRWV": {
+"bullish": 0,
+"bearish": 1
+},
+"IREN": {
+"bullish": 0,
+"bearish": 1
+},
+"NBIS": {
+"bullish": 1,
+"bearish": 1
+},
+"META": {
+"bullish": 1,
+"bearish": 1
+},
+"COIN": {
+"bullish": 0,
+"bearish": 1
+},
+"SKHY": {
+"bullish": 1,
+"bearish": 0
+},
+"NVDA": {
+"bullish": 2,
+"bearish": 1
+},
+"PLTR": {
+"bullish": 1,
+"bearish": 0
+},
+"SPCX": {
+"bullish": 6,
+"bearish": 0
+},
+"BE": {
+"bullish": 0,
+"bearish": 1
+},
+"TSLA": {
+"bullish": 2,
+"bearish": 1
+},
+"ORCL": {
+"bullish": 0,
+"bearish": 1
+},
+"NFLX": {
+"bullish": 0,
+"bearish": 1
+},
+"DELL": {
+"bullish": 1,
+"bearish": 0
+},
+"AAPL": {
+"bullish": 1,
+"bearish": 0
+},
+"SMCI": {
+"bullish": 1,
+"bearish": 0
+},
+"GOOGL": {
+"bullish": 1,
+"bearish": 0
+},
+"RKLB": {
+"bullish": 0,
+"bearish": 2
+},
+"SNDK": {
+"bullish": 0,
+"bearish": 1
+},
+"AMD": {
+"bullish": 1,
+"bearish": 0
+}
+},
+"hours": 36,
+"disclaimer": "事件类型、方向与重要度为 AI 判读，未经验证；仅供参考"
+},
+"watch_count": 44,
+"state": {
+"etfs": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"vol": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"rates": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"macro_calendar": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"macro_actuals": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"pcr": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"breadth": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"etf_d5": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"earnings_upcoming": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+},
+"earnings_history": {
+"last_attempt_at": "2026-10-26T06:20:16-04:00",
+"last_ok_at": "2026-10-26T06:20:16-04:00",
+"error": null
+}
+},
+"errors": {}
+}

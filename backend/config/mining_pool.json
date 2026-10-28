@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "revision": "2026-10-01",
+  "description": "周度自动挖掘的主题股票池。按用户 2026-10-01 指令：上限 200 只，覆盖科技/AI/存储/生物医药/服务器/算力/商业航天，自选股必须全部在池内。成员按主题人工审定（Nasdaq 行业标签过粗，如 QCOM 被标为广播设备、VRT 被标为工业机械，不能直接按标签筛）。运行时只保留本地有足够日K的标的，并按近 60 日成交额补足到上限。",
+  "max_symbols": 200,
+  "liquidity_fill": {
+    "window_days": 60,
+    "min_close": 5.0,
+    "min_history_days": 55,
+    "instrument_types": ["common_stock", "adr", "unknown"]
+  },
+  "themes": {
+    "semiconductors": {
+      "label": "半导体/芯片",
+      "symbols": ["NVDA", "AMD", "AVGO", "INTC", "TSM", "ARM", "MRVL", "QCOM", "TXN", "ADI", "MCHP", "NXPI", "ON", "MPWR", "LSCC", "ALAB", "CRDO", "SITM", "AMBA", "SYNA", "QRVO", "SWKS", "GFS", "WOLF", "NVTS", "POWI", "RMBS", "SMTC", "MTSI", "AOSL", "INDI", "SKYT", "ASML", "AMAT", "LRCX", "KLAC", "TER", "ONTO", "CAMT", "NVMI", "FORM", "ACMR", "UCTT", "ICHR", "KLIC", "COHU", "ENTG", "MKSI", "AEIS", "ASX", "UMC"]
+    },
+    "memory_storage": {
+      "label": "存储",
+      "symbols": ["MU", "SNDK", "WDC", "STX", "NTAP", "PSTG", "SIMO", "NTNX"]
+    },
+    "servers_compute": {
+      "label": "服务器/算力/AI基础设施",
+      "symbols": ["DELL", "SMCI", "HPE", "ANET", "VRT", "CLS", "CSCO", "CIEN", "COHR", "LITE", "AAOI", "FN", "JBL", "CRWV", "NBIS", "IREN", "CIFR", "WULF", "APLD", "CORZ", "GLXY", "HUT", "BTDR", "ETN", "GEV", "MOD", "NVT", "PWR", "VST", "CEG", "OKLO", "SMR", "BE", "EQIX", "DLR", "ORCL", "IBM", "PENG", "INOD"]
+    },
+    "ai_software": {
+      "label": "AI/软件/平台",
+      "symbols": ["MSFT", "GOOGL", "META", "AMZN", "AAPL", "PLTR", "SNOW", "AI", "PATH", "SOUN", "CRM", "NOW", "ADBE", "INTU", "DDOG", "MDB", "NET", "CRWD", "PANW", "ZS", "FTNT", "S", "OKTA", "TEAM", "WDAY", "SHOP", "APP", "TTD", "U", "RBLX", "BBAI", "TEM", "UPST", "AFRM", "HOOD", "SOFI", "CFLT", "GTLB", "ESTC", "IOT", "DOCN", "TWLO", "ZM", "DUOL", "RDDT", "PINS", "SNAP", "UBER", "NFLX", "TSLA"]
+    },
+    "commercial_space": {
+      "label": "商业航天",
+      "symbols": ["RKLB", "ASTS", "LUNR", "PL", "RDW", "KTOS", "SPCE", "BKSY", "SATS", "SPCX", "FLY", "VOYG", "IRDM", "MNTS", "SIDU", "GSAT", "VSAT", "BA", "LMT", "NOC", "RTX", "LHX", "GD", "HEI", "TDY", "AVAV"]
+    },
+    "biotech_pharma": {
+      "label": "生物医药",
+      "symbols": ["LLY", "NVO", "VRTX", "REGN", "AMGN", "GILD", "ABBV", "BMY", "PFE", "MRK", "JNJ", "AZN", "MRNA", "BNTX", "BIIB", "ALNY", "ARGX", "INSM", "MDGL", "VKTX", "EXEL", "INCY", "NBIX", "UTHR", "SRPT", "IONS", "BMRN", "CRSP", "NTLA", "BEAM", "RXRX", "HIMS", "ISRG", "DXCM", "PODD", "TMO", "DHR", "IDXX", "ABT", "SYK", "BSX", "MDT", "ILMN", "EXAS", "NTRA", "GH", "TWST", "CYTK", "AXSM", "ROIV", "SMMT", "VERA", "ACAD", "HALO", "TGTX", "PCVX", "KRYS", "RVMD", "MIRM", "PTGX"]
+    },
+    "crypto_fintech": {
+      "label": "加密/金融科技（自选相关）",
+      "symbols": ["COIN", "MSTR", "CRCL"]
+    }
+  }
+}

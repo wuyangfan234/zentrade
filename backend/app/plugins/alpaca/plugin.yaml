@@ -1,0 +1,11 @@
+name: alpaca
+display_name: "Alpaca (美股)"
+runtime: none
+entry: app.plugins.alpaca.provider:AlpacaProvider
+check: app.plugins.alpaca.provider:availability
+datasets: [daily, adj_factor, realtime, minute, full_minute]
+api_key_env: ZENTRADE_ALPACA_KEY
+hidden: false
+description: "Alpaca Markets 美股数据 (SIP历史日K/分钟K + delayed_sip研究快照；纸面执行独立取新鲜IEX报价)。Key 格式: KEY_ID:SECRET"
+install_hint: ""
+homepage: "https://alpaca.markets"
