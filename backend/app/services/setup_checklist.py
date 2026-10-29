@@ -68,7 +68,7 @@ def _ai_items() -> list[dict]:
     out.append(_item(
         "ai", "ai", "AI 模型（全局）", "recommended", configured, source=src,
         purpose="个股分析、新闻翻译与打标、AI 策略生成、助手对话、盘前大盘情绪的默认模型。",
-        impact="不配：新闻只有英文原标题（Google 兜底只翻标题，无利多/利空标签），个股分析、AI 策略、助手不可用。交易环与机会板不依赖 AI。",
+        impact="不配：新闻只有英文原标题（无利多/利空标签），个股分析、AI 策略、助手不可用。交易环与机会板不依赖 AI。",
         where="settings?tab=ai&highlight=ai-connection", env=["AI_PROVIDER", "AI_BASE_URL", "AI_API_KEY", "AI_MODEL"],
         note=f"当前模型：{model}" if configured and model else ""))
 
@@ -139,7 +139,7 @@ def build() -> dict:
         note="按积分计费，设置页可设每日上限。"))
     items.append(_item(
         "free_sources", "news", "免 Key 公开数据", "optional", True, source="内置",
-        purpose="Nasdaq 财报日历、CBOE 延迟报价与 Put/Call、FRED 宏观、ForexFactory 日历、Hyperliquid 盘前参考价、Google 翻译兜底。",
+        purpose="Nasdaq 财报日历、CBOE 延迟报价与 Put/Call、FRED 宏观、ForexFactory 日历、Hyperliquid 盘前参考价；可选 Google 翻译兜底（默认关闭）。",
         impact="无需配置。均为公开端点，不保证可用；单个源失败只影响对应卡片。",
         where="", note="使用前请自行确认各源服务条款。"))
 

@@ -319,8 +319,8 @@ def system_status(request: Request):
          f"24h {nw.get('events_24h', 0)} 条（已译 {nw.get('translated_24h', 0)}，已打标 {nw.get('tagged_24h', 0)}）"
          f" · 本轮新增 {ing.get('added', 0)} · 待打标 {tr.get('pending_after', 0)}"
          + (f"；源错误 {len(nw.get('ingest_errors') or [])} 项" if nw.get('ingest_errors') else '')
-         + (f"；翻译连续 {nw.get('translate_fail_streak')} 轮有失败批次（已用 Google 兜底）" if _news_translate_failing(nw)
-            else f"；本轮翻译 {tr.get('failed_batches')} 批超时已兜底，下一轮自动重译" if tr.get('failed_batches') else ''))
+         + (f"；翻译连续 {nw.get('translate_fail_streak')} 轮有失败批次" if _news_translate_failing(nw)
+            else f"；本轮翻译 {tr.get('failed_batches')} 批失败，下一轮自动重译" if tr.get('failed_batches') else ''))
         if nw.get('last_run_at') else '首次采集后显示（每分钟唤醒，盘前盘中每 5 分钟）', '/api/news/status')
     from app.services import qveris_data, qveris_gate
     qv = safe(lambda: qveris_gate.usage(data_dir), {}) or {}

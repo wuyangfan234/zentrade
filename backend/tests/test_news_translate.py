@@ -1,4 +1,4 @@
-"""新闻翻译打标: 宽松解析、字段白名单校验、不许编造摘要、模型失败走 Google 兜底、增量重试。"""
+"""新闻翻译打标: 宽松解析、字段白名单校验、不许编造摘要、模型失败走可选的 Google 兜底、增量重试。"""
 import asyncio
 import json
 from datetime import datetime, timezone

@@ -170,7 +170,7 @@ def tick(data_dir: Path, loop=None, repo=None, *, now: datetime | None = None, f
         if not sources and not tr.get("llm") and not tr.get("fallback"):
             return None
         pushed = notify_holdings(data_dir, held_symbols(loop), now=now)
-        # 0.41.1: 翻译失败连续轮数。单批偶发超时 (网关 120s 超时, 已用 Google 兜底, 下一轮自动重译) 不算故障;
+        # 0.41.1: 翻译失败连续轮数。单批偶发超时 (网关 120s 超时, 下一轮自动重译) 不算故障;
         # 连续 TRANSLATE_FAIL_WARN_STREAK 轮都失败才在状态页标黄。
         prev = (news_store.status_state(data_dir).get("translate_fail_streak") or 0)
         streak = int(prev) + 1 if tr.get("failed_batches") else 0
