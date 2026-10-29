@@ -99,6 +99,7 @@ def test_other_builtins_have_no_take_profit():
     assert with_tp == ["momentum_rsi2_pullback"]
 
 
+@pytest.mark.full_edition
 def test_strategy_detail_exposes_take_profit():
     from app.api.strategy import _strategy_detail
     e = StrategyEngine(strategy_dirs=[BUILTIN])
@@ -229,6 +230,7 @@ def test_backtest_uses_take_profit_and_hold_from_module(tmp_path):
 
 # ---------- 对账: 截面策略在全市场算 ----------
 
+@pytest.mark.full_edition
 def test_reconcile_replay_runs_cross_sectional_rules_on_full_market(monkeypatch, tmp_path):
     from app.services import strategy_evaluation_runner as runner
     from app.services import swing_settlement as ss

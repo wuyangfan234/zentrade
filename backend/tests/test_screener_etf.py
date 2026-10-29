@@ -47,6 +47,7 @@ def test_all_builtin_strategies_declare_asset_types_and_timeframes():
         assert meta["timeframes"] == ["1d"]
 
 
+@pytest.mark.full_edition
 def test_all_builtin_strategies_use_matrix_backend_only():
     engine = _engine()
     assert engine.load_errors() == []

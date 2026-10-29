@@ -123,6 +123,7 @@ def test_score_counts_strategy_hits_and_caps():
     assert out["long"][0]["score"] >= 3.0
 
 
+@pytest.mark.full_edition
 def test_build_empty_without_snapshot(tmp_path):
     out = sd.build(tmp_path)
     assert out["available"] is False

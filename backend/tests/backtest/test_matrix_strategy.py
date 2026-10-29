@@ -313,6 +313,7 @@ def test_matrix_crossovers_skip_missing_asset_bars_like_polars_signals(
     assert actual.entry.any() or actual.exit.any()
 
 
+@pytest.mark.full_edition
 def test_builtin_matrix_strategies_use_their_declared_formula_modules():
     strategy_dir = REPO_ROOT / "backend" / "app" / "strategy" / "builtin"
     strategy_files = sorted(
@@ -784,6 +785,7 @@ def test_managed_source_generation_skips_file_walk_and_invalidates_explicitly(tm
     assert len(list(cache_root.glob("v4-*"))) == 1
 
 
+@pytest.mark.full_edition
 def test_registered_builtin_matrix_strategies_share_one_cache_profile():
     engine = StrategyEngine(
         strategy_dirs=[REPO_ROOT / "backend" / "app" / "strategy" / "builtin"]

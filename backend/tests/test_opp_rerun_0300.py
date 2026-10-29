@@ -34,6 +34,7 @@ THIN = {"long_lower_shadow_reversal", "macd_below_zero_revival", "n_day_low_reve
         "momentum_rsi2_pullback"}
 
 
+@pytest.mark.full_edition
 def test_history_file_is_self_describing():
     """来源 (窗口 / 名单 / 数据截至) 必须写在文件里, 齿轮的来源行读它, 不再写死日期与票数。"""
     h = json.loads(sd.RULE_HISTORY_PATH.read_text(encoding="utf-8"))
@@ -44,6 +45,7 @@ def test_history_file_is_self_describing():
     assert h["generated"].endswith("+08:00") or h["generated"].endswith("+00:00")
 
 
+@pytest.mark.full_edition
 def test_history_file_lists_the_thin_rules_without_r():
     rules = json.loads(sd.RULE_HISTORY_PATH.read_text(encoding="utf-8"))["rules"]
     for k in THIN:
@@ -53,6 +55,7 @@ def test_history_file_lists_the_thin_rules_without_r():
         assert x["raw"] >= x["signals"] >= x["n"] >= 0, k
 
 
+@pytest.mark.full_edition
 def test_history_file_full_entries_are_consistent_with_themselves():
     """39 条够样本的规则: fill = 成交 / 过门卡; 其余字段齐全 (与旧 38 条同一口径)。"""
     rules = json.loads(sd.RULE_HISTORY_PATH.read_text(encoding="utf-8"))["rules"]
@@ -188,6 +191,7 @@ def _engine():
     return SimpleNamespace(list_strategies=lambda: metas)
 
 
+@pytest.mark.full_edition
 def test_rules_api_short_names_and_candidate_errors(tmp_path):
     p = sc.candidates_path(tmp_path)
     p.parent.mkdir(parents=True)
@@ -232,6 +236,7 @@ def test_rerun_endpoint_queues_in_session_and_writes_only_research(tmp_path, mon
     assert r.json()["started"] is True and started == ["manual"]
 
 
+@pytest.mark.full_edition
 def test_history_file_added_rules_share_the_window():
     """0.37.0: 追加的规则 (--only/--merge) 记在 added 里, 名单只数与文件头一致 (同口径才能和其它规则比)。"""
     h = json.loads(sd.RULE_HISTORY_PATH.read_text(encoding="utf-8"))

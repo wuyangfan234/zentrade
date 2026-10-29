@@ -257,6 +257,7 @@ def test_trading_loop_blockers_carry_card_id():
 
 # ---------- 5. 规则面板历史 = tight-v1 ----------
 
+@pytest.mark.full_edition
 def test_rule_history_is_tight_card():
     from app.services import swing_desk as _sd
     h = _sd.rule_history()

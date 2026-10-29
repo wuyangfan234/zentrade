@@ -112,4 +112,5 @@ markers = [
     "real_earnings_calendar: use the real on-disk earnings calendar instead of the default empty/usable stub",
     "real_corporate_actions: use the real on-disk corporate-action feed instead of the default empty/usable stub",
     "real_swing_candidate_check: let strategy publish start the background card-replay candidate check",
+    "full_edition: needs third-party strategy ports or private replay statistics that the open-source core edition does not ship (auto-skipped there)",
 ]

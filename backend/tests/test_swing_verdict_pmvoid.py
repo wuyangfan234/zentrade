@@ -227,6 +227,7 @@ def test_board_voided_card_goes_to_history(tmp_path, monkeypatch, cal):
     assert h["symbol"] == "LLY" and h["state"] == "paper_expired" and h["void_reason"] == pmc.REASON and h["pm_price"] == 97.0
 
 
+@pytest.mark.full_edition
 def test_board_verdict_order_with_usd_odds(tmp_path, monkeypatch, cal):
     _book_card(tmp_path, monkeypatch)                                    # 区 99.00-99.50 止损 97.50 ATR 2
     out = _board(tmp_path, monkeypatch, et(D1, 8, 0), {"LLY": (100.3, "premarket")})
@@ -241,6 +242,7 @@ def test_board_verdict_order_with_usd_odds(tmp_path, monkeypatch, cal):
     assert out["risk_pct"] == 0.01
 
 
+@pytest.mark.full_edition
 def test_board_premarket_beyond_stop_before_check_is_skip(tmp_path, monkeypatch, cal):
     _book_card(tmp_path, monkeypatch)
     out = _board(tmp_path, monkeypatch, et(D1, 8, 30), {"LLY": (97.0, "premarket")})
@@ -249,6 +251,7 @@ def test_board_premarket_beyond_stop_before_check_is_skip(tmp_path, monkeypatch,
     assert c["odds"]["bin"] == "beyond_stop" and c["odds"]["ev_r"] < 0
 
 
+@pytest.mark.full_edition
 def test_board_intraday_beyond_stop_still_order(tmp_path, monkeypatch, cal):
     """盘中越止损不作废 (那一格历史期望为正), 检查过没越止损的卡照常下单。"""
     card = _book_card(tmp_path, monkeypatch)
@@ -266,6 +269,7 @@ def test_board_blocked_is_skip_without_numbers(tmp_path, monkeypatch, cal):
     assert c["blocked"] == "cooldown" and c["verdict"] == "skip" and c["verdict_reason"] == "cooldown"
 
 
+@pytest.mark.full_edition
 def test_board_birth_cell_before_any_new_price(tmp_path, monkeypatch, cal):
     """信号日盘后到第 1 天盘前 04:00 前, 现价还是信号日收盘 -> birth 格 (第 1 天全部卡的结局)。"""
     _book_card(tmp_path, monkeypatch)
@@ -276,6 +280,7 @@ def test_board_birth_cell_before_any_new_price(tmp_path, monkeypatch, cal):
 
 # ---------- 5. 赔率表与裁决纯函数 ----------
 
+@pytest.mark.full_edition
 def test_odds_table_covers_every_state():
     cells = sv.odds_table()["cells"]
     for side in ("long", "short"):
@@ -357,6 +362,7 @@ def test_summarize_rows_excludes_void():
     assert s["cards"] == 2 and s["filled"] == 1
 
 
+@pytest.mark.full_edition
 def test_base_rates_rebuilt_with_void_rule():
     b = ss.base_rates()
     assert b["settle_contract"] == "swing-settle-v2" and b["void_cards"]["long"] == 24 and b["void_cards"]["short"] == 0

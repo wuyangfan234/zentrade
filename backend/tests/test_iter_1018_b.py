@@ -194,6 +194,7 @@ def test_contract_bump_keeps_old_outcomes(tmp_path, monkeypatch, cal):
 
 # ---------- 卡面一行 + 回测页卡结局 ----------
 
+@pytest.mark.full_edition
 def test_card_line_from_base_rates():
     line = ss.card_line("long")
     assert line is not None and set(line) >= {"fill", "win", "target", "stop", "time", "contract"}
@@ -202,6 +203,7 @@ def test_card_line_from_base_rates():
     assert ss.card_line("short") is not None
 
 
+@pytest.mark.full_edition
 def test_card_line_marks_stale_when_current_rules_differ():
     """基础率是 10-15 那套 3+3 的回放成绩; 当前 3+3 改了 -> stale (卡面标“旧 3+3”), 顺序不同不算改。"""
     built = ss.base_rates()["rules"]["long"]
@@ -210,6 +212,7 @@ def test_card_line_marks_stale_when_current_rules_differ():
     assert ss.card_line("long")["stale"] is False                      # 不给当前 3+3 -> 不判
 
 
+@pytest.mark.full_edition
 def test_live_board_cards_carry_base_line(tmp_path, monkeypatch, cal):
     _setup(tmp_path, monkeypatch)
     _snapshot(tmp_path, SIG_DAY, [_row("macd_golden", "AAA"), _row("phantom_4h", "AAA")], {"AAA"}, {"AAA": 100.0}, {"AAA": 2.0})
@@ -225,6 +228,7 @@ def test_live_board_cards_carry_base_line(tmp_path, monkeypatch, cal):
     assert out["base_rates"]["long"]["stale"] is True                  # _setup 的 3+3 = macd_golden, 不是基础率那套
 
 
+@pytest.mark.full_edition
 def test_table_flags_mismatch_when_intervals_do_not_overlap(tmp_path, monkeypatch):
     rows = [{"card_id": f"c{i}", "side": "long", "status": "no_fill", "signal_day": "2026-10-09", "symbol": "A"}
             for i in range(300)]
@@ -238,6 +242,7 @@ def test_table_flags_mismatch_when_intervals_do_not_overlap(tmp_path, monkeypatc
     assert t["sides"]["short"]["actual"]["cards"] == 0 and t["sides"]["short"]["mismatch"] == []
 
 
+@pytest.mark.full_edition
 def test_settlement_api_returns_swing_table(tmp_path, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -332,6 +337,7 @@ def test_reconcile_ignores_cards_removed_from_watchlist(tmp_path, monkeypatch, c
     assert out["ok"] is True
 
 
+@pytest.mark.full_edition
 def test_reconcile_lists_zero_hit_only_beyond_history_max(tmp_path, monkeypatch, cal):
     """连续 0 命中只在超过回放里的历史最长时列出: SMC 结构历史上最长 64 天不命中, 连续 14 天不该列;
     macd_golden 历史最长 23 天, 连续 25 天才列。"""

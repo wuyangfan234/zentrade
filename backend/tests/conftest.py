@@ -7,9 +7,27 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from app.market_clock import us_clock
+
+
+_CONFIG_DIR = Path(__file__).resolve().parents[1] / "config"
+_BUILTIN_DIR = Path(__file__).resolve().parents[1] / "app" / "strategy" / "builtin"
+# 完整版独有的内容: 开源核心版导出时排除 (scripts/core_manifest.toml)
+FULL_EDITION = (_BUILTIN_DIR / "tv_smc_structure.py").exists() and (_CONFIG_DIR / "swing_rule_history.json").exists()
+
+
+def pytest_collection_modifyitems(config, items):
+    """@pytest.mark.full_edition 的用例只在私有完整版运行; 开源核心版里自动跳过并写明原因。"""
+    if FULL_EDITION:
+        return
+    skip = pytest.mark.skip(reason="full edition only: third-party ports / private replay statistics not in core edition")
+    for item in items:
+        if item.get_closest_marker("full_edition"):
+            item.add_marker(skip)
 
 
 @pytest.fixture(autouse=True, scope="session")
