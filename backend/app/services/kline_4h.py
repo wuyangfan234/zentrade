@@ -102,7 +102,8 @@ def _adj_factors(repo, symbols: list[str], start: date, end: date, frames: dict 
 def bars_4h(data_dir: Path, repo, symbols: list[str], start: date, end: date,
             frames: dict | None = None) -> dict[str, pd.DataFrame]:
     """返回 {symbol: 4h OHLCV (index = 美东墙钟 naive, 分箱起点)}。价格已按系统日K复权口径调整。"""
-    from app.vendor.oasis_phantom.resample_4h_tv import _resample_4h_tv  # 仅完整版的 4h 插件调用本函数
+    # 仅完整版的 4h 插件调用本函数
+    from app.vendor.oasis_phantom.resample_4h_tv import _resample_4h_tv
 
     raw = load_m30(data_dir, symbols, start, end)
     if raw.is_empty():

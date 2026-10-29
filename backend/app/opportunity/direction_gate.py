@@ -122,7 +122,7 @@ def _close_series(frame) -> np.ndarray | None:
         if "date" in frame.columns:
             frame = frame.sort("date")
         return frame["close"].to_numpy()
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -139,7 +139,7 @@ def _daily_ma50_states(ctx: GateContext) -> dict[str, str]:
             try:
                 import polars as pl
                 closes = frame.filter(pl.col("date") <= ctx.as_of).sort("date")["close"].to_numpy()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         side = _ma_side(closes)
         if side:
@@ -155,7 +155,7 @@ def _states_from_repo(repo, symbols: list[str], as_of: date) -> dict[str, str]:
     try:
         batch = repo.get_daily_batch(sorted(symbols), as_of - timedelta(days=MA_WINDOW * 2 + 30), as_of,
                                      columns=["symbol", "date", "close"])
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("direction gate: daily bars unavailable: %s", type(e).__name__)
         return {}
     if batch is None or batch.is_empty():
@@ -200,7 +200,7 @@ def _daily_ma50_matrix(data_dir: Path, repo, symbols: list[str], days: list[date
     return gate
 
 
-register(DirectionGate(id=DEFAULT_GATE_ID, name="日线趋势门（收盘相对 50 日均线）",
+register(DirectionGate(id=DEFAULT_GATE_ID, name="日线趋势门 (收盘相对 50 日均线)",
                        states=_daily_ma50_states, matrix=_daily_ma50_matrix))
 
 
@@ -213,7 +213,7 @@ def load_plugins() -> None:
     for mod in PLUGINS:
         try:
             optional.load(mod)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("direction gate plugin %s failed to import: %s", mod, type(e).__name__)
 
 

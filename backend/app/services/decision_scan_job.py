@@ -209,7 +209,7 @@ def _refresh_m30(repo, as_of: date, symbols: set[str] | None, meta: dict) -> Non
         data_dir = Path(repo.store.data_dir)
         meta["m30"] = {"refresh": kline_4h.refresh_recent(data_dir, repo, provider, syms, as_of),
                        "history": kline_4h.ensure_history(data_dir, repo, provider, syms, as_of)}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         meta["m30"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
         logger.warning("m30 refresh failed: %s", meta["m30"]["error"])
 
@@ -227,7 +227,7 @@ def _direction_states(repo, data_dir: Path, as_of: date, frames: dict, watchlist
         ctx = direction_gate.GateContext(data_dir=Path(data_dir), repo=repo, as_of=as_of,
                                          symbols=tuple(sorted(watchlist or ())), frames=frames, precomputed=pre)
         states = gate.states(ctx) or {}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.warning("direction gate %s failed (不放行): %s", gate.id, type(e).__name__)
         states = {}
     meta["direction_gate"] = {"id": gate.id, "long": sum(1 for v in states.values() if v == "long"),
