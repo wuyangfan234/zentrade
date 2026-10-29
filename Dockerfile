@@ -11,7 +11,7 @@ ARG BACKEND_EXTRAS=
 ARG CODEX_CLI_VERSION=0.144.3
 
 # === Stage 1: 前端构建 ===
-FROM node:20-alpine AS frontend-builder
+FROM node:25-alpine AS frontend-builder
 ARG USE_CN_MIRROR=0
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 WORKDIR /build
@@ -29,7 +29,7 @@ RUN pnpm build
 
 # === Stage 2: Codex CLI ===
 # 固定版本保证镜像可复现；只复制安装产物到运行镜像，不保留 npm。
-FROM node:20-bookworm-slim AS codex-builder
+FROM node:25-bookworm-slim AS codex-builder
 ARG USE_CN_MIRROR=0
 ARG NPM_REGISTRY=https://registry.npmmirror.com
 # 版本由顶层 ARG CODEX_CLI_VERSION 提供, 这里仅声明以继承, 不再重复默认值。
