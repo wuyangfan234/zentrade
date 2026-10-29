@@ -1,8 +1,8 @@
-"""Phantom 4h · Pine 原版仪表盘 (Phantom Flow Core 中文优化版, Pine v6) —— 逐根、无前视。
+"""Phantom 4h · Pine 原版仪表盘 (Phantom Flow Core 中文优化版 / Phantom源代码2.md, Pine v6) —— 逐根、无前视。
 
-与 `phantom_4h` (vendor 简化扫描, “多头条件齐备”) 的区别 (2026-10-09 逐根对照 10 只真实 4h 序列):
+与 `phantom_4h` (oasis-quant 简化扫描, “多头条件齐备”) 的区别 (2026-10-09 逐根对照 10 只真实 4h 序列):
   - Pine 本身没有“多头条件齐备”: 它的交易判断是仪表盘“现在该交易吗”五盏灯 (第 1134-1144 行),
-    >=4 盏 = “积极做多”。MACD/RSI/ADX 打分是简化扫描后加的, 不在 Pine 里。
+    >=4 盏 = “积极做多”。MACD/RSI/ADX 打分是 oasis-quant 后加的, 不在 Pine 里。
   - Pine 的结构 (SMC leg/getCurrentStructure/displayStructure) 与 vendored `leg_pivots/structure_bias` 只有 64% 一致:
     vendored 把摆动高/低点标反、每根都记 pivot 而非只在 leg 翻转时记、且没有 Pine 默认开启的共振过滤。
   - Shift 与 Trail 与 Pine 分别 100% / 99.2% 一致。
