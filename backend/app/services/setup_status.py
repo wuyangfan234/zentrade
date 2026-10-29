@@ -22,7 +22,7 @@ _LOCK = threading.Lock()
 
 def evaluate(trips, setup: str, as_of: date) -> dict:
     start = as_of - timedelta(days=WINDOW_DAYS - 1)
-    # 回补成交 (backfill) 是事后重放补记, 不是实时决策的结果, 不进降级证据 (无限 2026-10-12)
+    # 回补成交 (backfill) 是事后重放补记, 不是实时决策的结果, 不进降级证据 (2026-10-12 产品决策)
     rs = [t.r_multiple for t in trips
           if t.setup_type == setup and start <= t.exit_date <= as_of and t.r_multiple is not None
           and not getattr(t, "backfill", False)]
@@ -93,7 +93,7 @@ def setups_in(trips) -> list[str]:
     审计 #1 (2026-10-12): 现行下单簿的回合记作 strategy:<规则>, 旧实现只循环 breakout/pullback,
     负期望规则永远不会被降级。
     0.15.0: 自进化卡 (strategy:evo) 不进周降级 —— 它每天按已离场历史重算权重, 纠错在权重里; “四周负 → 降级 → 只能手动恢复”
-    是一个要人等的死锁 (无限 10-13: 系统不允许建任何要等的东西)。2023-26 回放里这条规则会把 evo 停掉 189 周中的 71 周。"""
+    是一个要人等的死锁 (10-13 产品决策: 系统不允许建任何要等的东西)。2023-26 回放里这条规则会把 evo 停掉 189 周中的 71 周。"""
     seen = sorted({t.setup_type for t in trips if getattr(t, "setup_type", None)} - set(EXEMPT))
     return list(dict.fromkeys([*SETUPS, *seen]))
 

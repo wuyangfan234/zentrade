@@ -153,7 +153,7 @@ def test_trader_short_needs_double_buying_power(tmp_path, monkeypatch):
     card = _short_card(risk_per_share=0.5, invalidation=100.5, target_zone=(97.0, 98.0), reward_risk=3.0)
     tr.register_card(card)
     tr.try_fill_entry(card, price=99.5, trade_date=date(2026, 10, 5), at=_t(10, 0).isoformat())
-    # 2026-10-05 起现金不足按剩余可用资金缩量 (无限拍板)。约束不变: 空单名义 + 佣金 ≤ 成交前可用资金 2 万,
+    # 2026-10-05 起现金不足按剩余可用资金缩量 (产品决策)。约束不变: 空单名义 + 佣金 ≤ 成交前可用资金 2 万,
     # 成交后可用资金 (现金 − 2×空头名义) 不为负。
     fill = tr.try_fill_entry(card, price=99.4, trade_date=date(2026, 10, 5), at=_t(10, 1).isoformat())
     assert fill is not None and fill["side"] == "short" and fill["sizing"]["reason"] == "cash_downsized"

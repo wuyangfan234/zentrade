@@ -1,4 +1,4 @@
-"""证据 v3 (2026-10-05): 修尺子。预登记见 design/evidence-v3-preregistration.md (跑数之前已提交)。
+"""证据 v3 (2026-10-05): 修尺子。规则在跑数之前预先登记, 之后不按结果调整。
 
 相对 v2 的四处修正:
 1. 池子与生产对齐: 信号日之前 30 天日均成交额 ≥ $2000 万、收盘 ≥ $5、历史 ≥130 天、普通股/ADR (排除 ETF/杠杆/基金/优先/权证/单位)。
@@ -81,7 +81,7 @@ def real_price_volume(md) -> tuple[np.ndarray, np.ndarray]:
 def pool_mask(close: np.ndarray, volume: np.ndarray, asset_ok: np.ndarray) -> np.ndarray:
     """(T, N) 布尔: 第 t 天收盘后能否进池 —— 只用 t 及之前的数据 (信号在 t 收盘后产生, 与生产盘后扫描一致)。
     生产 _load_universe: 近 30 自然日均成交额 ≥ 2000 万、最后收盘 ≥ 5、历史 ≥130 根。这里 30 自然日 ≈ 21 个交易日。
-    逐日滚动累加 (内存 O(N), NAS 7.5G 上不额外占用整张 T×N 浮点表)。"""
+    逐日滚动累加 (内存 O(N), 小内存主机上不额外占用整张 T×N 浮点表)。"""
     T, N = close.shape
     w = 21
     out = np.zeros((T, N), dtype=bool)

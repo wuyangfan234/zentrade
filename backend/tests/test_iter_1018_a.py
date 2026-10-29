@@ -1,5 +1,5 @@
 # ruff: noqa: RUF001
-"""0.26.0 第①批 (无限 10-18 确认): 直接修、不改交易规则。
+"""0.26.0 第①批 (10-18 产品决策): 直接修、不改交易规则。
 
 1. 移出自选的卡不再从板和“已结束”里一起消失 -> 进“已结束”, 原因 = 已移出自选。
 2. 休市时卡上“现价”= 最近一个已收盘交易日的收盘价 (不是信号日收盘)。
@@ -280,13 +280,13 @@ def test_rules_api_history_uses_tight_history(tmp_path, monkeypatch):
 
 
 def test_swing_sort_weights_unchanged():
-    """截断保持现状 (无限 10-18 第 7 条): 同分排序权重一个字都不动。"""
+    """截断保持现状 (10-18 产品决策第 7 条): 同分排序权重一个字都不动。"""
     assert sd.EXCESS_WEIGHT == {"tv_smc_structure": 0.40, "volume_price_surge": 0.25, "macd_golden": 0.19,
                                 "tv_chandelier_exit": 0.06, "tv_halftrend": 0.06}
     assert sd.MAX_PER_SIDE == 5
 
 
-# ---------- 第②批: 每笔 0.5%、最多 12 仓; 单日 / 同板块上限按金额折算 (无限 10-18 选 A) ----------
+# ---------- 第②批: 每笔 0.5%、最多 12 仓; 单日 / 同板块上限按金额折算 (10-18 产品决策 A) ----------
 
 def test_book_caps_scale_by_amount():
     from app.services import entry_guard as eg

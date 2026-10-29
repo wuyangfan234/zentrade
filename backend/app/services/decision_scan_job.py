@@ -155,7 +155,7 @@ def _num(v):
 
 
 def _phantom_4h_picks(repo, as_of: date, frames: dict, picks: dict, meta: dict, include: set[str] | None = None) -> dict:
-    """oasis-quant 原版 4h Phantom (吊灯止损) 作为独立候选来源 (2026-10-03)。失败只降级, 不影响其他来源。
+    """原版 4h Phantom 扫描 (吊灯止损) 作为独立候选来源 (2026-10-03)。失败只降级, 不影响其他来源。
 
     返回 {source: {symbol: stop_loss}} — 4h 来源的止损因股而异 (吊灯止损位), 不是策略级固定比例。
     """
@@ -223,7 +223,7 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
     hits = meta.pop("hits", {}) or {}
     sell_hits = meta.pop("sell_hits", {}) or {}
     h4_state = meta.pop("phantom_4h_state", {}) or {}
-    # 自选独立选股 (无限 2026-10-05 拍板): 每个来源在自选池内的全部命中都成为候选, 不受“全池前 10”限制;
+    # 自选独立选股 (2026-10-05 产品决策): 每个来源在自选池内的全部命中都成为候选, 不受“全池前 10”限制;
     # 门槛 (流动性池 / 统一成卡 / 来源证据 / 组合约束) 与全池一致, 同账户同风控。
     lane = {sid: [h["symbol"] for h in rows if h["symbol"] in watchlist and h["symbol"] not in set(picks.get(sid, []))]
             for sid, rows in hits.items()}

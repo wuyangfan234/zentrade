@@ -9,6 +9,11 @@ describe('P6 内部出处名只在展示层去掉', () => {
     expect(stripProvenance('Phantom 4h Pine 原版 (仪表盘积极做多·吊灯止损)')).toBe('Phantom 4h Pine (仪表盘积极做多·吊灯止损)')
     expect(stripProvenance('新闻催化（只观察）')).toBe('新闻催化（只观察）')
   })
+  it('新名「（原版·吊灯止损）」同样去掉，旧台账里的旧名继续兼容', () => {
+    expect(stripProvenance('Phantom 4h 波段（原版·吊灯止损）')).toBe('Phantom 4h 波段')
+    expect(stripProvenance('Phantom 4h 做空（原版·空头吊灯止损）')).toBe('Phantom 4h 做空')
+    expect(displayStrategyName('Phantom 4h 波段（原版·吊灯止损）')).toBe('Phantom 4h（幻影）波段')
+  })
   it('cleanDeskNames 清洗 names 映射与各处 name / source_name 字段，不动其他文本与 id', () => {
     const p = {
       names: { phantom_4h: 'Phantom 4h 波段（oasis-quant 原版·吊灯止损）', 'strategy:ut_bot': 'UT Bot 翻多' },

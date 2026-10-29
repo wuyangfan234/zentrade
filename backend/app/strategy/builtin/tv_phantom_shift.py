@@ -1,7 +1,7 @@
 """Phantom 趋势换挡买入 — 用户提供的 Pine 源码 “Phantom Flow Core 中文优化版|美股1周波段” (Pine v6, 1179 行) SECTION 1 逐行移植 (日线)。
 
 图上唯一标“买入”的信号: shiftTrend 由 -1 翻 1 (ATR 14 x 3.2, 价格源 hl2, 内置 ATR)。算法与 Supertrend 相同, 参数不同。
-与现有 phantom_4h (oasis-quant 4h 简化扫描: Shift + EMA50 + 内部结构 + MACD/RSI/ADX 打分) 不是同一套规则, 互不替代。"""
+与现有 phantom_4h (vendor 4h 简化扫描: Shift + EMA50 + 内部结构 + MACD/RSI/ADX 打分) 不是同一套规则, 互不替代。"""
 
 import numpy as np
 

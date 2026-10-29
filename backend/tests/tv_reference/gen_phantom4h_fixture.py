@@ -26,7 +26,7 @@ TAIL = 2600
 
 
 def main(csv_dir: Path):
-    out = {"source": "Phantom源代码2.md (Phantom Flow Core 中文优化版, Pine v6)", "tail": TAIL, "series": {}}
+    out = {"source": "Phantom Flow Core 中文优化版 (Pine v6)", "tail": TAIL, "series": {}}
     for s in SYMS:
         df = pd.read_csv(csv_dir / f"{s}.csv", parse_dates=["ts"]).tail(TAIL).reset_index(drop=True)
         ts = (df["ts"].astype("int64") // 10**6).tolist()

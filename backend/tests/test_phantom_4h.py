@@ -1,4 +1,4 @@
-"""phantom_4h.scan_series 逐根结果 == 对每个前缀调用 oasis-quant 原函数 simplified_phantom_scan 的结果。
+"""phantom_4h.scan_series 逐根结果 == 对每个前缀调用 vendor 原函数 simplified_phantom_scan 的结果。
 
 原函数逐字搬入 app/vendor/oasis_phantom (函数级 sha256 与上游 52730bb 一致, 见 test_vendor_functions_are_verbatim)。
 """

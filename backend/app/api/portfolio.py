@@ -94,7 +94,7 @@ def _ledger_feed(events: list[dict]) -> list[dict]:
     return out[-_FEED_LIMIT:]
 
 
-# ── /live: 持仓直观数据 + 已平仓 + 汇总 (5 秒刷新; 2026-10-02 无限需求) ─────────
+# ── /live: 持仓直观数据 + 已平仓 + 汇总 (5 秒刷新; 2026-10-02 产品需求) ─────────
 
 LIVE_REFRESH_SECONDS = 5
 EXIT_REASON_LABEL = {

@@ -3783,7 +3783,7 @@ export interface AiTaskRow {
   effective: { model: string; base_url: string; thinking: AiThinking; reasoning_effort?: string; route?: 'api' | 'codex_cli'; overridden: string[] }
 }
 
-// ===== 个股新闻 (无限 2026-10-02 拍板; 中文优先视图, 方向/重要度为 AI 判读) =====
+// ===== 个股新闻 (2026-10-02 产品决策; 中文优先视图, 方向/重要度为 AI 判读) =====
 export type NewsDirection = 'bullish' | 'bearish' | 'neutral'
 export type NewsImportance = 'high' | 'medium' | 'low'
 export type NewsRelevance = 'primary' | 'secondary' | 'passing'

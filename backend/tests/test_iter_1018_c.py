@@ -1,4 +1,4 @@
-"""0.26.0 第④批 (无限 10-18 确认“策略自主发现显然方案”): 挖掘候选按机会板卡回放验收, 赢过“4h 门内随便挑”才标候选。"""
+"""0.26.0 第④批 (10-18 产品决策“策略自主发现显然方案”): 挖掘候选按机会板卡回放验收, 赢过“4h 门内随便挑”才标候选。"""
 import json
 from datetime import date
 from types import SimpleNamespace
@@ -157,7 +157,7 @@ def test_signals_any_matrix_runs_full_market_then_keeps_watchlist(monkeypatch):
 
 
 def test_worker_run_builds_matrix_in_memory_without_enriched_rebuild(tmp_path, monkeypatch):
-    """子进程配置与 NAS 实测一致: 不写回测磁盘缓存, 不在子进程里重建日K指标缓存。"""
+    """子进程配置与参考部署实测一致: 不写回测磁盘缓存, 不在子进程里重建日K指标缓存。"""
     from app.config import settings
     monkeypatch.setattr(settings, "backtest_matrix_disk_cache_enabled", True)
     repo = SimpleNamespace(_enriched_warming=False)

@@ -1,4 +1,4 @@
-"""挖掘候选 · 按机会板卡回放验收 (0.26.0 第④批, 无限 10-18 确认“策略自主发现显然方案”)。
+"""挖掘候选 · 按机会板卡回放验收 (0.26.0 第④批, 10-18 产品决策“策略自主发现显然方案”)。
 
 为什么: 周度挖掘与 AI 迭代原来按“次日开盘买、前 10 名等权、拿 5 天”验收, 与机会板卡 (挂单区回踩成交、止损、目标、
 5 天) 是两套买法。W42 挖出的“低波动”排序, 按卡回放 +18.8R/年, 而“4h 方向对了就随便挑”是 +44.3R/年 (方向相反)。
@@ -267,7 +267,7 @@ def _signals_any(sid: str, svc, engine, start: date, end: date, symbols: list[st
     只在几十只自选上算会换掉分母和名次, 验收的就不是会上线的那条策略 (0.26.0 自审 F2)。
     矩阵策略走 strategy_evaluation_runner._signals_for (与回测页同一条信号路径); 其他日线策略 (polars_expr /
     python_history_legacy) 走回测非矩阵分支同一组调用 (load_panel_for_backtest -> 候选层 & 买点层 -> 评分)。
-    NAS 实测 (10-18, 生产容器, 关磁盘缓存): 全市场单策略峰值 1.49~1.57 GB, 可用 4.5 GB。"""
+    参考部署实测 (10-18, 容器内, 关磁盘缓存): 全市场单策略峰值 1.49~1.57 GB, 可用 4.5 GB。"""
     from types import SimpleNamespace
 
     import polars as pl
@@ -334,7 +334,7 @@ def discovered_ids(engine) -> list[str]:
 
 
 def worker_run(data_dir: Path, repo, cfg: dict) -> dict:
-    """子进程入口 (backtest/worker.py kind=swing_candidates)。与 NAS 实测同一配置 (10-18, 生产容器: 单策略峰值
+    """子进程入口 (backtest/worker.py kind=swing_candidates)。与参考部署实测同一配置 (10-18, 容器内: 单策略峰值
     1.49~1.57 GB, 60~77 秒): 全市场矩阵只在内存里建, 不写也不挤占回测磁盘缓存; 复权系数/SPY 按日期扫 parquet,
     不在子进程里重建整份日K指标缓存 (那是主进程启动时的 50 秒级重活)。"""
     from app.config import settings

@@ -47,7 +47,7 @@ def test_dashboard_lights_and_trail_match_pine_bar_by_bar(sym):
 
 
 def test_vendored_structure_is_not_pine_structure():
-    """记录差异 (不是缺陷断言): oasis-quant 版内部结构与 Pine 波段结构不是同一个东西 → Pine 版必须独立成源。"""
+    """记录差异 (不是缺陷断言): 简化扫描版内部结构与 Pine 波段结构不是同一个东西 → Pine 版必须独立成源。"""
     from app.vendor.oasis_phantom.phantom_state_machine import leg_pivots, structure_bias
     df, ref = _series()["NVDA"]
     iph, ipl = leg_pivots(df, 5)
@@ -112,7 +112,7 @@ def test_pine_failure_does_not_break_phantom_4h(monkeypatch, tmp_path):
 
 
 def test_pine_source_is_in_rule_catalog_but_not_tradable_without_evidence(tmp_path):
-    """2026-10-09 无限: Pine 版上线到策略与机会卡。进规则目录 (可勾选/可看), 默认机会卡显示;
+    """2026-10-09 产品决策: Pine 版上线到策略与机会卡。进规则目录 (可勾选/可看), 默认机会卡显示;
     没有证据 → 权重 0; 下单仍只认规则集 + 前向确认。"""
     w = dd.source_weight(None)
     assert w["weight"] == 0.0 and w["risk_pct"] == 0.0

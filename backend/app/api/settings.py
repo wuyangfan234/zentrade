@@ -288,7 +288,7 @@ def _ai_tasks_view() -> dict:
 
 @router.get("/ai/tasks")
 def get_ai_tasks() -> dict:
-    """按任务选模型 (无限 2026-10-02 拍板: 新闻翻译打标用 Kimi 关思考, 个股分析等沿用全局)。"""
+    """按任务选模型 (2026-10-02 产品决策: 新闻翻译打标用 Kimi 关思考, 个股分析等沿用全局)。"""
     return _ai_tasks_view()
 
 

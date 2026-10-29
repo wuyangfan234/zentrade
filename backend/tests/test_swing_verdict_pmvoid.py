@@ -1,4 +1,4 @@
-"""0.27.0 机会卡下单裁决 + 做多第 1 天盘前越止损作废 (无限 2026-10-19 选 B “折中”; 期望写美元; 盘前量/新闻角标保留)。"""
+"""0.27.0 机会卡下单裁决 + 做多第 1 天盘前越止损作废 (2026-10-19 产品决策 B “折中”; 期望写美元; 盘前量/新闻角标保留)。"""
 import json
 from datetime import date, datetime
 from types import SimpleNamespace

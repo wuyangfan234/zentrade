@@ -245,7 +245,7 @@ class MiningJobManager:
             self._store.write_summary(run_id, result)
             self._store.transition_status(run_id, status)
             self._store.append_event(run_id, status, {"status": status})
-        # 0.26.0 (无限 10-18 “策略自主发现显然方案”): 挖掘结束后, 对系统发现的策略按机会板卡回放验收,
+        # 0.26.0 (10-18 产品决策“策略自主发现显然方案”): 挖掘结束后, 对系统发现的策略按机会板卡回放验收,
         # 赢过“4h 门内随便挑”才标候选 (只标记, 不改 3+3、不改交易)。在锁外跑, 失败只记日志。
         try:
             from app.market_clock import us_clock

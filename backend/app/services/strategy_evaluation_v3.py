@@ -1,4 +1,4 @@
-"""证据 v3 运行器 (2026-10-05)。规则见 design/evidence-v3-preregistration.md, 统计在 evidence_v3。
+"""证据 v3 运行器 (2026-10-05)。规则为跑数前预登记的口径, 统计在 evidence_v3。
 
 输出写并行文件 evaluation_v3.json (不改 v1/v2, 不改许可); 许可是否改用 v3 由 evidence_mode 决定。
 """
@@ -187,7 +187,7 @@ def run_v3(data_dir: Path, start: date, end: date, *, repo=None, engine=None, on
                        "(no ETF/leveraged/fund/preferred/warrant/unit); delisted names included (ticker~delist_date)",
                "baseline": f"same day, same pool, same card+replay rules, {BASELINE_SAMPLE} random names (fixed seed), "
                            "per stop-loss ratio", "picks_per_day": se.PICKS_PER_DAY,
-               "sources": {}, "trades": {}, "evaluated": [], "preregistration": "design/evidence-v3-preregistration.md",
+               "sources": {}, "trades": {}, "evaluated": [], "preregistration": "evidence-v3 (2026-10-05, rules fixed before evaluation)",
                "cluster_unit": ev3.CLUSTER_UNIT, "explore_enabled": ev3.EXPLORE_ENABLED, "calibration": ev3.CALIBRATION}
     t0 = time.perf_counter()
 

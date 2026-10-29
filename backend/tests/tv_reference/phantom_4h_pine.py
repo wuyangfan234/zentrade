@@ -1,7 +1,7 @@
 """
 @pyne
 """
-# Phantom Flow Core 中文优化版 (Phantom源代码2.md) 4h 关键件逐行转写 —— Pine 答案:
+# Phantom Flow Core 中文优化版 4h 关键件逐行转写 —— Pine 答案:
 # SECTION 1 Shift (16-43) / SMC leg+getCurrentStructure+displayStructure (358-605, 761-771) /
 # SECTION 3 Oscillator maBase/osc (875-880) / SECTION 4 Trail (935-958) / 仪表盘 L1-L4 (1134-1138)。
 # L5 (日线 EMA20>EMA50, request.security) 不在这里: 由调用方用日K单独算并对齐。

@@ -1,11 +1,11 @@
 /**
  * 策略 / 来源名的展示层处理（2026-10-11 P2、P6）。只改显示，不改后端名称、id、指纹与台账。
  *
- * - P6：去掉内部出处名，如「（oasis-quant 原版·吊灯止损）」和「Pine 原版」里的「原版」。
+ * - P6：去掉出处括注（含旧数据里的「（oasis-quant 原版·吊灯止损）」与新名「（原版·吊灯止损）」）和「Pine 原版」里的「原版」。
  * - P2：英文指标名后紧跟中文名，如「UT Bot（ATR 追踪止损）翻多」。纯中文名和已带中文名的不变。
  */
 
-const PROVENANCE_RE = /\s*[（(]\s*oasis-quant[^（）()]*[）)]/g
+const PROVENANCE_RE = /\s*[（(]\s*(?:oasis-quant\s*)?原版·[^（）()]*[）)]/g
 const ORIGINAL_RE = /\s原版(?=\s|$)/g
 
 /** 英文名 → 中文名。按顺序匹配，长的在前（「Phantom 4h」先于「Phantom」）。 */

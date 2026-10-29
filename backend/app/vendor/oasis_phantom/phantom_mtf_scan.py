@@ -34,7 +34,7 @@ def simplified_phantom_scan(df: pd.DataFrame, ticker: str, timeframe: str, daily
     - 动能: MACD 柱状图斜率 + RSI
     - 风险: ATR% + 跳空
 
-    2026-09-02 P0-2（无限批准）：protection 用日线 ATR(14) 重算——4h/2h bar ATR 太小
+    2026-09-02 P0-2（产品决策）：protection 用日线 ATR(14) 重算——4h/2h bar ATR 太小
     导致保护位距触发价仅 ~1.66%（真实 Phantom 日线 4.84%）→ 60 个 INVALIDATED 里
     52 个距离 <4.84%（盘中插针误判"未进场先失效"）。传入 daily_atr_pct（日线 ATR%）
     后，protection = close ± 3×daily_atr_pct（约 3-5% 距离，对齐真实 Phantom）。

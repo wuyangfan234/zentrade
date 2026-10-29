@@ -6,7 +6,7 @@ import { api, type EstimateRow, type QverisOptions, type QverisPaidMeta } from '
 import { QK } from '@/lib/queryKeys'
 
 /**
- * QVeris 付费数据面板 (无限 2026-10-02 拍板: 期权 / 财报预期 / 电话会; 每日上限 100 积分)。
+ * QVeris 付费数据面板 (2026-10-02 产品决策: 期权 / 财报预期 / 电话会; 每日上限 100 积分)。
  * 打开面板只读缓存 (免费); 只有点击「查询」才可能花约 1 积分 (缓存仍新鲜时后端直接返回缓存, 不扣费)。
  */
 

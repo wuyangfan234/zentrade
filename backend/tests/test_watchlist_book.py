@@ -1,4 +1,4 @@
-"""(0.11.0 起单一口径, 原试用档测试改写) 自选机会卡下单簿 + 合约式核算 (2026-10-10 无限: “纸面账户先按小风险开仓, 但是现在机会卡是多空两种方向的,
+"""(0.11.0 起单一口径, 原试用档测试改写) 自选机会卡下单簿 + 合约式核算 (2026-10-10 产品需求: “纸面账户先按小风险开仓, 但是现在机会卡是多空两种方向的,
 你按照合约期权的方式进行核算, 每笔 0.25%（约 $250）, 前向确认继续独立统计, 通过后再升到 1%”)。"""
 import json
 from dataclasses import replace
@@ -556,7 +556,7 @@ def test_loop_new_symbol_merge_failure_does_not_halt_covered_symbols(tmp_path, m
     assert len(calls) == 2
 
 
-# ── 开仓节奏上限 / 单笔风险上限 / 回补剔除 (无限 2026-10-12 拍板) ──
+# ── 开仓节奏上限 / 单笔风险上限 / 回补剔除 (2026-10-12 产品决策) ──
 
 def _open(lg, sym, side, at="2026-10-09T10:00:00-04:00", **kw):
     lg.append("fill", dict(symbol=sym, side=side, qty=10, price=100.0, fee=1.0,

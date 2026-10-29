@@ -422,7 +422,7 @@ def test_direct_parquet_matrix_matches_panel_builder_and_reuses_mmap(tmp_path):
     )
     # turnover_rate 暂不在等价断言内 (P1-3b): compute_limit_signals→compute_turnover
     # 重构后, 面板直算与 parquet 装载两路的换手口径有分歧 (12.5 vs 1.5);
-    # 待 P1-4 Alpaca 数据链落地时统一复核, 见 design/p1-progress.md。
+    # 待 Alpaca 数据链统一复核。
     field_columns = {
         "amount",
         "raw_close",

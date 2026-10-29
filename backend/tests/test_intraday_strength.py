@@ -1,4 +1,4 @@
-"""0.28.0 盘中强势卡 (无限 2026-10-20: 只上机会板 + 自动结算记战绩, 不下单; 波段出场 2R / 5 天)。"""
+"""0.28.0 盘中强势卡 (2026-10-20 产品决策: 只上机会板 + 自动结算记战绩, 不下单; 波段出场 2R / 5 天)。"""
 import json
 from datetime import date, datetime, time
 from types import SimpleNamespace

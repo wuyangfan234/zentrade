@@ -1,4 +1,4 @@
-"""盘前定稿 + 同向放量排前 (无限 2026-10-21 19:40 SGT 授权)。只重排已出的卡: 不新增、不作废、不改几何/仓位/结算。"""
+"""盘前定稿 + 同向放量排前 (2026-10-21 19:40 SGT 产品决策)。只重排已出的卡: 不新增、不作废、不改几何/仓位/结算。"""
 import json
 from datetime import date, datetime
 from pathlib import Path

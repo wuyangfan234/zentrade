@@ -92,7 +92,7 @@ function fmtClock(ts: number): string {
 
 const SETUP_NAME: Record<string, string> = { breakout: '突破', pullback: '回踩', 'strategy:swing': '机会板' }
 
-/** 持仓现价刷新间隔 (无限 2026-10-02: 5 秒)。 */
+/** 持仓现价刷新间隔 (2026-10-02 产品决策: 5 秒)。 */
 export const LIVE_REFRESH_MS = 5_000
 
 function scheduleStamp(iso: string | null | undefined): string {

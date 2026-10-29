@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""S1/S2 setup 真实规则重放 (批1, 取代 replay_breakout.py 的错误口径)。
+"""S1/S2 setup 真实规则重放 (批1, 取代早期简化回放的错误口径)。
 
 与旧回放的区别:
 - 选股用生产同一个 ``detect_candidates`` (含 ATR 地板/反垃圾/RS 横截面), 横截面只含

@@ -1,7 +1,7 @@
 """飞书应用机器人推送 (飞书 Agent 集成能力 · Channel SDK)。
 
 用户 2026-10-01: 群自定义机器人 Webhook 不稳定, 改用应用机器人发送。
-- 凭据: 环境变量 ZENTRADE_FEISHU_APP_ID / ZENTRADE_FEISHU_APP_SECRET (NAS .env, 永不落库、不打印、不出接口)
+- 凭据: 环境变量 ZENTRADE_FEISHU_APP_ID / ZENTRADE_FEISHU_APP_SECRET (.env, 永不落库、不打印、不出接口)
 - 目标: preferences.feishu_app_chat_id (机器人所在群的 oc_ id, 设置页可选)
 - 只做出站: 不建立长连接 (推送用 OpenAPI 即可, 无需收消息); SDK 自带 token 缓存与重试
 失败一律返回 False 并记 WARNING (不含凭据), 由调用方 (outbox) 决定退避重试。

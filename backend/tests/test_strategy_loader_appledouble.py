@@ -1,6 +1,6 @@
 """策略加载器必须跳过隐藏文件 (含 macOS AppleDouble 伴生文件 ``._xxx.py``)。
 
-复现 2026-09-29 线上故障: 在 Mac 上用 bsdtar 打包推送 NAS 时, 每个带扩展属性的文件
+复现 2026-09-29 线上故障: 在 Mac 上用 bsdtar 打包推送到部署主机时, 每个带扩展属性的文件
 都会多出一个 ``._<原名>`` 伴生文件 (二进制资源叉, 不是 Python 源码)。它们经 Docker
 构建上下文 COPY 进镜像后, 被 ``glob("*.py")`` 当成策略加载, 每个都报
 ``'utf-8' codec can't decode byte 0xa3 in position 45``: 策略页连弹 22 条红色报错,
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from app.strategy.engine import StrategyEngine
 
-# 线上 NAS 实取的伴生文件原样字节: 163 B, 魔数 00 05 16 07 + "Mac OS X",
+# 部署主机上实取的伴生文件原样字节: 163 B, 魔数 00 05 16 07 + "Mac OS X",
 # 第 45 字节 0xa3 即报错位置, 载荷是 com.apple.provenance 扩展属性。
 APPLEDOUBLE_SIDECAR = bytes.fromhex(
     "00051607000200004d6163204f53205820202020202020200002000000090000"

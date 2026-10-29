@@ -128,7 +128,7 @@ def desk_sources(request: Request) -> dict:
                      "latest": by_source.get(sid)})
     rank = {"proven": 0, "explore": 1, "negative": 2}
     rows.sort(key=lambda r: (r["status"] != "enabled", rank.get(r["tier"], 9), -(r["weight"] or 0)))
-    # 新闻催化 (无限 2026-10-02 拍板): 固定只观察, 不进排序、不开仓; 只展示影子证据进度
+    # 新闻催化 (2026-10-02 产品决策): 固定只观察, 不进排序、不开仓; 只展示影子证据进度
     try:
         from app.services import news_shadow
         nev = news_shadow.evidence(data_dir)

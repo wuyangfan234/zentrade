@@ -1,6 +1,6 @@
 """Alpaca provider — ZenTrade 唯一内置数据源 (P1-4)。
 
-能力 (P0 实证, 见 p0-probe/REPORT.md):
+能力 (接入时实测):
 - daily / minute: feed=sip 合并磁带全历史 (量口径真实)
 - realtime: feed=delayed_sip 合并磁带快照 (15 分钟延迟); IEX 降级仅价格
 - execution quotes: 定向 IEX 成交价, 独立验证源时间, 仅供纸面撮合

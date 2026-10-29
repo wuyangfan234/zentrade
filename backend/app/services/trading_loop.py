@@ -362,7 +362,7 @@ class TradingLoop:
             logger.warning('corporate actions merge for new symbols failed: %s', type(e).__name__)
 
     def premarket_void_check(self, now=None, cards=None, *, from_trader=False):
-        """0.27.0 (无限 10-19 选 B): 做多机会板卡第 1 天 09:00 盘前价已越过止损 -> 整卡作废 (swing_pm_check)。
+        """0.27.0 (10-19 产品决策 B): 做多机会板卡第 1 天 09:00 盘前价已越过止损 -> 整卡作废 (swing_pm_check)。
         cards=None -> 读全部卡 (定时任务); from_trader=True -> 交易环每轮用上一轮已同步的卡 (不多读一次台账)。
         出错只记日志、不抛: 还没查过的第 1 天做多卡由准入 premarket_check_pending 单独拦下, 不连坐其它卡的开仓。"""
         from app.services import swing_pm_check as pmc
@@ -715,7 +715,7 @@ class TradingLoop:
         return {'events': len(generated), 'nav': nav, 'missing_symbols': missing}
 
     def _watchlist_exit(self, day: date, marks: dict, at: datetime) -> list[dict]:
-        """0.33.0 (无限 10-22 选 B): 票已移出自选 -> 收盘定版时记离场意向, 下一交易日开盘全平 (与收盘破止损同一条执行路径)。
+        """0.33.0 (10-22 产品决策 B): 票已移出自选 -> 收盘定版时记离场意向, 下一交易日开盘全平 (与收盘破止损同一条执行路径)。
         读不到自选 / 自选为空 = 不动 (不能因名单读失败把全部持仓平掉)。当天已有离场意向 (收盘破止损) 的不重复记。
         缺官方收盘的票本次跳过, 下一次收盘定版再记。调用方持台账锁。"""
         from app.services import decision_scan_job

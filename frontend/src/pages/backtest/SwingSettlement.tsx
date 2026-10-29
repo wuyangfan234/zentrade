@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, type SwingReconcileRow, type SwingSettleProp, type SwingSettleRow, type SwingSettleSide, type SwingSettlePayload } from '@/lib/api'
 
 /**
- * 卡结局 (0.26.0, 无限 10-18 “机会页折中方案”): 每张上过板的卡的自动结局 (实际) 与 30 分钟K 回放 (回放), 多空分开。
+ * 卡结局 (0.26.0, 10-18 产品决策“机会页折中方案”): 每张上过板的卡的自动结局 (实际) 与 30 分钟K 回放 (回放), 多空分开。
  * 每个数并排给随时有效 95% 区间 —— 不设“攒够多少笔才算数”, 任何时候看都成立。
  * 实际与回放的区间不重叠 = 回放算错了 (撮合规则与纸面不一致), 该行标红: 先修回放, 再采信回放的数。
  */

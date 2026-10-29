@@ -1,8 +1,8 @@
-"""4h K 线数据层 (Phantom 4h 用) — 2026-10-03 无限要求“用 4h 级别原版 Phantom 与吊灯止损”。
+"""4h K 线数据层 (Phantom 4h 用) — 2026-10-03 产品决策“用 4h 级别原版 Phantom 与吊灯止损”。
 
 数据: Alpaca SIP 30 分钟线, 04:00–20:00 ET 全时段 (原系统 yfinance prepost=True 同口径), 不复权原始价;
       按月分区存 data/kline_4h_src/m30/<YYYY-MM>.parquet (列 symbol,t(UTC ISO),open,high,low,close,volume)。
-合成: 30 分钟线转美东墙钟 (naive) → oasis-quant 原函数 _resample_4h_tv (09:30/13:30/17:30/21:30/01:30/05:30 分箱)。
+合成: 30 分钟线转美东墙钟 (naive) → 原函数 _resample_4h_tv (app/vendor/oasis_phantom) (09:30/13:30/17:30/21:30/01:30/05:30 分箱)。
       喂墙钟是因为原函数吃带时区索引时 pandas 会在夏令时切换后整体偏移 1 小时 (实测 09:30→08:30)。
 复权: 价格 × 当日复权系数 (系统日K close/raw_close, 与日K同一口径); 成交量 ÷ 系数。
 每日增量: 盘后拉“最近一个月”不完整分区补齐 (幂等重写该月)。

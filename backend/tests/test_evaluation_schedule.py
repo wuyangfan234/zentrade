@@ -68,7 +68,7 @@ def test_v3_degrades_to_production_data_when_research_data_unavailable(tmp_path,
 
 
 def test_v3_skips_when_memory_is_tight_and_never_raises(tmp_path, monkeypatch):
-    """NAS 只有 7.5G: 可用内存不足时不跑全市场矩阵 (保护交易进程), 结果记 failed + 原因, 不抛。"""
+    """小内存主机 (如 7.5G): 可用内存不足时不跑全市场矩阵 (保护交易进程), 结果记 failed + 原因, 不抛。"""
     from app.services import research_data
     monkeypatch.setattr(us_clock, "now", lambda: datetime(2026, 10, 3, 10, 0, tzinfo=us_clock.tz))
     monkeypatch.setattr(es, "_available_memory_mb", lambda: 800)

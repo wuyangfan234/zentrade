@@ -1,4 +1,4 @@
-"""Phantom 4h 候选来源 (决策台用) — oasis-quant 原版 4h Phantom + 吊灯止损。
+"""Phantom 4h 候选来源 (决策台用) — 原版 4h Phantom 简化扫描 + 吊灯止损。
 
 盘后扫描 (美东 16:35 后) 使用区间 [前一交易日13:30, 当日09:30] 内真实存在的已完成根。
 04:00–20:00 ET 源在完整交易日通常贡献5根：前日13:30/17:30和当日01:30/05:30/09:30。
@@ -19,10 +19,10 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 SOURCE_ID = "phantom_4h"
-SOURCE_NAME = "Phantom 4h 波段（oasis-quant 原版·吊灯止损）"
+SOURCE_NAME = "Phantom 4h 波段（原版·吊灯止损）"
 SHORT_SOURCE_ID = "phantom_4h_short"
-SHORT_SOURCE_NAME = "Phantom 4h 做空（oasis-quant 原版·空头吊灯止损）"
-# 2026-10-09: Pine 原文 (Phantom源代码2.md) 仪表盘“积极做多”(≥4/5 灯) 出现 —— 与上面的 oasis-quant 简化扫描是两套规则,
+SHORT_SOURCE_NAME = "Phantom 4h 做空（原版·空头吊灯止损）"
+# 2026-10-09: Pine 原文仪表盘“积极做多”(≥4/5 灯) 出现 —— 与上面的简化扫描是两套规则,
 # 结构判定只有 64% 一致 (见 phantom_4h_pine 模块说明)。独立来源: 只进影子账本/自选信号表攒前向样本, 不改 phantom_4h、不进规则集。
 PINE_SOURCE_ID = "phantom_4h_pine"
 PINE_SOURCE_NAME = "Phantom 4h Pine 原版 (仪表盘积极做多·吊灯止损)"

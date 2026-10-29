@@ -185,7 +185,7 @@ def test_sync_entry_reuses_one_event_loop_across_ticks(tmp_path, monkeypatch):
     assert len(loops) == 2 and loops[0] is loops[1] and not loops[0].is_closed()
 
 
-# ── Google 兜底 (2026-10-07 性能审查): gtx 端点对 NAS 出口 IP 恒 429, 每批 20 条逐条打失败 (6h 1205 条告警);
+# ── Google 兜底 (2026-10-07 性能审查): gtx 端点对部署出口 IP 恒 429, 每批 20 条逐条打失败 (6h 1205 条告警);
 #    改用 client=at 端点 (生产实测 6/6 → 200), 且同一轮内首个失败即熔断, 不再逐条空打。
 
 def test_google_fallback_uses_working_endpoint():

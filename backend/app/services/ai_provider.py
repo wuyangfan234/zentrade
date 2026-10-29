@@ -295,7 +295,7 @@ def ai_configured(provider: str | None = None) -> bool:
     return bool(secrets_store.get_ai_key())
 
 
-# ── 按任务选模型 (无限 2026-10-02 拍板: 新闻翻译打标用 Kimi 关思考; 个股分析维持全局配置) ──
+# ── 按任务选模型 (2026-10-02 产品决策: 新闻翻译打标用 Kimi 关思考; 个股分析维持全局配置) ──
 # 存储: secrets.json 的 ai_task_overrides = {task: {model?, base_url?, api_key?, thinking?}}
 # 未配置的任务/字段一律回退全局 AI 配置, task=None 时行为与改造前完全一致。
 # thinking (2026-10-19 起有档位): off=关 (reasoning_effort=none, 不传 temperature);
@@ -339,7 +339,7 @@ def apply_task_thinking(kwargs: dict, profile: dict | None) -> dict:
         return kwargs
     thinking = profile.get("thinking")
     if thinking == "off":
-        # 关思考: 推理型模型 (Kimi k3 等) 会把思考 token 计入 max_tokens 把正文挤空。
+        # 关思考: 部分推理型模型会把思考 token 计入 max_tokens 把正文挤空。
         # reasoning_effort=none 经实测 Kimi 接受且思考 token 为 0; 被拒时由 _openai_retry_kwargs 移除后重试。
         # 这类模型通常只允许固定温度, 不传 temperature (被拒同样会自动移除)。
         kwargs["reasoning_effort"] = "none"

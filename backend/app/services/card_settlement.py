@@ -1,4 +1,4 @@
-"""卡级结局结算 (方向 A, 2026-10-11 无限批复 A-D-impl-plan)。研究级: 只读自选信号表与日K, 只写 data/research/settlement/。
+"""卡级结局结算 (方向 A, 2026-10-11 产品决策)。研究级: 只读自选信号表与日K, 只写 data/research/settlement/。
 
 结算对象 = 自选信号表 (opportunities/watchlist/<信号日>.json) 的每一行 = 规则 x 票 x 方向 x 信号日, 含试用/下单/观察/记账全部档位。
 回放直接调用 card_replay.replay_state / replay_state_short (与交易员、影子账本同一规则, 本模块不另写出场逻辑):

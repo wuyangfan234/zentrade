@@ -124,11 +124,11 @@ class SwingTrader:
             slip = self.account.slippage_bps / 10000
             fill_price = round(price * (1 - slip if short else 1 + slip), 4)
             # 卖空占用 2×名义 (所得 + 同额抵押, 所得记入现金); 做多占用 1×名义 — 两者对购买力的净占用都是
-            # 1×名义 + 佣金, 不加杠杆。现金不足 → 按剩余可用资金缩量 (无限 2026-10-05), 缩到原计划 25% 以下不成交。
+            # 1×名义 + 佣金, 不加杠杆。现金不足 → 按剩余可用资金缩量 (2026-10-05 产品决策), 缩到原计划 25% 以下不成交。
             available = self.ledger.buying_power(valuation)
             sizing = None
             reason = None
-            # 单笔风险上限 (无限 2026-10-12): 股数按建卡区间中点算, 实际成交价离失效价更远时风险会超预算
+            # 单笔风险上限 (2026-10-12 产品决策): 股数按建卡区间中点算, 实际成交价离失效价更远时风险会超预算
             # (10-09 实测最大 1.15 倍)。按成交价重算: 实际风险 = 股数 * |成交价 - 失效价| <= 权益 * 单笔风险。
             actual_rps = (frozen.invalidation - fill_price) if short else (fill_price - frozen.invalidation)
             risk_cap = None

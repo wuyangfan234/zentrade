@@ -92,7 +92,7 @@ def _engine():
 
 
 def test_tv_strategies_are_public_matrix_strategies():
-    """2026-10-09 无限: “把这些策略给我上线系统, 不要停留在研究态”。公开 = 进策略页/选股/回测/决策台候选/规则目录;
+    """2026-10-09 产品需求: “把这些策略给我上线系统, 不要停留在研究态”。公开 = 进策略页/选股/回测/决策台候选/规则目录;
     是否下单另由规则集勾选 + 前向确认决定 (见 test_tv_live_cannot_trade_without_ruleset)。"""
     e = _engine()
     assert e.load_errors() == []

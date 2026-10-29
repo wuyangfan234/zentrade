@@ -111,7 +111,7 @@ def enrich(components: list[dict], jobs: list[dict], *, now: datetime, loop_stat
         if (c := by.get(cid)) is not None and not sess and c["state"] != "error":
             c["state"], c["idle_kind"] = "idle", ("waiting" if mk["phase"] == "premarket" else "closed")
     # 0.35.3: 收盘后 / 盘前, 交易环和热报价都不再运行, last_error 是上一交易时段最后一轮留下的, 下一次成功轮次
-    # (要等开盘) 才会覆盖。10-22 收盘前 NAS 断网 1.5 小时, 这两项从 16:00 一直红到次日开盘, 状态页报「异常」却无事可做。
+    # (要等开盘) 才会覆盖。10-22 收盘前宿主机断网 1.5 小时, 这两项从 16:00 一直红到次日开盘, 状态页报「异常」却无事可做。
     # 非盘中: 降为休市 (idle/closed), 摘要标明是上一交易时段的最后一次报错。盘中照旧标红, 判定不变。
     if not sess:
         for cid in ("paper_loop", "hot_quotes"):

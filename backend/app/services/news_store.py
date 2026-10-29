@@ -109,7 +109,7 @@ TONE_IMPORTANCE = ("high", "medium")
 
 
 def tone(views: list[dict]) -> dict:
-    """机会卡「利空 N / 利多 N」角标 (0.16.0, 无限 10-14 拍板): 48 小时内、已打标、重要度高或中的主角新闻
+    """机会卡「利空 N / 利多 N」角标 (0.16.0, 10-14 产品决策): 48 小时内、已打标、重要度高或中的主角新闻
     (primary 且非旧闻重炒) 按方向计数; 中性不计。只做标注, 不参与开仓。各附最新 3 条标题供悬停。"""
     out = {"bearish": 0, "bullish": 0, "bearish_heads": [], "bullish_heads": []}
     hits = [v for v in views if v["tagged"] and is_main(v) and v["importance"] in TONE_IMPORTANCE

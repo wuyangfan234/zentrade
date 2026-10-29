@@ -1029,7 +1029,7 @@ def _scheduled_pipeline_task(pipeline_fn, *, catchup: bool = False, session_day=
     return True
 
 
-# 0.35.3: 盘后管道失败自动重试 (10-22: 14:59-16:36 ET NAS 断网, 16:35 管道在 sync_daily 因 URLError 失败,
+# 0.35.3: 盘后管道失败自动重试 (10-22: 14:59-16:36 ET 宿主机断网, 16:35 管道在 sync_daily 因 URLError 失败,
 # 开机补跑只在启动后 120 秒判定一次, 网络恢复后没人重跑, 直到北京次日 08:43 手动补跑)。
 # 每 15 分钟看一次: 目标日 (pipeline_catchup_target) 收盘后最近一次管道失败, 且离失败已过退避间隔 → 再跑一次。
 PIPELINE_RETRY_GAPS_MIN = (15, 30, 60, 120)
@@ -1217,7 +1217,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_paper_tick", max_instances=1, coalesce=True,
         misfire_grace_time=10, replace_existing=True)
 
-    # 机会板每 30 分钟刷新 (无限 2026-10-16): 美东交易日北京时间 20:00 起 (夏令时 = 美东 08:00, 冬令时 = 07:00)
+    # 机会板每 30 分钟刷新 (2026-10-16 产品决策): 美东交易日北京时间 20:00 起 (夏令时 = 美东 08:00, 冬令时 = 07:00)
     # 到 16:00 收盘, 每个整点/半点落一次机会板快照; 页面每 60 秒读实时板, 快照只用于记录卡的状态变化 (灰色历史)。
     def _swing_refresh():
         from app.services import swing_desk
@@ -1381,7 +1381,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="mon-fri", hour=9, minute=0, timezone="America/New_York"),
         id="zen_premarket_gap", max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True)
 
-    # 0.27.0 (无限 10-19 选 B): 机会板做多卡第 1 天 09:00 盘前价越过止损 -> 整卡作废。SIP 扣留 15 分钟,
+    # 0.27.0 (10-19 产品决策 B): 机会板做多卡第 1 天 09:00 盘前价越过止损 -> 整卡作废。SIP 扣留 15 分钟,
     # 08:30-09:00 那根 09:16 后才拿得到 -> 09:20 ET 起 (北京夏令时 21:20 / 冬令时 22:20), 09:30 / 09:40 再补两次
     # (只查还没查过的卡; 出网只在这里, 不在交易环); 交易环 09:44 起用本地 09:00 HL 价兜底。
     def _swing_pm_check():
@@ -1418,7 +1418,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=5, timezone="America/New_York"),
         id="zen_swing_candidates_queue", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
 
-    # 0.28.0 盘中强势卡 (无限 10-20: 只上机会板 + 自动结算记战绩, 不下单): 10:00-15:00 ET 每 30 分钟检查自选出卡
+    # 0.28.0 盘中强势卡 (10-20 产品决策: 只上机会板 + 自动结算记战绩, 不下单): 10:00-15:00 ET 每 30 分钟检查自选出卡
     # (形态用 20 分钟前已完成的 SIP 5 分钟K + 出卡时实时价), 同时按 5 分钟K 结算在途卡; 16:25 ET 再结算一次
     # (当天K线齐了, 第 5 天到期的卡按收盘结)。不碰台账、不进交易环。
     def _intraday_strength():
@@ -1439,7 +1439,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_intraday_strength_settle", max_instances=1, coalesce=True, misfire_grace_time=3600,
         replace_existing=True)
 
-    # 0.34.0 开盘放量榜 (无限 10-22 选「机会页按时段换主角」): 09:30 那根 SIP 5 分钟K 09:50 后才完整可见,
+    # 0.34.0 开盘放量榜 (10-22 产品决策 「机会页按时段换主角」): 09:30 那根 SIP 5 分钟K 09:50 后才完整可见,
     # 09:51 ET 出榜 (北京夏令时 21:51 / 冬令时 22:51), 09:56 再试一次 (当天已出榜就跳过); 16:40 ET 记收盘, 17:40 补缺。
     # 不写台账、不进交易环。0.35.0: 出榜后按齿轮开关 / 门槛与全局渠道推一条提醒 (每天每渠道最多一条, 推送失败不影响出榜)。
     def _open_radar():
@@ -1495,7 +1495,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_hot_quotes", max_instances=1, coalesce=True,
         misfire_grace_time=4, replace_existing=True)
 
-    # 个股新闻 (无限 2026-10-02 拍板): 每分钟唤醒, 内部按节奏真跑 (盘前/盘中 5 分钟, 其余 30 分钟; SEC 30 分钟)。
+    # 个股新闻 (2026-10-02 产品决策): 每分钟唤醒, 内部按节奏真跑 (盘前/盘中 5 分钟, 其余 30 分钟; SEC 30 分钟)。
     # 采集 → Kimi 关思考翻译打标 → 持仓高重要度利空入队飞书。只展示与记账, 不参与开仓。
     def _news_tick():
         from app.services import news_job
@@ -1508,7 +1508,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_news", max_instances=1, coalesce=True,
         misfire_grace_time=55, replace_existing=True)
 
-    # 盘面情报面板 (0.40.0, 无限 2026-10-26 选 B 档): 每分钟唤醒, 内部按源各自节奏刷新 (盘前盘中 1-30 分钟, 其余更慢)。
+    # 盘面情报面板 (0.40.0, 2026-10-26 产品决策 B 档): 每分钟唤醒, 内部按源各自节奏刷新 (盘前盘中 1-30 分钟, 其余更慢)。
     # 只写 data/intel/ 缓存供页面读; 不进打分、裁决、下单, 不推送。
     def _intel_tick():
         from app.services import intel_panel
@@ -1521,7 +1521,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_intel", max_instances=1, coalesce=True,
         misfire_grace_time=55, replace_existing=True)
 
-    # QVeris 财报一致预期 (无限 2026-10-02 拍板「10 个交易日内有财报的持仓和候选每天自动查一次」):
+    # QVeris 财报一致预期 (2026-10-02 产品决策「10 个交易日内有财报的持仓和候选每天自动查一次」):
     # 美东 08:45 (财报日历 08:30 刷新之后) 跑一次; 计入每日 100 积分上限, 当日已缓存的不再扣费。
     def _qveris_auto_estimates():
         from app.services import qveris_data

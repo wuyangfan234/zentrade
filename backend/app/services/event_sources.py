@@ -1,4 +1,4 @@
-"""事件来源 (2026-10-05 预登记, design/evidence-v3-preregistration.md 第 9 节)。
+"""事件来源 (2026-10-05 预登记规则)。
 
 E1 earnings_beat_drift  财报超预期后漂移 (做多)
 E2 insider_cluster_buy  内部人集中买入 (做多)

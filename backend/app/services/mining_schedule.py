@@ -50,7 +50,7 @@ def iso_week(value: date) -> tuple[int, int]:
 def build_default_request(repo: Any, profile: str) -> dict[str, Any]:
     """Build the scheduler request on the bounded themed pool (cap 200, watchlist always in).
 
-    The full market is not used: on the NAS a 1442-day full-market balanced run peaks near
+    The full market is not used: on a typical self-hosted box a 1442-day full-market balanced run peaks near
     4 GiB in the worker while ~2 GiB is available; 200 symbols peak near 0.9 GiB.
     """
     if profile not in _PROFILES:
@@ -66,7 +66,7 @@ def build_default_request(repo: Any, profile: str) -> dict[str, Any]:
         # Filter the original cohort, never backfill with later unrelated factors.
         "factor_names": [item["id"] for item in FACTOR_COLUMNS[:48] if item["id"] in available],
         "strategy_ids": [],
-        # 空池不能退化成 None (= 全市场, NAS 内存不足); 交由前置检查记为 skipped_prerequisite
+        # 空池不能退化成 None (= 全市场, 内存不足); 交由前置检查记为 skipped_prerequisite
         "symbols": list(pool.symbols),
         "universe": pool.audit(),
         "asset_type": "stock",

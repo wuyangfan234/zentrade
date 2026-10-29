@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { IntelEvent, IntelNewsItem, IntelPayload } from '@/lib/api'
-import prod from './__fixtures__/intel-prod-20261026.json'
+import prod from './__fixtures__/intel-snapshot-20261026.json'
 
 vi.mock('@/components/StockPreviewDialog', () => ({ StockPreviewDialog: ({ symbol }: { symbol: string | null }) => (symbol ? <div data-preview={symbol} /> : null) }))
 const intelToday = vi.fn()

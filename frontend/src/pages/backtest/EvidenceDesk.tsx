@@ -193,7 +193,7 @@ function fmtR(n: number | null | undefined): string {
   return n == null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(3)}R`
 }
 
-/** 新闻催化来源: 固定只观察 (无状态下拉), 只展示影子证据进度 (无限 2026-10-02 拍板)。 */
+/** 新闻催化来源: 固定只观察 (无状态下拉), 只展示影子证据进度 (2026-10-02 产品决策)。 */
 function NewsShadowRow({ s }: { s: DeskSource }) {
   const ev = s.news_shadow
   if (!ev) return null

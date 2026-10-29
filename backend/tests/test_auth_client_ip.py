@@ -1,7 +1,7 @@
 """BH-01 (2026-10-11): 客户端 IP 判定与登录限流。
 
-生产链路: 公网 → Cloudflare → cloudflared 容器 → 宿主 172.17.0.1:3018 → 容器内看到 peer=172.25.0.1 (docker 网关)。
-局域网直连 192.168.1.215:3018 在容器内同样是 peer=172.25.0.1, 且不带转发头。
+典型隧道链路: 公网 → Cloudflare → cloudflared 容器 → 宿主 3018 端口 → 容器内看到 peer=172.25.0.1 (docker 网关)。
+局域网直连宿主 3018 端口在容器内同样是 peer=172.25.0.1, 且不带转发头。
 Cloudflare 一定附带 Cf-Connecting-IP (访客真实 IP, 不可伪造), 并把访客 IP 追加到 X-Forwarded-For 末尾。
 """
 from __future__ import annotations
@@ -80,8 +80,8 @@ def test_unconfigured_middleware_rejects_tunnel_requests() -> None:
 
 
 @pytest.mark.parametrize("peer, headers, local", [
-    ("127.0.0.1", {}, True),                       # NAS 本机 / 健康检查
-    (DOCKER_GW, {}, True),                         # 局域网直连 192.168.1.215:3018 (经 docker NAT)
+    ("127.0.0.1", {}, True),                       # 宿主机本机 / 健康检查
+    (DOCKER_GW, {}, True),                         # 局域网直连宿主 3018 端口 (经 docker NAT)
     ("192.168.1.20", {}, True),                    # 局域网直连 (保留源 IP 的部署)
     ("10.0.0.5", {}, True),
     ("8.8.8.8", {}, False),                        # 公网直连

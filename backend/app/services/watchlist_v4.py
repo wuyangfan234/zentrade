@@ -1,4 +1,4 @@
-"""自选机会 v4 (2026-10-06): 规则集版本 + 自选影子账本 (同票基线) + 前向确认。预登记 = design/watchlist-v4-preregistration.md。
+"""自选机会 v4 (2026-10-06): 规则集版本 + 自选影子账本 (同票基线) + 前向确认 (规则跑数前预登记)。
 
 - 规则集: data/rules/R{n}.json 一版一文件 (冻结) + data/rules/current.json 指针; 改勾选/参数 = 新版本。
 - 自选影子账本: data/decision_desk/shadow_watchlist.jsonl。盘后扫描时写入: 全部规则在自选上的全部 +1 命中 (规则卡)
@@ -167,7 +167,7 @@ def short_gate(repo, day: date) -> dict:
 
 
 # ── 机会卡显示 (看) ──────────────────────────────────────────
-# 2026-10-09 无限: “加入到策略里面, 同步到机会卡 … 我用来分析行情使用”。显示 (看) 与交易 (规则集 R{n}) 分开:
+# 2026-10-09 产品需求: “加入到策略里面, 同步到机会卡 … 我用来分析行情使用”。显示 (看) 与交易 (规则集 R{n}) 分开:
 # 看 = 哪些规则的信号出卡 (多/空各一组), 只影响展示, 不建版本、不进下单许可; 交易仍只看规则集 + 前向确认。
 # 规则集里勾选的规则其多头信号永远出卡 (交易的规则必须看得见)。
 TV_RULES = ("tv_supertrend", "tv_ut_bot", "tv_chandelier_exit", "tv_halftrend", "tv_zlsma_cross", "tv_squeeze_momentum",
@@ -541,7 +541,7 @@ def _status_uncached(data_dir: Path, ruleset: dict | None = None) -> dict:
 def permission(data_dir: Path) -> dict:
     """下单许可的唯一出处 (v4, 0.11.0 单一口径)。任何异常/非法 → 全空 (fail-closed)。
 
-    0.11.0 (无限 2026-10-13 拍板, 退役 试用/正式/观察 分档): 已保存规则集 (R1 起) 里勾选的看多规则 = 可下单,
+    0.11.0 (2026-10-13 产品决策, 退役 试用/正式/观察 分档): 已保存规则集 (R1 起) 里勾选的看多规则 = 可下单,
     单笔风险 = 规则集 risk_per_trade_pct (默认 1%); 规则集外 = 不可。做空按规则集 short 列表 + 大盘门槛
     (short_gate: 信号日 SPY 收盘 < 50 日均线)。前向确认 status() 仅作只读统计, 不参与许可。"""
     try:
@@ -556,7 +556,7 @@ def permission(data_dir: Path) -> dict:
             if (saved and risk) else set()
         if saved and risk and rs.get("evo") is True:      # 0.15.0 自进化卡: 开关开 = 只交易 evo 卡, 多空都放行 (空头再过 SPY<50 日线)
             tradable, short_tradable = {EVO_RULE}, {EVO_RULE}
-        # tight-v1 (0.24.0, 无限 10-15 "完全重构"): 机会板模式 (rules/swing.json 存在) = 纸面只交易机会板卡 (规则名 swing),
+        # tight-v1 (0.24.0, 10-15 产品决策"完全重构"): 机会板模式 (rules/swing.json 存在) = 纸面只交易机会板卡 (规则名 swing),
         # 板与纸面同一张卡; 旧规则集勾选不再开新仓 (持仓照常管理)。风险仍取规则集 risk_per_trade_pct。
         if saved and risk and (Path(data_dir) / "rules" / "swing.json").exists():
             tradable, short_tradable = {SWING_RULE}, {SWING_RULE}

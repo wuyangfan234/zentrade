@@ -23,7 +23,7 @@ def size_position(card: OpportunityCard, equity: float, account: Account) -> int
     return max(qty, 0)
 
 
-# 现金不足时按剩余可用资金缩量成交 (无限 2026-10-05 拍板)。缩量后计划风险低于原计划的这个比例就不成交:
+# 现金不足时按剩余可用资金缩量成交 (2026-10-05 产品决策)。缩量后计划风险低于原计划的这个比例就不成交:
 # 碎仓占用持仓名额与一张卡的唯一回合, 却几乎不产生可学习的结果。25% 与探索单 (0.25% vs 1%) 同比例。
 MIN_CASH_DOWNSIZE_RATIO = 0.25
 

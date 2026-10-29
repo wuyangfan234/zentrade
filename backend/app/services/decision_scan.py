@@ -129,7 +129,7 @@ def build(*, as_of: date, strategy_picks: dict[str, list[str]], s1s2: ScanResult
                     "lane_only": bool(r["tradable_sources"]) and all(sym in lane.get(t, ()) for t in r["tradable_sources"])}
         if decision["lane_only"] and (evaluation or {}).get("mode") != "v4":
             # 来源证据只覆盖每日全池前 10; 自选通道的票排在第 10 名之后, 不在证据总体内 (10-05 研究: 长下影
-            # 第 11-30 名 −0.206R vs 第 4-10 名 +0.291R)。开仓照做 (无限拍板), 单笔风险按探索档 0.25%。
+            # 第 11-30 名 −0.206R vs 第 4-10 名 +0.291R)。开仓照做 (产品决策), 单笔风险按探索档 0.25%。
             decision["risk_pct"] = min(decision["risk_pct"], dd.EXPLORE_RISK_PCT)
             decision["lane_risk_capped"] = True
         card = replace(card, evidence={**card.evidence, "decision": decision, "sector": sector_map.get(sym),

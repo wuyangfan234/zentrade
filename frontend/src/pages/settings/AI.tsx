@@ -525,7 +525,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
   )
 }
 
-// ===== 按任务选模型 (无限 2026-10-02 拍板: 新闻翻译打标 = Kimi 关思考; 其余沿用上方全局配置) =====
+// ===== 按任务选模型 (2026-10-02 产品决策: 新闻翻译打标 = Kimi 关思考; 其余沿用上方全局配置) =====
 // 2026-10-19: 思考从「关 / 开」两档改为 关 / 低 / 中 / 高 / 极高 / 模型默认 (按档位发 reasoning_effort)
 
 const THINKING_OPTIONS: { value: string; label: string }[] = [
@@ -553,7 +553,7 @@ export function AiTasksCard() {
   return (
     <Card icon={Layers} title="AI 模型分工" anchor="ai-tasks">
       <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-        每个任务可单独指定模型和思考档位；留空沿用上方全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：推理型模型（如 Kimi k3）的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
+        每个任务可单独指定模型和思考档位；留空沿用上方全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：部分推理型模型的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
       </p>
       {q.isLoading && <div className="text-xs text-muted">加载中…</div>}
       {q.isError && <div className="text-xs text-danger">读取失败</div>}

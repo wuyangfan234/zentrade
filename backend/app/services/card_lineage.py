@@ -1,4 +1,4 @@
-"""机会卡谱系 (方向 A, 2026-10-11 无限批复 A-D-impl-plan)。只读: 不写任何文件、不改许可。
+"""机会卡谱系 (方向 A, 2026-10-11 产品决策)。只读: 不写任何文件、不改许可。
 
 出卡时 (盘后扫描写自选信号表那一刻) 给每一行打复现印记, 结算时据此分清“规则变了还是数据变了”:
   ruleset_version   规则集版本 (rules/current.json → R{n})
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 CONTRACT = "zt-settle-v1"
 SGT = timezone(timedelta(hours=8))
 
-# 家族 (A/B 共用一份): 趋势延续 / 突破 / 回踩 / 反转 / 量价事件。暂定, B 落地时再与无限确认
+# 家族 (A/B 共用一份): 趋势延续 / 突破 / 回踩 / 反转 / 量价事件。暂定, B 落地时再与产品决策
 _FAMILY = {
     "breakout": ("breakout", "breakout_new_high_60d", "boll_breakout", "ma_convergence_breakout",
                  "platform_consolidation_breakout", "trend_breakout"),

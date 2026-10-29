@@ -1,4 +1,4 @@
-"""Phantom 4h 逐根信号 (oasis-quant 原代码, 无前视)。
+"""Phantom 4h 逐根信号 (vendor 原代码, 无前视)。
 
 `simplified_phantom_scan(df[:j+1])` 只读最后一根; 其内部所有序列 (EMA/RMA/rolling/棘轮/结构状态机) 都是因果的,
 所以在整段历史上算一次、逐根读取，与“每根都对截至该根的前缀调用一次原函数”完全等价。

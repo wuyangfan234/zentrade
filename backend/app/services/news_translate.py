@@ -1,4 +1,4 @@
-"""新闻翻译与打标 — Kimi 关思考批量调用 (无限 2026-10-02 拍板「直接用 Kimi（关思考），不碰 Grok」)。
+"""新闻翻译与打标 — 按任务配置的 OpenAI 兼容模型批量调用 (默认关思考, 见 ai_provider.AI_TASKS)。
 
 输入: news_ingest 落盘的已聚簇事件 (data/news/YYYY-MM.jsonl)。
 输出: 在同一条记录上补写字段 (原地增量, 不另开文件):
@@ -34,7 +34,7 @@ PROMPT_VERSION = "news-tag-v1"
 BATCH_SIZE = 20
 MAX_BATCHES_PER_RUN = 2  # 每轮最多 40 条; 积压分摊到后续轮 (调度每分钟唤醒)
 TIME_BUDGET_S = 120.0    # 单轮翻译墙钟上限 (含预估的下一批耗时); 剩余下一轮继续
-# 生产实测 (2026-10-02, Kimi k3 关思考): 20 条/批 60-70 秒; 安静时段 ~40 秒。按慢的估。
+# 实测 (2026-10-02, 推理模型关思考): 20 条/批 60-70 秒; 安静时段 ~40 秒。按慢的估。
 EST_BATCH_S = 70.0
 EVENT_TYPES = ("earnings", "guidance", "rating", "contract", "mna", "product", "regulatory", "dilution",
                "management", "litigation", "macro", "other")

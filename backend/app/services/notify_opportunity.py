@@ -340,7 +340,7 @@ def _et_label(iso_utc) -> str:
 
 
 def enqueue_news_alert(data_dir: Path, item: dict) -> bool:
-    """持仓重大利空新闻 (无限 2026-10-02 拍板「仅持仓 + 重要度高时推送」) — 按事件 id + 股票去重, 一事一推。
+    """持仓重大利空新闻 (2026-10-02 产品决策「仅持仓 + 重要度高时推送」) — 按事件 id + 股票去重, 一事一推。
 
     item 是 news_store.view() 的展示视图 (已是中文)。标注「AI 判读」, 不给任何操作结论。
     """

@@ -1,4 +1,4 @@
-"""机会板出卡引擎 tight-v1 (0.24.0, 无限 2026-10-15 "完全重构, 卡区间太大没有交易价值")。
+"""机会板出卡引擎 tight-v1 (0.24.0, 2026-10-15 产品决策"完全重构, 卡区间太大没有交易价值")。
 
 流水线: 自选 → 4h Phantom 门 (窗口内"条件齐备"事件 或 最后一根已完成 4h 同向状态)
 → 用户可改的 3 多 / 3 空策略打分 (命中条数) → 空头只在 SPY 收盘 < 50 日线
@@ -24,7 +24,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ── 默认 3+3 (无限 10-15: 可在规则集手动改; 初值按自选池超额 R 选) ──────────
+# ── 默认 3+3 (10-15 产品决策: 可在规则集手动改; 初值按自选池超额 R 选) ──────────
 # 证据: backend/config/watchlist_rule_history.json 2022-01~2026-09 同票随机日基线。
 DEFAULT_LONG = (
     "tv_smc_structure",      # excess +0.40 (n=43, p=0.025)
@@ -851,7 +851,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
                             key=lambda c: (order.get(c["state"], 9), bool(c.get("blocked")) or c.get("verdict") == "skip",
                                            -c["score"],
                                            abs(c.get("dist_pct") or 0), c["symbol"], c.get("signal_day") or ""))
-    # 0.31.0 盘前定稿 (无限 10-21 授权): 09:20 ET 起卡面带盘前一行; 同向放量卡在同组内排前 (只重排, 不增减卡)
+    # 0.31.0 盘前定稿 (10-21 产品决策): 09:20 ET 起卡面带盘前一行; 同向放量卡在同组内排前 (只重排, 不增减卡)
     try:
         from app.services import pm_rank
         pmv = pm_rank.view(data_dir, now)
@@ -899,7 +899,7 @@ def _equity_and_risk(data_dir: Path, lg) -> tuple[float | None, float | None]:
     return eq, rk
 
 
-# ── 每 30 分钟刷新 (无限 10-16: 盘前北京时间 20:00 起, 每 30 分钟更新卡; 作废的卡变灰并留在历史) ──
+# ── 每 30 分钟刷新 (10-16 产品决策: 盘前北京时间 20:00 起, 每 30 分钟更新卡; 作废的卡变灰并留在历史) ──
 REFRESH_START_CN = (20, 0)       # 北京时间 20:00 (夏令时 = 美东 08:00, 冬令时 = 美东 07:00), 都在美股盘前
 
 

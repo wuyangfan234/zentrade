@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api, type SettlementCardRow, type SettlementCardsPayload } from '@/lib/api'
 
 /**
- * 已结算卡逐张明细 (0.18.0, 2026-10-14 无限批复): 只读 GET /api/opportunities/settlement/cards
+ * 已结算卡逐张明细 (0.18.0, 2026-10-14 产品决策): 只读 GET /api/opportunities/settlement/cards
  * = cards.zt-settle-v1.jsonl 原样逐行; 按规则 / 退出原因在前端筛选, 不改任何结算口径。
  */
 const f2 = (n: number | null | undefined) => (n == null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(2)}`)
