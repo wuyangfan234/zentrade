@@ -5,7 +5,7 @@
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 
-> **链上美股交易**：[通过 Gate 邀请链接注册](https://www.gatesites.cc/zh/referral/registry?ref=UlNBXQ9Y&ref_type=103&page=superRebate)（推广链接，作者可能获得返佣；本项目与 Gate 无隶属关系。Gate 的服务地区限制以其用户协议为准，请先确认所在地区可用。）
+> **链上美股交易**：[通过 Gate 邀请链接注册](https://www.gatesites.cc/zh/referral/registry?ref=UlNBXQ9Y&ref_type=103&page=superRebate)（推广链接，作者可能获得返佣；本项目与 Gate 无隶属关系。Gate 的服务地区限制以其用户协议为准，请先确认所在地区可用。推荐交易美股现货，不推荐进行高风险的合约交易！可能损失全部资金！）
 
 > A self-hosted research, monitoring and paper-trading workspace for US swing trading.
 >
