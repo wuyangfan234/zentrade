@@ -6,7 +6,7 @@ import importlib
 import json
 import re
 from collections.abc import Iterator
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -120,7 +120,7 @@ def test_google_translate_fallback_is_opt_in(tmp_path, monkeypatch):
     from app.services import news_ingest as ni
     from app.services import news_translate as nt
 
-    now = datetime(2026, 10, 2, 14, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 2, 14, 0, tzinfo=UTC)
     ev = {"id": "alpaca:0", "headline": "Lumentum rips higher", "summary": "", "created_at": "2026-10-02T10:00:00Z",
           "symbols": ["LITE"], "mentions": {"LITE": "headline"}, "sources": ["alpaca"], "refs": [], "scope": "focused"}
     ni.save_shard(tmp_path, now, {ev["id"]: ev})
