@@ -1,0 +1,6 @@
+# 仓库页 Sponsor 按钮。打赏完全自愿；同样的二维码也展示在 README 的「赞助」小节。
+custom:
+  [
+    "https://github.com/wuyangfan234/zentrade/blob/main/docs/assets/sponsor/wechat.png",
+    "https://github.com/wuyangfan234/zentrade/blob/main/docs/assets/sponsor/alipay.jpg",
+  ]

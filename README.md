@@ -181,6 +181,17 @@ ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥�
 - 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。
 - 需要只含 OSI 许可内容的版本时，用 `python scripts/export_core.py --out <目录>` 导出开源核心版（清单见 `scripts/core_manifest.toml`）。
 
+## 赞助
+
+如果 ZenTrade 帮到了你，欢迎请作者喝杯咖啡。打赏完全自愿，不对应任何服务、功能或投资建议；Star、Issue 和 PR 同样是很好的支持。
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/assets/sponsor/wechat.png" alt="微信赞赏码" width="220"><br>微信赞赏</td>
+    <td align="center"><img src="docs/assets/sponsor/alipay.jpg" alt="支付宝收钱码" width="180"><br>支付宝</td>
+  </tr>
+</table>
+
 ## 免责声明
 
 本项目仅供学习、软件研究与量化方法验证。所有回测、信号、净值、收益和胜率均为历史模拟或纸面结果，不代表未来表现，不构成投资建议、证券咨询或交易推荐。第三方数据的准确性和可用性以其提供方为准。使用者须自行遵守适用法律法规、数据源条款和第三方许可，并承担全部使用风险。
