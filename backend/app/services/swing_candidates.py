@@ -150,31 +150,13 @@ def _cells(data_dir: Path, repo, symbols: list[str], days: list[date], close: np
 
 
 def _gate_matrix(data_dir: Path, repo, symbols: list[str], days: list[date]) -> np.ndarray:
-    """4h 门 (T,N): 生产 30 分钟K -> 4h Phantom, 可见窗 [前日 13:30, 当日 09:30] 内“多头条件齐备”或最后方向 = 多。"""
-    import pandas as pd
-
-    from app.services import kline_4h, phantom_4h
-    from app.services.phantom_4h_source import DIRECTION_SIDE
-    n_days, n_syms = len(days), len(symbols)
-    gate = np.zeros((n_days, n_syms), bool)
-    bars = kline_4h.bars_4h(data_dir, repo, symbols, days[0] - timedelta(days=400), days[-1] + timedelta(days=1))
-    for j, sym in enumerate(symbols):
-        df = bars.get(sym)
-        if df is None or len(df) < phantom_4h.MIN_BARS:
-            continue
-        s = phantom_4h.scan_series(df)
-        idx = s.index.values
-        act = s["action"].values
-        dr = s["direction"].values
-        for t in range(1, n_days):
-            lo = np.datetime64(pd.Timestamp(days[t - 1]) + pd.Timedelta(hours=13, minutes=30))
-            hi = np.datetime64(pd.Timestamp(days[t]) + pd.Timedelta(hours=9, minutes=30))
-            a = np.searchsorted(idx, lo, "left")
-            b = np.searchsorted(idx, hi, "right")
-            if b == 0:
-                continue
-            gate[t, j] = bool((act[a:b] == "多头条件齐备").any()) or DIRECTION_SIDE.get(str(dr[b - 1])) == "long"
-    return gate
+    """方向门 (T,N) 做多放行矩阵: 由当前生效的方向门计算 (direction_gate.active)。
+    插件门 (如 4h Phantom) 存在时与生产机会板同一口径; 核心版用内置日线 MA50 门。门没有矩阵实现 = 全不放行。"""
+    from app.opportunity import direction_gate
+    gate = direction_gate.active(Path(data_dir))
+    if gate.matrix is None:
+        return np.zeros((len(days), len(symbols)), bool)
+    return gate.matrix(Path(data_dir), repo, symbols, days)
 
 
 def evaluate(data_dir: Path, repo, strategy_ids: list[str], *, end: date, watchlist: set[str]) -> dict:

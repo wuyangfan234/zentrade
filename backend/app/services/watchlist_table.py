@@ -28,12 +28,21 @@ def _names(engine) -> dict:
     return names
 
 
+def _optional_module(name: str) -> bool:
+    import importlib.util
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
 def rule_catalog(engine) -> list[dict]:
     """可勾选的规则: 引擎全部可运行的日线股票策略 (含自定义/挖掘发布, 含 10 个 TradingView 移植) + S1/S2 +
     Phantom 4h 多 (简化扫描版与 Pine 原版)。"""
-    out = [{"id": "breakout", "name": "S1 突破", "kind": "builtin"}, {"id": "pullback", "name": "S2 回踩", "kind": "builtin"},
-           {"id": "phantom_4h", "name": "Phantom 4h", "kind": "ported"},
-           {"id": "phantom_4h_pine", "name": "Phantom 4h Pine", "kind": "ported"}]
+    out = [{"id": "breakout", "name": "S1 突破", "kind": "builtin"}, {"id": "pullback", "name": "S2 回踩", "kind": "builtin"}]
+    if _optional_module("app.services.phantom_4h_source"):   # 可选来源: 开源核心版不含
+        out += [{"id": "phantom_4h", "name": "Phantom 4h", "kind": "ported"},
+                {"id": "phantom_4h_pine", "name": "Phantom 4h Pine", "kind": "ported"}]
     if engine is not None:
         try:
             for m in engine.list_strategies():

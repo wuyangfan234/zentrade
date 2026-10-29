@@ -86,7 +86,8 @@ RUN if [ "$USE_CN_MIRROR" = "1" ]; then \
 # Backend deps
 COPY README.md /README.md
 COPY LICENSE LICENSE.upstream NOTICE.md THIRD_PARTY_NOTICES.md /licenses/
-COPY LICENSES /licenses/LICENSES
+# LICENSES/ (第三方许可全文) 只在完整版存在; 通配让核心版没有该目录时也能构建
+COPY LICENSE[S] /licenses/LICENSES
 COPY backend/pyproject.toml backend/uv.lock* ./
 # uv 原生支持同时挂多个 index(主源 + 备用源),会自动在两源中查找,
 # 比逐个重试更稳健 —— 任一源缺包时另一源补位。

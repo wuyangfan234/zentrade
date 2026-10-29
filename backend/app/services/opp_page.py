@@ -218,9 +218,12 @@ def _settings(data_dir: Path) -> dict:
     lg, sh = sd.strategies_from_ruleset(data_dir)
     from app.services import open_radar
     rs = wv.current_ruleset(data_dir)
+    from app.opportunity import direction_gate
+    gate = direction_gate.active(data_dir)
     return {"long": list(lg), "short": list(sh), "risk_per_trade_pct": (rs.get("params") or {}).get("risk_per_trade_pct"),
             "ruleset_version": rs.get("version"), "evo": rs.get("evo") is True,
-            "radar_push": {**open_radar.push_settings(data_dir), **open_radar.push_options()}}
+            "radar_push": {**open_radar.push_settings(data_dir), **open_radar.push_options()},
+            "gate": {"id": gate.id, "name": gate.name}}
 
 
 def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) -> dict:

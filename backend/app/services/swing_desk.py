@@ -146,12 +146,40 @@ def swing_config_path(data_dir: Path) -> Path:
     return Path(data_dir) / "rules" / "swing.json"
 
 
+# 默认 3+3 里的策略在开源核心版里可能不存在 (第三方移植不随核心版分发): 缺失时按下面顺序补位。
+# 补位只用原创内置策略; 做空侧原创策略没有翻空信号 → 留空 (机会板只出多头卡)。
+CORE_FALLBACK_LONG = ("volume_price_surge", "macd_golden", "trend_breakout")
+
+
+def _builtin_ids() -> set[str] | None:
+    """内置策略目录里实际存在的策略 id (按文件名, 不导入)。目录读不到 → None (不过滤)。"""
+    d = Path(__file__).resolve().parents[1] / "strategy" / "builtin"
+    try:
+        return {p.stem for p in d.glob("*.py") if not p.stem.startswith("_")}
+    except OSError:
+        return None
+
+
+def _available_defaults() -> tuple[tuple[str, ...], tuple[str, ...]]:
+    have = _builtin_ids()
+    if have is None:
+        return DEFAULT_LONG, DEFAULT_SHORT
+    lg = [x for x in DEFAULT_LONG if x in have]
+    for x in CORE_FALLBACK_LONG:
+        if len(lg) >= 3:
+            break
+        if x in have and x not in lg:
+            lg.append(x)
+    sh = [x for x in DEFAULT_SHORT if x in have]
+    return tuple(lg), tuple(sh)
+
+
 def strategies_from_ruleset(data_dir: Path | None) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """读 data/rules/swing.json 的 long/short (各最多 3 条)。缺/坏/空 → 默认 3+3。
 
     不读 R0 默认勾选 (那是旧前向确认七条), 避免静默串台。用户在设置里改 3+3 即写 swing.json。
     """
-    long_ids, short_ids = list(DEFAULT_LONG), list(DEFAULT_SHORT)
+    long_ids, short_ids = (list(x) for x in _available_defaults())
     if data_dir is None:
         return tuple(long_ids), tuple(short_ids)
     p = swing_config_path(data_dir)
@@ -181,10 +209,11 @@ def save_strategies(data_dir: Path, long_ids: list[str], short_ids: list[str]) -
         "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "note": "swing-desk 3+3; 可手动改",
     }
+    dl, ds = _available_defaults()
     if not out["long"]:
-        out["long"] = list(DEFAULT_LONG)
+        out["long"] = list(dl)
     if not out["short"]:
-        out["short"] = list(DEFAULT_SHORT)
+        out["short"] = list(ds)
     path = swing_config_path(data_dir)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(path, json.dumps(out, ensure_ascii=False, indent=1))

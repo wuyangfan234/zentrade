@@ -159,7 +159,12 @@ def _phantom_4h_picks(repo, as_of: date, frames: dict, picks: dict, meta: dict, 
 
     返回 {source: {symbol: stop_loss}} — 4h 来源的止损因股而异 (吊灯止损位), 不是策略级固定比例。
     """
-    from app.services import phantom_4h_source as p4
+    try:
+        from app.services import phantom_4h_source as p4
+    except ModuleNotFoundError:   # 开源核心版不含该来源: 跳过, 方向门回落到内置门
+        meta["phantom_4h"] = {"unavailable": True}
+        _refresh_m30(repo, as_of, include, meta)
+        return {}
     try:
         provider = None
         try:
@@ -189,6 +194,45 @@ def _phantom_4h_picks(repo, as_of: date, frames: dict, picks: dict, meta: dict, 
         logger.exception("phantom_4h source failed (跳过该来源)")
         meta[p4.SOURCE_ID] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
         return {}
+
+
+def _refresh_m30(repo, as_of: date, symbols: set[str] | None, meta: dict) -> None:
+    """30 分钟K 数据层的盘后增量 (卡结算、盘前作废检查、盘前放量排序、数据新鲜度都读它)。
+    完整版由 4h 来源扫描顺带刷新; 没有该来源时在这里单独刷新自选。失败只记 meta, 不影响扫描。"""
+    syms = sorted(symbols or ())
+    if not syms:
+        return
+    try:
+        from app.data_providers.custom import get_provider
+        from app.services import kline_4h
+        provider = get_provider("alpaca")
+        data_dir = Path(repo.store.data_dir)
+        meta["m30"] = {"refresh": kline_4h.refresh_recent(data_dir, repo, provider, syms, as_of),
+                       "history": kline_4h.ensure_history(data_dir, repo, provider, syms, as_of)}
+    except Exception as e:  # noqa: BLE001
+        meta["m30"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+        logger.warning("m30 refresh failed: %s", meta["m30"]["error"])
+
+
+def _direction_states(repo, data_dir: Path, as_of: date, frames: dict, watchlist, meta: dict) -> dict[str, str]:
+    """机会板方向门: 自选股 → long/short (写进信号快照的 h4_state, 字段名沿用历史)。
+
+    当前门由 direction_gate.active 决定 (插件门如 4h Phantom 优先, 缺失时用内置日线 MA50 门)。
+    插件门在来源扫描里已经算好的方向放在 meta["phantom_4h_state"], 作为 precomputed 交给门复用。
+    任何失败 = 空 (不放行), 只记日志。"""
+    from app.opportunity import direction_gate
+    pre = {"phantom_4h_state": meta.pop("phantom_4h_state", {}) or {}}
+    gate = direction_gate.active(data_dir)
+    try:
+        ctx = direction_gate.GateContext(data_dir=Path(data_dir), repo=repo, as_of=as_of,
+                                         symbols=tuple(sorted(watchlist or ())), frames=frames, precomputed=pre)
+        states = gate.states(ctx) or {}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("direction gate %s failed (不放行): %s", gate.id, type(e).__name__)
+        states = {}
+    meta["direction_gate"] = {"id": gate.id, "long": sum(1 for v in states.values() if v == "long"),
+                              "short": sum(1 for v in states.values() if v == "short")}
+    return {s: v for s, v in states.items() if v in ("long", "short")}
 
 
 def _previous_weights(data_dir: Path, as_of: date) -> tuple[dict[str, float] | None, bool]:
@@ -222,7 +266,7 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
     stops_by_symbol = _phantom_4h_picks(repo, as_of, frames, picks, meta, include=watchlist)
     hits = meta.pop("hits", {}) or {}
     sell_hits = meta.pop("sell_hits", {}) or {}
-    h4_state = meta.pop("phantom_4h_state", {}) or {}
+    h4_state = _direction_states(repo, data_dir, as_of, frames, watchlist, meta)
     # 自选独立选股 (2026-10-05 产品决策): 每个来源在自选池内的全部命中都成为候选, 不受“全池前 10”限制;
     # 门槛 (流动性池 / 统一成卡 / 来源证据 / 组合约束) 与全池一致, 同账户同风控。
     lane = {sid: [h["symbol"] for h in rows if h["symbol"] in watchlist and h["symbol"] not in set(picks.get(sid, []))]

@@ -1,0 +1,102 @@
+# ZenTrade 开源核心版导出清单 (scripts/export_core.py 读取)。
+# 原则: 核心版里的每个文件都必须可以按 OSI 许可再分发。授权不明、非商用、Copyleft 移植或依赖它们的内容一律排除。
+
+[exclude]
+# 路径 glob (相对仓库根)。目录以 / 结尾表示整个目录。
+paths = [
+  # TradingView Pine 移植 (GPL-3.0 / MPL-2.0 / CC BY-NC-SA 4.0 / 非商用 / 未声明许可) 与其共用内核
+  "backend/app/strategy/builtin/tv_*.py",
+  "backend/app/backtest/tv_kernels.py",
+  # Phantom (作者私有 Pine 脚本) 及其 4h 数据层、来源与方向门插件
+  "backend/app/vendor/oasis_phantom/",
+  "backend/app/services/phantom_4h.py",
+  "backend/app/services/phantom_4h_pine.py",
+  "backend/app/services/phantom_4h_source.py",
+  "backend/app/services/phantom_4h_gate.py",
+  # 书籍 / QuantifiedStrategies 规则转录 (来源条款未核)
+  "backend/app/strategy/builtin/connors_rsi2.py",
+  "backend/app/strategy/builtin/ibs_mean_reversion.py",
+  "backend/app/strategy/builtin/williams_r2_reversion.py",
+  "backend/app/strategy/builtin/mdd_multi_down_days.py",
+  "backend/app/strategy/builtin/three_down_days_overnight.py",
+  "backend/app/strategy/builtin/five_day_low_overnight.py",
+  # 依赖上面规则的私人自选池回放统计 (缺失时各页面自动降级为“无回放”)
+  "backend/config/swing_base_rates.json",
+  "backend/config/swing_rule_history.json",
+  "backend/config/swing_rule_hit_rates.json",
+  "backend/config/swing_state_odds.json",
+  "backend/config/watchlist_rule_history.json",
+  # PyneCore 参照脚本与夹具 (Pine 逐行转写)
+  "backend/tests/tv_reference/",
+  # 只服务于上述组件的测试与维护脚本
+  "backend/tests/test_tv_strategies.py",
+  "backend/tests/test_phantom_4h.py",
+  "backend/tests/test_phantom_4h_pine.py",
+  "backend/tests/test_phantom_4h_source.py",
+  "backend/tests/test_phantom_4h_gate.py",
+  "backend/tests/test_short_desk.py",
+  "backend/tests/test_review1004_false_positive_contracts.py",
+  "backend/scripts/rebuild_swing_history.py",
+  "backend/scripts/repair_evaluation_v1_0392.py",
+  "backend/tests/test_audit1026_eval_v1_base.py",
+  # 非 OSI 许可文本 (核心版不含对应组件)
+  "LICENSES/",
+  "backend/LICENSES/",
+  # 本清单与导出脚本只服务于私有完整版
+  "scripts/core_manifest.toml",
+  "scripts/export_core.py",
+  "scripts/core/",
+  "backend/tests/test_core_export.py",
+]
+
+[replace]
+# 用 scripts/core/ 下的同名文件替换 (核心版专用的许可与说明)。
+files = [
+  "NOTICE.md",
+  "THIRD_PARTY_NOTICES.md",
+  "backend/NOTICE.md",
+  "backend/THIRD_PARTY_NOTICES.md",
+]
+
+[[edit]]
+# 文本替换: 只改核心版里的副本。old 必须恰好出现一次, 否则导出失败 (防止上游改文案后静默失配)。
+file = "Dockerfile"
+old = 'org.opencontainers.image.licenses="MIT AND LicenseRef-ZenTrade-Third-Party"'
+new = 'org.opencontainers.image.licenses="MIT"'
+
+[[edit]]
+file = "README.md"
+old = """- 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商用或作者原始声明；这些内容**不适用本项目的 MIT 授权**。
+- 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。"""
+new = """- 本仓库是**开源核心版**：全部源代码按 OSI 许可分发（原创 MIT + 上游 MIT）。第三方指标移植、作者私有脚本和书籍规则转录不包含在内，机会板方向门使用内置的日线趋势门（收盘相对 50 日均线）。
+- 依赖与外部服务条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。"""
+
+[pyproject]
+# 从 backend/pyproject.toml 删除的 optional-dependency 组 (许可不是 OSI: vectorbt = Apache-2.0 + Commons Clause)。
+# 删除后用 `uv lock --offline` 重新锁定 (只移除该组独占的依赖, 其余版本不变)。
+drop_extras = ["backtest"]
+license = "MIT"
+license_files = ["LICENSE", "LICENSE.upstream", "NOTICE.md", "THIRD_PARTY_NOTICES.md"]
+
+[forbid]
+# 导出后在核心版里不得出现的标记 (大小写敏感, 正则)。出现即导出失败。
+patterns = [
+  "from app\\.vendor\\.oasis_phantom",
+  "from app\\.backtest\\.tv_kernels",
+  "import tv_kernels",
+  "from app\\.services import phantom_4h\\b",
+  "from app\\.services\\.phantom_4h",
+  "CC BY-NC-SA",
+  "LicenseRef-ZenTrade-Third-Party",
+  "vectorbt>=",
+  "name = \"vectorbt\"",
+]
+# 这些文件允许出现上面的标记 (降级分支里用 try/except 引用可选模块的文件)
+allow = [
+  "backend/app/services/decision_scan_job.py",
+  "backend/app/api/opportunities.py",
+  "backend/app/services/desk_overview.py",
+  "backend/app/services/kline_4h.py",
+  "backend/app/opportunity/direction_gate.py",
+  "backend/app/strategy/ai_generator.py",
+]

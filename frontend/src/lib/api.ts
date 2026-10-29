@@ -860,7 +860,9 @@ export type OppCardCtx = {
 /** 0.35.0 开盘放量榜推送: 开关 + 门槛档位; 渠道跟随全局推送设置 (levels = 各档回放频率, 后端单一来源) */
 export type RadarPushLevel = { v: number; days: number; per_day: number; up5: number }
 export type RadarPushSettings = { enabled: boolean; min_rvol: number; period?: string; other?: number; levels?: RadarPushLevel[] }
-export type OppSettings = { long: string[]; short: string[]; risk_per_trade_pct: number | null; ruleset_version: number | null; evo: boolean; radar_push?: RadarPushSettings }
+export type OppSettings = { long: string[]; short: string[]; risk_per_trade_pct: number | null; ruleset_version: number | null; evo: boolean; radar_push?: RadarPushSettings
+  /** 机会板方向门 (可插拔): 内置日线 MA50 门或插件门 */
+  gate?: { id: string; name: string } }
 /** 0.34.0 按时段换主角: 盘前 = 跳空榜 / 开盘 = 开盘放量榜 / 盘中 = 盘中强势 + 放量前 5 / 挂单 = 机会板 */
 export type OppStageKey = 'pre' | 'open' | 'session' | 'board'
 export type OpenRadarRow = {

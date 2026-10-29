@@ -252,7 +252,7 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
           {save.isError && <span className="text-danger">{(save.error as Error).message}</span>}
         </>
       )}>
-      <div data-swing-explain className="mb-3 text-xs text-muted">4h 定方向 · 最多 3 条策略打分 · 纸面只下机会板卡</div>
+      <div data-swing-explain className="mb-3 text-xs text-muted">{`${settings?.gate?.name ?? '方向门'}定方向 · 最多 3 条策略打分 · 纸面只下机会板卡`}</div>
       <div data-forward-summary className="mb-3 flex flex-wrap items-end gap-3 rounded-card border border-border bg-base p-3 text-xs">
         <div className="min-w-0 flex-1">
           <div className="text-[11px] leading-4 text-muted">当前 3+3</div>

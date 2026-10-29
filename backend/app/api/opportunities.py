@@ -111,11 +111,15 @@ def desk_sources(request: Request) -> dict:
     by_source = (latest.get("summary") or {}).get("by_source", {})
     names = {m["id"]: m.get("name", m["id"]) for m in engine.list_strategies()} if engine else {}
     names.update({"breakout": "S1 突破形态", "pullback": "S2 回踩形态"})
-    from app.services import phantom_4h_source
-    names[phantom_4h_source.SOURCE_ID] = phantom_4h_source.SOURCE_NAME
-    names[phantom_4h_source.SHORT_SOURCE_ID] = phantom_4h_source.SHORT_SOURCE_NAME
-    names[phantom_4h_source.PINE_SOURCE_ID] = phantom_4h_source.PINE_SOURCE_NAME
-    ids = set(ids) | {phantom_4h_source.SOURCE_ID, phantom_4h_source.SHORT_SOURCE_ID, phantom_4h_source.PINE_SOURCE_ID}
+    try:   # 可选来源 (开源核心版不含): 有才列出
+        from app.services import phantom_4h_source
+    except ModuleNotFoundError:
+        phantom_4h_source = None
+    if phantom_4h_source is not None:
+        names[phantom_4h_source.SOURCE_ID] = phantom_4h_source.SOURCE_NAME
+        names[phantom_4h_source.SHORT_SOURCE_ID] = phantom_4h_source.SHORT_SOURCE_NAME
+        names[phantom_4h_source.PINE_SOURCE_ID] = phantom_4h_source.PINE_SOURCE_NAME
+        ids = set(ids) | {phantom_4h_source.SOURCE_ID, phantom_4h_source.SHORT_SOURCE_ID, phantom_4h_source.PINE_SOURCE_ID}
     rows = []
     for sid in sorted(ids | set(dd.BUILTIN_SETUPS) | set(ev)):
         w = reg.effective(sid, dd.source_weight(ev.get(sid)))
