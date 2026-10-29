@@ -15,7 +15,7 @@ from app.opportunity import direction_gate as dg
 
 def _frame(closes: list[float], end: date) -> pl.DataFrame:
     days = [end - timedelta(days=len(closes) - 1 - i) for i in range(len(closes))]
-    return pl.DataFrame({"date": days, "close": closes})
+    return pl.DataFrame({"date": days, "close": [float(c) for c in closes]})
 
 
 def _ctx(frames: dict, as_of: date, repo=None, pre=None) -> dg.GateContext:
@@ -49,7 +49,7 @@ def test_daily_ma50_falls_back_to_repo_for_symbols_outside_frames():
 
     def get_daily_batch(symbols, start, end, columns):
         calls.append((tuple(symbols), end))
-        return pl.concat([_frame([100 + i for i in range(60)], end).with_columns(pl.lit("WL").alias("symbol"))])
+        return _frame([100 + i for i in range(60)], end).with_columns(pl.lit("WL").alias("symbol"))
 
     repo = SimpleNamespace(get_daily_batch=get_daily_batch)
     ctx = dg.GateContext(data_dir=Path("."), repo=repo, as_of=D, symbols=("WL",), frames={})
@@ -73,7 +73,7 @@ def test_daily_ma50_matrix_uses_previous_close_only():
 
 def test_registry_selection_order(tmp_path, monkeypatch):
     monkeypatch.setattr(dg, "_REGISTRY", dict(dg._REGISTRY))
-    base = dg.active(tmp_path)
+    assert dg.active(tmp_path).id in {g["id"] for g in dg.available()}
     # 没有插件 (或插件未声明 preferred) → 内置门
     for gid, g in list(dg._REGISTRY.items()):
         if g.preferred:
@@ -89,7 +89,6 @@ def test_registry_selection_order(tmp_path, monkeypatch):
     assert dg.active(tmp_path).id == dg.DEFAULT_GATE_ID
     (tmp_path / "rules" / "swing.json").write_text(json.dumps({"gate": "missing"}))
     assert dg.active(tmp_path).id == "plug"
-    assert base.id in {g["id"] for g in dg.available()}
 
 
 def test_scan_direction_states_uses_active_gate_and_records_meta(tmp_path, monkeypatch):
