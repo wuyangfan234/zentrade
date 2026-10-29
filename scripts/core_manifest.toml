@@ -66,7 +66,8 @@ new = 'org.opencontainers.image.licenses="MIT"'
 [[edit]]
 file = "README.md"
 old = """- 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商用或作者原始声明；这些内容**不适用本项目的 MIT 授权**。
-- 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。"""
+- 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。
+- 需要只含 OSI 许可内容的版本时，用 `python scripts/export_core.py --out <目录>` 导出开源核心版（清单见 `scripts/core_manifest.toml`）。"""
 new = """- 本仓库是**开源核心版**：全部源代码按 OSI 许可分发（原创 MIT + 上游 MIT）。第三方指标移植、作者私有脚本和书籍规则转录不包含在内，机会板方向门使用内置的日线趋势门（收盘相对 50 日均线）。
 - 依赖与外部服务条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。"""
 
@@ -84,6 +85,11 @@ new = "BACKEND_EXTRAS=       # legacy-cpu（老 CPU 无 AVX2/FMA）"
 file = "docs/deployment.md"
 old = "可选 `backtest` extra 会安装带额外许可限制的 vectorbt；默认不安装。使用前请阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。"
 new = "回测使用内置的 Polars / NumPy 矩阵引擎，不需要额外的回测依赖。"
+
+[[edit]]
+file = "CHANGELOG.md"
+old = "- 严格开源核心版导出：`scripts/export_core.py` 按 `scripts/core_manifest.toml` 生成只含 OSI 许可内容的源码树（排除第三方指标移植、私有脚本、规则转录、依赖它们的回放统计和带销售限制的可选依赖），附带逐文件 SHA-256 清单与禁止引用扫描。\n- CI 新增核心版守门任务：每次提交都导出核心版，并在核心版自己的锁文件环境里跑后端、前端全量测试和文档检查。\n"
+new = "- 首个开源核心版：只含 OSI 许可内容（原创 MIT + 上游 MIT），附 `CORE_EXPORT.json` 逐文件 SHA-256 清单。\n"
 
 [pyproject]
 # 从 backend/pyproject.toml 删除的 optional-dependency 组 (许可不是 OSI: vectorbt = Apache-2.0 + Commons Clause)。
