@@ -239,7 +239,7 @@ def logout(request: Request, response: Response) -> dict:
     token = request.cookies.get(COOKIE_NAME)
     if token:
         auth.revoke_session(token)
-    response.delete_cookie(key=COOKIE_NAME, path="/")
+    response.delete_cookie(key=COOKIE_NAME, path="/", httponly=True, samesite="lax", secure=_cookie_secure(request))
     return {"ok": True}
 
 

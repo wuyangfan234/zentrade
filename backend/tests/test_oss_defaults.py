@@ -81,6 +81,18 @@ def test_cookie_secure_explicit_modes(isolated_auth, monkeypatch, mode, expected
     assert _is_secure(_login(LAN_PEER, headers={"X-Forwarded-Proto": "https"} if not expected else {})) is expected
 
 
+def test_logout_clears_cookie_with_matching_attributes(isolated_auth, monkeypatch):
+    from app.api import auth as auth_api
+    monkeypatch.setattr(app_config.settings, "cookie_secure", "auto")
+    app = FastAPI()
+    app.include_router(auth_api.router)
+    client = TestClient(app, client=(LAN_PEER, 50000))
+    r = client.post("/api/auth/logout", headers={"X-Forwarded-Proto": "https"})
+    assert r.status_code == 200
+    cookie = r.headers["set-cookie"]
+    assert "max-age=0" in cookie.lower() and _is_secure(cookie)
+
+
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
 def _cors_headers(origin: str) -> dict:
