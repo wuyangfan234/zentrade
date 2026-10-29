@@ -111,10 +111,8 @@ def desk_sources(request: Request) -> dict:
     by_source = (latest.get("summary") or {}).get("by_source", {})
     names = {m["id"]: m.get("name", m["id"]) for m in engine.list_strategies()} if engine else {}
     names.update({"breakout": "S1 突破形态", "pullback": "S2 回踩形态"})
-    try:   # 可选来源 (开源核心版不含): 有才列出
-        from app.services import phantom_4h_source
-    except ModuleNotFoundError:
-        phantom_4h_source = None
+    from app import optional
+    phantom_4h_source = optional.load("app.services.phantom_4h_source")   # 可选来源 (开源核心版不含): 有才列出
     if phantom_4h_source is not None:
         names[phantom_4h_source.SOURCE_ID] = phantom_4h_source.SOURCE_NAME
         names[phantom_4h_source.SHORT_SOURCE_ID] = phantom_4h_source.SHORT_SOURCE_NAME

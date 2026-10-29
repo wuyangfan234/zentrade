@@ -159,9 +159,9 @@ def _phantom_4h_picks(repo, as_of: date, frames: dict, picks: dict, meta: dict, 
 
     返回 {source: {symbol: stop_loss}} — 4h 来源的止损因股而异 (吊灯止损位), 不是策略级固定比例。
     """
-    try:
-        from app.services import phantom_4h_source as p4
-    except ModuleNotFoundError:   # 开源核心版不含该来源: 跳过, 方向门回落到内置门
+    from app import optional
+    p4 = optional.load("app.services.phantom_4h_source")
+    if p4 is None:   # 开源核心版不含该来源: 跳过, 方向门回落到内置门
         meta["phantom_4h"] = {"unavailable": True}
         _refresh_m30(repo, as_of, include, meta)
         return {}

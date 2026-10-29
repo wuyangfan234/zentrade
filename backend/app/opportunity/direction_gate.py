@@ -204,16 +204,15 @@ register(DirectionGate(id=DEFAULT_GATE_ID, name="日线趋势门（收盘相对 
                        states=_daily_ma50_states, matrix=_daily_ma50_matrix))
 
 
+PLUGINS = ("app.services.phantom_4h_gate",)
+
+
 def load_plugins() -> None:
-    """导入可选的门插件。插件模块缺失 (例如开源核心版) 时静默跳过。"""
-    import importlib
-    for mod in ("app.services.phantom_4h_gate",):
+    """导入可选的门插件。插件文件不存在 (例如开源核心版) 时跳过; 存在但导入失败只记日志, 回落到内置门。"""
+    from app import optional
+    for mod in PLUGINS:
         try:
-            importlib.import_module(mod)
-        except ModuleNotFoundError as e:
-            if e.name and (e.name == mod or mod.startswith(e.name)):
-                continue
-            logger.warning("direction gate plugin %s failed to import: %s", mod, e)
+            optional.load(mod)
         except Exception as e:  # noqa: BLE001
             logger.warning("direction gate plugin %s failed to import: %s", mod, type(e).__name__)
 
