@@ -179,6 +179,7 @@ ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥�
 - 项目基于 [TSP (tick-stock-panel)](https://github.com/shy3130/tick-stock-panel) 的 MIT 授权代码演进；上游版权与许可保留在 [LICENSE.upstream](LICENSE.upstream)。
 - 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商用或作者原始声明；这些内容**不适用本项目的 MIT 授权**。
 - 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。
+- 需要只含 OSI 许可内容的版本时，用 `python scripts/export_core.py --out <目录>` 导出开源核心版（清单见 `scripts/core_manifest.toml`）。
 
 ## 免责声明
 

@@ -37,6 +37,8 @@ ZenTrade 是一个单容器、单用户、自托管的美股波段研究与纸�
 
 机会卡把策略输出转换为完整提案：触发区、失效点、目标区、方向和时间边界。页面聚合接口按区块隔离失败，某个情报或标注源失败不应拖垮整页。
 
+机会板只在**方向门**同向时出卡。方向门是可插拔接口（`app/opportunity/direction_gate.py`）：盘后扫描时由当前生效的门给每只自选股一个方向（多 / 空 / 不放行），写进当日自选信号快照；机会板与纸面下单簿只读快照，不重算门。内置门为日线趋势门（收盘相对 50 日均线，数据不足不放行）；插件门调用 `direction_gate.register()` 注册，`rules/swing.json` 的 `gate` 字段可以显式选择已注册的门，未注册时自动回落到内置门。研究回放用同一个门的矩阵版本（只使用信号日之前已知的数据）。
+
 ### 证据与许可
 
 代码：`backend/app/services/decision_desk.py`、`backend/app/services/watchlist_v4.py`、`backend/app/services/entry_guard.py`
