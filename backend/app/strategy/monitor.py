@@ -1292,7 +1292,7 @@ class MonitorRuleEngine:
 
         hit = candidate.filter(
             pl.col(cmp_col).is_not_null() & (pl.col(cmp_col) >= threshold)
-        ).sort(cmp_col, descending=True)
+        ).sort(cmp_col, descending=True, maintain_order=True)  # 同值保持输入顺序 (结果与线程调度无关)
         if hit.is_empty():
             return []
         hit_rows = list(hit.iter_rows(named=True))

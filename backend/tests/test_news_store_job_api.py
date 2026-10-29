@@ -179,7 +179,10 @@ def test_tick_runs_stages_independently_and_writes_state(tmp_path, monkeypatch):
 def test_sec_stage_rotates_through_large_universe(tmp_path, monkeypatch):
     seen = []
     big = [f"S{i:03d}" for i in range(100)]
-    monkeypatch.setattr(news_job, "_last", {"fast": 1e18, "sec": 0.0})  # 只让 SEC 到点
+    # 只让 SEC 到点: 用相对当前单调时钟的时间戳 (新开机的 CI 机器 monotonic() 可能小于 30 分钟)
+    import time as _time
+    sec_due = lambda: {"fast": _time.monotonic() + 1e9, "sec": _time.monotonic() - news_job.SLOW_SECONDS - 60}  # noqa: E731
+    monkeypatch.setattr(news_job, "_last", sec_due())
     monkeypatch.setattr(news_job, "_sec_cursor", {"i": 0})
     monkeypatch.setattr(news_job, "universe", lambda loop=None, core_only=False: ["S000"] if core_only else big)
     monkeypatch.setattr(ni, "ingest", lambda d, symbols, **kw: seen.append(list(symbols)) or
@@ -188,7 +191,7 @@ def test_sec_stage_rotates_through_large_universe(tmp_path, monkeypatch):
     monkeypatch.setattr(news_translate, "translate_pending_sync",
                         lambda d, **kw: {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0})
     news_job.tick(tmp_path, None, None, now=NOW)
-    monkeypatch.setattr(news_job, "_last", {"fast": 1e18, "sec": 0.0})
+    monkeypatch.setattr(news_job, "_last", sec_due())
     news_job.tick(tmp_path, None, None, now=NOW)
     assert len(seen) == 2 and all(len(b) == news_job.SEC_PER_ROUND for b in seen)
     assert all("S000" in b for b in seen)                    # 核心股票每轮都查
