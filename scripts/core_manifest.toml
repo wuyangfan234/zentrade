@@ -71,6 +71,21 @@ old = """- 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商
 new = """- 本仓库是**开源核心版**：全部源代码按 OSI 许可分发（原创 MIT + 上游 MIT）。第三方指标移植、作者私有脚本和书籍规则转录不包含在内，机会板方向门使用内置的日线趋势门（收盘相对 50 日均线）。
 - 依赖与外部服务条款见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。"""
 
+[[edit]]
+file = ".env.example"
+old = "# 可选后端依赖: legacy-cpu (老 CPU 无 AVX2) / backtest (vectorbt, Apache-2.0 + Commons Clause, 含销售限制)"
+new = "# 可选后端依赖: legacy-cpu (老 CPU 无 AVX2)"
+
+[[edit]]
+file = "docs/configuration.md"
+old = "BACKEND_EXTRAS=       # legacy-cpu（老 CPU 无 AVX2/FMA）/ backtest（vectorbt，Apache-2.0 + Commons Clause，含销售限制）"
+new = "BACKEND_EXTRAS=       # legacy-cpu（老 CPU 无 AVX2/FMA）"
+
+[[edit]]
+file = "docs/deployment.md"
+old = "可选 `backtest` extra 会安装带额外许可限制的 vectorbt；默认不安装。使用前请阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。"
+new = "回测使用内置的 Polars / NumPy 矩阵引擎，不需要额外的回测依赖。"
+
 [pyproject]
 # 从 backend/pyproject.toml 删除的 optional-dependency 组 (许可不是 OSI: vectorbt = Apache-2.0 + Commons Clause)。
 # 删除后用 `uv lock --offline` 重新锁定 (只移除该组独占的依赖, 其余版本不变)。

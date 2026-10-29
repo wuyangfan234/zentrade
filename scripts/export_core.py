@@ -167,6 +167,10 @@ def export(out: Path, rev: str, force: bool) -> dict:
         "sha256": dict(sorted(kept.items())),
     }
     (out / "CORE_EXPORT.json").write_text(json.dumps(report, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    # 文件哈希会被密钥扫描器当成泛型 API key: 在核心版里声明白名单 (只放行这一个文件)
+    (out / ".gitleaks.toml").write_text(
+        '[extend]\nuseDefault = true\n\n[allowlist]\ndescription = "file hashes in the export manifest"\n'
+        'paths = [\'\'\'^CORE_EXPORT\\.json$\'\'\']\n', encoding="utf-8")
     return report
 
 

@@ -1,8 +1,8 @@
-"""4h K 线数据层 (Phantom 4h 用) — 2026-10-03 产品决策“用 4h 级别原版 Phantom 与吊灯止损”。
+"""30 分钟K / 4h K 线数据层 — 卡结算、盘前检查、盘前放量排序、数据新鲜度共用; 可选的 4h 方向门插件也读它。
 
 数据: Alpaca SIP 30 分钟线, 04:00–20:00 ET 全时段 (原系统 yfinance prepost=True 同口径), 不复权原始价;
       按月分区存 data/kline_4h_src/m30/<YYYY-MM>.parquet (列 symbol,t(UTC ISO),open,high,low,close,volume)。
-合成: 30 分钟线转美东墙钟 (naive) → 原函数 _resample_4h_tv (app/vendor/oasis_phantom) (09:30/13:30/17:30/21:30/01:30/05:30 分箱)。
+合成 (仅 4h 插件用): 30 分钟线转美东墙钟 (naive) → 4h 分箱 (09:30/13:30/17:30/21:30/01:30/05:30)。
       喂墙钟是因为原函数吃带时区索引时 pandas 会在夏令时切换后整体偏移 1 小时 (实测 09:30→08:30)。
 复权: 价格 × 当日复权系数 (系统日K close/raw_close, 与日K同一口径); 成交量 ÷ 系数。
 每日增量: 盘后拉“最近一个月”不完整分区补齐 (幂等重写该月)。
@@ -102,7 +102,7 @@ def _adj_factors(repo, symbols: list[str], start: date, end: date, frames: dict 
 def bars_4h(data_dir: Path, repo, symbols: list[str], start: date, end: date,
             frames: dict | None = None) -> dict[str, pd.DataFrame]:
     """返回 {symbol: 4h OHLCV (index = 美东墙钟 naive, 分箱起点)}。价格已按系统日K复权口径调整。"""
-    from app.vendor.oasis_phantom.resample_4h_tv import _resample_4h_tv
+    from app.vendor.oasis_phantom.resample_4h_tv import _resample_4h_tv  # 仅完整版的 4h 插件调用本函数
 
     raw = load_m30(data_dir, symbols, start, end)
     if raw.is_empty():
