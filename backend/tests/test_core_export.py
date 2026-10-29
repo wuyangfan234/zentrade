@@ -110,3 +110,23 @@ def test_forbidden_reference_fails_export(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "MANIFEST", manifest)
     with pytest.raises(SystemExit, match="forbidden"):
         mod.export(tmp_path / "out", "HEAD", force=False)
+
+
+def test_relock_baseline_is_archived_rev_not_worktree(tmp_path, monkeypatch):
+    """重锁比对基线取自归档的 rev, 不读工作区 (工作区锁文件有未提交改动时导出不能误报)。"""
+    mod = _load()
+    seen: dict[str, bytes] = {}
+    real = mod._assert_versions_unchanged
+
+    def spy(full_lock, core_lock):
+        seen["path"] = str(full_lock)
+        seen["data"] = Path(full_lock).read_bytes()
+        return real(full_lock, core_lock)
+
+    monkeypatch.setattr(mod, "_assert_versions_unchanged", spy)
+    mod.export(tmp_path / "out", "HEAD", force=False)
+    head_lock = subprocess.run(["git", "show", "HEAD:backend/uv.lock"], cwd=REPO, check=True,
+                               capture_output=True).stdout
+    assert seen["path"] != str(REPO / "backend" / "uv.lock")
+    assert seen["data"] == head_lock
+    assert not (tmp_path / "out" / "backend" / ".uv.lock.source").exists()

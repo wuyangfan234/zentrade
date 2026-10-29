@@ -96,6 +96,9 @@ def _apply_pyproject(out: Path, cfg: dict, kept: dict[str, str]) -> None:
         files = ", ".join(f'"{f}"' for f in cfg["license_files"])
         text = re.sub(r"^license-files = \[.*\]$", f"license-files = [{files}]", text, flags=re.M)
     path.write_text(text, encoding="utf-8")
+    # 比对基线必须是同一 rev 归档出来的锁文件, 不能读工作区 (工作区可能有未提交改动, 或导出的是旧 rev)
+    baseline = out / "backend" / ".uv.lock.source"
+    shutil.copyfile(out / "backend" / "uv.lock", baseline)
     env = {k: v for k, v in __import__("os").environ.items()
            if k not in {"VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON", "UV_DEFAULT_INDEX", "UV_INDEX_URL"}}
     env["UV_PROJECT_ENVIRONMENT"] = str(out / "backend" / ".venv-lock")
@@ -105,8 +108,11 @@ def _apply_pyproject(out: Path, cfg: dict, kept: dict[str, str]) -> None:
     if res.returncode != 0:
         subprocess.run(["uv", "lock", "--python", "3.11"], cwd=out / "backend", env=env, check=True,
                        capture_output=True, text=True)
-    _assert_versions_unchanged(ROOT / "backend" / "uv.lock", out / "backend" / "uv.lock")
-    shutil.rmtree(out / "backend" / ".venv-lock", ignore_errors=True)
+    try:
+        _assert_versions_unchanged(baseline, out / "backend" / "uv.lock")
+    finally:
+        baseline.unlink(missing_ok=True)
+        shutil.rmtree(out / "backend" / ".venv-lock", ignore_errors=True)
     for rel in ("backend/pyproject.toml", "backend/uv.lock"):
         kept[rel] = hashlib.sha256((out / rel).read_bytes()).hexdigest()
 
