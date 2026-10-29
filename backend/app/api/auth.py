@@ -24,6 +24,7 @@ from threading import Lock
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
+from app.config import settings
 from app.services import auth
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,26 @@ def _client_ip(request: Request) -> str:
             if hops:
                 return hops[-1]
     return direct or "unknown"
+
+
+def _cookie_secure(request: Request) -> bool:
+    """会话 Cookie 是否带 Secure 标志 (COOKIE_SECURE=auto|true|false)。
+
+    auto: 请求本身是 HTTPS, 或直连 peer 是本机/内网反代且 X-Forwarded-Proto=https 时开启;
+    公网直连时不采信转发头 (可伪造)。纯 HTTP 内网访问保持关闭, 否则浏览器会丢弃 Cookie 导致无法登录。
+    """
+    mode = (settings.cookie_secure or "auto").strip().lower()
+    if mode in {"1", "true", "yes", "on"}:
+        return True
+    if mode in {"0", "false", "no", "off"}:
+        return False
+    if request.url.scheme == "https":
+        return True
+    direct = request.client.host if request.client else ""
+    if direct and _is_local_network(direct):
+        proto = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+        return proto == "https"
+    return False
 
 
 def _check_login_rate_limit(ip: str) -> None:
@@ -207,7 +228,7 @@ def login(req: LoginIn, request: Request, response: Response) -> dict:
         httponly=True,
         samesite="lax",
         path="/",
-        secure=False,  # 自托管可能无 HTTPS, 不强制 secure(建议反代加 HTTPS)
+        secure=_cookie_secure(request),
     )
     return {"ok": True, "authenticated": True}
 

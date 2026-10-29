@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.market_clock import us_clock
 
 logger = logging.getLogger(__name__)
@@ -42,7 +43,7 @@ def _label(value) -> str | None:
 
 def _fetch_nasdaq() -> dict:
     request = urllib.request.Request(NASDAQ_URL, headers={
-        "User-Agent": "Mozilla/5.0", "Accept": "application/json, text/plain, */*",
+        "User-Agent": PUBLIC_HTTP_USER_AGENT, "Accept": "application/json, text/plain, */*",
         "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/",
     })
     with urllib.request.urlopen(request, timeout=25.0) as response:

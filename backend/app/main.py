@@ -408,16 +408,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: 允许局域网访问 (自托管场景, 放开所有来源)
-# 注: allow_credentials=True 与 allow_origins=['*'] 不能共存 (浏览器规范),
-# 本项目认证走 header (API Key), 不依赖 cookie, 故关闭 credentials 换取通配来源。
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS: 默认只允许同源 (前端由本服务托管; 开发时 Vite 代理 /api 也是同源)。
+# 前端与 API 分域部署时, 用 CORS_ALLOW_ORIGINS 显式列出来源 (逗号分隔)。
+# 认证走 HttpOnly 会话 Cookie, 不开 allow_credentials: 跨域页面拿不到登录态。
+_cors_origins = [o.strip().rstrip("/") for o in settings.cors_allow_origins.split(",") if o.strip()]
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 # ================================================================

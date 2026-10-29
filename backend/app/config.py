@@ -70,6 +70,11 @@ _ENV_FILE = Path(
 )
 
 
+# 访问免 Key 公开端点 (Nasdaq 日历、CBOE、FRED 等) 时使用的 User-Agent: 如实标识本项目,
+# 不伪装具体浏览器。保留 "Mozilla/5.0" 前缀是因为部分 CDN 只放行该前缀的客户端。
+PUBLIC_HTTP_USER_AGENT = "Mozilla/5.0 (ZenTrade self-hosted)"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
@@ -84,13 +89,8 @@ class Settings(BaseSettings):
     ai_model: str = ""
     ai_codex_command: str = "codex"
     ai_codex_reasoning_effort: str = ""
-    # 默认浏览器风格 UA,绕过 Cloudflare 等 CDN/WAF 的 Bot 拦截(Issue #8)。
-    # 用户可在 AI 设置页按需修改。
-    ai_user_agent: str = (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/131.0.0.0 Safari/537.36"
-    )
+    # AI 请求的 User-Agent。默认如实标识本项目; 个别网关要求特定 UA 时可在 AI 设置页修改。
+    ai_user_agent: str = "ZenTrade (self-hosted; +https://github.com/wuyangfan234/zentrade)"
     # AI 输出上限 (max_tokens) 与输入上下文窗口上限 (约 token)。
     # 任务级 max_tokens 会被钳制到 ai_max_output_tokens; 输入估算超出上下文窗口时给出明确报错。
     # 钳制仅封顶不放大: 现有任务最多请求 4500, 上调默认值只影响用户自行调高任务上限的场景。
@@ -102,6 +102,14 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 3018
     log_level: str = "INFO"
+    # 跨域来源白名单 (逗号分隔)。默认空 = 只允许同源 (前端由本服务托管, 或开发时经 Vite 代理, 都是同源)。
+    # 只有前端与 API 分开部署在不同域名时才需要配置, 例如 "https://zentrade.example.com"。
+    cors_allow_origins: str = ""
+    # 登录 Cookie 的 Secure 标志。auto = 按请求协议判断 (HTTPS 或可信反代转发的 X-Forwarded-Proto=https 时开启);
+    # true = 总是开启 (仅 HTTPS 部署); false = 总是关闭 (纯 HTTP 内网)。
+    cookie_secure: str = "auto"
+    # 新闻翻译兜底: AI 打标失败时用 Google 翻译网页端点 (非官方、无 SLA) 只翻译标题。默认关闭。
+    news_google_translate_fallback: bool = False
     backtest_range_guard: bool = False
     backtest_matrix_disk_cache_enabled: bool = True
     backtest_matrix_cache_max_mb: int = 512

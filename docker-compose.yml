@@ -1,4 +1,5 @@
-# Single-container deployment: FastAPI serves the API and the built frontend.
+# 单容器部署: FastAPI 同时提供 API 与前端静态页面。
+# 完整说明见 docs/deployment.md。
 services:
   app:
     build:
@@ -7,26 +8,21 @@ services:
       args:
         BACKEND_EXTRAS: ${BACKEND_EXTRAS:-}
         CODEX_CLI_VERSION: ${CODEX_CLI_VERSION:-0.144.3}
+        # 中国大陆网络可在 .env 设 USE_CN_MIRROR=1, 改用国内 npm / PyPI / Debian 镜像构建。
+        USE_CN_MIRROR: ${USE_CN_MIRROR:-0}
     container_name: zentrade
     ports:
-      - "${HOST:-0.0.0.0}:${PORT:-3018}:3018"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      # 默认只监听本机。局域网访问可在 .env 设 HOST=0.0.0.0;
+      # 公网访问请放在 HTTPS 反向代理或受信隧道之后, 不要直接暴露端口。
+      - "${HOST:-127.0.0.1}:${PORT:-3018}:3018"
     env_file:
       - .env
     environment:
-      # 强制固定为容器内绝对路径, 防止 .env 里的 DATA_DIR=./data(开发模式用)
-      # 被 env_file 原样传入容器后按错误的相对路径解析, 写到未挂载卷的目录,
-      # 导致每次 up --build 重建容器都丢数据。environment 优先级高于 env_file,
-      # 无论 .env 怎么写这里都以容器路径为准。
+      # 固定为容器内绝对路径, 防止 .env 里的 DATA_DIR=./data (本地开发用) 被原样传入容器,
+      # 写到未挂载的目录导致重建容器丢数据。environment 优先级高于 env_file。
       - DATA_DIR=/app/data
-      # 将主机 Codex Desktop 的 loopback local-access 端点映射到 Docker host gateway。
-      - CODEX_DOCKER_HOST=host.docker.internal
     volumes:
       - ./data:/app/data
-      # 保留原始 dotenv 值供首次密码初始化读取，避免 Compose 展开密码中的 $VAR。
+      # 保留原始 dotenv 值供首次密码初始化读取, 避免 Compose 展开密码中的 $VAR。
       - ./.env:/app/.env:ro
-      # 复用主机 Codex 登录态；后端只读后复制到单次请求的临时 CODEX_HOME。
-      # Windows PowerShell/CMD 下 HOME 常未设置, 可通过 .env 里 CODEX_HOME_HOST 覆盖。
-      - ${CODEX_HOME_HOST:-${HOME}/.codex}:/root/.codex:ro
     restart: unless-stopped

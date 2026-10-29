@@ -7,8 +7,9 @@
                   importance: high|medium|low, rehash: bool}
   tagged_by = {model, prompt_version, at, mode: llm|fallback}
 
-失败兜底: 模型不可用/返回无法解析 → Google 翻译 (免 key) 只翻译标题, 不打标 (tags 留空,
-前端显示「未打标」), mode=fallback; 下一轮仍会重试打标, 直到模型成功。
+失败兜底 (可选, NEWS_GOOGLE_TRANSLATE_FALLBACK=1 开启): 模型不可用/返回无法解析 → Google 翻译网页端点
+只翻译标题, 不打标 (tags 留空, 前端显示「未打标」), mode=fallback; 下一轮仍会重试打标, 直到模型成功。
+未开启时事件保持未翻译, 等下一轮模型重试。
 模型判读只用于展示与影子记账, 不参与开仓 (方案第五节)。
 """
 from __future__ import annotations
@@ -23,6 +24,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
+from app.config import PUBLIC_HTTP_USER_AGENT, settings
 from app.services import news_ingest
 
 logger = logging.getLogger(__name__)
@@ -115,10 +117,9 @@ def parse_llm_output(text: str, batch: list[dict]) -> dict[int, dict]:
 
 
 def google_translate(text: str, *, http_get: HttpGet | None = None) -> str | None:
-    """兜底: Google 翻译免 key 端点。失败返回 None, 不抛。
+    """兜底: Google 翻译网页端点 (非官方、无 SLA)。失败返回 None, 不抛。
 
-    端点用 translate.google.com 的 client=at: 原 translate.googleapis.com client=gtx 对 NAS 出口 IP
-    恒返回 429 (2026-10-07 生产实测), 等于兜底从不生效、每条都空打一次。
+    默认关闭, 需设置 NEWS_GOOGLE_TRANSLATE_FALLBACK=1 显式开启; 使用前请自行确认服务条款。
     """
     if not text:
         return ""
@@ -128,7 +129,7 @@ def google_translate(text: str, *, http_get: HttpGet | None = None) -> str | Non
         if http_get is not None:
             data = http_get(url)
         else:
-            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": PUBLIC_HTTP_USER_AGENT})
             with urllib.request.urlopen(req, timeout=10) as r:  # noqa: S310 - 固定 https 端点
                 data = json.loads(r.read().decode("utf-8"))
         return "".join(seg[0] for seg in (data or [[]])[0] if seg and seg[0]).strip() or None
@@ -174,7 +175,9 @@ async def translate_pending(data_dir: Path, *, now: datetime | None = None, ai_c
     stats = {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0}
     model = _model_label()
     t0 = _time.monotonic()
-    google_down = False  # 本轮兜底熔断: 首个失败后不再逐条空打 (下一轮自动重试)
+    # 兜底默认关闭; 显式注入 google_get (测试/调用方自带取数) 时视为开启。
+    # 本轮兜底熔断: 首个失败后不再逐条空打 (下一轮自动重试)。
+    google_down = google_get is None and not settings.news_google_translate_fallback
     for when in months:
         shard = news_ingest.load_shard(data_dir, when)
         todo = [ev for ev in shard.values() if _needs_work(ev)]
@@ -196,7 +199,7 @@ async def translate_pending(data_dir: Path, *, now: datetime | None = None, ai_c
             try:
                 result = await translate_batch(batch, ai_call=ai_call)
             except Exception as exc:  # noqa: BLE001
-                logger.warning("news translate batch failed (fallback to google): %s: %s",
+                logger.warning("news translate batch failed: %s: %s",
                                type(exc).__name__, str(exc)[:160])
                 stats["failed_batches"] += 1
                 result = {}

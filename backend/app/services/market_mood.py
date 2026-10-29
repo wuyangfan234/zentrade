@@ -19,6 +19,7 @@ from collections.abc import Callable
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.market_clock import us_clock
 from app.services.fs_utils import atomic_write_text
 
@@ -38,7 +39,7 @@ ITEMS = (("trend", "趋势"), ("overnight", "隔夜"), ("calendar", "日历"),
          ("rates", "利率"), ("sectors", "板块与宽度"), ("panic", "恐慌"))
 LEAN = {"up": "涨", "down": "跌", "range": "震荡"}
 STANCE = {"up": "偏多", "down": "偏空", "range": "观望"}
-_UA = {"User-Agent": "Mozilla/5.0 (zentrade market-mood)"}
+_UA = {"User-Agent": PUBLIC_HTTP_USER_AGENT}
 _LOCK = threading.Lock()
 
 

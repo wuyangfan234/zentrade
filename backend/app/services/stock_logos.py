@@ -29,6 +29,7 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.services.fs_utils import atomic_write_text
 
 logger = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ MAX_BYTES = 2 * 1024 * 1024
 MAX_SIDE = 2048  # 10-24 实测来源最大 1534x1225; 4096 的图解码峰值约 265MB, 3 线程并发会顶到 0.8GB
 WORKERS = 3
 _SYMBOL = re.compile(r"^[A-Z0-9][A-Z0-9.\-]{0,11}$")
-_UA = {"User-Agent": "Mozilla/5.0 (ZenTrade stock logo cache)"}
+_UA = {"User-Agent": PUBLIC_HTTP_USER_AGENT}
 LIGHT_TILE = (255, 255, 255)
 DARK_TILE = (39, 39, 42)  # zinc-800: 比暗色页面底 (#0A0A0B/#18181B) 亮一档, 方块边界看得见
 

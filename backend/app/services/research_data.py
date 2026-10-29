@@ -25,13 +25,14 @@ from pathlib import Path
 
 import polars as pl
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.services.fs_utils import atomic_write_parquet, atomic_write_text
 
 logger = logging.getLogger(__name__)
 
 MASSIVE = "https://api.massive.com"
 
-WEB_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"
+WEB_UA = PUBLIC_HTTP_USER_AGENT
 DELIST_SINCE = "2021-01-01"
 MAIN_EXCHANGES = ("XNYS", "XNAS", "XASE", "ARCX", "BATS")
 

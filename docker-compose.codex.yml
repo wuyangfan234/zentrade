@@ -1,0 +1,15 @@
+# 可选: 复用主机 Codex CLI 登录态作为 AI 通道。
+#
+#   docker compose -f docker-compose.yml -f docker-compose.codex.yml up -d --build
+#
+# 会把主机 Codex 凭据目录只读挂进容器; 后端只读后复制到单次请求的临时 CODEX_HOME。
+# 只在可信主机上启用。Windows PowerShell/CMD 下 HOME 常未设置, 可在 .env 设 CODEX_HOME_HOST。
+services:
+  app:
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # 把主机 Codex Desktop 的 loopback 端点映射到 Docker 宿主网关。
+      - CODEX_DOCKER_HOST=host.docker.internal
+    volumes:
+      - ${CODEX_HOME_HOST:-${HOME}/.codex}:/root/.codex:ro

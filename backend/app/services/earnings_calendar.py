@@ -19,6 +19,7 @@ from datetime import time as dt_time
 from pathlib import Path
 from typing import Callable
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.market_clock import us_clock
 
 logger = logging.getLogger(__name__)
@@ -29,7 +30,7 @@ LOOKAHEAD_DAYS = 16          # 自然日; 覆盖约 10 个交易日
 REFRESH_TIMES = (dt_time(8, 30), dt_time(17, 0))   # = daily_pipeline 财报日历两个 cron (mon-fri, ET)
 REFRESH_GRACE = timedelta(minutes=60)               # = 两个任务的 misfire_grace_time 3600s
 _NASDAQ_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", "Accept": "application/json",
+    "User-Agent": PUBLIC_HTTP_USER_AGENT, "Accept": "application/json",
     "Origin": "https://www.nasdaq.com", "Referer": "https://www.nasdaq.com/",
 }
 _NASDAQ_TIMING = {"time-pre-market": "bmo", "time-after-hours": "amc"}

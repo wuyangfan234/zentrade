@@ -199,14 +199,15 @@ def install_plugin(name: str) -> tuple[bool, str]:
                     capture_output=True, text=True, timeout=300,
                     env={**__import__("os").environ, "UV_HTTP_TIMEOUT": "300"},
                 )
-                # exit 2 通常是配置文件解析错误, 绕过配置重试
-                # --no-config 会丢镜像, 显式传国内镜像加速 (与用户 uv.toml 意图一致)
+                # exit 2 通常是配置文件解析错误, 绕过配置重试。
+                # --no-config 会丢掉用户 uv.toml 里的镜像; 需要镜像时用 PLUGIN_PIP_INDEX_URL 显式指定。
                 if result.returncode == 2:
+                    retry = [uv_bin, "pip", "install", "--no-config"]
+                    index_url = __import__("os").environ.get("PLUGIN_PIP_INDEX_URL", "").strip()
+                    if index_url:
+                        retry += ["--index-url", index_url]
                     result = subprocess.run(
-                        [uv_bin, "pip", "install", "--no-config",
-                         "--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple",
-                         "--python", sys.executable,
-                         "-r", str(req)],
+                        [*retry, "--python", sys.executable, "-r", str(req)],
                         capture_output=True, text=True, timeout=300,
                         env={**__import__("os").environ, "UV_HTTP_TIMEOUT": "300"},
                     )

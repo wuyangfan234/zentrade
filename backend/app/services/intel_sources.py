@@ -19,12 +19,13 @@ import urllib.request
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
+from app.config import PUBLIC_HTTP_USER_AGENT
 from app.market_clock import us_clock
 from app.services.fs_utils import atomic_write_text
 
 logger = logging.getLogger(__name__)
 
-_UA = {"User-Agent": "Mozilla/5.0 (zentrade intel)"}
+_UA = {"User-Agent": PUBLIC_HTTP_USER_AGENT}
 _LOCK = threading.Lock()
 
 SECTOR_ETFS = ("XLK", "SMH", "XLC", "XLY", "XLF", "XLI", "XLE", "XLV", "XLP", "XLU", "XLB", "XLRE")
