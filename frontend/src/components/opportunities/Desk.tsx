@@ -195,15 +195,19 @@ const COLS: Record<DeskEngine, (p: { d: ColData; onOpen: (s: string) => void }) 
   gap: GapCol, open: OpenCol, intraday: IntradayCol, board: BoardCol,
 }
 
+// 四栏同一高度 (约 7 行), 超出在栏内滚动: 某栏行数多时不再把整排撑高。
+// 并排 (md 起) 固定高度, 数据到达或增减时页面不跳; 手机单列只设上限, 空栏不留白。
+export const COL_BODY = 'max-h-[320px] overflow-y-auto overscroll-y-contain pb-1 md:h-[320px]'
+
 export function EngineCols({ order, d, onOpen }: { order: DeskEngine[]; d: ColData; onOpen: (s: string) => void }) {
   return (
     <div data-cols className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
       {order.map((k, i) => {
         const c = COLS[k]({ d, onOpen })
         return (
-          <Panel key={k} data-col={k} className={i === 0 ? 'ring-2 ring-inset ring-accent' : ''}>
+          <Panel key={k} data-col={k} className={`flex flex-col ${i === 0 ? 'ring-2 ring-inset ring-accent' : ''}`}>
             <Head title={ENGINE_ZH[k]} count={c.count} meta={c.meta} rank={i + 1} />
-            <div className="pb-1">{c.body}</div>
+            <div data-col-body className={COL_BODY}>{c.body}</div>
           </Panel>
         )
       })}

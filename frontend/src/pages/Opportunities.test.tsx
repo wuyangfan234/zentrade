@@ -203,6 +203,21 @@ it('四栏内容: 跳空现在涨幅 / 开盘点名 / 盘中在途与今日已�
   expect(text('[data-board-row="TSLA"]')).toContain('距区 4.6%')
 })
 
+it('四栏同一高度, 跳空多时栏内滚动', async () => {
+  const rows = Array.from({ length: 18 }, (_, i) => ({ symbol: `G${i}`, gap_pct: -3 - i * 0.4, price: 100 }))
+  mocks.oppPage.mockResolvedValue(page({ gaps: { at: '2026-10-29T04:28:00-04:00', live: true, threshold_pct: 3, checked: 41, rows } }))
+  await render()
+  expect(host.querySelectorAll('[data-gap-row]').length).toBe(18)
+  const bodies = [...host.querySelectorAll('[data-col] > [data-col-body]')]
+  expect(bodies.length).toBe(4)
+  for (const b of bodies) {
+    expect(b.className).toContain('max-h-[320px]')
+    expect(b.className).toContain('md:h-[320px]')
+    expect(b.className).toContain('overflow-y-auto')
+  }
+  expect(host.querySelector('[data-col="gap"] [data-col-body] [data-gap-row="G17"]')).not.toBeNull()
+})
+
 it('持仓表读台账: 当前止损 (原止损) + 浮动', async () => {
   const v = view({ blips: [hold('IREN', { kind: 'exit', ring: 0, hold: { ...hold('IREN').hold!, qty: 198, avg: 27.69, stop_now: 27.68, stop_initial: 30.29, stop_moved: true, day_n: 5 } })] })
   mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
