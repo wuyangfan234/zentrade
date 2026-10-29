@@ -33,7 +33,6 @@ paths = [
   "backend/tests/test_phantom_4h.py",
   "backend/tests/test_phantom_4h_pine.py",
   "backend/tests/test_phantom_4h_source.py",
-  "backend/tests/test_phantom_4h_gate.py",
   "backend/tests/test_short_desk.py",
   "backend/tests/test_review1004_false_positive_contracts.py",
   "backend/scripts/rebuild_swing_history.py",

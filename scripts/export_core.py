@@ -67,6 +67,22 @@ def _drop_extra(text: str, name: str) -> str:
     return "".join(lines[:head] + lines[end + 1:])
 
 
+def _lock_versions(path: Path) -> dict[str, set[str]]:
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    out: dict[str, set[str]] = {}
+    for p in data.get("package", []):
+        out.setdefault(p["name"], set()).add(p.get("version", ""))
+    return out
+
+
+def _assert_versions_unchanged(full_lock: Path, core_lock: Path) -> None:
+    """核心版重锁只能删除包 (被移除的可选依赖独占的), 不能新增或改动任何版本。"""
+    full, core = _lock_versions(full_lock), _lock_versions(core_lock)
+    changed = sorted(n for n, v in core.items() if n not in full or not v <= full[n])
+    if changed:
+        raise SystemExit(f"core relock changed package versions: {changed[:10]}")
+
+
 def _apply_pyproject(out: Path, cfg: dict, kept: dict[str, str]) -> None:
     if not cfg:
         return
@@ -83,8 +99,13 @@ def _apply_pyproject(out: Path, cfg: dict, kept: dict[str, str]) -> None:
     env = {k: v for k, v in __import__("os").environ.items()
            if k not in {"VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT", "UV_PYTHON", "UV_DEFAULT_INDEX", "UV_INDEX_URL"}}
     env["UV_PROJECT_ENVIRONMENT"] = str(out / "backend" / ".venv-lock")
-    subprocess.run(["uv", "lock", "--offline", "--python", "3.11"], cwd=out / "backend", env=env, check=True,
-                   capture_output=True)
+    # 先离线重锁 (本机缓存足够时最快且不联网); 缓存不全 (如全新 CI 机器) 再联网。已有锁文件时 uv 保留原有版本。
+    res = subprocess.run(["uv", "lock", "--offline", "--python", "3.11"], cwd=out / "backend", env=env,
+                         capture_output=True, text=True)
+    if res.returncode != 0:
+        subprocess.run(["uv", "lock", "--python", "3.11"], cwd=out / "backend", env=env, check=True,
+                       capture_output=True, text=True)
+    _assert_versions_unchanged(ROOT / "backend" / "uv.lock", out / "backend" / "uv.lock")
     shutil.rmtree(out / "backend" / ".venv-lock", ignore_errors=True)
     for rel in ("backend/pyproject.toml", "backend/uv.lock"):
         kept[rel] = hashlib.sha256((out / rel).read_bytes()).hexdigest()

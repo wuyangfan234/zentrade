@@ -80,6 +80,48 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  core-edition:
+    # 开源核心版守门: 按 scripts/core_manifest.toml 导出, 在核心版自己的锁文件环境里跑后端与前端全量测试。
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10.3.3
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+      - name: Prime uv cache for offline relock
+        working-directory: backend
+        run: uv sync --extra dev --frozen --python 3.11
+      - name: Export core edition
+        run: uv run --project backend --frozen python scripts/export_core.py --out "$RUNNER_TEMP/core"
+      - name: Core backend tests
+        working-directory: ${{ runner.temp }}/core/backend
+        run: |
+          uv sync --extra dev --frozen --python 3.11
+          uv run --frozen pytest tests -q --tb=short -p no:cacheprovider
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - name: Core frontend tests and build
+        working-directory: ${{ runner.temp }}/core/frontend
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc -b
+          pnpm test
+          pnpm build
+      - name: Core docs and licence copies
+        working-directory: ${{ runner.temp }}/core
+        run: python3 scripts/check_docs.py
+
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 40
