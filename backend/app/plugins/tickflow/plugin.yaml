@@ -8,4 +8,4 @@ api_key_env: TICKFLOW_API_KEY
 hidden: false
 description: "TickFlow 美股实时报价（全市场合并口径，约 5 秒刷新，成交量为全市场股数）。提供：全市场研究快照、纸面撮合执行报价、5 秒热报价与分钟K拼接。套餐无分钟K/盘口/财务/WebSocket；历史日K与官方开盘价仍用 Alpaca SIP。限频：按标的 60 次/分（50 只/次）、标的池 20 次/分。"
 install_hint: ""
-homepage: "https://tickflow.org"
+homepage: "https://tickflow.org/auth/register?ref=LE2A6H94VW"

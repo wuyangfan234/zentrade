@@ -1,6 +1,6 @@
 [project]
 name = "zentrade-backend"
-version = "0.43.0"
+version = "0.43.1"
 description = "ZenTrade 后端 — 美股波段研究、监控、回测与纸面交易"
 requires-python = ">=3.11"
 license = { text = "MIT AND LicenseRef-ZenTrade-Third-Party" }

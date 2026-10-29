@@ -226,3 +226,17 @@ def test_alpaca_key_masked_covers_env_pair_and_hides_secret(store, monkeypatch):
     _secrets(store, alpaca_api_key="PKUIKEYID9999:ui-secret-yyyy")
     m = loader._plugin_key_masked("alpaca", "ZENTRADE_ALPACA_KEY")
     assert m.startswith("PKUI") and "yyyy" not in m
+
+
+def test_tickflow_register_link_uses_referral(client):
+    """TickFlow 申请入口 = 注册页: 配置清单与数据源详情 (plugin.yaml homepage) 同一链接。"""
+    import yaml
+
+    from app.services import setup_checklist
+    ref = "https://tickflow.org/auth/register?ref=LE2A6H94VW"
+    assert ref == setup_checklist.TICKFLOW_REGISTER_URL
+    c, _ = client
+    ids = {i["id"]: i for i in c.get("/api/settings/setup-checklist").json()["items"]}
+    assert ids["tickflow"]["link"] == ref
+    manifest = Path(__file__).resolve().parents[1] / "app" / "plugins" / "tickflow" / "plugin.yaml"
+    assert yaml.safe_load(manifest.read_text(encoding="utf-8"))["homepage"] == ref

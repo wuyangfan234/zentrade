@@ -67,6 +67,10 @@ jobs:
   docs-and-hygiene:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      # gitleaks-action 在 pull_request 事件里要列出 PR 的提交
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -79,6 +83,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 只读令牌不能写 PR 评论; 发现泄露时以任务失败和日志为准
+          GITLEAKS_ENABLE_COMMENTS: "false"
 
   core-edition:
     # 开源核心版守门: 按 scripts/core_manifest.toml 导出, 在核心版自己的锁文件环境里跑后端与前端全量测试。

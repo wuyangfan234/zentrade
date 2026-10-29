@@ -28,6 +28,10 @@ def news_token_estimate(items_per_day: int = NEWS_PER_DAY_TYPICAL) -> dict:
     return {"items_per_day": items_per_day, "tokens_per_day": daily, "tokens_per_month": daily * 22}
 
 
+# TickFlow 注册入口; 与 plugins/tickflow/plugin.yaml 的 homepage 一致。
+TICKFLOW_REGISTER_URL = "https://tickflow.org/auth/register?ref=LE2A6H94VW"
+
+
 def _plugin_status(name: str) -> dict:
     try:
         from app.data_providers import custom as custom_sources
@@ -109,7 +113,7 @@ def build() -> dict:
         source="已配置" if tf.get("available") else "",
         purpose="全市场合并口径实时报价，约 5 秒刷新；用于盘中强势、热报价与纸面撮合。",
         impact="不配：实时行情用 Alpaca IEX（单一交易所，成交量偏小），其余功能不受影响。",
-        where="settings?tab=data-sources&source=tickflow&highlight=source-detail", env=["TICKFLOW_API_KEY"], link="https://tickflow.org"))
+        where="settings?tab=data-sources&source=tickflow&highlight=source-detail", env=["TICKFLOW_API_KEY"], link=TICKFLOW_REGISTER_URL))
 
     # ── 新闻与基本面 ──
     fh = credentials.finnhub()
