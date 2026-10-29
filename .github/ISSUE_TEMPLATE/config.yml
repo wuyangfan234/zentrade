@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞 / Security vulnerability
+    url: https://github.com/wuyangfan234/zentrade/security/advisories/new
+    about: 请私密报告，不要在公开 issue 中披露漏洞细节。Please report privately.
+  - name: 使用文档 / Documentation
+    url: https://github.com/wuyangfan234/zentrade/tree/main/docs
+    about: 部署、配置、策略与插件开发说明。

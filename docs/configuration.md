@@ -29,7 +29,7 @@ ZenTrade 用到的外部数据源、AI 模型和推送渠道，统一按本文�
 | 推送 | 可选 | `ZENTRADE_FEISHU_APP_ID` / `ZENTRADE_FEISHU_APP_SECRET`（飞书应用机器人） | 实时监控 → 推送渠道（飞书群 Webhook / 企业微信 / 自定义 Webhook / 邮件） | 提醒只在页面显示 |
 | 访问密码 | 公网必需 | `AUTH_PASSWORD` | 系统设置 → 修改密码 | 仅首次启动生效；之后以页面修改为准 |
 
-免 Key 的公开数据源（Nasdaq 财报日历、CBOE、FRED、ForexFactory、Hyperliquid、Google 翻译兜底）无需配置，单个源失败只影响对应卡片。使用前请自行确认各源服务条款，见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
+免 Key 的公开数据源（Nasdaq 财报日历、CBOE、FRED、ForexFactory、Hyperliquid）无需配置，单个源失败只影响对应卡片。请求统一使用如实标识本项目的 User-Agent（`Mozilla/5.0 (ZenTrade self-hosted)`），不伪装成具体浏览器。部分端点并非官方 API，可用性与使用条款以提供方为准，见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
 数据源的能力路由（日K / 分钟K / 实时 / 复权 / 财务各由哪个源提供）在「设置 → 数据源 → 能力路由」切换；接入自有数据源见 [custom-data-source.md](./custom-data-source.md)（YAML 声明）与 [plugin-development.md](./plugin-development.md)（Python 插件）。
 
@@ -44,17 +44,24 @@ AI 按任务分工（设置 → AI 设置 → AI 模型分工），每个任务�
 | 个股分析 | 手动触发 | 可用旗舰模型 |
 | 策略生成、助手对话 | 手动触发 | 可用旗舰模型 |
 
-AI 不可用时，新闻翻译退回 Google 网页翻译（只翻标题，不打标签）。
+AI 不可用时，新闻保持英文原标题，下一轮继续重试打标。可选设置 `NEWS_GOOGLE_TRANSLATE_FALLBACK=1`，让失败批次改用 Google 翻译网页端点只翻译标题（非官方端点、无 SLA，默认关闭）。
 
 ## 4. 服务与数据
 
 ```ini
-HOST=0.0.0.0          # 监听地址 / Docker 主机绑定地址
+HOST=127.0.0.1        # 监听地址 / Docker 主机绑定地址；局域网访问设 0.0.0.0
 PORT=3018             # 端口
 LOG_LEVEL=INFO        # DEBUG | INFO | WARNING | ERROR
 DATA_DIR=./data       # 数据目录（容器内固定为 /app/data）
+CORS_ALLOW_ORIGINS=   # 跨域来源白名单（逗号分隔）；留空 = 只允许同源
+COOKIE_SECURE=auto    # 登录 Cookie 的 Secure 标志：auto | true | false
+NEWS_GOOGLE_TRANSLATE_FALLBACK=0  # 新闻翻译兜底（非官方端点），默认关闭
 BACKEND_EXTRAS=       # legacy-cpu（老 CPU 无 AVX2/FMA）/ backtest（vectorbt，Apache-2.0 + Commons Clause，含销售限制）
+USE_CN_MIRROR=0       # Docker 构建：1 = 使用国内 npm / PyPI / Debian 镜像
+PLUGIN_PIP_INDEX_URL= # 可选：安装 Python 数据源插件依赖时使用的 PyPI 镜像
 ```
+
+`COOKIE_SECURE=auto` 时，请求本身是 HTTPS，或直连地址是本机/内网反向代理且带 `X-Forwarded-Proto: https`，登录 Cookie 才会加 `Secure`。公网直连时不采信转发头。
 
 整个 `data/` 目录不纳入 git：行情、台账、规则集、密钥（`user_data/secrets.json`）都在里面。迁移时整体拷贝，备份时注意它含密钥。
 

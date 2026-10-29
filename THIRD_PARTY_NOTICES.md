@@ -48,7 +48,7 @@ Phantom 相关实现还涉及 `backend/app/services/phantom_4h.py`、`phantom_4h
 特别说明：
 
 - 可选 extra `backtest` 中的 [vectorbt](https://github.com/polakowo/vectorbt) 使用 **Apache-2.0 + Commons Clause**，含额外销售限制；默认镜像不安装，只有显式启用该 extra 时才引入。
-- Docker 构建会安装 OpenAI Codex CLI（Apache-2.0），用于可选的本机 Codex 登录态 AI 通道。
+- Docker 构建会安装 OpenAI Codex CLI（Apache-2.0），用于可选的本机 Codex 登录态 AI 通道；主机凭据目录只有叠加 `docker-compose.codex.yml` 时才会挂载。
 - 测试和构建依赖不一定进入最终运行镜像，应区分运行时、构建时和研究用途的许可义务。
 
 ## 4. 外部数据源与服务
@@ -64,7 +64,7 @@ ZenTrade 不附带第三方行情数据，也不附带任何真实 API Key。各
 | [SEC EDGAR](https://www.sec.gov/os/accessing-edgar-data) | 公司财务与申报文件 | 免 Key，须在 User-Agent 中提供联系标识 |
 | Nasdaq、CBOE、FRED、ForexFactory | 财报保护、盘面情报 | 公开端点，条款以提供方为准 |
 | Hyperliquid | 周末和盘前参考价 | 公开端点 |
-| Google 翻译网页端点 | 新闻翻译兜底 | 非官方端点，可用性不保证 |
+| Google 翻译网页端点 | 新闻翻译兜底（默认关闭，`NEWS_GOOGLE_TRANSLATE_FALLBACK=1` 开启） | 非官方端点，可用性不保证 |
 | CoinMarketCap、Parqet、FMP 静态图标 | 公司图标 | 公开静态资源，商标归各自权利人 |
 | OpenAI 兼容 LLM 接口 | 个股分析、新闻打标、AI 策略生成 | 用户自备 |
 

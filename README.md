@@ -95,6 +95,8 @@ docker compose up -d --build
 
 打开 <http://localhost:3018>，按页面向导检查配置，并在「数据」页完成首次同步。运行时数据保存在 `./data`，不会因重新构建镜像而被纳入 Git。
 
+默认只允许本机访问（端口绑定 `127.0.0.1`）。局域网访问在 `.env` 设置 `HOST=0.0.0.0`；公网访问请放在 HTTPS 反向代理或受信隧道之后。中国大陆网络构建可设置 `USE_CN_MIRROR=1`。
+
 完整配置见 [配置规范](docs/configuration.md)，更新、备份、密码重置和老 CPU 兼容见 [部署指南](docs/deployment.md)。
 
 ### 可选服务
@@ -160,13 +162,16 @@ FastAPI API
 - [数据源插件开发](docs/plugin-development.md)
 - [自定义 HTTP 数据源](docs/custom-data-source.md)
 - [二次开发](docs/secondary-development.md)
+- [维护脚本](backend/scripts/README.md)
+- [贡献指南](CONTRIBUTING.md)
+- [行为准则](CODE_OF_CONDUCT.md)
 - [安全说明](SECURITY.md)
 - [第三方声明](THIRD_PARTY_NOTICES.md)
 - [更新日志](CHANGELOG.md)
 
 ## 安全边界
 
-ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥有完整控制权；自定义 Python 策略的 AST 校验不是安全沙箱。扩展数据 URL 可能触发服务端请求，因此不要把实例开放给不受信任的人，也不要将 3018 端口直接暴露到公网。部署前请阅读 [SECURITY.md](SECURITY.md)。
+ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥有完整控制权；自定义 Python 策略的 AST 校验不是安全沙箱。扩展数据 URL 可能触发服务端请求，因此不要把实例开放给不受信任的人，也不要将 3018 端口直接暴露到公网。默认配置下 CORS 只允许同源，登录 Cookie 在 HTTPS 下自动加 `Secure`。部署前请阅读 [SECURITY.md](SECURITY.md)。
 
 ## 许可与归属
 

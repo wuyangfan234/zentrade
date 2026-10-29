@@ -17,6 +17,7 @@ import { Eye, EyeOff, Loader2, Lock, ShieldCheck, ShieldAlert, Sparkles } from '
 import { api } from '@/lib/api'
 import { Logo } from '@/components/Logo'
 import { cn } from '@/lib/cn'
+import { safeRedirect } from '@/lib/safeRedirect'
 
 export function Auth() {
   const navigate = useNavigate()
@@ -46,8 +47,8 @@ export function Auth() {
       return api.authLogin(password)
     },
     onSuccess: () => {
-      // 成功: 跳回原页面(或首页)
-      const redirect = new URLSearchParams(window.location.search).get('redirect') || '/'
+      // 成功: 跳回原页面(或首页); 只接受站内相对路径, 防开放重定向
+      const redirect = safeRedirect(new URLSearchParams(window.location.search).get('redirect'))
       navigate(redirect, { replace: true })
     },
     onError: (err: any) => {

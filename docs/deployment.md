@@ -18,6 +18,8 @@ docker compose ps
 
 打开 <http://localhost:3018>。容器名为 `zentrade`，默认端口为 `3018`。
 
+Compose 默认只把端口绑定到宿主机 `127.0.0.1`。需要局域网访问时在 `.env` 设置 `HOST=0.0.0.0` 后重新 `docker compose up -d`；公网访问见第 5 节。镜像自带 `/health` 健康检查，`docker compose ps` 中显示 `healthy` 即服务就绪（数据同步可能仍在后台进行）。
+
 ```bash
 # 查看日志
 docker compose logs -f app
@@ -79,7 +81,9 @@ ssh -L 3018:127.0.0.1:3018 user@your-server
 
 ## 5. 公网部署
 
-- 使用 HTTPS 反向代理或受信隧道，不直接暴露 3018 端口。
+- 使用 HTTPS 反向代理或受信隧道，不直接暴露 3018 端口。保持 `HOST=127.0.0.1`，让反向代理在同一台主机上转发。
+- 反向代理需转发 `X-Forwarded-Proto`。`COOKIE_SECURE=auto`（默认）会在 HTTPS 请求上自动给登录 Cookie 加 `Secure`；只走 HTTPS 时可设为 `true`。
+- 前端与 API 默认同源，无需配置跨域；只有把前端单独部署到其他域名时才设置 `CORS_ALLOW_ORIGINS`。
 - 设置强密码，限制管理入口的访问来源。
 - 保持 `.env` 和 `data/` 权限最小化，不提交到 Git。
 - 不把实例共享给不受信任的人；自定义策略和扩展数据配置具有服务端执行能力。
@@ -89,12 +93,14 @@ ssh -L 3018:127.0.0.1:3018 user@your-server
 
 ## 6. 构建选项
 
-默认 Dockerfile 支持中国网络镜像。海外或官方源环境可关闭：
+默认使用 npm、PyPI 与 Debian 官方源构建。中国大陆网络可改用国内镜像：
 
-```bash
-docker compose build --build-arg USE_CN_MIRROR=0
-docker compose up -d
+```ini
+# .env
+USE_CN_MIRROR=1
 ```
+
+然后重新执行 `docker compose up -d --build`。容器启动时不会再联网安装依赖；依赖只在构建阶段安装。
 
 老 CPU 缺少 AVX2/FMA 时，在 `.env` 设置：
 
@@ -104,7 +110,13 @@ BACKEND_EXTRAS=legacy-cpu
 
 可选 `backtest` extra 会安装带额外许可限制的 vectorbt；默认不安装。使用前请阅读 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
 
-Compose 中的 Codex 主机目录挂载用于可选的本机 Codex 登录通道。它只读挂载；不使用该功能时，不要向不受信任的容器或镜像提供主机凭据目录。
+可选的本机 Codex 登录通道需要把主机 `~/.codex` 只读挂进容器，默认不启用。确有需要时叠加覆盖文件：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.codex.yml up -d --build
+```
+
+只在可信主机上启用；不要向不受信任的容器或镜像提供主机凭据目录。
 
 ## 7. 本地开发启动
 
@@ -136,5 +148,7 @@ pnpm dev
 - 页面功能缺失：先看「设置 → 数据源」的能力清单，再看「系统状态」。
 - 数据未更新：检查交易日、供应商权限、数据同步日志和本地磁盘。
 - 构建依赖失败：尝试切换 `USE_CN_MIRROR`，不要删除锁文件重新猜版本。
+- 局域网其他设备打不开：Compose 默认只绑定 `127.0.0.1`，按第 1 节设置 `HOST=0.0.0.0`。
+- HTTPS 反代后登录后立即掉线：确认反代转发了 `X-Forwarded-Proto`，且没有把 `COOKIE_SECURE` 设为 `true` 却用 HTTP 访问。
 - 忘记密码：按第 4 节操作，不要在公开 issue 中提交 `auth.json`、`.env` 或会话 Cookie。
 - 需要报告问题：提供版本、部署方式、复现步骤和脱敏日志，不附带任何 Key 或用户数据。

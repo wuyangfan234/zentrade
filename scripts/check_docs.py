@@ -15,7 +15,7 @@ SKIP = ("http://", "https://", "mailto:", "tel:", "data:", "#")
 
 def markdown_files() -> list[Path]:
     files = list(ROOT.glob("*.md"))
-    for folder in (ROOT / "docs", ROOT / ".github"):
+    for folder in (ROOT / "docs", ROOT / ".github", ROOT / "backend" / "scripts"):
         if folder.exists():
             files.extend(folder.rglob("*.md"))
     return sorted(set(files))

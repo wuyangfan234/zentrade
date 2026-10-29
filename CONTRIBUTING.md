@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢参与 ZenTrade。一个可合并的改动应当聚焦、可复现、可审查，并保持金融数据、失败语义和用户数据边界清晰。
+感谢参与 ZenTrade。一个可合并的改动应当聚焦、可复现、可审查，并保持金融数据、失败语义和用户数据边界清晰。参与项目即表示同意遵守 [行为准则](CODE_OF_CONDUCT.md)。
 
 ## 1. 开发环境
 
@@ -22,6 +22,15 @@ pnpm install --frozen-lockfile
 ```
 
 不要提交 `.venv`、`node_modules`、构建产物或 `data/`。
+
+可选：安装 [pre-commit](https://pre-commit.com/) 钩子，在提交前自动检查合并冲突标记、私钥、密钥泄露和未定义名称：
+
+```bash
+pipx install pre-commit
+pre-commit install
+```
+
+仓库根目录的 `.editorconfig` 约定 UTF-8、LF 换行和缩进；Node.js 版本见 `.nvmrc`。
 
 ## 2. 工作流程
 
