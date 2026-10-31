@@ -44,6 +44,28 @@ def _get_engine(request: Request):
     return engine
 
 
+def clamp_backtest_end(repo, end: date, asset_type: str = "stock") -> date:
+    """结束日不晚于最近一个已定版的日K (0.43.2)。
+
+    回测页默认结束日 = 今天; 美东盘中今天的日K分区是每 ~10 秒整份重写的实时快照, 读矩阵/面板时代次一变就失败
+    (「指标数据正在发布更新」), 侥幸读到也是半天的价格。夹到定版日后回测只读定版数据。
+    读不到定版日 (无数据 / 仓库替身没有该方法) 时原样返回, 由下游按原逻辑报“无数据”。"""
+    getter = getattr(repo, "latest_settled_daily_date", None)
+    if not callable(getter):
+        return end
+    try:
+        settled = getter(asset_type)
+    except Exception:  # 夹日期失败不能挡住回测
+        logger.debug("latest_settled_daily_date failed", exc_info=True)
+        return end
+    return min(end, settled) if settled is not None else end
+
+
+def _settled_end(request: Request, end: date, asset_type: str = "stock") -> date:
+    state = getattr(getattr(request, "app", None), "state", None)
+    return clamp_backtest_end(getattr(state, "repo", None), end, asset_type)
+
+
 def _resolve_start(req: BaseModel, end: date, default_days: int) -> date:
     """未传 start 使用默认区间；显式传 null/空值表示全部历史。"""
     start = getattr(req, "start")
@@ -95,7 +117,7 @@ def run(req: BacktestRequest, request: Request):
     """信号回测 — 现有接口，向后兼容。"""
     repo = request.app.state.repo
     svc = BacktestService(repo)
-    end = req.end or date.today()
+    end = _settled_end(request, req.end or date.today(), req.asset_type)
     start = req.start or (end - timedelta(days=365 * 3))
 
     cfg = BacktestConfig(
@@ -162,7 +184,7 @@ def factor_run(req: FactorBacktestRequest, request: Request):
     engine = _get_engine(request)
     svc = FactorBacktestService(engine)
 
-    end = req.end or date.today()
+    end = _settled_end(request, req.end or date.today(), req.asset_type)
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     symbols = req.symbols if req.symbols else None
@@ -223,7 +245,7 @@ def factor_batch(req: FactorBatchRequest, request: Request):
     if invalid:
         raise HTTPException(status_code=400, detail=f"不支持的因子: {', '.join(invalid)}")
 
-    end = req.end or date.today()
+    end = _settled_end(request, req.end or date.today(), req.asset_type)
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     symbols = req.symbols if req.symbols else None
@@ -394,7 +416,7 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
     from app.backtest.strategy import StrategyBacktestConfig
     from app.backtest.worker import make_worker_task, run_worker_task
 
-    end = req.end or date.today()
+    end = _settled_end(request, req.end or date.today(), req.asset_type)
     start = _resolve_start(req, end, FACTOR_DEFAULT_DAYS)
     _guard_server_backtest_range(start, end)
     _guard_minute_strategy_backtest(request, req.strategy_id, start, req.asset_type)
@@ -588,6 +610,7 @@ async def strategy_stream(
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
+    end_date = _settled_end(request, end_date, asset_type)
     if start_date is None:
         # 空 start = 全部历史: 用本地最早日K日期, 查不到再回退到默认窗口
         earliest = request.app.state.repo.earliest_daily_date()
@@ -918,6 +941,7 @@ async def optimize_stream(
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
+    end_date = _settled_end(request, end_date)
     if start_date is None:
         earliest = request.app.state.repo.earliest_daily_date()
         start_date = earliest or (end_date - timedelta(days=FACTOR_DEFAULT_DAYS))
@@ -1144,6 +1168,7 @@ async def walkforward_stream(
         start_date = date.fromisoformat(start) if start else None
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"日期格式错误: {e}") from e
+    end_date = _settled_end(request, end_date)
     if start_date is None:
         earliest = request.app.state.repo.earliest_daily_date()
         start_date = earliest or (end_date - timedelta(days=STRATEGY_DEFAULT_DAYS))

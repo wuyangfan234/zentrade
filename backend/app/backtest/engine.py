@@ -41,6 +41,13 @@ def _matrix_entry_score(matrix: MarketMatrix, time_id: int, asset_id: int) -> fl
     return float(matrix.score[source_time, asset_id])
 
 
+def _as_date(value) -> date:
+    """TradeRecord 的日期字段在矩阵路径里是 'YYYY-MM-DD' 字符串, 旧路径是 date: 统一成 date。"""
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value)[:10])
+
+
 # ================================================================
 # 数据结构
 # ================================================================
@@ -3091,6 +3098,12 @@ class BacktestEngine:
         daily = np.array(daily_avg, dtype=float)
         sharpe = float(np.mean(daily) / np.std(daily) * np.sqrt(252)) if len(daily) > 1 and np.std(daily) > 0 else 0.0
         sortino = BacktestEngine._sortino_ratio(daily)
+        # 年化 (0.43.2): 同一条样本收益曲线, 按首笔建仓日到末笔退出日的自然日跨度折算 (与 _calc_stats 同口径)。
+        # 之前全量模拟不出这个字段, 回测页「年化」一直显示「—」。
+        span_days = max((max(_as_date(t.exit_date) for t in trades) - min(_as_date(t.entry_date) for t in trades)).days, 1)
+        years = span_days / 365.25
+        annual_return = (1 + total_return) ** (1 / years) - 1 if total_return > -1.0 else total_return
+        calmar = annual_return / abs(max_drawdown) if abs(max_drawdown) > 0.001 else 0.0
 
         stats = {
             "mode": "full",
@@ -3107,9 +3120,11 @@ class BacktestEngine:
             "worst": round(float(np.min(pnls)), 4),
             "avg_duration": round(float(np.mean(durations)), 1) if len(durations) else 0.0,
             "total_return": round(float(total_return), 4),
+            "annual_return": round(float(annual_return), 4),
             "max_drawdown": round(float(max_drawdown), 4),
             "sharpe": round(float(sharpe), 2),
             "sortino": round(float(sortino), 2) if sortino is not None else None,
+            "calmar": round(float(calmar), 2),
             "execution": execution_stats,
         }
         if options.include_return_distribution:

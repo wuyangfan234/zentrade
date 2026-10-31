@@ -5,6 +5,7 @@ import { api, type StrategyDetail } from '@/lib/api'
 import { fmtPct } from '@/lib/format'
 import { EmptyState } from '@/components/EmptyState'
 import { DatePicker } from '@/components/DatePicker'
+import { useClampEndToSettled, useSettledDate } from '@/lib/backtestEnd'
 import {
   startWalkForward,
   stopWalkForward,
@@ -81,6 +82,8 @@ export function StrategyWalkForward() {
   const [objective, setObjective] = useState('sortino')
   const [start, setStart] = useState(THREE_YEARS_AGO)
   const [end, setEnd] = useState(TODAY)
+  const settledDate = useSettledDate('stock')
+  useClampEndToSettled(end, setEnd, settledDate)
   const [mode, setMode] = useState<'position' | 'full'>('position')
   const [trainDays, setTrainDays] = useState('252')
   const [testDays, setTestDays] = useState('63')
@@ -148,7 +151,7 @@ export function StrategyWalkForward() {
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-secondary">结束</label>
-            <DatePicker value={end} onChange={setEnd} />
+            <DatePicker value={end} onChange={setEnd} max={settledDate ?? TODAY} />
           </div>
         </div>
 

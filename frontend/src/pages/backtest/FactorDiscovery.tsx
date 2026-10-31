@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, BookmarkPlus, ChevronRight, ChevronsUpDown, Clock, Info, Layers3, ListFilter, ListPlus, Play, Search, Sparkles, Zap } from 'lucide-react'
 import { DatePicker } from '@/components/DatePicker'
+import { useClampEndToSettled, useSettledDate } from '@/lib/backtestEnd'
 import { EmptyState } from '@/components/EmptyState'
 import { toast } from '@/components/Toast'
 import { WatchlistGroupMenu } from '@/components/WatchlistAddMenu'
@@ -117,6 +118,9 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
   const [assetType, setAssetType] = useState<'stock' | 'etf'>('stock')
   const [start, setStart] = useState(monthsAgo(3))
   const [end, setEnd] = useState(TODAY)
+  const settledDate = useSettledDate(assetType)
+  const latestEnd = settledDate ?? TODAY
+  useClampEndToSettled(end, setEnd, settledDate)
   const [nGroups, setNGroups] = useState(5)
   const [rebalance, setRebalance] = useState<'daily' | 'weekly' | 'monthly'>('daily')
   const [slippage, setSlippage] = useState('5')
@@ -427,7 +431,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             </div>
             <div>
               <label className="mb-1 block text-[11px] text-secondary">结束</label>
-              <DatePicker value={end} onChange={setEnd} min={start || undefined} className="w-full" buttonClassName="w-full justify-start" />
+              <DatePicker value={end} onChange={setEnd} min={start || undefined} max={latestEnd} className="w-full" buttonClassName="w-full justify-start" />
             </div>
           </div>
           <div className="mt-2 flex rounded-input bg-base/60 p-0.5">
@@ -435,7 +439,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
               <button
                 key={months}
                 type="button"
-                onClick={() => { setStart(monthsAgo(months)); setEnd(TODAY) }}
+                onClick={() => { setStart(monthsAgo(months)); setEnd(latestEnd) }}
                 className="flex-1 rounded-btn px-2 py-1 text-[10px] text-muted transition-colors hover:bg-elevated hover:text-secondary"
               >
                 {months === 12 ? '1年' : `${months}个月`}
