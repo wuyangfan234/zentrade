@@ -342,7 +342,7 @@ export function Layout() {
   const { data: settingsState } = useSettings()
   const { data: matrix } = useCapabilityMatrix()
   const { data: versionData } = useVersion()
-  // 更新检查 (单例 store): 配置自有发版仓库后启动静默查一次, 供左下角版本号徽标 (未配置=不查)
+  // 更新检查 (单例 store): 启动静默查一次 (经后端 /api/settings/update-check), 供左下角版本号徽标; 服务端关闭时不查
   const update = useUpdateCheck()
   const hasUpdate = update.status === 'found'
   const { data: prefs } = usePreferences()

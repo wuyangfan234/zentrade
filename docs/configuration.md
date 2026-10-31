@@ -22,7 +22,7 @@ ZenTrade 用到的外部数据源、AI 模型和推送渠道，统一按本文�
 | Finnhub | 建议 | `FINNHUB_API_KEY` | 配置清单内直接填写 | 新闻只剩 Alpaca + SEC；财报日历只有 Nasdaq 单源，Nasdaq 不可用时暂停新开仓；财务兜底与公司图标缺失 |
 | SEC EDGAR 联系邮箱 | 建议 | `SEC_USER_AGENT`（如 `ZenTrade you@example.com`） | 配置清单内直接填写 | SEC 要求请求头带联系邮箱；用占位标识可能被限流，财务与公告新闻缺失 |
 | AI 模型（全局） | 建议 | `AI_PROVIDER` / `AI_BASE_URL` / `AI_API_KEY` / `AI_MODEL` | AI 设置 | 新闻只有英文原标题（无利多/利空标签），个股分析、AI 策略、助手不可用；交易环不依赖 AI |
-| 新闻翻译模型 | 建议 | — | AI 设置 → AI 模型分工 → 新闻翻译与打标 | 跟随全局模型时占掉大部分 AI 调用量，见第 3 节 |
+| 新闻翻译模型 | 建议 | — | AI 设置 → 模型库 + AI 模型分工 → 新闻翻译与打标 | 跟随全局模型时占掉大部分 AI 调用量，见第 3 节 |
 | TickFlow | 可选 | `TICKFLOW_API_KEY` | 数据源 → TickFlow | 实时行情用 Alpaca IEX（单一交易所，成交量偏小） |
 | QVeris | 可选 | `QVERIS_API_KEY` | 数据源 → QVeris | 个股弹窗无期权全链、财报预期、电话会；按积分计费，可设每日上限 |
 | Massive / Polygon | 可选 | `MASSIVE_API_KEY` 或 `POLYGON_API_KEY` | — | 证据研究的退市股名单不更新（只影响研究数据，不影响交易） |
@@ -35,7 +35,7 @@ ZenTrade 用到的外部数据源、AI 模型和推送渠道，统一按本文�
 
 ## 3. AI 模型选择
 
-AI 按任务分工（设置 → AI 设置 → AI 模型分工），每个任务可单独指定模型、地址、Key 和思考档位，留空跟随全局。
+AI 按任务分工。先在「设置 → AI 设置 → 模型库」登记要用的模型（可以同时登记多个，例如 DeepSeek 和 Claude，各自填写地址、Key 和模型名；地址或 Key 留空时沿用全局），再到「AI 模型分工」给每个任务选一个：新闻翻译用 DeepSeek，助手对话用 Claude。每个任务还能单独设思考档位。任务也可以不选库模型、直接单独填写，或者都不填，沿用全局。被任务引用的库模型不能删除，要先在分工里改掉。
 
 | 任务 | 调用频率 | 建议 |
 |---|---|---|
@@ -56,6 +56,8 @@ DATA_DIR=./data       # 数据目录（容器内固定为 /app/data）
 CORS_ALLOW_ORIGINS=   # 跨域来源白名单（逗号分隔）；留空 = 只允许同源
 COOKIE_SECURE=auto    # 登录 Cookie 的 Secure 标志：auto | true | false
 NEWS_GOOGLE_TRANSLATE_FALLBACK=0  # 新闻翻译兜底（非官方端点），默认关闭
+UPDATE_CHECK_ENABLED=true          # 新版本提醒：服务端每 6 小时查一次上游仓库；离线 / 内网部署可关
+UPDATE_CHECK_REPO=wuyangfan234/zentrade  # 自己的 fork 想跟自己的仓库时改这里
 BACKEND_EXTRAS=       # legacy-cpu（老 CPU 无 AVX2/FMA）/ backtest（vectorbt，Apache-2.0 + Commons Clause，含销售限制）
 USE_CN_MIRROR=0       # Docker 构建：1 = 使用国内 npm / PyPI / Debian 镜像
 PLUGIN_PIP_INDEX_URL= # 可选：安装 Python 数据源插件依赖时使用的 PyPI 镜像
@@ -65,7 +67,7 @@ PLUGIN_PIP_INDEX_URL= # 可选：安装 Python 数据源插件依赖时使用的
 
 整个 `data/` 目录不纳入 git：行情、台账、规则集、密钥（`user_data/secrets.json`）都在里面。迁移时整体拷贝，备份时注意它含密钥。
 
-访问密码的公网部署步骤与重置方法见 [deployment.md](./deployment.md)。
+访问密码的公网部署步骤与重置方法见 [deployment.md](./deployment.md)。让其他 agent 用密钥或 MCP 接入，见 [api-and-mcp.md](./api-and-mcp.md)。
 
 ## 5. 首次部署检查
 

@@ -92,6 +92,8 @@ export const QK = {
   newsSummary:          (symbols: string) => ['news-summary', symbols] as const,
   newsStatus:           ['news-status'] as const,
   aiTasks:              ['ai-tasks'] as const,
+  aiModels:             ['ai-models'] as const,
+  apiKeys:              ['api-keys'] as const,
   qverisUsage:          ['qveris-usage'] as const,
   qverisOptions:        (symbol: string) => ['qveris-options', symbol] as const,
   qverisEstimates:      (symbol: string) => ['qveris-estimates', symbol] as const,

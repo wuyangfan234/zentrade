@@ -3,10 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Save, Loader2, Check, Wifi, WifiOff, Eye, EyeOff, Shield,
   Shuffle, Plug, Zap, Settings2, ExternalLink, Trash2,
-  Terminal, Layers,
+  Terminal, Layers, Library, Plus, Pencil, X,
 } from 'lucide-react'
 import { useSettings } from '@/lib/useSharedQueries'
-import { api, type AiTaskRow, type SettingsState } from '@/lib/api'
+import { api, type AiModelEntry, type AiTaskRow, type SettingsState } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { useCardFlash, cardFlashCls } from '@/lib/useCardFlash'
 
@@ -519,6 +519,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
           </div>
         </div>
       )}
+      <AiModelLibraryCard />
       <AiTasksCard />
     </div>
     </HighlightContext.Provider>
@@ -547,39 +548,196 @@ function effectiveThinkingLabel(eff: AiTaskRow['effective']): string {
   return EFFORT_LABELS[eff.reasoning_effort] ?? `思考 ${eff.reasoning_effort}`
 }
 
+// ===== 模型库 (0.44.0): 同时登记多个模型 (如 DeepSeek 做翻译、Claude 做助手), 下方各任务下拉引用 =====
+
+const EMPTY_MODEL_FORM = { name: '', base_url: '', model: '', api_key: '' }
+
+export function AiModelLibraryCard() {
+  const qc = useQueryClient()
+  const q = useQuery({ queryKey: QK.aiModels, queryFn: () => api.aiModels() })
+  const [editing, setEditing] = useState<string | 'new' | null>(null)
+  const [form, setForm] = useState(EMPTY_MODEL_FORM)
+  const [msg, setMsg] = useState<string | null>(null)
+  const [testing, setTesting] = useState<Record<string, string>>({})
+  const models = q.data?.models ?? []
+  const done = (data: { models: AiModelEntry[] }, text: string) => {
+    qc.setQueryData(QK.aiModels, { models: data.models })
+    void qc.invalidateQueries({ queryKey: QK.aiTasks })
+    setEditing(null); setForm(EMPTY_MODEL_FORM); setMsg(text); setTimeout(() => setMsg(null), 2500)
+  }
+  const save = useMutation({
+    mutationFn: () => {
+      const body = { name: form.name.trim(), base_url: form.base_url.trim(), model: form.model.trim(), api_key: form.api_key ? form.api_key : null }
+      return editing === 'new' ? api.createAiModel(body) : api.updateAiModel(String(editing), body)
+    },
+    onSuccess: d => done(d, '已保存'),
+    onError: (e: any) => setMsg(String(e?.message ?? '保存失败')),
+  })
+  const remove = useMutation({
+    mutationFn: (id: string) => api.deleteAiModel(id),
+    onSuccess: d => done(d, '已删除'),
+    onError: (e: any) => setMsg(String(e?.message ?? '删除失败')),
+  })
+  const runTest = async (id: string) => {
+    setTesting(t => ({ ...t, [id]: '测试中…' }))
+    try {
+      const r = await api.testAiModel(id)
+      setTesting(t => ({ ...t, [id]: r.ok ? `连通 · ${r.model}` : `失败：${r.error ?? ''}` }))
+    } catch (e: any) {
+      setTesting(t => ({ ...t, [id]: `失败：${e?.message ?? ''}` }))
+    }
+  }
+  const startEdit = (m?: AiModelEntry) => {
+    setEditing(m ? m.id : 'new')
+    setForm(m ? { name: m.name, base_url: m.base_url, model: m.model, api_key: '' } : EMPTY_MODEL_FORM)
+  }
+  const editingEntry = models.find(m => m.id === editing)
+  return (
+    <Card icon={Library} title="模型库" anchor="ai-models"
+      right={editing === null && (
+        <button type="button" onClick={() => startEdit()} data-ai-model-add
+          className="inline-flex h-7 items-center gap-1 rounded-btn bg-accent px-2.5 text-[11px] font-medium text-white hover:opacity-90">
+          <Plus className="h-3.5 w-3.5" />添加模型
+        </button>
+      )}>
+      <p className="mb-3 text-[11px] leading-relaxed text-secondary">
+        可同时登记多个 OpenAI 兼容模型（例如 DeepSeek 做新闻翻译、Claude 做助手对话），再到下方「AI 模型分工」给每个任务选一个。API 地址或 Key 留空时沿用上方全局配置。
+      </p>
+      {q.isLoading && <div className="text-xs text-muted">加载中…</div>}
+      {q.isError && <div className="text-xs text-danger">读取失败</div>}
+      {!q.isLoading && models.length === 0 && editing === null && (
+        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted" data-ai-models-empty>
+          还没有登记模型。所有任务目前都用上方全局配置。
+        </div>
+      )}
+      <div className="space-y-2">
+        {models.map(m => (
+          <div key={m.id} data-ai-model={m.id} className="rounded-lg border border-border/60 px-3 py-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-foreground">{m.name}</div>
+                <div className="truncate font-mono text-[10px] text-muted">
+                  {m.model} · {m.base_url || '沿用全局地址'} · {m.has_api_key ? `Key ${m.api_key_masked}` : '沿用全局 Key'}
+                </div>
+                {m.used_by.length > 0 && (
+                  <div className="mt-0.5 text-[10px] text-secondary" data-ai-model-used>
+                    用于：{m.used_by.map(t => TASK_LABELS[t] ?? t).join('、')}
+                  </div>
+                )}
+                {testing[m.id] && <div className="mt-0.5 text-[10px] text-secondary">{testing[m.id]}</div>}
+              </div>
+              <div className="flex shrink-0 items-center gap-1">
+                <button type="button" onClick={() => void runTest(m.id)} title="连通测试"
+                  className="inline-flex h-7 items-center gap-1 rounded-btn bg-elevated px-2 text-[11px] text-secondary hover:text-foreground">
+                  <Plug className="h-3.5 w-3.5" />测试
+                </button>
+                <button type="button" onClick={() => startEdit(m)} title="编辑" aria-label={`编辑 ${m.name}`}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-btn bg-elevated text-secondary hover:text-foreground">
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+                <button type="button" onClick={() => remove.mutate(m.id)} title={m.used_by.length ? '仍被任务引用，先改掉再删' : '删除'}
+                  aria-label={`删除 ${m.name}`} disabled={m.used_by.length > 0 || remove.isPending}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-btn bg-elevated text-secondary hover:text-danger disabled:opacity-40">
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {editing !== null && (
+        <div className="mt-3 rounded-lg border border-accent/30 p-3" data-ai-model-form>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-medium text-foreground">{editing === 'new' ? '添加模型' : `编辑：${editingEntry?.name ?? ''}`}</span>
+            <button type="button" onClick={() => { setEditing(null); setForm(EMPTY_MODEL_FORM) }} aria-label="取消"
+              className="text-muted hover:text-foreground"><X className="h-4 w-4" /></button>
+          </div>
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {PRESETS.filter(p => !p.custom && p.provider !== CODEX_PROVIDER).map(p => (
+              <button key={p.label} type="button"
+                onClick={() => setForm(f => ({ ...f, name: f.name || p.label, base_url: p.url, model: p.model }))}
+                className="rounded-full border border-border px-2 py-0.5 text-[10px] text-secondary hover:border-accent/40 hover:text-accent">
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <input className={INPUT_CLS} placeholder="名称（如 DeepSeek 翻译）" value={form.name}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))} data-ai-model-field="name" />
+            <input className={INPUT_CLS} placeholder="模型名（如 deepseek-chat）" value={form.model}
+              onChange={e => setForm(f => ({ ...f, model: e.target.value }))} data-ai-model-field="model" />
+            <input className={INPUT_CLS} placeholder="API 地址（留空沿用全局）" value={form.base_url}
+              onChange={e => setForm(f => ({ ...f, base_url: e.target.value }))} data-ai-model-field="base_url" />
+            <input className={INPUT_CLS} type="password" autoComplete="off"
+              placeholder={editingEntry?.has_api_key ? `已设置（${editingEntry.api_key_masked}），留空不改` : 'API Key（留空沿用全局）'}
+              value={form.api_key} onChange={e => setForm(f => ({ ...f, api_key: e.target.value }))} data-ai-model-field="api_key" />
+          </div>
+          <div className="mt-2 flex items-center gap-3">
+            <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !form.name.trim() || !form.model.trim()}
+              className="h-7 rounded-btn bg-accent px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+              {save.isPending ? '保存中…' : '保存'}
+            </button>
+            {editingEntry?.has_api_key && (
+              <button type="button" onClick={() => api.updateAiModel(editingEntry.id, {
+                name: form.name.trim() || editingEntry.name, base_url: form.base_url.trim(), model: form.model.trim() || editingEntry.model, api_key: '',
+              }).then(d => done(d, '已清除单独 Key'))} className="text-[11px] text-secondary hover:text-danger">清除单独 Key</button>
+            )}
+          </div>
+        </div>
+      )}
+      {msg && <div className="mt-2 text-[11px] text-secondary">{msg}</div>}
+    </Card>
+  )
+}
+
+const TASK_LABELS: Record<string, string> = {
+  news_translate: '新闻翻译与打标', stock_analysis: '个股分析', strategy_gen: '策略生成', assistant: '助手对话', market_mood: '盘前大盘情绪',
+}
+
 export function AiTasksCard() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: QK.aiTasks, queryFn: () => api.aiTasks() })
+  const mq = useQuery({ queryKey: QK.aiModels, queryFn: () => api.aiModels() })
   return (
     <Card icon={Layers} title="AI 模型分工" anchor="ai-tasks">
       <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-        每个任务可单独指定模型和思考档位；留空沿用上方全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：部分推理型模型的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
+        每个任务可从上方模型库选一个模型，或单独填写；都不选时沿用全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：部分推理型模型的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
       </p>
       {q.isLoading && <div className="text-xs text-muted">加载中…</div>}
       {q.isError && <div className="text-xs text-danger">读取失败</div>}
       <div className="space-y-3">
         {(q.data?.tasks ?? []).map(row => (
-          <AiTaskRowEditor key={row.task} row={row} onSaved={data => qc.setQueryData(QK.aiTasks, data)} />
+          <AiTaskRowEditor key={row.task} row={row} models={mq.data?.models ?? []}
+            onSaved={data => { qc.setQueryData(QK.aiTasks, data); void qc.invalidateQueries({ queryKey: QK.aiModels }) }} />
         ))}
       </div>
     </Card>
   )
 }
 
-function AiTaskRowEditor({ row, onSaved }: { row: AiTaskRow; onSaved: (d: { tasks: AiTaskRow[] }) => void }) {
+const CUSTOM_REF = '__custom__'
+
+function AiTaskRowEditor({ row, models, onSaved }: { row: AiTaskRow; models: AiModelEntry[]; onSaved: (d: { tasks: AiTaskRow[] }) => void }) {
   const [model, setModel] = useState(row.override.model)
   const [baseUrl, setBaseUrl] = useState(row.override.base_url)
   const [key, setKey] = useState('')
   const [thinking, setThinking] = useState(row.override.thinking)
+  const initialRef = row.override.model_ref || ((row.override.model || row.override.base_url || row.override.has_api_key) ? CUSTOM_REF : '')
+  const [ref, setRef] = useState(initialRef)
   const [msg, setMsg] = useState<string | null>(null)
   const { ref: flashRef, flash } = useCardFlash(useContext(HighlightContext), `ai-task-${row.task}`)
   useEffect(() => {
     setModel(row.override.model)
     setBaseUrl(row.override.base_url)
     setThinking(row.override.thinking)
-  }, [row.override.model, row.override.base_url, row.override.thinking])
+    setRef(row.override.model_ref || ((row.override.model || row.override.base_url || row.override.has_api_key) ? CUSTOM_REF : ''))
+  }, [row.override.model, row.override.base_url, row.override.thinking, row.override.model_ref, row.override.has_api_key])
+  const libRef = ref && ref !== CUSTOM_REF ? ref : ''
   const save = useMutation({
-    mutationFn: () => api.saveAiTask(row.task, { model, base_url: baseUrl, thinking, api_key: key ? key : null }),
+    mutationFn: () => api.saveAiTask(row.task, ref === CUSTOM_REF
+      ? { model, base_url: baseUrl, thinking, api_key: key ? key : null, model_ref: '' }
+      // 选模型库 / 沿用全局: 一并清掉该任务旧的单独填写, 免得以后取消引用时旧值悄悄复活
+      : { model: '', base_url: '', thinking, api_key: row.override.has_api_key ? '' : null, model_ref: libRef }),
     onSuccess: d => { onSaved(d); setKey(''); setMsg('已保存'); setTimeout(() => setMsg(null), 2000) },
     onError: (e: any) => setMsg(String(e?.message ?? '保存失败')),
   })
@@ -592,7 +750,7 @@ function AiTaskRowEditor({ row, onSaved }: { row: AiTaskRow; onSaved: (d: { task
         <span className="shrink-0 whitespace-nowrap text-xs font-medium text-foreground">{row.label}</span>
         <span className="font-mono text-[10px] text-muted" data-ai-task-effective>
           实际：{eff.model || '—'} · {effectiveThinkingLabel(eff)}
-          {eff.overridden.length > 0 ? ' · 已单独配置' : ' · 沿用全局'}
+          {eff.model_ref_name ? ` · 模型库「${eff.model_ref_name}」` : eff.overridden.length > 0 ? ' · 已单独配置' : ' · 沿用全局'}
         </span>
       </div>
       {row.task === 'news_translate' && (
@@ -600,23 +758,35 @@ function AiTaskRowEditor({ row, onSaved }: { row: AiTaskRow; onSaved: (d: { task
           调用量最大的任务：约 600 条/交易日，关思考时粗估约 12 万 token/日。建议单独配一个低价、关思考的模型（DeepSeek / Kimi / 通义千问轻量档），不要跟随旗舰推理模型。
         </p>
       )}
+      {eff.model_ref_missing && (
+        <p className="mt-1.5 text-[11px] text-warning" data-ai-task-ref-missing>引用的库模型已不存在，当前回退全局配置；请重新选择。</p>
+      )}
       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <input className={INPUT_CLS} placeholder="模型（留空沿用全局）" value={model} onChange={e => setModel(e.target.value)} />
-        <input className={INPUT_CLS} placeholder="Base URL（留空沿用全局）" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
-        <input className={INPUT_CLS} type="password" autoComplete="off"
-          placeholder={row.override.has_api_key ? `已单独设置 Key（${row.override.api_key_masked}），留空不改` : 'API Key（留空沿用全局）'}
-          value={key} onChange={e => setKey(e.target.value)} />
+        <select className={INPUT_CLS} value={ref} onChange={e => setRef(e.target.value)} aria-label={`${row.label}使用的模型`} data-ai-task-ref>
+          <option value="">模型：沿用全局配置</option>
+          {models.map(m => <option key={m.id} value={m.id}>模型库：{m.name}（{m.model}）</option>)}
+          <option value={CUSTOM_REF}>单独填写模型 / 地址 / Key…</option>
+        </select>
         <select className={INPUT_CLS} value={thinking} onChange={e => setThinking(e.target.value)} aria-label={`${row.label}思考档位`}>
           <option value="">思考：按任务默认（{row.default_thinking === 'off' ? '关' : '模型默认'}）</option>
           {THINKING_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        {ref === CUSTOM_REF && (
+          <>
+            <input className={INPUT_CLS} placeholder="模型（留空沿用全局）" value={model} onChange={e => setModel(e.target.value)} />
+            <input className={INPUT_CLS} placeholder="Base URL（留空沿用全局）" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+            <input className={`${INPUT_CLS} sm:col-span-2`} type="password" autoComplete="off"
+              placeholder={row.override.has_api_key ? `已单独设置 Key（${row.override.api_key_masked}），留空不改` : 'API Key（留空沿用全局）'}
+              value={key} onChange={e => setKey(e.target.value)} />
+          </>
+        )}
       </div>
       <div className="mt-2 flex items-center gap-3">
         <button type="button" onClick={() => save.mutate()} disabled={save.isPending}
           className="h-7 rounded-btn bg-accent px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
           {save.isPending ? '保存中…' : '保存'}
         </button>
-        {row.override.has_api_key && (
+        {row.override.has_api_key && ref === CUSTOM_REF && (
           <button type="button" onClick={() => api.saveAiTask(row.task, { model, base_url: baseUrl, thinking, api_key: '' }).then(onSaved)}
             className="text-[11px] text-secondary hover:text-danger">清除单独 Key</button>
         )}
