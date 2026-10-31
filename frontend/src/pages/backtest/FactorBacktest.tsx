@@ -6,6 +6,7 @@ import { api, type FactorColumn, type FactorBacktestResult, type GroupStat } fro
 import { fmtPct, priceColorClass } from '@/lib/format'
 import { EmptyState } from '@/components/EmptyState'
 import { DatePicker } from '@/components/DatePicker'
+import { useClampEndToSettled, useSettledDate } from '@/lib/backtestEnd'
 import { toast } from '@/components/Toast'
 import { QK } from '@/lib/queryKeys'
 import { FactorICChart } from './charts/FactorICChart'
@@ -90,6 +91,10 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
   const [assetType, setAssetType] = useState<'stock' | 'etf'>('stock')
   const [start, setStart] = useState(THREE_MONTHS_AGO)
   const [end, setEnd] = useState(TODAY)
+  // 结束日上限 = 最近定版日K (0.43.2); 数据状态没回来前沿用今天
+  const settledDate = useSettledDate(assetType)
+  const latestEnd = settledDate ?? TODAY
+  useClampEndToSettled(end, setEnd, settledDate)
   const [nGroups, setNGroups] = useState(5)
   const [weight, setWeight] = useState<'equal' | 'factor_weight'>('equal')
   const [rebalance, setRebalance] = useState<'daily' | 'weekly' | 'monthly'>('daily')
@@ -158,21 +163,21 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
 
   const applyRange = (months: number) => {
     setStart(monthsAgo(months))
-    setEnd(formatDate(new Date()))
+    setEnd(latestEnd)
   }
 
   const applyAllRange = () => {
     setStart('')
-    setEnd(formatDate(new Date()))
+    setEnd(latestEnd)
   }
 
-  const rangeKey = end === TODAY && start === THREE_MONTHS_AGO
+  const rangeKey = end === latestEnd && start === THREE_MONTHS_AGO
     ? '3m'
-    : end === TODAY && start === monthsAgo(6)
+    : end === latestEnd && start === monthsAgo(6)
       ? '6m'
-      : end === TODAY && start === monthsAgo(12)
+      : end === latestEnd && start === monthsAgo(12)
         ? '1y'
-        : end === TODAY && start === ''
+        : end === latestEnd && start === ''
           ? 'all'
           : 'custom'
   const rangeTitle = rangeKey === '3m'
@@ -273,6 +278,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
                 value={end}
                 onChange={setEnd}
                 min={start || undefined}
+                max={latestEnd}
                 className="w-full"
                 buttonClassName="w-full justify-start"
               />

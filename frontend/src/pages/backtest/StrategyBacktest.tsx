@@ -27,6 +27,7 @@ import { useDataStatus, useCapabilities } from '@/lib/useSharedQueries'
 import { EmptyState } from '@/components/EmptyState'
 import { WarmupBadge } from '@/components/WarmupBadge'
 import { DatePicker } from '@/components/DatePicker'
+import { useClampEndToSettled } from '@/lib/backtestEnd'
 import { toast } from '@/components/Toast'
 import { StrategyNavChart } from './charts/StrategyNavChart'
 import { ReturnDistributionChart } from './charts/ReturnDistributionChart'
@@ -1067,6 +1068,10 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
     : dataStatus.data?.enriched
   const earliestDate = backtestDataStatus?.earliest_date ?? null
   const backtestDataUnavailable = dataStatus.isSuccess && !earliestDate
+  // 结束日上限 = 最近定版日K; 数据状态没回来前沿用今天
+  const settledDate = backtestDataStatus?.settled_date ?? null
+  const latestEnd = settledDate ?? TODAY
+  useClampEndToSettled(end, setEnd, settledDate)
   const backtestDataLabel = assetType === 'etf' ? 'ETF 指标数据' : '股票指标数据'
 
   const resetConfigFromDetail = (detail: StrategyDetail) => {
@@ -1279,20 +1284,20 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
 
   const applyRange = (months: number) => {
     setStart(monthsAgo(months))
-    setEnd(formatDate(new Date()))
+    setEnd(latestEnd)
   }
 
   const applyAllRange = () => {
     setStart(earliestDate ?? '')
-    setEnd(formatDate(new Date()))
+    setEnd(latestEnd)
   }
 
   // 进入页面/还在加载时就点了"全部": earliestDate 就绪后回填, 让 DatePicker 显示真实起始日
   useEffect(() => {
-    if (earliestDate && start === '' && end === TODAY) {
+    if (earliestDate && start === '' && end === latestEnd) {
       setStart(earliestDate)
     }
-  }, [earliestDate, start, end])
+  }, [earliestDate, start, end, latestEnd])
 
   const applyQuickRange = (range: QuickRangeConfig) => {
     if (range.unit === 'all') {
@@ -1321,8 +1326,8 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
 
   const visibleQuickRanges = quickRanges.filter(range => range.enabled)
   const matchedQuickRange = visibleQuickRanges.find(range => range.unit === 'all'
-    ? end === TODAY && (start === earliestDate || start === '')
-    : end === TODAY && start === monthsAgo(quickRangeMonths(range))
+    ? end === latestEnd && (start === earliestDate || start === '')
+    : end === latestEnd && start === monthsAgo(quickRangeMonths(range))
   )
   const rangeKey = matchedQuickRange?.id ?? 'custom'
   const rangeTitle = matchedQuickRange ? quickRangeTitle(matchedQuickRange) : '自定义区间'
@@ -1709,6 +1714,7 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
                 value={end}
                 onChange={setEnd}
                 min={start || undefined}
+                max={latestEnd}
                 className="w-full"
                 buttonClassName="w-full justify-start"
               />

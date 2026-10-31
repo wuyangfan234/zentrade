@@ -3558,6 +3558,8 @@ interface TableStats {
   rows: number
   earliest_date: string | null
   latest_date: string | null
+  /** 最近一个已定版的日K (不含当天盘中快照); 仅 enriched / etf_enriched 提供 */
+  settled_date?: string | null
   symbols_covered: number
   trading_days: number
 }

@@ -184,9 +184,22 @@ def _safe_aggregate_enriched(repo) -> dict | None:
         "fields": fields,
         "earliest_date": dates[0],
         "latest_date": dates[-1],
+        # 0.43.2: 最近一个已定版的日K (不含当天盘中快照), 回测/因子检验的默认结束日与选择上限
+        "settled_date": _settled_date(repo, "stock"),
         "symbols_covered": symbols,
         "trading_days": len(dates),
     }
+
+
+def _settled_date(repo, asset_type: str) -> str | None:
+    getter = getattr(repo, "latest_settled_daily_date", None)
+    if not callable(getter):
+        return None
+    try:
+        value = getter(asset_type)
+    except Exception:
+        return None
+    return value.isoformat() if value is not None else None
 
 
 def _count_instruments_symbols(repo) -> int:
@@ -306,7 +319,7 @@ def _safe_aggregate_etf_enriched(repo) -> dict | None:
     stats = _safe_aggregate(repo, "kline_etf_enriched")
     if not stats:
         return None
-    return {**stats, "fields": fields}
+    return {**stats, "fields": fields, "settled_date": _settled_date(repo, "etf")}
 
 
 def _safe_aggregate_etf_daily(repo) -> dict | None:

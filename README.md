@@ -1,7 +1,7 @@
 # ZenTrade · 禅交易
 
 [![CI](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml/badge.svg)](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.43.1-2563eb)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.43.2-2563eb)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 

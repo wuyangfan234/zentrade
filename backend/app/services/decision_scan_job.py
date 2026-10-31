@@ -372,6 +372,16 @@ def watchlist_short_signals(as_of: date, *, watchlist: set[str], frames: dict, h
     return out
 
 
+def merge_side_signals(long_rows: dict[str, list[dict]], short_rows: dict[str, list[dict]]) -> dict[str, list[dict]]:
+    """多空两路信号按规则名合并成一张表: 同一规则两边都有时拼接, 不覆盖。
+    TradingView 移植规则 (如 tv_zlsma_cross) 当天可同时有看多命中与卖出命中 (看空卡); 0.43.2 前按字典
+    `{**long, **short}` 合并, 看空列表整条覆盖看多列表, 机会板因此漏掉多头卡。"""
+    out: dict[str, list[dict]] = {rule: list(rows) for rule, rows in (long_rows or {}).items()}
+    for rule, rows in (short_rows or {}).items():
+        out.setdefault(rule, []).extend(rows)
+    return out
+
+
 def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hits, stops, stops_by_symbol, s1s2,
                            out, sell_hits: dict | None = None, h4_state: dict | None = None) -> None:
     """自选影子账本 (v4, 不占资金): 全部规则在自选上的 +1 卡 + 同票基线卡; 同时落当日自选信号表 (另含只观察的看空卡)。
@@ -389,13 +399,14 @@ def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hi
         base_stops = {v for v in (stops or {}).values() if v is None or isinstance(v, (int, float))}
         added = wv.record(data_dir, as_of, watchlist=watchlist, frames=frames, signals=sig, baseline_stops=base_stops,
                           short_signals=short)
+        table = merge_side_signals(sig, short)
         lineage, row_extra = None, None
         try:   # 方向 A 谱系 (只读许可, 只追加新键); 失败照常落表
             from app.services import card_lineage
-            lineage, row_extra = card_lineage.stamp(data_dir, as_of, rules=sorted({**sig, **short}))
+            lineage, row_extra = card_lineage.stamp(data_dir, as_of, rules=sorted(table))
         except Exception as e:  # noqa: BLE001
             logger.warning("watchlist lineage stamp skipped: %s", type(e).__name__)
-        wv.save_signals(data_dir, as_of, {**sig, **short}, watchlist=watchlist, frames=frames,
+        wv.save_signals(data_dir, as_of, table, watchlist=watchlist, frames=frames,
                         lineage=lineage, row_extra=row_extra, extra_rows=_evo_rows(data_dir, as_of, watchlist, out),
                         h4_state=h4_state, atr=_atr_map(frames, watchlist))
         out.summary["watchlist_v4"] = {"recorded": sum(added.values()), "rules_with_signal": sorted(sig),

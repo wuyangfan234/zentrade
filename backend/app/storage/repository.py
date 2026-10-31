@@ -1883,6 +1883,39 @@ class KlineRepository:
                 latest = value
         return latest
 
+    def latest_settled_daily_date(self, asset_type: str = "stock") -> date | None:
+        """最近一个已定版的日K分区日期 (回测/因子检验的结束日上限)。
+
+        今天及以后的分区只有在盘后管道标记了官方收盘 (data/quote_official_close.json) 后才算;
+        之前它们是行情服务每 ~10 秒整份重写的盘中快照: 收盘价是那一刻的价格, 而且每次重写都换
+        enriched 代次, 回测读到一半就报「指标数据正在发布更新」。更早的分区一律算。"""
+        import json as _json
+
+        from app.market_clock import us_clock
+
+        root = self.store.data_dir / enriched_dirname(asset_type)
+        if not root.exists():
+            return None
+        today = us_clock.today()
+        official: set[str] = set()
+        try:
+            raw = _json.loads((self.store.data_dir / "quote_official_close.json").read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                official = {str(x) for x in raw}
+        except (OSError, ValueError):
+            official = set()
+        latest: date | None = None
+        for partition in root.glob("date=*"):
+            try:
+                value = date.fromisoformat(partition.name.removeprefix("date="))
+            except ValueError:
+                continue
+            if value >= today and value.isoformat() not in official:
+                continue
+            if latest is None or value > latest:
+                latest = value
+        return latest
+
     def get_matrix_data_generation(self, asset_type: str = "stock") -> str:
         """Return the stable generation for managed enriched readers."""
         return get_enriched_generation(self.store.data_dir, asset_type)
