@@ -2,31 +2,35 @@
  * 应用更新检查 — 单例 store (useSyncExternalStore)。
  *
  * 侧栏左下角版本号徽标与 设置→系统 的「检查更新」共用同一状态与网络请求。
- * 静默检查结果按天缓存 localStorage (GitHub 未认证 API 限额 60 次/时):
- * 同一版本 24h 内只发一次真实请求; 手动检查 (force) 绕过缓存立即刷新。
- * 检查失败不落缓存, 下次启动仍会重试, 但单次会话只静默检查一次。
+ * 0.44.0 起改为问本服务的 GET /api/settings/update-check: 由服务端查上游仓库
+ * (GitHub Release, 没有 Release 时读默认分支 VERSION), 服务端缓存 6 小时。
+ * 好处: 浏览器不直连 GitHub (国内网络、CORS、按访客 IP 的限额都不再是问题);
+ * 离线部署在 .env 设 UPDATE_CHECK_ENABLED=false 即全站不查、不显示入口。
+ *
+ * 前端再按天缓存一次 (localStorage), 避免每次打开页面都打后端; 失败不落缓存。
  */
 import { useCallback, useEffect, useSyncExternalStore } from 'react'
+import { api, type UpdateCheckResult } from '@/lib/api'
 import { useVersion } from '@/lib/useSharedQueries'
 
-// 检查更新的目标仓库 (Release 清单来源)。
-// ZenTrade 是 TSP 的一次性 fork (不跟上游): 不对上游仓库发起检查 — 否则上游发版会
-// 让侧栏亮 NEW、「前往下载」跳到上游旧版。自有发版仓库就绪后在此填入 'owner/repo'。
-export const UPDATE_REPO = ''
-const CACHE_KEY = 'update_check_cache'
+const CACHE_KEY = 'update_check_cache_v2'
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
-export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'found' | 'error'
+export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'found' | 'error' | 'disabled'
 
 export interface UpdateInfo {
   latest: string
   url: string
+  notes?: string
+  source?: 'release' | 'version_file'
 }
 
 interface UpdateState {
   status: UpdateStatus
   info: UpdateInfo | null
   checkedAt: number
+  error?: string
+  repo?: string
 }
 
 let state: UpdateState = { status: 'idle', info: null, checkedAt: 0 }
@@ -48,6 +52,13 @@ export function getUpdateState(): UpdateState {
   return state
 }
 
+/** 测试用: 复位单例 */
+export function resetUpdateState(): void {
+  state = { status: 'idle', info: null, checkedAt: 0 }
+  inFlight = false
+  silentStarted = false
+}
+
 /** 语义版本比较: a<b → -1, 相等 → 0, a>b → 1; 无法解析按 0.0.0 处理 */
 export function compareVersion(a: string, b: string): number {
   const parse = (v: string) =>
@@ -63,9 +74,7 @@ export function compareVersion(a: string, b: string): number {
 
 interface CacheBlob {
   current: string
-  latest: string
-  url: string
-  found: boolean
+  result: UpdateCheckResult
   checkedAt: number
 }
 
@@ -74,13 +83,7 @@ function readCache(): CacheBlob | null {
     const raw = localStorage.getItem(CACHE_KEY)
     if (!raw) return null
     const v = JSON.parse(raw) as Partial<CacheBlob>
-    if (
-      typeof v.current !== 'string' ||
-      typeof v.latest !== 'string' ||
-      typeof v.url !== 'string' ||
-      typeof v.found !== 'boolean' ||
-      typeof v.checkedAt !== 'number'
-    ) {
+    if (typeof v.current !== 'string' || typeof v.checkedAt !== 'number' || !v.result || typeof v.result.status !== 'string') {
       return null
     }
     return v as CacheBlob
@@ -93,55 +96,34 @@ function writeCache(blob: CacheBlob): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(blob))
   } catch {
-    // 隐私模式/存储满: 只影响下次启动多一次请求, 可忽略
+    // 隐私模式/存储满: 只影响下次多一次请求
   }
 }
 
-// 优先 api.github.com (官方带 CORS, 浏览器可直连; 未认证限额 60 次/时);
-// latest.json 清单 (发版仓库产物) 作兜底 — API 限流或字段变动时仍可取到版本号。
-async function fetchLatest(repo: string): Promise<UpdateInfo> {
-  let latest = ''
-  let url = `https://github.com/${repo}/releases/latest`
-  const r = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-    cache: 'no-store',
-  })
-  if (r.ok) {
-    const rel = await r.json()
-    latest = String(rel.tag_name ?? '')
-    url = rel.html_url || url
+/** 服务端结果 → 前端状态。是否有新版由前端按本地版本再比一次 (防缓存跨版本)。 */
+function applyResult(r: UpdateCheckResult, current: string, checkedAt: number): void {
+  if (r.status === 'disabled') {
+    setState({ status: 'disabled', info: null, checkedAt, repo: r.repo })
+    return
   }
-  if (!latest) {
-    const m = await fetch(
-      `https://github.com/${repo}/releases/latest/download/latest.json`,
-      { cache: 'no-store' },
-    )
-    if (m.ok) {
-      const manifest = await m.json()
-      latest = String(manifest.tag ?? '')
-      url = manifest.notes_url || url
-    }
+  if (r.status === 'error' || !r.latest) {
+    setState({ status: 'error', info: null, checkedAt, error: r.error, repo: r.repo })
+    return
   }
-  if (!latest) throw new Error('no release info')
-  return { latest, url }
+  const info: UpdateInfo = { latest: r.latest, url: r.url ?? '', notes: r.notes ?? '', source: r.source }
+  const found = compareVersion(current || r.current, r.latest) < 0
+  setState({ status: found ? 'found' : 'latest', info, checkedAt, error: undefined, repo: r.repo })
 }
 
 let inFlight = false
 
-export async function checkForUpdate(
-  current: string,
-  opts: { force?: boolean; repo?: string } = {},
-): Promise<void> {
-  const cur = current.trim()
-  const repo = opts.repo ?? UPDATE_REPO
-  if (!cur || !repo || inFlight) return
+export async function checkForUpdate(current: string, opts: { force?: boolean } = {}): Promise<void> {
+  const cur = current.trim().replace(/^v/i, '')
+  if (!cur || inFlight) return
   if (!opts.force) {
     const c = readCache()
-    if (c && c.current === cur && Date.now() - c.checkedAt < CACHE_TTL_MS) {
-      setState({
-        status: c.found ? 'found' : 'latest',
-        info: { latest: c.latest, url: c.url },
-        checkedAt: c.checkedAt,
-      })
+    if (c && c.current === cur && Date.now() - c.checkedAt < CACHE_TTL_MS && c.result.status !== 'error') {
+      applyResult(c.result, cur, c.checkedAt)
       return
     }
   }
@@ -149,12 +131,10 @@ export async function checkForUpdate(
   setState({ status: 'checking' })
   const checkedAt = Date.now()
   try {
-    const info = await fetchLatest(repo)
-    const found = compareVersion(cur, info.latest) < 0
-    setState({ status: found ? 'found' : 'latest', info, checkedAt })
-    writeCache({ current: cur, latest: info.latest, url: info.url, found, checkedAt })
+    const r = await api.updateCheck(!!opts.force)
+    applyResult(r, cur, checkedAt)
+    if (r.status !== 'error') writeCache({ current: cur, result: r, checkedAt })
   } catch {
-    // 不落缓存: 下次启动重试 (静默检查每次会话最多一次, 不会打爆限额)
     setState({ status: 'error', checkedAt })
   } finally {
     inFlight = false
@@ -165,15 +145,16 @@ let silentStarted = false
 
 /**
  * 侧栏与设置页共用的更新检查 hook。
- * 版本号就绪后自动做一次静默检查 (每次会话最多一次);
- * `check` 为手动入口, 绕过缓存立即刷新。
+ * 版本号就绪后自动做一次静默检查 (每次会话最多一次); `check` 为手动入口, 绕过缓存立即刷新。
  */
 export function useUpdateCheck(): {
   status: UpdateStatus
   info: UpdateInfo | null
   checkedAt: number
+  error?: string
+  repo?: string
   check: () => void
-  /** 是否配置了自有发版仓库 (未配置时 UI 不展示检查入口) */
+  /** 服务端未关闭检查 (UPDATE_CHECK_ENABLED) 时才展示入口 */
   enabled: boolean
 } {
   const s = useSyncExternalStore(subscribe, getUpdateState)
@@ -187,5 +168,5 @@ export function useUpdateCheck(): {
   const check = useCallback(() => {
     void checkForUpdate(current, { force: true })
   }, [current])
-  return { status: s.status, info: s.info, checkedAt: s.checkedAt, check, enabled: !!UPDATE_REPO }
+  return { ...s, check, enabled: s.status !== 'disabled' }
 }

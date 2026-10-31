@@ -2247,7 +2247,27 @@ export const api = {
   health: () => request<{ status: string; version: string; mode: string }>('/health'),
 
   aiTasks: () => request<{ tasks: AiTaskRow[] }>('/api/settings/ai/tasks'),
-  saveAiTask: (task: string, body: { model?: string; base_url?: string; api_key?: string | null; thinking?: string }) =>
+  // ===== 模型库 (0.44.0) =====
+  aiModels: () => request<{ models: AiModelEntry[] }>('/api/settings/ai/models'),
+  createAiModel: (body: AiModelInput) =>
+    request<{ models: AiModelEntry[]; created: string }>('/api/settings/ai/models', { method: 'POST', body: JSON.stringify(body) }),
+  updateAiModel: (id: string, body: AiModelInput) =>
+    request<{ models: AiModelEntry[] }>(`/api/settings/ai/models/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteAiModel: (id: string) =>
+    request<{ models: AiModelEntry[] }>(`/api/settings/ai/models/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  testAiModel: (id: string) =>
+    request<{ ok: boolean; model?: string; response?: string; error?: string }>(
+      `/api/settings/ai/models/${encodeURIComponent(id)}/test`, { method: 'POST', timeoutMs: 30_000 }),
+  // ===== 对外 API 密钥 (0.44.0) =====
+  apiKeys: () => request<{ keys: ApiKeyInfo[] }>('/api/settings/api-keys'),
+  createApiKey: (body: { name: string; scope: 'full' | 'read'; expires_days?: number | null }) =>
+    request<{ key: ApiKeyInfo; token: string; keys: ApiKeyInfo[] }>('/api/settings/api-keys', { method: 'POST', body: JSON.stringify(body) }),
+  revokeApiKey: (id: string) =>
+    request<{ keys: ApiKeyInfo[] }>(`/api/settings/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  // ===== 新版本检查 (0.44.0, 服务端查上游仓库) =====
+  updateCheck: (force = false) =>
+    request<UpdateCheckResult>(`/api/settings/update-check${force ? '?force=true' : ''}`, { quiet: true, timeoutMs: 30_000 }),
+  saveAiTask: (task: string, body: { model?: string; base_url?: string; api_key?: string | null; thinking?: string; model_ref?: string | null }) =>
     request<{ tasks: AiTaskRow[] }>(`/api/settings/ai/tasks/${encodeURIComponent(task)}`, {
       method: 'POST',
       body: JSON.stringify(body),
@@ -3782,9 +3802,58 @@ export interface AiTaskRow {
   task: string
   label: string
   default_thinking: 'default' | 'off'
-  override: { model: string; base_url: string; thinking: string; has_api_key: boolean; api_key_masked: string }
+  /** model_ref = 引用的模型库 id ('' = 未引用; 0.44.0 起) */
+  override: { model: string; base_url: string; thinking: string; has_api_key: boolean; api_key_masked: string; model_ref?: string }
   /** reasoning_effort = 首次请求实际发送的档位 ('' = 不指定); route = api / codex_cli (旧后端无这两个字段) */
-  effective: { model: string; base_url: string; thinking: AiThinking; reasoning_effort?: string; route?: 'api' | 'codex_cli'; overridden: string[] }
+  effective: {
+    model: string; base_url: string; thinking: AiThinking; reasoning_effort?: string; route?: 'api' | 'codex_cli'; overridden: string[]
+    model_ref?: string; model_ref_name?: string; model_ref_missing?: boolean
+  }
+}
+
+/** 模型库条目 (0.44.0): 同时登记多个模型, 各任务下拉引用 */
+export interface AiModelEntry {
+  id: string
+  name: string
+  base_url: string
+  model: string
+  has_api_key: boolean
+  api_key_masked: string
+  used_by: string[]
+}
+export interface AiModelInput {
+  name: string
+  base_url: string
+  model: string
+  /** null = 不改动已存 key; '' = 清除 (回退全局 key) */
+  api_key?: string | null
+}
+
+/** 对外 API 密钥 (0.44.0)。明文 token 只在创建响应里出现一次 */
+export interface ApiKeyInfo {
+  id: string
+  name: string
+  scope: 'full' | 'read'
+  prefix: string
+  created_at: number
+  last_used_at: number | null
+  expires_at: number | null
+}
+
+/** GET /api/settings/update-check */
+export interface UpdateCheckResult {
+  enabled: boolean
+  repo: string
+  current: string
+  status: 'disabled' | 'latest' | 'update_available' | 'error'
+  latest?: string
+  url?: string
+  notes?: string
+  source?: 'release' | 'version_file'
+  published_at?: string | null
+  error?: string
+  checked_at: number | null
+  cached?: boolean
 }
 
 // ===== 个股新闻 (2026-10-02 产品决策; 中文优先视图, 方向/重要度为 AI 判读) =====

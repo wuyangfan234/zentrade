@@ -5,41 +5,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('@/lib/useSharedQueries', () => ({
   useVersion: () => ({ data: undefined }),
 }))
+const mocks = vi.hoisted(() => ({ updateCheck: vi.fn() }))
+vi.mock('@/lib/api', () => ({ api: mocks }))
 
-import { checkForUpdate, compareVersion, getUpdateState, UPDATE_REPO } from './updateCheck'
+import { checkForUpdate, compareVersion, getUpdateState, resetUpdateState } from './updateCheck'
 
-const CACHE_KEY = 'update_check_cache'
-const REPO = 'owner/zentrade'  // 测试用自有发版仓库 (检查逻辑与仓库解耦)
+const CACHE_KEY = 'update_check_cache_v2'
 const DAY = 24 * 60 * 60 * 1000
 
-function seedCache(blob: Record<string, unknown>) {
-  localStorage.setItem(CACHE_KEY, JSON.stringify(blob))
-}
+const res = (over: Record<string, unknown> = {}) => ({
+  enabled: true, repo: 'owner/zentrade', current: '0.3.2', status: 'update_available',
+  latest: 'v0.9.0', url: 'https://github.com/owner/zentrade/releases/tag/v0.9.0', notes: 'n', source: 'release',
+  checked_at: 1, ...over,
+})
 
-function readCacheRaw(): string | null {
-  return localStorage.getItem(CACHE_KEY)
-}
-
-/** 模拟 GitHub Releases API 响应 (tag_name 可空以触发 latest.json 兜底) */
-function mockFetchReleases(tagName: string) {
-  return vi.fn(async (url: unknown) => {
-    const u = String(url)
-    if (u.includes('api.github.com')) {
-      return { ok: true, json: async () => ({ tag_name: tagName, html_url: 'https://github.com/r/rel/1' }) }
-    }
-    if (u.includes('latest.json')) {
-      return { ok: true, json: async () => ({ tag: tagName, notes_url: 'https://github.com/r/rel/1' }) }
-    }
-    return { ok: false, json: async () => ({}) }
-  })
+function seedCache(result: Record<string, unknown>, current = '0.3.2', checkedAt = Date.now() - 1000) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ current, result, checkedAt }))
 }
 
 beforeEach(() => {
   localStorage.clear()
+  resetUpdateState()
+  mocks.updateCheck.mockReset()
 })
 
 afterEach(() => {
-  vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
@@ -57,122 +47,73 @@ describe('compareVersion', () => {
   })
 })
 
-describe('checkForUpdate', () => {
-  it('同版本 24h 内命中缓存, 不发网络请求', async () => {
-    seedCache({
-      current: '0.3.2', latest: '0.3.3', url: 'https://github.com/r/rel/9',
-      found: true, checkedAt: Date.now() - 1000,
-    })
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkForUpdate('0.3.2', { repo: REPO })
-
-    expect(fetchMock).not.toHaveBeenCalled()
+describe('checkForUpdate (经后端 /api/settings/update-check)', () => {
+  it('发现新版本: 状态 found 并带链接与说明, 结果落缓存', async () => {
+    mocks.updateCheck.mockResolvedValue(res())
+    await checkForUpdate('v0.3.2')
+    expect(mocks.updateCheck).toHaveBeenCalledWith(false)
     expect(getUpdateState().status).toBe('found')
-    expect(getUpdateState().info?.latest).toBe('0.3.3')
-    expect(getUpdateState().info?.url).toBe('https://github.com/r/rel/9')
+    expect(getUpdateState().info).toMatchObject({ latest: 'v0.9.0', notes: 'n', source: 'release' })
+    expect(JSON.parse(localStorage.getItem(CACHE_KEY) ?? '{}')).toMatchObject({ current: '0.3.2' })
   })
 
-  it('缓存过期后重新请求并回写缓存', async () => {
-    seedCache({
-      current: '0.3.2', latest: '0.3.3', url: 'u',
-      found: true, checkedAt: Date.now() - DAY - 1000,
-    })
-    vi.stubGlobal('fetch', mockFetchReleases('0.9.0'))
-
-    await checkForUpdate('0.3.2', { repo: REPO })
-
-    expect(getUpdateState().status).toBe('found')
-    expect(getUpdateState().info?.latest).toBe('0.9.0')
-    const cached = JSON.parse(readCacheRaw() ?? '{}')
-    expect(cached).toMatchObject({ current: '0.3.2', latest: '0.9.0', found: true })
-  })
-
-  it('当前版本已是最新时状态为 latest', async () => {
-    vi.stubGlobal('fetch', mockFetchReleases('v0.3.2'))
-
-    await checkForUpdate('0.3.2', { repo: REPO })
-
-    expect(getUpdateState().status).toBe('latest')
-  })
-
-  it('版本变化后缓存失效, 重新请求', async () => {
-    seedCache({
-      current: '0.3.1', latest: '0.3.2', url: 'u',
-      found: true, checkedAt: Date.now(),
-    })
-    const fetchMock = mockFetchReleases('0.3.2')
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkForUpdate('0.3.2', { repo: REPO }) // 本地版本已升级, 与缓存的 current 不一致
-
-    expect(fetchMock).toHaveBeenCalled()
-    expect(getUpdateState().status).toBe('latest')
-  })
-
-  it('force 绕过新鲜缓存立即刷新', async () => {
-    seedCache({
-      current: '0.3.2', latest: '0.9.9', url: 'u',
-      found: true, checkedAt: Date.now(),
-    })
-    const fetchMock = mockFetchReleases('0.3.2')
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkForUpdate('0.3.2', { force: true, repo: REPO })
-
-    expect(fetchMock).toHaveBeenCalled()
-    expect(getUpdateState().status).toBe('latest')
-  })
-
-  it('API 失败时状态 error 且不落缓存 (下次启动重试)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => ({}) })))
-
-    await checkForUpdate('0.3.2', { repo: REPO })
-
-    expect(getUpdateState().status).toBe('error')
-    expect(readCacheRaw()).toBeNull()
-  })
-
-  it('GitHub API 字段为空时回退 latest.json 清单', async () => {
-    const fetchMock = vi.fn(async (url: unknown) => {
-      const u = String(url)
-      if (u.includes('api.github.com')) {
-        return { ok: true, json: async () => ({}) } // tag_name 缺失
-      }
-      if (u.includes('latest.json')) {
-        return { ok: true, json: async () => ({ tag: '1.0.0', notes_url: 'https://github.com/r/notes' }) }
-      }
-      return { ok: false, json: async () => ({}) }
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkForUpdate('0.3.2', { repo: REPO })
-
-    expect(getUpdateState().status).toBe('found')
-    expect(getUpdateState().info?.latest).toBe('1.0.0')
-    expect(getUpdateState().info?.url).toBe('https://github.com/r/notes')
-  })
-
-  it('版本未知时空操作 (不请求不落缓存)', async () => {
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-
-    await checkForUpdate('')
-
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(getUpdateState().status).not.toBe('checking')
-  })
-
-  it('未配置自有发版仓库时不检查 (ZenTrade 不连上游仓库)', async () => {
-    expect(UPDATE_REPO).toBe('')
-    const fetchMock = vi.fn()
-    vi.stubGlobal('fetch', fetchMock)
-
+  it('同版本 24h 内命中缓存, 不请求后端', async () => {
+    seedCache(res({ latest: 'v0.3.3' }))
     await checkForUpdate('0.3.2')
-    await checkForUpdate('0.3.2', { force: true })
+    expect(mocks.updateCheck).not.toHaveBeenCalled()
+    expect(getUpdateState().status).toBe('found')
+    expect(getUpdateState().info?.latest).toBe('v0.3.3')
+  })
 
-    expect(fetchMock).not.toHaveBeenCalled()
-    expect(readCacheRaw()).toBeNull()
+  it('缓存过期或本地版本已变 → 重新请求', async () => {
+    seedCache(res(), '0.3.2', Date.now() - DAY - 1000)
+    mocks.updateCheck.mockResolvedValue(res({ status: 'latest', latest: 'v0.3.2' }))
+    await checkForUpdate('0.3.2')
+    expect(mocks.updateCheck).toHaveBeenCalledTimes(1)
+    expect(getUpdateState().status).toBe('latest')
+
+    resetUpdateState()
+    seedCache(res({ latest: 'v0.3.2' }), '0.3.1')
+    await checkForUpdate('0.3.2')
+    expect(mocks.updateCheck).toHaveBeenCalledTimes(2)
+  })
+
+  it('本地已升级到与缓存最新版相同: 不再显示 found (前端按本地版本复核)', async () => {
+    mocks.updateCheck.mockResolvedValue(res({ current: '0.3.2', latest: 'v0.9.0' }))
+    await checkForUpdate('0.9.0')
+    expect(getUpdateState().status).toBe('latest')
+  })
+
+  it('force 绕过新鲜缓存, 并把 force 传给后端', async () => {
+    seedCache(res())
+    mocks.updateCheck.mockResolvedValue(res({ status: 'latest', latest: 'v0.3.2' }))
+    await checkForUpdate('0.3.2', { force: true })
+    expect(mocks.updateCheck).toHaveBeenCalledWith(true)
+    expect(getUpdateState().status).toBe('latest')
+  })
+
+  it('后端 error 或请求失败: 状态 error 且不落缓存', async () => {
+    mocks.updateCheck.mockResolvedValue(res({ status: 'error', latest: undefined, error: '仓库不可访问 (私有或不存在)' }))
+    await checkForUpdate('0.3.2')
+    expect(getUpdateState().status).toBe('error')
+    expect(getUpdateState().error).toContain('私有')
+    expect(localStorage.getItem(CACHE_KEY)).toBeNull()
+
+    resetUpdateState()
+    mocks.updateCheck.mockRejectedValue(new Error('offline'))
+    await checkForUpdate('0.3.2')
+    expect(getUpdateState().status).toBe('error')
+  })
+
+  it('服务端关闭检查: 状态 disabled (界面隐藏入口)', async () => {
+    mocks.updateCheck.mockResolvedValue({ enabled: false, repo: '', current: '0.3.2', status: 'disabled', checked_at: null })
+    await checkForUpdate('0.3.2')
+    expect(getUpdateState().status).toBe('disabled')
+  })
+
+  it('版本未知时空操作', async () => {
+    await checkForUpdate('')
+    expect(mocks.updateCheck).not.toHaveBeenCalled()
+    expect(getUpdateState().status).toBe('idle')
   })
 })

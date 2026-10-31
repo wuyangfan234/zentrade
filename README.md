@@ -1,7 +1,7 @@
 # ZenTrade · 禅交易
 
 [![CI](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml/badge.svg)](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.43.2-2563eb)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.44.0-2563eb)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 
@@ -26,6 +26,7 @@ ZenTrade 把分散的研究流程放进同一条可审计链路：从市场数�
 | 策略研究 | 内置与自定义策略、因子检验、策略挖掘、回测、参数优化和样本外验证 |
 | 纸面交易 | 风险预算、入场与退出、仓位管理、公司行动处理、只追加事件台账和净值重放 |
 | 数据与扩展 | 数据源能力路由、Python 插件、YAML 自定义 HTTP 数据源、Parquet + DuckDB 本地存储 |
+| AI 与对外接入 | 模型库可同时配置多个模型并按任务分配（如翻译用 DeepSeek、助手用 Claude）；API 密钥 + MCP 端点，让其他 agent 操作回测、策略、自选等全系统功能；新版本自动提醒 |
 | 运维可观测 | 数据同步、报价、新闻、推送和保护性数据源的健康状态；支持桌面与移动端 |
 
 | 盘面情报 | 纸面持仓 |
@@ -164,6 +165,7 @@ FastAPI API
 - [数据源插件开发](docs/plugin-development.md)
 - [自定义 HTTP 数据源](docs/custom-data-source.md)
 - [二次开发](docs/secondary-development.md)
+- [API 密钥与 MCP 接入](docs/api-and-mcp.md)
 - [维护脚本](backend/scripts/README.md)
 - [贡献指南](CONTRIBUTING.md)
 - [行为准则](CODE_OF_CONDUCT.md)
@@ -173,7 +175,7 @@ FastAPI API
 
 ## 安全边界
 
-ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥有完整控制权；自定义 Python 策略的 AST 校验不是安全沙箱。扩展数据 URL 可能触发服务端请求，因此不要把实例开放给不受信任的人，也不要将 3018 端口直接暴露到公网。默认配置下 CORS 只允许同源，登录 Cookie 在 HTTPS 下自动加 `Secure`。部署前请阅读 [SECURITY.md](SECURITY.md)。
+ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥有完整控制权；自定义 Python 策略的 AST 校验不是安全沙箱。扩展数据 URL 可能触发服务端请求，因此不要把实例开放给不受信任的人，也不要将 3018 端口直接暴露到公网。默认配置下 CORS 只允许同源，登录 Cookie 在 HTTPS 下自动加 `Secure`。「完全控制」API 密钥等同登录权限，只发给可信的 agent。部署前请阅读 [SECURITY.md](SECURITY.md)。
 
 ## 许可与归属
 

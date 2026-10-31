@@ -38,6 +38,7 @@ from app.api import (
     watchlist,
 )
 from app.api import auth as auth_api
+from app.api import mcp as mcp_api
 from app.api import settings as settings_api
 from app.api.routes import router as core_router
 from app.config import settings
@@ -440,6 +441,19 @@ async def auth_middleware(request: Request, call_next):
     # 仅 /api/ 走认证; 静态资源(前端页面/assets)放行, 由前端处理跳转
     if not path.startswith("/api/"):
         return await call_next(request)
+    # 对外 API 密钥 (0.44.0): 带了密钥头就只按密钥判定 (不回退 Cookie), 与是否设过登录密码无关
+    from app.services import api_keys
+    api_token = api_keys.token_from_headers(request.headers)
+    if api_token is not None:
+        key = api_keys.verify(api_token)
+        if key is None:
+            return JSONResponse(status_code=401, content={"detail": "API 密钥无效、已吊销或已过期"})
+        denied = api_keys.permission_error(key["scope"], request.method, path)
+        if denied:
+            return JSONResponse(status_code=403, content={"detail": denied})
+        request.state.api_key = key
+        return await call_next(request)
+
     # 白名单放行(设密码/登录/探活本身不拦)
     if path.startswith(_AUTH_WHITELIST_PREFIX) or path in _AUTH_WHITELIST_EXACT:
         return await call_next(request)
@@ -495,6 +509,7 @@ app.include_router(signals.router)
 app.include_router(monitor_rules.router)
 app.include_router(lots.router)
 app.include_router(alerts.router)
+app.include_router(mcp_api.router)
 
 # 二次开发路由与小粒度策略在所有核心路由后注册, 禁止覆盖核心路径。
 extension_registry, extension_load_errors = configure_backend_extensions(app)

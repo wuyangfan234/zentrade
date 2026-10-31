@@ -247,11 +247,15 @@ def save_ai_settings(req: AiSettingsIn) -> dict:
 
 
 class AiTaskOverrideIn(BaseModel):
-    """单个任务的模型覆盖。空字符串 = 清除该字段 (回退全局); api_key=None = 不改动已存 key。"""
+    """单个任务的模型覆盖。空字符串 = 清除该字段 (回退全局); api_key=None = 不改动已存 key。
+
+    model_ref: 引用模型库里的一个模型 (0.44.0); None = 不改动已存引用, "" = 取消引用。
+    """
     model: str = Field(default="", max_length=128)
     base_url: str = Field(default="", max_length=300)
     api_key: str | None = Field(default=None, max_length=400)
     thinking: str = Field(default="", max_length=16)
+    model_ref: str | None = Field(default=None, max_length=40)
 
 
 def _ai_tasks_view() -> dict:
@@ -275,13 +279,17 @@ def _ai_tasks_view() -> dict:
             "task": task, "label": meta["label"], "default_thinking": meta["default_thinking"],
             "override": {"model": ov.get("model", ""), "base_url": ov.get("base_url", ""),
                          "thinking": ov.get("thinking", ""), "has_api_key": bool(ov.get("api_key")),
-                         "api_key_masked": secrets_store.mask(ov.get("api_key") or "") if ov.get("api_key") else ""},
+                         "api_key_masked": secrets_store.mask(ov.get("api_key") or "") if ov.get("api_key") else "",
+                         "model_ref": ov.get("model_ref", "")},
             # reasoning_effort = 首次请求实际发送的思考档位 ('' = 不指定, 模型默认; 网关不认时自动去掉重试)
             # route = api (OpenAI 兼容接口) / codex_cli (全局 Codex 且本任务没单独填模型/Base URL/Key)
             "effective": {"model": current_codex_model() if codex else prof["model"],
                           "base_url": "" if codex else prof["base_url"], "thinking": prof["thinking"],
                           "reasoning_effort": task_reasoning_effort(task), "route": route,
-                          "overridden": prof["overridden"]},
+                          "overridden": prof["overridden"],
+                          "model_ref": prof.get("model_ref", ""),
+                          "model_ref_name": prof.get("model_ref_name", ""),
+                          "model_ref_missing": bool(prof.get("model_ref_missing"))},
         })
     return {"tasks": out}
 
@@ -301,8 +309,17 @@ def save_ai_task(task: str, req: AiTaskOverrideIn) -> dict:
         raise HTTPException(status_code=400, detail=f"thinking 只能是 {' / '.join(THINKING_MODES)} 之一")
     if req.base_url and not req.base_url.startswith(("https://", "http://")):
         raise HTTPException(status_code=400, detail="base_url 需以 http(s):// 开头")
+    from app.services.ai_provider import ai_model_entry
     all_ov = dict(secrets_store.load().get("ai_task_overrides") or {})
     cur = dict(all_ov.get(task) or {})
+    if req.model_ref is not None:
+        ref = req.model_ref.strip()
+        if ref:
+            if ai_model_entry(ref) is None:
+                raise HTTPException(status_code=400, detail=f"模型库里没有 '{ref}'")
+            cur["model_ref"] = ref
+        else:
+            cur.pop("model_ref", None)
     for field in ("model", "base_url", "thinking"):
         val = getattr(req, field).strip()
         if val:
@@ -320,6 +337,165 @@ def save_ai_task(task: str, req: AiTaskOverrideIn) -> dict:
         all_ov.pop(task, None)
     secrets_store.save({"ai_task_overrides": all_ov})
     return _ai_tasks_view()
+
+
+# ── 模型库 (0.44.0): 同时登记多个模型, 任务按 id 引用 ──
+
+class AiModelIn(BaseModel):
+    """模型库条目。api_key=None = 不改动已存 key; "" = 清除 (回退全局 key)。"""
+    name: str = Field(..., min_length=1, max_length=60)
+    base_url: str = Field(default="", max_length=300)
+    model: str = Field(..., min_length=1, max_length=128)
+    api_key: str | None = Field(default=None, max_length=400)
+
+
+def _ai_models_view() -> dict:
+    from app.services.ai_provider import ai_models
+    overrides = secrets_store.load().get("ai_task_overrides") or {}
+    used: dict[str, list[str]] = {}
+    if isinstance(overrides, dict):
+        for task, ov in overrides.items():
+            if isinstance(ov, dict) and ov.get("model_ref"):
+                used.setdefault(ov["model_ref"], []).append(task)
+    return {"models": [
+        {"id": m["id"], "name": m.get("name") or m["id"], "base_url": m.get("base_url", ""),
+         "model": m.get("model", ""), "has_api_key": bool(m.get("api_key")),
+         "api_key_masked": secrets_store.mask(m["api_key"]) if m.get("api_key") else "",
+         "used_by": sorted(used.get(m["id"], []))}
+        for m in ai_models()
+    ]}
+
+
+def _new_model_id(name: str, taken: set[str]) -> str:
+    import re as _re
+    import secrets as _secrets
+    base = _re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")[:24] or "model"
+    if not base[0].isalnum():
+        base = "m" + base
+    cand = base
+    while cand in taken:
+        cand = f"{base}-{_secrets.token_hex(2)}"
+    return cand
+
+
+@router.get("/ai/models")
+def list_ai_models() -> dict:
+    return _ai_models_view()
+
+
+@router.post("/ai/models")
+def create_ai_model(req: AiModelIn) -> dict:
+    from app.services.ai_provider import ai_models
+    if req.base_url and not req.base_url.startswith(("https://", "http://")):
+        raise HTTPException(status_code=400, detail="base_url 需以 http(s):// 开头")
+    models = ai_models()
+    if len(models) >= 30:
+        raise HTTPException(status_code=400, detail="模型库最多 30 个")
+    mid = _new_model_id(req.name, {m["id"] for m in models})
+    entry = {"id": mid, "name": req.name.strip(), "base_url": req.base_url.strip(), "model": req.model.strip()}
+    if req.api_key and req.api_key.strip():
+        entry["api_key"] = req.api_key.strip()
+    secrets_store.save({"ai_models": [*models, entry]})
+    return {**_ai_models_view(), "created": mid}
+
+
+@router.put("/ai/models/{model_id}")
+def update_ai_model(model_id: str, req: AiModelIn) -> dict:
+    from app.services.ai_provider import ai_models
+    if req.base_url and not req.base_url.startswith(("https://", "http://")):
+        raise HTTPException(status_code=400, detail="base_url 需以 http(s):// 开头")
+    models = ai_models()
+    for m in models:
+        if m["id"] == model_id:
+            m["name"] = req.name.strip()
+            m["base_url"] = req.base_url.strip()
+            m["model"] = req.model.strip()
+            if req.api_key is not None:
+                if req.api_key.strip():
+                    m["api_key"] = req.api_key.strip()
+                else:
+                    m.pop("api_key", None)
+            secrets_store.save({"ai_models": models})
+            return _ai_models_view()
+    raise HTTPException(status_code=404, detail="模型不存在")
+
+
+@router.delete("/ai/models/{model_id}")
+def delete_ai_model(model_id: str) -> dict:
+    from app.services.ai_provider import ai_models
+    models = ai_models()
+    if not any(m["id"] == model_id for m in models):
+        raise HTTPException(status_code=404, detail="模型不存在")
+    view = _ai_models_view()
+    used = next((m["used_by"] for m in view["models"] if m["id"] == model_id), [])
+    if used:
+        from app.services.ai_provider import AI_TASKS
+        labels = "、".join(AI_TASKS.get(t, {}).get("label", t) for t in used)
+        raise HTTPException(status_code=409, detail=f"仍被任务引用: {labels}; 先在「AI 模型分工」里改掉再删")
+    secrets_store.save({"ai_models": [m for m in models if m["id"] != model_id]})
+    return _ai_models_view()
+
+
+@router.post("/ai/models/{model_id}/test")
+async def test_ai_model(model_id: str) -> dict:
+    """用该库模型发一句最小请求, 验证地址/Key/模型名可用。"""
+    from app.services.ai_provider import _openai_client, ai_model_entry, model_profile
+    entry = ai_model_entry(model_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="模型不存在")
+    prof = model_profile(entry)
+    if not prof["api_key"]:
+        return {"ok": False, "error": "没有可用的 API Key (库模型和全局都未配置)"}
+    try:
+        client = _openai_client(prof["api_key"], 20.0, base_url=prof["base_url"])
+        resp = await client.chat.completions.create(
+            model=prof["model"], messages=[{"role": "user", "content": "Reply exactly: OK"}], max_tokens=16,
+        )
+        text = (resp.choices[0].message.content or "").strip() if resp.choices else ""
+        return {"ok": True, "model": prof["model"], "response": text[:80]}
+    except Exception as e:
+        return {"ok": False, "error": (str(e) or type(e).__name__)[:300]}
+
+
+# ── 对外 API 密钥 (0.44.0): 只认网页登录会话, 密钥本身不能管理密钥 (中间件已拦) ──
+
+class ApiKeyCreateIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=60)
+    scope: Literal["full", "read"] = "read"
+    expires_days: int | None = Field(default=None, ge=1, le=3650)
+
+
+@router.get("/api-keys")
+def list_api_keys() -> dict:
+    from app.services import api_keys
+    return {"keys": api_keys.list_keys()}
+
+
+@router.post("/api-keys")
+def create_api_key(req: ApiKeyCreateIn) -> dict:
+    """生成密钥。明文 token 只在本次响应里出现一次, 服务端只存摘要。"""
+    from app.services import api_keys
+    try:
+        info, token = api_keys.create_key(req.name, req.scope, req.expires_days)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"key": info, "token": token, "keys": api_keys.list_keys()}
+
+
+@router.delete("/api-keys/{key_id}")
+def revoke_api_key(key_id: str) -> dict:
+    from app.services import api_keys
+    if not api_keys.revoke_key(key_id):
+        raise HTTPException(status_code=404, detail="密钥不存在")
+    return {"keys": api_keys.list_keys()}
+
+
+# ── 新版本检查 (0.44.0) ──
+
+@router.get("/update-check")
+def get_update_check(force: bool = False) -> dict:
+    from app.services import update_check
+    return update_check.check(force=force)
 
 
 @router.delete("/ai")

@@ -110,6 +110,10 @@ class Settings(BaseSettings):
     cookie_secure: str = "auto"
     # 新闻翻译兜底: AI 打标失败时用 Google 翻译网页端点 (非官方、无 SLA) 只翻译标题。默认关闭。
     news_google_translate_fallback: bool = False
+    # 新版本检查 (0.44.0): 服务端查上游仓库的 GitHub Release / VERSION, 设置页与侧栏提示新版本。
+    # 离线或内网部署可关; 自己的 fork 想跟自己的仓库时改 UPDATE_CHECK_REPO。
+    update_check_enabled: bool = True
+    update_check_repo: str = "wuyangfan234/zentrade"
     backtest_range_guard: bool = False
     backtest_matrix_disk_cache_enabled: bool = True
     backtest_matrix_cache_max_mb: int = 512

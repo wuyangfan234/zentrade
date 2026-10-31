@@ -34,6 +34,8 @@ export function SettingsSystemPanel() {
     info: updateInfo,
     check: checkUpdate,
     enabled: updateEnabled,
+    error: updateError,
+    repo: updateRepo,
   } = useUpdateCheck()
   const [toastEnabled, setToastEnabled] = useState(() => {
     try { return localStorage.getItem('alert_toast_enabled') !== '0' } catch { return true }
@@ -379,9 +381,22 @@ export function SettingsSystemPanel() {
                 : updateState === 'latest'
                   ? `已是最新版本 (${versionData?.version ?? '—'})`
                   : updateState === 'error'
-                    ? '检查失败 (网络受限?), 可直接前往 Releases'
-                    : '对比自有发版仓库最新 Release, 提示新版本'}
+                    ? `检查失败${updateError ? `：${updateError}` : ' (网络受限?)'}`
+                    : `对比 ${updateRepo || '上游仓库'} 的最新版本 (服务端每 6 小时查一次)`}
             </div>
+            {updateState === 'found' && updateInfo && (
+              <div className="mt-1 text-[11px] leading-4 text-secondary" data-update-howto>
+                更新方法：在部署目录执行 git pull 后重新构建（docker compose up -d --build），详见 docs/deployment.md「更新与备份」。
+              </div>
+            )}
+            {updateState === 'found' && updateInfo?.notes && (
+              <details className="mt-1.5" data-update-notes>
+                <summary className="cursor-pointer text-[11px] text-accent">更新说明</summary>
+                <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap rounded bg-base px-2 py-1.5 text-[11px] leading-relaxed text-secondary">
+                  {updateInfo.notes}
+                </pre>
+              </details>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-2">
             {updateState === 'found' && updateInfo && (
@@ -393,7 +408,7 @@ export function SettingsSystemPanel() {
                            bg-accent text-white hover:bg-accent/90 transition-colors"
               >
                 <Download className="h-3.5 w-3.5" />
-                前往下载
+                {updateInfo.source === 'version_file' ? '查看更新日志' : '查看新版本'}
               </a>
             )}
             <button

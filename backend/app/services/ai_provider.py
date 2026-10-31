@@ -320,15 +320,64 @@ def task_override(task: str | None) -> dict:
     return raw if isinstance(raw, dict) else {}
 
 
+# ── 模型库 (0.44.0): 可同时登记多个 OpenAI 兼容模型, 各任务按 id 引用 ──
+# 存储: secrets.json 的 ai_models = [{id, name, base_url, api_key, model}]
+# 任务覆盖里的 model_ref 指向库中 id; 引用优先于该任务旧的单独填写 (model/base_url/api_key)。
+# 删除被引用的库模型由 API 拒绝; 引用失效 (手改文件) 时回退全局并在设置页标出。
+MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+
+
+def ai_models() -> list[dict]:
+    raw = secrets_store.load().get("ai_models") or []
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for m in raw:
+        if isinstance(m, dict) and isinstance(m.get("id"), str) and MODEL_ID_RE.match(m["id"]):
+            out.append(m)
+    return out
+
+
+def ai_model_entry(model_id: str | None) -> dict | None:
+    if not model_id:
+        return None
+    for m in ai_models():
+        if m["id"] == model_id:
+            return m
+    return None
+
+
+def model_profile(entry: dict) -> dict:
+    """库模型 → 与 task_profile 同形的连接参数 (base_url/key 缺省回退全局)。"""
+    return {
+        "base_url": entry.get("base_url") or secrets_store.get_ai_config("ai_base_url", settings.ai_base_url),
+        "model": entry.get("model") or current_openai_model(),
+        "api_key": entry.get("api_key") or secrets_store.get_ai_key(),
+    }
+
+
 def task_profile(task: str | None) -> dict:
     """解析某任务实际使用的 {base_url, model, api_key, thinking}; 不含密钥原文以外的推断。"""
     ov = task_override(task)
     default_thinking = (AI_TASKS.get(task or "") or {}).get("default_thinking", "default")
+    thinking = ov.get("thinking") if ov.get("thinking") in THINKING_MODES else default_thinking
+    entry = ai_model_entry(ov.get("model_ref"))
+    if entry is not None:
+        prof = model_profile(entry)
+        return {
+            **prof,
+            "thinking": thinking,
+            "model_ref": entry["id"],
+            "model_ref_name": entry.get("name") or entry["id"],
+            "overridden": sorted({"model_ref", *(k for k in ("thinking",) if ov.get(k))}),
+        }
     return {
         "base_url": ov.get("base_url") or secrets_store.get_ai_config("ai_base_url", settings.ai_base_url),
         "model": ov.get("model") or current_openai_model(),
         "api_key": ov.get("api_key") or secrets_store.get_ai_key(),
-        "thinking": ov.get("thinking") if ov.get("thinking") in THINKING_MODES else default_thinking,
+        "thinking": thinking,
+        "model_ref": "",
+        "model_ref_missing": bool(ov.get("model_ref")),
         "overridden": sorted(k for k in ("base_url", "model", "api_key", "thinking") if ov.get(k)),
     }
 
@@ -370,7 +419,7 @@ def task_reasoning_effort(task: str | None) -> str:
 
 
 API_ROUTE = "api"
-_ROUTING_FIELDS = ("model", "base_url", "api_key")
+_ROUTING_FIELDS = ("model", "base_url", "api_key", "model_ref")
 
 
 def task_route(task: str | None) -> str:
@@ -382,6 +431,8 @@ def task_route(task: str | None) -> str:
     if not is_codex_cli_provider():
         return API_ROUTE
     ov = task_override(task)
+    if ov.get("model_ref") and ai_model_entry(ov.get("model_ref")) is None:
+        ov = {k: v for k, v in ov.items() if k != "model_ref"}
     return API_ROUTE if any(ov.get(k) for k in _ROUTING_FIELDS) else CODEX_CLI_PROVIDER
 
 

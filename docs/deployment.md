@@ -41,6 +41,8 @@ docker compose down
 
 ## 3. 更新与备份
 
+有新版本时，侧栏左下角的版本号旁会出现 **NEW** 标记，「设置 → 系统设置 → 检查更新」可以查看版本号和更新说明。检查由服务端完成：先查 GitHub Release，仓库没有发 Release 时改读默认分支的 `VERSION` 文件，结果缓存 6 小时。浏览器不直连 GitHub。离线部署设 `UPDATE_CHECK_ENABLED=false`，自己的 fork 用 `UPDATE_CHECK_REPO=owner/repo` 指向自己的仓库。
+
 更新前备份整个 `data/`；其中包含行情、配置、事件台账和密钥，备份文件也应按敏感资料保护。
 
 ```bash
