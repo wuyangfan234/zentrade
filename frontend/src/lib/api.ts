@@ -3776,6 +3776,9 @@ export interface OptionsAnalysis {
   unusual?: { contract: string; expiration: string; strike: number; type: string; volume: number; open_interest: number; ratio: number; iv: number | null }[]
   earnings_move?: { earnings_date: string; expiration: string; expected_move_pct: number | null; atm_iv: number | null } | null
   heatmap?: OptionsHeatmap | null
+  /** 0.45.0 非交易时段 (或链是盘外拉的): 隐含波动率 / 偏斜置空, 跨式预期波动与 PCR 照给 */
+  iv_hidden?: boolean
+  iv_hidden_reason?: string
 }
 export interface QverisPaidMeta { symbol: string; available: boolean; reason?: string; fetched_at?: string; cached?: boolean; charged?: number; fresh?: boolean; cost: number; note?: string }
 export interface QverisOptions extends QverisPaidMeta { spot?: number | null; spot_source?: string; analysis?: OptionsAnalysis; earnings_date?: string | null; source?: 'alpaca' | 'qveris' }
@@ -3919,10 +3922,15 @@ export interface IntelEvent {
   surprise?: 'above' | 'below' | 'inline' | 'near' | null; actual_status?: 'ok' | 'pending' | 'unmapped' | 'mismatch' | null; past: boolean
   actual_derived?: boolean
   symbol?: string; role?: string | null; timing?: string
+  /** 0.45.0 本周之后的前瞻事件来自 TradingView (只有预期 / 前值, 不算实际值) */
+  source?: 'tradingview'
 }
 export interface IntelCalendar {
   events: IntelEvent[]; days: string[]; today: string; level: IntelImpactLevel; fetched_at?: string | null; error?: string | null
   source?: string; is_trading_day: boolean; session_close: string
+  lookahead_from?: string | null; lookahead_fetched_at?: string | null; lookahead_error?: string | null
+  /** FF 本周日历覆盖到哪天 (周六); null = FF 缺失或停在旧周, 这时 TradingView 的日子当本周用, 不算前瞻 */
+  ff_until?: string | null
 }
 export interface IntelEarningsReport { date: string; timing: string; eps: number | null; forecast: number | null; surprise_pct: number | null; react_day: string | null; move_pct: number | null }
 export interface IntelEarningsRow {

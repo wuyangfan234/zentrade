@@ -79,6 +79,25 @@ it('options panel reads cache only on open and spends only on click, showing cos
   expect(host.querySelector('[data-term] tbody tr')?.textContent).toContain('2026-10-09')
 })
 
+it('hides IV columns and skew off-hours but keeps straddle moves and PCR', async () => {
+  const hidden = {
+    ...analysis, iv_hidden: true, iv_hidden_reason: '非交易时段不显示隐含波动率与偏斜（盘外期权报价停更，免费源的隐含波动率与希腊值失真）', skew: null,
+    term: analysis.term.map(t => ({ ...t, atm_iv: null })), earnings_move: { ...analysis.earnings_move, atm_iv: null },
+  }
+  mocks.qverisOptions.mockResolvedValue({ symbol: 'NVDA', available: true, fetched_at: '2026-11-01T17:00:00Z', cached: true, charged: 0,
+    fresh: true, cost: 0, source: 'alpaca', spot: 234.8, spot_source: '实时报价', analysis: hidden, earnings_date: '2026-11-18' })
+  await render(<OptionsPanel symbol="NVDA" />)
+  const text = host.textContent ?? ''
+  expect(host.querySelector('[data-iv-hidden]')?.textContent).toContain('非交易时段不显示隐含波动率')
+  expect(host.querySelector('[data-term] thead')?.textContent).not.toContain('隐含波动率')
+  expect(host.querySelectorAll('[data-term] tbody tr td').length).toBe(5)       // 少一列 IV
+  expect(text).toContain('±3.6%')                                              // 跨式预期波动照给
+  expect(text).toContain('±10.4%')
+  expect(text).toContain('0.64')                                               // PCR 照给
+  expect(text).toContain('开盘后显示')
+  expect(text).not.toContain('28.3%')                                          // 盘中 IV 值不出现
+})
+
 it('shows quota errors from the server instead of silently failing', async () => {
   mocks.qverisOptions.mockImplementation(async (_s: string, refresh: boolean) => {
     if (refresh) throw new Error('今日 QVeris 积分已用 100/100，本次需约 1，已拒绝')

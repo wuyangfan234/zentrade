@@ -64,10 +64,11 @@ def _chain_rows(spot=100.0, exp="2026-10-23", put_vol=300, call_vol=600):
     return rows
 
 
-def _free_cache(d: Path, sym, day=TODAY, rows=None):
+def _free_cache(d: Path, sym, day=TODAY, rows=None, fetched_at="2026-10-20T14:01:00Z"):
+    """fetched_at 默认 = 当天 10:01 ET (盘中拉的); 0.45.0 起 IV 是否显示、是否盘中重拉看它。"""
     p = d / "options_free" / sym / f"{day.isoformat()}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"available": True, "rows": rows or _chain_rows(), "source": "alpaca"}))
+    p.write_text(json.dumps({"available": True, "rows": rows or _chain_rows(), "source": "alpaca", "fetched_at": fetched_at}))
 
 
 def _client(tmp_path):
@@ -186,10 +187,12 @@ def test_warm_options_single_flight_and_retry_window(tmp_path, monkeypatch):
     from app.services import alpaca_options
     gate, calls = threading.Event(), []
 
-    def chain(data_dir, sym, today):
+    def chain(data_dir, sym, today, min_fetched=None):
         calls.append(sym)
+        cutoffs.append(min_fetched)
         gate.wait(2)
         return {"available": False}
+    cutoffs: list = []
     monkeypatch.setattr(alpaca_options, "chain", chain)
     _REAL_WARM(tmp_path, "NVDA", TODAY)
     _REAL_WARM(tmp_path, "NVDA", TODAY)                                 # 在途: 不重复
@@ -200,6 +203,7 @@ def test_warm_options_single_flight_and_retry_window(tmp_path, monkeypatch):
         _t.sleep(0.02)
     _REAL_WARM(tmp_path, "NVDA", TODAY)                                 # 10 分钟内不重试
     assert calls == ["NVDA"] and not opp_page._WARM_INFLIGHT
+    assert cutoffs == [datetime(2026, 10, 20, 9, 30, tzinfo=us_clock.tz)]   # 0.45.0 开盘前拉的当天缓存要重拉
 
 
 # ---------- POST /settings ----------

@@ -3,7 +3,7 @@
  * 只读展示, 不参与打分 / 裁决 / 下单。数据一次取齐 (GET /api/intel/today, 只读缓存);
  * 盘前 / 盘中 60 秒刷新, 其余 5 分钟。每格标来源与时点, 不是今天的数据标「非今日」。
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, CalendarDays, FileBarChart2, Newspaper, RefreshCw, Thermometer } from 'lucide-react'
 import {
@@ -20,6 +20,12 @@ import { etToday } from '@/lib/etTime'
 const ACTIVE = new Set(['premarket', 'open_wait', 'session'])
 const WRAP = 'mx-auto max-w-6xl space-y-6 px-4 pb-24 pt-4 md:px-8 md:pt-6'
 const CARD = 'rounded-card border border-border bg-surface'
+/**
+ * 日历 / 新闻并排两卡 (0.45.0): 宽屏同一固定高度, 头部筛选与底部按钮不动, 只有中间列表在卡内滚动;
+ * 窄屏整页滚动, 列表本身封顶 520px (与新闻原样一致), 卡片随内容收缩。
+ */
+export const PAIR_CARD = `${CARD} flex flex-col px-3 py-2 lg:h-[640px]`
+export const PAIR_BODY = 'max-h-[520px] min-h-0 overflow-y-auto scrollbar-gutter-stable pr-1.5 lg:max-h-none lg:flex-1'
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const IMPACT_ZH: Record<string, string> = { high: '高', medium: '中', low: '低' }
 const TIMING_ZH: Record<string, string> = { bmo: '盘前', amc: '盘后', unknown: '时间未定' }
@@ -281,12 +287,25 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
     for (const e of cal?.events ?? []) m.set(e.day, [...(m.get(e.day) ?? []), e])
     return [...m.entries()].sort(([a], [b]) => a.localeCompare(b))
   }, [cal])
+  // 展开全部时列表从本周一开始, 卡内滚到今天 (或今天之后第一天); 收起回到顶部。定时刷新不动滚动位置
+  const bodyRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const b = bodyRef.current
+    if (!b) return
+    const t = showAll ? [...b.querySelectorAll<HTMLElement>('[data-cal-day]')].find((el) => (el.dataset.calDay ?? '') >= (cal?.today ?? '')) : null
+    b.scrollTop = t ? b.scrollTop + t.getBoundingClientRect().top - b.getBoundingClientRect().top : 0
+  }, [showAll, cal?.today])
   if (!cal) return <div className={`${CARD} p-4 text-xs text-muted`}>无日历数据</div>
   const today = cal.today
-  const visible = showAll ? groups : groups.filter(([day]) => day >= today).slice(0, 3)
+  // 前瞻 = FF 覆盖周之后的日子; FF 缺失 (ff_until 为空) 时 TradingView 顶替本周, 不算前瞻
+  const ffUntil = cal.ff_until === undefined ? '' : cal.ff_until
+  const isLook = (evs: IntelEvent[]) => ffUntil !== null && evs.length > 0 && evs.every((e) => e.source === 'tradingview' && e.day > ffUntil)
+  // 收起时: 本周 (FF) 今天起 3 天 + 下周起的高重要度前瞻 (TradingView); 展开看全部
+  const visible = showAll ? groups : groups.filter(([day, evs]) => day >= today && !isLook(evs)).slice(0, 3)
+  const ahead = showAll || ffUntil === null ? [] : (cal.events ?? []).filter((e) => e.source === 'tradingview' && e.impact === 'high' && e.day >= today && e.day > ffUntil)
   return (
-    <div className={`${CARD} px-3 py-2`}>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <div data-pair-card="calendar" className={PAIR_CARD}>
+      <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div data-intel-levels role="radiogroup" aria-label="宏观事件重要度" className="inline-flex rounded-btn border border-border p-0.5 text-[11px]">
           {LEVELS.map((l) => (
             <button key={l.k} type="button" role="radio" aria-checked={level === l.k} disabled={save.isPending}
@@ -298,12 +317,12 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
         </div>
         <span className="text-[11px] text-muted">美东时间 · {cal.source}</span>
       </div>
-      {cal.error && <div className="mb-2 text-[11px] text-warning">日历源上次刷新失败，显示的是上一份</div>}
-      <div className="space-y-3">
+      {cal.error && <div className="mb-2 shrink-0 text-[11px] text-warning">日历源上次刷新失败，显示的是上一份</div>}
+      <div ref={bodyRef} data-pair-body="calendar" className={`${PAIR_BODY} space-y-3`}>
         {visible.map(([day, evs]) => (
           <div key={day} data-cal-day={day}>
             <div className={`mb-1 text-[11px] font-medium ${day === today ? 'text-accent' : 'text-secondary'}`}>
-              {`${md(day)} ${weekday(day)}${day === today ? ' · 今天' : ''}`}
+              {`${md(day)} ${weekday(day)}${day === today ? ' · 今天' : ''}${isLook(evs) ? ' · 前瞻' : ''}`}
             </div>
             <ul className="divide-y divide-border/60">
               {evs.map((e, i) => <EventRow key={`${e.at}-${e.title}-${i}`} e={e} onSymbol={onSymbol} />)}
@@ -311,10 +330,30 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
           </div>
         ))}
         {visible.length === 0 && <div className="py-2 text-xs text-muted">本周无剩余事件</div>}
+        {ahead.length > 0 && (
+          <div data-cal-ahead>
+            <div className="mb-1 text-[11px] font-medium text-secondary">下周起 · 高重要度</div>
+            <ul className="divide-y divide-border/60">
+              {ahead.map((e, i) => (
+                <li key={`${e.at}-${e.title}-${i}`} data-cal-event="ahead" className="flex items-baseline gap-2 py-1 text-xs">
+                  <span className="w-[4.75rem] shrink-0 whitespace-nowrap tabular-nums text-muted">{`${md(e.day)} ${weekday(e.day)}`}</span>
+                  <span className="w-10 shrink-0 whitespace-nowrap tabular-nums text-muted">{e.time || '全天'}</span>
+                  <span className="min-w-0 truncate font-medium text-foreground" title={e.title}>{e.title_zh ?? e.title}</span>
+                  {(e.forecast || e.previous) && (
+                    <span className="ml-auto shrink-0 tabular-nums text-[11px] text-secondary">
+                      {[e.forecast && `预期 ${e.forecast}`, e.previous && `前值 ${e.previous}`].filter(Boolean).join(' · ')}
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {cal.lookahead_error && <div className="text-[11px] text-muted">前瞻日历上次刷新失败，显示的是上一份</div>}
       </div>
       {groups.length > visible.length || showAll ? (
-        <button type="button" data-cal-more onClick={() => setShowAll((x) => !x)} className="mt-2 text-[11px] text-accent hover:underline">
-          {showAll ? '只看今天起 3 天' : `全部 ${groups.length} 天 (含已过)`}
+        <button type="button" data-cal-more onClick={() => setShowAll((x) => !x)} className="mt-2 shrink-0 self-start text-[11px] text-accent hover:underline">
+          {showAll ? '收起' : `全部 ${groups.length} 天 (含已过与前瞻)`}
         </button>
       ) : null}
     </div>
@@ -344,8 +383,8 @@ function EventRow({ e, onSymbol }: { e: IntelEvent; onSymbol: (s: string) => voi
   }
   const sl = surpriseLabel(e)
   return (
-    <li data-cal-event="macro" data-impact={e.impact} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2 py-1 text-xs">
-      <span className="tabular-nums text-muted">{e.time}</span>
+    <li data-cal-event="macro" data-impact={e.impact} data-source={e.source ?? 'ff'} className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-2 py-1 text-xs">
+      <span className="tabular-nums text-muted">{e.time || '全天'}</span>
       <div className="min-w-0">
         <div className="flex items-baseline gap-x-2">
           <span className={`inline-block w-5 shrink-0 rounded border text-center text-[10px] ${e.impact === 'high' ? 'border-warning/60 text-warning' : 'border-border text-secondary'}`}>{IMPACT_ZH[e.impact ?? 'low']}</span>
@@ -412,7 +451,7 @@ function Earnings({ rows, onSymbol }: { rows: IntelEarningsRow[]; onSymbol: (s: 
                   {rev30(r) != null ? fmtPct(rev30(r)! * 100, 1) : '—'}
                 </td>
                 <td className="px-2 py-1.5 text-right">{h?.median_abs_move != null ? `±${h.median_abs_move.toFixed(1)}% / ±${h.max_abs_move?.toFixed(1)}%` : '—'}<span className="ml-1 inline-block w-7 text-left text-muted">{h ? `${h.n}次` : ''}</span></td>
-                <td data-implied className="px-2 py-1.5 text-right" title={imp == null ? '今天的期权链还没缓存 (盘中 09:35 后自动预热)' : `到期 ${r.implied?.expiration}`}>
+                <td data-implied className="px-2 py-1.5 text-right" title={imp == null ? '今天的期权链还没缓存 (盘中 09:35 后自动预热)' : `到期 ${r.implied?.expiration} · 跨式价格 ÷ 现价`}>
                   {imp != null ? `±${imp.toFixed(1)}%` : '—'}
                   <span className={`ml-1 inline-block w-14 text-left ${cmp != null && cmp >= 1.25 ? 'text-warning' : 'text-muted'}`}>{cmp != null ? `${cmp.toFixed(1)}×历史` : ''}</span>
                 </td>
@@ -450,8 +489,8 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
   const items = filterNews(news.items, f).slice(0, limit)
   const tone = Object.entries(news.tone).sort((a, b) => (b[1].bullish + b[1].bearish) - (a[1].bullish + a[1].bearish)).slice(0, 8)
   return (
-    <div className={`${CARD} px-3 py-2`}>
-      <div className="mb-2 flex flex-wrap items-center gap-1.5">
+    <div data-pair-card="news" className={PAIR_CARD}>
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5">
         {NEWS_FILTERS.map((x) => (
           <button key={x.k} type="button" data-news-filter={x.k} aria-pressed={f === x.k} onClick={() => setF(x.k)}
             className={`rounded-btn border px-2 py-0.5 text-[11px] ${f === x.k ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-secondary hover:text-foreground'}`}>
@@ -460,7 +499,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
         ))}
       </div>
       {tone.length > 0 && (
-        <div data-news-tone className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums">
+        <div data-news-tone className="mb-2 flex shrink-0 flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums">
           {tone.map(([s, t]) => (
             <button key={s} type="button" onClick={() => onSymbol(s)} className="text-secondary hover:text-accent">
               {s} <span className="text-bull">{t.bullish ? `多${t.bullish}` : ''}</span>{t.bullish && t.bearish ? ' ' : ''}<span className="text-bear">{t.bearish ? `空${t.bearish}` : ''}</span>
@@ -468,7 +507,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
           ))}
         </div>
       )}
-      <div data-news-list className="max-h-[520px] overflow-y-auto">
+      <div data-news-list data-pair-body="news" className={PAIR_BODY}>
         {items.map((i) => (
           <div key={i.id} data-news-row={i.symbol} className="relative">
             <button type="button" onClick={() => onSymbol(i.symbol)}
@@ -480,7 +519,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
         ))}
         {items.length === 0 && <div className="py-3 text-xs text-muted">无</div>}
       </div>
-      <p className="mt-1 text-[10px] text-muted">{news.disclaimer}</p>
+      <p className="mt-1 shrink-0 text-[10px] text-muted">{news.disclaimer}</p>
     </div>
   )
 }
@@ -488,7 +527,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
 // ── 数据源状态 ────────────────────────────────────────────────────
 
 const SRC_ZH: Record<string, string> = {
-  etfs: 'ETF 快照', vol: '波动率', rates: '利率', macro_calendar: '宏观日历', macro_actuals: '宏观实际值', pcr: '期权 Put/Call',
+  etfs: 'ETF 快照', vol: '波动率', rates: '利率', macro_calendar: '宏观日历', macro_lookahead: '前瞻日历', macro_actuals: '宏观实际值', pcr: '期权 Put/Call',
   breadth: '全市场宽度', etf_daily: 'ETF 官方日K', earnings_upcoming: '财报预期', earnings_history: '财报历史', options_warm: '期权链预热',
 }
 

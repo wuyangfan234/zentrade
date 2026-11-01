@@ -111,7 +111,9 @@ def _free_options(data_dir: Path, repo, symbol: str, earnings_date: date | None)
     from app.market_clock import us_clock
     from app.services import alpaca_options, options_analytics
     try:
-        ch = alpaca_options.chain(data_dir, symbol, today=us_clock.today())
+        # 盘中打开时, 开盘前拉的当天缓存重拉一次 (那份的 IV / 希腊值是盘外残值); 盘外照旧读缓存
+        cutoff = _session_open(us_clock.today()) if us_clock.in_session() else None
+        ch = alpaca_options.chain(data_dir, symbol, today=us_clock.today(), min_fetched=cutoff)
     except Exception as e:  # noqa: BLE001
         logger.debug("free options %s: %s", symbol, type(e).__name__)
         return None
@@ -119,9 +121,16 @@ def _free_options(data_dir: Path, repo, symbol: str, earnings_date: date | None)
         return None
     spot, spot_src = spot_price(repo, symbol)
     analysis = options_analytics.analyze(ch["rows"], spot or 0, today=us_clock.today(), earnings_date=earnings_date)
+    if not options_analytics.iv_visible(ch.get("fetched_at"), us_clock.now()):
+        analysis = options_analytics.strip_iv(analysis)
     return {"symbol": symbol, "available": True, "fetched_at": ch.get("fetched_at"), "cached": ch.get("cached"),
             "charged": 0.0, "fresh": True, "spot": spot, "spot_source": spot_src, "analysis": analysis,
             "cost": 0.0, "source": "alpaca"}
+
+
+def _session_open(day: date) -> datetime:
+    from app.market_clock import us_clock
+    return datetime.combine(day, us_clock.sessions[0].open, tzinfo=us_clock.tz)
 
 
 def options_summary(data_dir: Path, repo, symbol: str, *, refresh: bool, earnings_date: date | None = None,
@@ -149,6 +158,9 @@ def options_summary(data_dir: Path, repo, symbol: str, *, refresh: bool, earning
     rows = (res.get("data") or {}).get("data") if isinstance(res.get("data"), dict) else None
     spot, spot_src = spot_price(repo, symbol)
     analysis = options_analytics.analyze(rows or [], spot or 0, today=us_clock.today(), earnings_date=earnings_date)
+    fetched = _fetched_dt(res)
+    if not options_analytics.iv_visible(fetched, us_clock.now()):     # 0.45.0 付费链同一规则: 盘外 / 盘外拉的不给 IV
+        analysis = options_analytics.strip_iv(analysis)
     return {"symbol": symbol, "available": True, "fetched_at": res.get("fetched_at"), "cached": res.get("cached"),
             "charged": res.get("charged"), "fresh": options_fresh(res) if res.get("fetched_ts") else False,
             "spot": spot, "spot_source": spot_src, "analysis": analysis, "cost": 1.0}

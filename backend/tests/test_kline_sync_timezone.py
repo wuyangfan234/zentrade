@@ -61,7 +61,9 @@ def test_sync_and_persist_minute_incremental_window_is_beijing_wall_clock(monkey
 
     expected_offset = local_latest.replace(tzinfo=CN_TZ).utcoffset()
     assert start.utcoffset() == expected_offset
-    assert end.utcoffset() == expected_offset
+    # 终点 = 现在: 与起点同一时区 (美东), 但夏令时切换后 UTC 偏移可以不同 (11-01 起 EST -5h vs 8 月 EDT -4h,
+    # 原来比 utcoffset 的断言在冬令时每天都红)。契约是「同一时区、不是服务器本地」, 按时区名比。
+    assert getattr(end.tzinfo, "key", None) == getattr(CN_TZ, "key", None)
     assert start < end
     assert datetime.fromtimestamp(
         kline_sync._datetime_to_ms(start) / 1000, tz=CN_TZ
