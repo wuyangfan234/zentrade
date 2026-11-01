@@ -4,6 +4,7 @@
   美债 10Y + 高收益利差 (复用 market_mood.fetch_rates)。
 - 宏观日历: ForexFactory 本周美元事件 (预期 / 前值); 公布后用 FRED 官方序列算「实际」。
   只在 FRED 最新一期正好是这次公布对应的那一期时才给实际值, 对不上就显示「实际待同步」(不猜)。
+  本周之后 3 周的前瞻由 TradingView 经济日历补 (0.45.0, 只展示预期 / 前值, 不算实际值)。
 - 全市场期权 Put/Call: CBOE 每日统计 (收盘后发布, 只有日度)。
 每个源失败只记 state 里的 error, 不覆盖已有缓存。
 """
@@ -396,6 +397,124 @@ def fetch_ff_week(http_get=None) -> list[dict]:
 
 def event_key(ev: dict) -> str:
     return f"{ev['at'][:16]}|{ev['title']}"
+
+
+# ── 宏观日历 · 多周前瞻: TradingView 经济日历 (0.45.0) ──────────────────
+# ForexFactory 只给本周 (nextweek / lastweek 实测 404), 周五盘后出的卡看不到下周的 CPI / FOMC。
+# TradingView 给多周, 只用来补「本周之后」的事件; 本周仍以 FF 为准 (FF 的预期值、FRED 实际值对期都按 FF 标题),
+# 两源的一致预期有小差 (ISM 54.7 vs 54.6), 不混。非官方接口: 必须带 Origin 头 (不带 403), 失败只是没有前瞻。
+TV_CALENDAR_URL = "https://economic-calendar.tradingview.com/events"
+TV_ORIGIN = {"Origin": "https://www.tradingview.com"}
+TV_DAYS = 21
+TV_MAX_EVENTS = 400
+# TradingView 重要度 1 = 高, 0 = 中, -1 = 低。这两项 TV 标 0 而 FF 标高, 升一档, 否则「仅高」档会漏掉 (初请 FF 也是中, 不升)。
+TV_HIGH_TITLES = frozenset({"Average Hourly Earnings MoM", "Core PPI MoM"})
+TV_IMPACT = {1: "high", 0: "medium", -1: "low"}
+TV_TITLE_ZH = {
+    "Non Farm Payrolls": "非农新增就业", "Unemployment Rate": "失业率", "Average Hourly Earnings MoM": "平均时薪环比",
+    "Inflation Rate MoM": "CPI 环比", "Inflation Rate YoY": "CPI 同比", "Core Inflation Rate MoM": "核心 CPI 环比",
+    "Core Inflation Rate YoY": "核心 CPI 同比", "PPI MoM": "PPI 环比", "Core PPI MoM": "核心 PPI 环比",
+    "Core PCE Price Index MoM": "核心 PCE 环比", "PCE Price Index MoM": "PCE 环比", "PCE Price Index YoY": "PCE 同比",
+    "Personal Income MoM": "个人收入环比", "Personal Spending MoM": "个人支出环比", "Retail Sales MoM": "零售销售环比",
+    "Retail Sales Ex Autos MoM": "核心零售销售环比", "Retail Sales Control Group MoM": "零售销售控制组环比",
+    "Durable Goods Orders MoM": "耐用品订单环比", "Durable Goods Orders Ex Transp MoM": "核心耐用品订单环比",
+    "Industrial Production MoM": "工业产出环比", "Building Permits Prel": "营建许可 (初值)", "Housing Starts": "新屋开工",
+    "New Home Sales": "新屋销售", "Existing Home Sales": "成屋销售", "Pending Home Sales MoM": "成屋签约销售环比",
+    "JOLTs Job Openings": "JOLTS 职位空缺", "Balance of Trade": "贸易差额", "GDP Growth Rate QoQ Adv": "GDP 季环比年化 (初值)",
+    "GDP Growth Rate QoQ 2nd Est": "GDP 季环比年化 (修正值)", "GDP Growth Rate QoQ Final": "GDP 季环比年化 (终值)",
+    "Initial Jobless Claims": "初请失业金人数", "ADP Employment Change": "ADP 就业", "CB Consumer Confidence": "谘商会消费者信心",
+    "ISM Manufacturing PMI": "ISM 制造业 PMI", "ISM Services PMI": "ISM 服务业 PMI",
+    "S&P Global Manufacturing PMI Flash": "制造业 PMI (初值)", "S&P Global Services PMI Flash": "服务业 PMI (初值)",
+    "Michigan Consumer Sentiment Prel": "密歇根消费者信心 (初值)", "Michigan Consumer Sentiment Final": "密歇根消费者信心 (终值)",
+    "NY Empire State Manufacturing Index": "纽约联储制造业指数", "Philadelphia Fed Manufacturing Index": "费城联储制造业指数",
+    "Fed Interest Rate Decision": "联储利率决议", "FOMC Statement": "FOMC 声明", "Fed Press Conference": "FOMC 新闻发布会",
+    "FOMC Minutes": "FOMC 会议纪要", "EIA Crude Oil Stocks Change": "EIA 原油库存", "Chicago PMI": "芝加哥 PMI",
+    "Midterm Elections": "美国中期选举",
+}
+
+
+def _tv_num(v, unit, scale) -> str | None:
+    """TradingView 的数值 + 单位 → 与 FF 同样的展示串 (29 + K → 29K, 4.2 + % → 4.2%)。"""
+    if not isinstance(v, (int, float)) or isinstance(v, bool):
+        return None
+    s = f"{v:g}"
+    return f"{s}{unit}" if unit == "%" else (f"{unit}{s}{scale or ''}" if unit else f"{s}{scale or ''}")
+
+
+# 远期 (尚未进入公布周) 的条目 TradingView 常不带 unit / scale (11-01 实测: 11-10 CPI 前值只给 3.7, 10-14 那期带 %)。
+# 同一指标每月口径不变: 缺单位时按下表补 (表中 31 项已对 7-10 月 1364 条已公布条目逐项核对, 口径全部一致);
+# 表里没有的只给数字, 不猜。
+TV_UNITS: dict[str, tuple[str | None, str | None]] = {
+    "Non Farm Payrolls": (None, "K"), "Initial Jobless Claims": (None, "K"), "ADP Employment Change": (None, "K"),
+    "Unemployment Rate": ("%", None), "Average Hourly Earnings MoM": ("%", None),
+    "Inflation Rate MoM": ("%", None), "Inflation Rate YoY": ("%", None), "Core Inflation Rate MoM": ("%", None),
+    "Core Inflation Rate YoY": ("%", None), "PPI MoM": ("%", None), "Core PPI MoM": ("%", None),
+    "Core PCE Price Index MoM": ("%", None), "PCE Price Index MoM": ("%", None), "PCE Price Index YoY": ("%", None),
+    "Personal Income MoM": ("%", None), "Personal Spending MoM": ("%", None), "Retail Sales MoM": ("%", None),
+    "Retail Sales Ex Autos MoM": ("%", None), "Retail Sales Control Group MoM": ("%", None),
+    "Durable Goods Orders MoM": ("%", None), "Industrial Production MoM": ("%", None),
+    "GDP Growth Rate QoQ Adv": ("%", None), "GDP Growth Rate QoQ 2nd Est": ("%", None), "GDP Growth Rate QoQ Final": ("%", None),
+    "Fed Interest Rate Decision": ("%", None), "Housing Starts": (None, "M"), "Building Permits Prel": (None, "M"),
+    "Existing Home Sales": (None, "M"), "New Home Sales": (None, "M"), "JOLTs Job Openings": (None, "M"),
+    "Balance of Trade": ("$", "B"),
+}
+
+
+def _tv_units(title: str, unit, scale) -> tuple:
+    return (unit, scale) if (unit or scale) else TV_UNITS.get(title, (None, None))
+
+
+def parse_tv_events(data, *, after: date, until: date) -> list[dict]:
+    """TradingView 返回 → 与 fetch_ff_week 同一形状, 只留 (after, until] 内的美国事件 (早于 after 的归 FF)。
+    UTC 00:00 的条目是只给日期的全天事件 (节日、选举), 不编造时刻, 时间留空。"""
+    rows = (data or {}).get("result") if isinstance(data, dict) else None
+    out = []
+    for e in rows or []:
+        if not isinstance(e, dict) or e.get("country") != "US" or not e.get("title"):
+            continue
+        try:
+            utc = datetime.fromisoformat(str(e.get("date")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        all_day = utc.time() == time(0, 0)
+        at = utc.astimezone(us_clock.tz)
+        day = utc.date() if all_day else at.date()
+        if not (after < day <= until):
+            continue
+        title = str(e["title"]).strip()
+        raw_imp = e.get("importance")
+        imp = "high" if title in TV_HIGH_TITLES else TV_IMPACT.get(raw_imp if isinstance(raw_imp, int) else -1, "low")
+        unit, scale = _tv_units(title, e.get("unit"), e.get("scale"))
+        out.append({"at": f"{day.isoformat()}T00:00" if all_day else at.isoformat(timespec="minutes"),
+                    "all_day": all_day, "title": title, "title_zh": TV_TITLE_ZH.get(title), "impact": imp,
+                    "forecast": _tv_num(e.get("forecast"), unit, scale),
+                    "previous": _tv_num(e.get("previous"), unit, scale), "source": "tradingview"})
+    out.sort(key=lambda x: x["at"])
+    return out[:TV_MAX_EVENTS]
+
+
+def week_end(d: date) -> date:
+    """d 所在周 (FF 口径: 周日到周六) 的周六。"""
+    return d + timedelta(days=(5 - d.weekday()) % 7)
+
+
+def fetch_tv_lookahead(now: datetime, http_get=None, *, days: int = TV_DAYS) -> list[dict]:
+    """今天起 days 天内的美国宏观事件 (TradingView)。拿不到抛异常, 由调用方记 state、保留上一份。
+    存全窗口, 页面按 FF 实际覆盖到哪一周再裁 (FF 周日换周可能晚于本任务, 不能按今天推算本周)。"""
+    today = now.date()
+    after, until = today - timedelta(days=1), today + timedelta(days=days)
+
+    def _default(url):
+        req = urllib.request.Request(url, headers={**_UA, **TV_ORIGIN, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.loads(r.read())
+    http_get = http_get or _default
+    frm = datetime.combine(today, time(0, 0)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    to = datetime.combine(until + timedelta(days=1), time(5, 0)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    data = http_get(f"{TV_CALENDAR_URL}?from={frm}&to={to}&countries=US")
+    if not isinstance(data, dict) or data.get("status") != "ok" or not isinstance(data.get("result"), list):
+        raise ValueError("tradingview calendar: unexpected payload")
+    return parse_tv_events(data, after=after, until=until)
 
 
 # FF 标题 → FRED 序列。kind: pct = 环比 %, yoy = 同比 %, level = 原值, diff_k = 差值 (千人 → K),

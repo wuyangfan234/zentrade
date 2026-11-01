@@ -281,7 +281,9 @@ def fetch_upcoming(today: date, *, http_get=None, trading_days: int = UPCOMING_T
 
 # ── 隐含波动 (免费期权链) ─────────────────────────────────────────
 
-def implied_move(data_dir: Path, sym: str, spot: float | None, earnings_day: date, today: date) -> dict | None:
+def implied_move(data_dir: Path, sym: str, spot: float | None, earnings_day: date, today: date,
+                 now: datetime | None = None) -> dict | None:
+    """跨式预期波动只用报价, 盘外照给; ATM IV 只在盘中、且链是盘中拉的时候给 (0.45.0)。"""
     from app.services import alpaca_options, options_analytics
     p = alpaca_options._dir(data_dir, sym) / f"{today.isoformat()}.json"
     try:
@@ -295,6 +297,8 @@ def implied_move(data_dir: Path, sym: str, spot: float | None, earnings_day: dat
     if not spot:
         return None
     a = options_analytics.analyze(free["rows"], spot, today=today, earnings_date=earnings_day)
+    if not options_analytics.iv_visible(free.get("fetched_at"), now or us_clock.now()):
+        a = options_analytics.strip_iv(a)
     em = a.get("earnings_move") if a.get("ok") else None
     if not em or em.get("expected_move_pct") is None:
         return None

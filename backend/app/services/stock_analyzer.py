@@ -254,8 +254,14 @@ def _paid_part(paid: dict) -> str:
         pcr = (opt.get("pcr") or {}).get("all") or {}
         skew = opt.get("skew") or {}
         walls = opt.get("oi_walls") or {}
-        seg = [f"- 期权（数据日 {opt.get('as_of')}）: ATM 隐含波动率 " + "、".join(
-            f"{t['dte']}天 {_pct(t['atm_iv'])}（预期波动 ±{_pct(t['expected_move_pct'])}）" for t in term)]
+        if term:
+            head = "ATM 隐含波动率 " + "、".join(
+                f"{t['dte']}天 {_pct(t['atm_iv'])}（预期波动 ±{_pct(t['expected_move_pct'])}）" for t in term)
+        else:   # 0.45.0 非交易时段不给 IV: 只报跨式价格算出的预期波动, 不提 IV
+            moves = [t for t in opt.get("term") or [] if t.get("expected_move_pct") is not None][:4]
+            head = ("跨式预期波动 " + "、".join(f"{t['dte']}天 ±{_pct(t['expected_move_pct'])}" for t in moves)
+                    if moves else "隐含波动率非交易时段不提供")
+        seg = [f"- 期权（数据日 {opt.get('as_of')}）: {head}"]
         if pcr.get("volume") is not None:
             seg.append(f"认沽/认购比 成交量 {pcr['volume']}、持仓量 {pcr.get('open_interest')}")
         if skew.get("risk_reversal") is not None:

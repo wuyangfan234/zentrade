@@ -99,13 +99,21 @@ def _warm_options(data_dir: Path, sym: str, today: date) -> None:
     def run():
         try:
             from app.services import alpaca_options
-            alpaca_options.chain(data_dir, sym, today=today)
+            alpaca_options.chain(data_dir, sym, today=today, min_fetched=session_open_utc(today))
         except Exception as e:
             logger.warning("opp page: options warm %s failed: %s", sym, type(e).__name__)
         finally:
             with _WARM_LOCK:
                 _WARM_INFLIGHT.discard(sym)
     threading.Thread(target=run, daemon=True, name=f"opp-options-{sym}").start()
+
+
+def session_open_utc(day: date):
+    """当天开盘时刻 (带时区)。盘中预热时, 早于它拉的当天缓存 = 开盘前的残值, 要重拉。"""
+    from datetime import datetime as _dt
+
+    from app.market_clock import us_clock
+    return _dt.combine(day, us_clock.sessions[0].open, tzinfo=us_clock.tz)
 
 
 def _paid_cache(data_dir: Path, sym: str) -> dict | None:
@@ -119,10 +127,11 @@ def _paid_cache(data_dir: Path, sym: str) -> dict | None:
     return d if isinstance(d, dict) else None
 
 
-def _option_rows(data_dir: Path, sym: str, today: date) -> list | None:
+def _option_rows(data_dir: Path, sym: str, today: date) -> tuple[list | None, str | None]:
     """与 qveris_data.options_summary(refresh=False) 同一顺序, 但不在请求里出网:
     今天的付费缓存 → 今天的免费缓存 → (没有今天免费缓存: 后台预热免费链) 本次退回更早的付费缓存 → 都没有不给。
-    旧付费缓存不能挡住预热, 否则点过付费查询的票会一直显示几周前的 PCR/IV。"""
+    旧付费缓存不能挡住预热, 否则点过付费查询的票会一直显示几周前的 PCR/IV。
+    0.45.0 连同拉取时刻一起返回 (盘外 / 盘前拉的链不给 IV); 今天的免费缓存是开盘前拉的, 盘中后台重拉一次。"""
     from app.market_clock import us_clock
     from app.services import alpaca_options, qveris_data
     entry = _paid_cache(data_dir, sym)
@@ -130,7 +139,7 @@ def _option_rows(data_dir: Path, sym: str, today: date) -> list | None:
 
     def paid_rows():
         data = (entry or {}).get("data")
-        return data.get("data") if isinstance(data, dict) else None
+        return (data.get("data") if isinstance(data, dict) else None), (t.isoformat() if t else None)
 
     if t is not None and t.astimezone(us_clock.tz).date() == today:
         return paid_rows()
@@ -140,20 +149,31 @@ def _option_rows(data_dir: Path, sym: str, today: date) -> list | None:
     except (OSError, ValueError):
         free = None
     if isinstance(free, dict) and free.get("available") and free.get("rows"):
-        return free["rows"]
+        if us_clock.in_session() and not _iv_ok(free.get("fetched_at")):
+            _warm_options(data_dir, sym, today)          # 开盘前拉的: 后台换成盘中的链, 本次先给旧链 (不含 IV)
+        return free["rows"], free.get("fetched_at")
     _warm_options(data_dir, sym, today)
-    return paid_rows() if entry is not None else None
+    return paid_rows() if entry is not None else (None, None)
+
+
+def _iv_ok(fetched_at) -> bool:
+    from app.market_clock import us_clock
+    from app.services import options_analytics
+    return options_analytics.iv_visible(fetched_at, us_clock.now())
 
 
 def _options(data_dir: Path, sym: str, spot: float | None, today: date, earnings_date: date | None) -> dict | None:
-    """近月 Put/Call 成交量比 + 财报前平值隐含波动率 (只读缓存)。现价用板卡上的现价 (不出网取报价)。"""
+    """近月 Put/Call 成交量比 + 财报前平值隐含波动率 (只读缓存)。现价用板卡上的现价 (不出网取报价)。
+    0.45.0: 非交易时段 / 链不是盘中拉的 → 不给 IV (PCR 只用成交量, 照给)。"""
     from app.services import options_analytics
-    rows = _option_rows(data_dir, sym, today)
+    rows, fetched_at = _option_rows(data_dir, sym, today)
     if not rows or not spot:
         return None
     a = options_analytics.analyze(rows, spot, today=today, earnings_date=earnings_date)
     if not a.get("ok"):
         return None
+    if not _iv_ok(fetched_at):
+        a = options_analytics.strip_iv(a)
     pcr = ((a.get("pcr") or {}).get("front") or {}).get("volume")
     iv = (a.get("earnings_move") or {}).get("atm_iv")
     return {"pcr": pcr if isinstance(pcr, (int, float)) else None,

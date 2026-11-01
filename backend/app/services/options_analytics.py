@@ -14,11 +14,45 @@ from __future__ import annotations
 
 import math
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime
 
 UNUSUAL_RATIO = 5.0
 UNUSUAL_MIN_VOLUME = 1000
 WALL_EXPIRIES = 4
+IV_HIDDEN_REASON = "非交易时段不显示隐含波动率与偏斜（盘外期权报价停更，免费源的隐含波动率与希腊值失真）"  # noqa: RUF001
+
+
+def iv_visible(fetched_at, now) -> bool:
+    """非交易时段不展示 IV: 只在盘中、且这份链是今天盘中拉的时候给 IV。
+    对 223 份免费链缓存按中间价回算: 盘中拉取 IV 误差中位 1.4 个波动率点, 盘前 16.2、周末 11.6 (86-88% 超 5 点),
+    且是看着正常的错值; 盘前拉的当天缓存原样复用到收盘。前几天盘中拉的 (如付费缓存回退) 也不给: 已过期。
+    拉取时刻不明 = 不给。"""
+    from app.market_clock import us_clock
+    if now is None:
+        return False
+    now = us_clock.market_datetime(now)
+    if not us_clock.in_session(now):
+        return False
+    try:
+        t = us_clock.market_datetime(fetched_at) if isinstance(fetched_at, datetime) else (
+            us_clock.market_datetime(str(fetched_at).replace("Z", "+00:00")) if isinstance(fetched_at, str) and fetched_at
+            else None)
+    except ValueError:
+        return False
+    return t is not None and t.date() == now.date() and us_clock.in_session(t)
+
+
+def strip_iv(a: dict) -> dict:
+    """去掉 analyze() 里由隐含波动率 / 希腊值算出的字段 (期限结构 IV、25Δ 偏斜、异常合约 IV、财报 ATM IV)。
+    跨式价格、预期波动、PCR、持仓墙、热力图只用报价与持仓量, 保留。"""
+    if not a.get("ok"):
+        return a
+    out = {**a, "iv_hidden": True, "iv_hidden_reason": IV_HIDDEN_REASON, "skew": None}
+    out["term"] = [{**t, "atm_iv": None} for t in a.get("term") or []]
+    out["unusual"] = [{**u, "iv": None} for u in a.get("unusual") or []]
+    if a.get("earnings_move"):
+        out["earnings_move"] = {**a["earnings_move"], "atm_iv": None}
+    return out
 
 
 def _f(x) -> float | None:

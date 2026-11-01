@@ -174,11 +174,29 @@ def calendar_view(data_dir: Path, now: datetime, roles: dict[str, str], settings
     actuals = src.read_cache(data_dir, "macro_actuals") or {}
     level = settings["macro_impact"]
     events = []
-    for ev in ff.get("events") or []:
+    ff_events = list(ff.get("events") or [])
+    # 0.45.0 前瞻 (TradingView): 只补 FF 没覆盖的日子 —— FF 那一周 (周日到周六) 之后; FF 缺失或停在旧周时,
+    # TradingView 从今天起顶上。本周以 FF 为准 (两源一致预期有小差, 实际值对期按 FF 标题), 不混。
+    look = src.read_cache(data_dir, "macro_lookahead") or {}
+    ff_last = max((str(e.get("at"))[:10] for e in ff_events), default="")
+    try:
+        horizon = src.week_end(date.fromisoformat(ff_last)).isoformat() if ff_last else ""
+    except ValueError:
+        horizon = ""
+    tv_events = [e for e in look.get("events") or [] if str(e.get("at"))[:10] > horizon]
+    for ev in ff_events + tv_events:
         if not _impact_ok(ev.get("impact"), level):
             continue
         at = calc._parse_iso(ev.get("at"))
         if at is None:
+            continue
+        lookahead = ev.get("source") == "tradingview"
+        if lookahead:
+            hm = "" if ev.get("all_day") else at.strftime("%H:%M")
+            events.append({"kind": "macro", "at": ev["at"], "day": str(ev["at"])[:10], "time": hm, "title": ev["title"],
+                           "title_zh": ev.get("title_zh"), "impact": ev.get("impact"), "forecast": ev.get("forecast"),
+                           "previous": ev.get("previous"), "past": at <= now, "actual": None, "actual_status": None,
+                           "source": "tradingview"})
             continue
         a = actuals.get(src.event_key(ev)) or {}
         mapped = ev["title"] in src.FRED_MAP
@@ -207,10 +225,15 @@ def calendar_view(data_dir: Path, now: datetime, roles: dict[str, str], settings
                            "past": False, "at": f"{d.isoformat()}T16:00"})
     events.sort(key=lambda e: (e["day"], e.get("time") or "99", e["kind"] != "macro"))
     days = sorted({e["day"] for e in events} | {now.date().isoformat()})
-    st = (src.read_cache(data_dir, "state") or {}).get("macro_calendar") or {}
+    st = src.read_cache(data_dir, "state") or {}
+    ff_st, tv_st = st.get("macro_calendar") or {}, st.get("macro_lookahead") or {}
+    tv_days = [e["day"] for e in events if e.get("source") == "tradingview"]
     return {"events": events, "days": days, "today": now.date().isoformat(), "level": level,
-            "fetched_at": ff.get("fetched_at"), "error": st.get("error"),
-            "source": "ForexFactory 本周日历 · 实际值 FRED", "is_trading_day": us_clock.is_trading_day(now.date()),
+            "fetched_at": ff.get("fetched_at"), "error": ff_st.get("error"),
+            "lookahead_from": min(tv_days) if tv_days else None,
+            "lookahead_fetched_at": look.get("fetched_at"), "lookahead_error": tv_st.get("error"),
+            "source": "本周 ForexFactory · 之后 3 周 TradingView · 实际值 FRED" if look.get("events") else "ForexFactory 本周日历 · 实际值 FRED",
+            "is_trading_day": us_clock.is_trading_day(now.date()),
             "session_close": us_clock.session_close(now.date()).strftime("%H:%M")}
 
 
@@ -246,7 +269,7 @@ def earnings_view(data_dir: Path, repo, now: datetime, roles: dict[str, str]) ->
     for sym, r in calc.upcoming_for(up, cal, sorted(roles), now.date()).items():
         h = hist.get(sym) or {}
         d = date.fromisoformat(r["date"])
-        iv = calc.implied_move(data_dir, sym, _spot(repo, sym), d, now.date())
+        iv = calc.implied_move(data_dir, sym, _spot(repo, sym), d, now.date(), now=now)
         qv = calc.read_qveris_estimate(data_dir, sym)
         fh = r.get("finnhub") or {}
         cons = calc.eps_consensus(r, qv, d)
@@ -367,13 +390,15 @@ def _active(now: datetime) -> bool:
 
 # 每个源的刷新间隔 (秒): (活跃时段, 其余时段)
 DUE = {"etfs": (60, 1800), "vol": (120, 1800), "rates": (1800, 3600), "macro_calendar": (900, 1800),
+       "macro_lookahead": (6 * 3600, 6 * 3600),
        "macro_actuals": (60, 300), "pcr": (3600, 3600), "breadth": (300, 1800), "etf_daily": (1800, 3600),
        "earnings_upcoming": (6 * 3600, 6 * 3600), "earnings_history": (6 * 3600, 6 * 3600), "options_warm": (1800, 3 * 3600)}
 
 
 # 「立即刷新」只强制跑快源 (实测全量强制 162 秒, 其中 Nasdaq 10 天 + Finnhub 逐票 145 秒,
 # 期间占住 tick 锁, 每分钟的 ETF 刷新停摆, 前端 180 秒超时边缘)。财报类按自己的 6 小时节奏跑。
-MANUAL_SOURCES = frozenset({"etfs", "vol", "rates", "macro_calendar", "macro_actuals", "pcr", "breadth", "etf_daily"})
+MANUAL_SOURCES = frozenset({"etfs", "vol", "rates", "macro_calendar", "macro_lookahead", "macro_actuals", "pcr", "breadth",
+                            "etf_daily"})
 
 
 def _due(state: dict, key: str, now: datetime) -> bool:
@@ -456,6 +481,11 @@ def _tick(data_dir: Path, repo, loop, *, now: datetime, force: bool, only: set[s
         src.write_json(src.root(data_dir) / "macro_calendar.json",
                        {"events": ev, "fetched_at": now.isoformat(timespec="seconds"), "source": "ForexFactory"})
 
+    def macro_lookahead():
+        ev = src.fetch_tv_lookahead(now)
+        src.write_json(src.root(data_dir) / "macro_lookahead.json",
+                       {"events": ev, "fetched_at": now.isoformat(timespec="seconds"), "source": "TradingView"})
+
     def macro_actuals():
         ev = (src.read_cache(data_dir, "macro_calendar") or {}).get("events") or []
         src.update_actuals(data_dir, ev, now)
@@ -517,6 +547,7 @@ def _tick(data_dir: Path, repo, loop, *, now: datetime, force: bool, only: set[s
     run("vol", vol)
     run("rates", rates)
     run("macro_calendar", macro_calendar)
+    run("macro_lookahead", macro_lookahead)
     run("macro_actuals", macro_actuals)
     run("pcr", pcr)
     run("breadth", breadth)

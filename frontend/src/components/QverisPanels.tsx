@@ -102,27 +102,28 @@ export function OptionsPanel({ symbol }: { symbol: string }) {
             {`数据日 ${a.as_of ?? '—'} · ${a.contracts} 个合约 / ${a.expirations} 个到期日 · 现价 $${num(data.spot)}（${data.spot_source}）`}
           </div>
           {data.source === 'alpaca' && <div className="text-[10px] text-muted" data-options-source="alpaca">免费源 · 持仓量为上一交易日</div>}
+          {a.iv_hidden && <div className="text-[11px] text-muted" data-iv-hidden>{a.iv_hidden_reason ?? '非交易时段不显示隐含波动率'}</div>}
           {a.heatmap && <OptionsHeatmap h={a.heatmap} />}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Stat label="认沽/认购（成交量）" value={num(a.pcr?.all.volume, 2)} hint={`持仓量 ${num(a.pcr?.all.open_interest, 2)}`} />
             <Stat label="近月认沽/认购" value={num(a.pcr?.front.volume, 2)} hint={a.pcr?.front_expiration ?? ''} />
             <Stat label="25Δ 偏斜" value={a.skew ? `${(a.skew.risk_reversal * 100).toFixed(1)} pt` : '—'}
-              hint={a.skew ? `看跌 ${pct(a.skew.put25_iv)} / 看涨 ${pct(a.skew.call25_iv)}` : ''} />
+              hint={a.skew ? `看跌 ${pct(a.skew.put25_iv)} / 看涨 ${pct(a.skew.call25_iv)}` : (a.iv_hidden ? '开盘后显示' : '')} />
             <Stat label="财报预期波动" value={a.earnings_move ? `±${pct(a.earnings_move.expected_move_pct)}` : '—'}
               hint={a.earnings_move ? `财报 ${a.earnings_move.earnings_date} → ${a.earnings_move.expiration} 到期` : (data.earnings_date ? `财报 ${data.earnings_date}` : '近期无财报')} />
           </div>
 
           <div>
-            <div className="mb-1 text-[11px] text-secondary">期限结构（ATM 隐含波动率 · 跨式价格对应的预期波动）</div>
+            <div className="mb-1 text-[11px] text-secondary">{a.iv_hidden ? '期限结构（跨式价格对应的预期波动）' : '期限结构（ATM 隐含波动率 · 跨式价格对应的预期波动）'}</div>
             <table data-term className="w-full text-[11px] tabular-nums">
               <thead className="text-muted"><tr><th className="text-left font-normal">到期</th><th className="text-right font-normal">天数</th>
-                <th className="text-right font-normal">ATM 行权价</th><th className="text-right font-normal">隐含波动率</th>
+                <th className="text-right font-normal">ATM 行权价</th>{!a.iv_hidden && <th className="text-right font-normal">隐含波动率</th>}
                 <th className="text-right font-normal">跨式</th><th className="text-right font-normal">预期波动</th></tr></thead>
               <tbody>
                 {(a.term ?? []).slice(0, 10).map(t => (
                   <tr key={t.expiration} className="border-t border-border/40">
                     <td className="py-0.5">{t.expiration}</td><td className="text-right">{t.dte}</td>
-                    <td className="text-right">{num(t.atm_strike)}</td><td className="text-right">{pct(t.atm_iv)}</td>
+                    <td className="text-right">{num(t.atm_strike)}</td>{!a.iv_hidden && <td className="text-right">{pct(t.atm_iv)}</td>}
                     <td className="text-right">{t.straddle != null ? `$${num(t.straddle)}` : '—'}</td>
                     <td className="text-right">{t.expected_move_pct != null ? `±${pct(t.expected_move_pct)}` : '—'}</td>
                   </tr>

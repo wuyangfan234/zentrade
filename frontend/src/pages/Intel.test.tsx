@@ -16,7 +16,7 @@ vi.mock('@/lib/api', async (orig) => {
   return { ...m, api: { ...m.api, intelToday: () => intelToday(), intelSettings: (x: string) => intelSettings(x), intelRefresh: vi.fn() } }
 })
 
-import { Intel, filterNews, fmtPct, fmtUsd, heatCls, intelPollMs, quoteSub, rev30, surpriseLabel } from './Intel'
+import { Intel, PAIR_BODY, PAIR_CARD, filterNews, fmtPct, fmtUsd, heatCls, intelPollMs, quoteSub, rev30, surpriseLabel } from './Intel'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 let root: Root
@@ -157,4 +157,82 @@ it('news filter caps each view at limit and shows per-filter counts', async () =
   expect(host.querySelector('[data-news-filter="hold"]')?.textContent).toBe('持仓 1')
   await act(async () => { (host.querySelector('[data-news-filter="hold"]') as HTMLButtonElement).click() })
   expect(host.querySelectorAll('[data-news-row]').length).toBe(1)
+})
+
+// 0.45.0: 本周之后的高重要度事件 (TradingView 前瞻) 收起时也要看得到, 全天事件写「全天」
+it('calendar shows next-week high-impact lookahead even when collapsed', async () => {
+  const day = P.calendar!.today
+  const ev = (over: Partial<IntelEvent>): IntelEvent => ({ kind: 'macro', at: `${day}T08:30-05:00`, day, time: '08:30', title: 'x', past: false, impact: 'medium', ...over })
+  const cal = { ...P.calendar!, source: '本周 ForexFactory · 之后 3 周 TradingView · 实际值 FRED', lookahead_from: '2099-01-05', events: [
+    ev({ title: 'ISM Manufacturing PMI', title_zh: 'ISM 制造业 PMI', forecast: '54.7' }),
+    ev({ day: '2099-01-06', at: '2099-01-06T08:30-05:00', title: 'Inflation Rate YoY', title_zh: 'CPI 同比', impact: 'high', previous: '3.7%', source: 'tradingview' }),
+    ev({ day: '2099-01-07', at: '2099-01-07T00:00', time: '', title: 'Midterm Elections', title_zh: '美国中期选举', impact: 'high', source: 'tradingview' }),
+    ev({ day: '2099-01-08', at: '2099-01-08T10:00-05:00', title: 'Pending Home Sales MoM', impact: 'medium', source: 'tradingview' }),
+  ] }
+  await render({ ...P, calendar: cal })
+  const ahead = [...host.querySelectorAll('[data-cal-event="ahead"]')].map((li) => li.textContent ?? '')
+  expect(ahead.length).toBe(2)                                     // 只列高重要度; 中的点「全部」再看
+  expect(ahead[0]).toContain('CPI 同比')
+  expect(ahead[0]).toContain('前值 3.7%')
+  expect(ahead[1]).toContain('全天')
+  expect(host.querySelector('[data-cal-day="2099-01-06"]')).toBeNull()      // 前瞻日不挤占本周 3 天
+  expect(host.querySelector('[data-intel="calendar"]')?.textContent).toContain('之后 3 周 TradingView')
+  await act(async () => { (host.querySelector('[data-cal-more]') as HTMLButtonElement).click() })
+  expect(host.querySelector('[data-cal-day="2099-01-08"]')?.textContent).toContain('前瞻')
+  expect(host.querySelector('[data-cal-day="2099-01-07"] [data-source="tradingview"]')?.textContent).toContain('全天')
+  expect(host.querySelectorAll('[data-cal-event="ahead"]').length).toBe(0)  // 展开后不重复列
+})
+
+// 0.45.0: 日历与新闻并排两卡宽屏等高, 只有中间列表在卡内滚动; 头部筛选、底部「全部/收起」不随列表滚走
+it('calendar and news share one fixed-height card with an inner scrolling list', async () => {
+  const p = structuredClone(P)
+  const day = p.calendar!.today
+  const ev = (d: string, i: number): IntelEvent => ({ kind: 'macro', at: `${d}T08:30-05:00`, day: d, time: '08:30', title: `e${i}`, past: d < day, impact: 'high' })
+  const days = ['2026-10-19', '2026-10-20', '2026-10-21', day, '2099-01-05', '2099-01-06']
+  p.calendar!.events = days.flatMap((d, k) => Array.from({ length: 6 }, (_, i) => ev(d, k * 10 + i)))
+  await render(p)
+  expect(PAIR_CARD).toMatch(/\bflex\b.*\bflex-col\b/)
+  expect(PAIR_CARD).toMatch(/\blg:h-\[\d+px\]/)
+  expect(PAIR_BODY).toMatch(/\bmin-h-0\b/)
+  expect(PAIR_BODY).toMatch(/\boverflow-y-auto\b/)
+  expect(PAIR_BODY).toMatch(/\blg:flex-1\b/)
+  expect(PAIR_BODY).toMatch(/\bmax-h-\[\d+px\]/)                    // 窄屏列表也封顶, 不再整页拉长
+  const cards = [...host.querySelectorAll<HTMLElement>('[data-pair-card]')]
+  expect(cards.map((c) => c.dataset.pairCard)).toEqual(['calendar', 'news'])
+  for (const c of cards) expect(c.className).toBe(PAIR_CARD)
+  const calBody = host.querySelector<HTMLElement>('[data-pair-body="calendar"]')!
+  const newsBody = host.querySelector<HTMLElement>('[data-pair-body="news"]')!
+  expect(calBody.className).toContain(PAIR_BODY)
+  expect(newsBody.className).toBe(PAIR_BODY)
+  expect(newsBody.hasAttribute('data-news-list')).toBe(true)
+  // 列表在滚动区里, 控件在外面
+  expect(calBody.querySelector('[data-cal-day]')).not.toBeNull()
+  expect(newsBody.querySelector('[data-news-row]')).not.toBeNull()
+  for (const sel of ['[data-intel-levels]', '[data-cal-more]']) {
+    const el = host.querySelector(sel)!
+    expect(calBody.contains(el)).toBe(false)
+    expect(el.parentElement === cards[0] || cards[0].contains(el)).toBe(true)
+  }
+  expect(newsBody.contains(host.querySelector('[data-news-filter="all"]'))).toBe(false)
+  for (const el of [cards[0].firstElementChild!, cards[1].firstElementChild!, host.querySelector('[data-cal-more]')!]) {
+    expect(el.className).toContain('shrink-0')
+  }
+  // 展开全部: 卡内滚到今天, 不是从本周一顶部开始
+  const rect = (top: number) => ({ top, bottom: top + 20, left: 0, right: 0, width: 0, height: 20, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
+  calBody.getBoundingClientRect = () => rect(100)
+  const proto = HTMLElement.prototype.getBoundingClientRect
+  HTMLElement.prototype.getBoundingClientRect = function (this: HTMLElement) {
+    const d = this.dataset?.calDay
+    if (!d) return proto.call(this)
+    return rect(100 + days.indexOf(d) * 150)
+  }
+  try {
+    await act(async () => { (host.querySelector('[data-cal-more]') as HTMLButtonElement).click() })
+    expect(host.querySelectorAll('[data-cal-day]').length).toBe(days.length)
+    expect(calBody.scrollTop).toBe(3 * 150)                          // 今天是第 4 天
+    await act(async () => { (host.querySelector('[data-cal-more]') as HTMLButtonElement).click() })
+    expect(calBody.scrollTop).toBe(0)
+  } finally {
+    HTMLElement.prototype.getBoundingClientRect = proto
+  }
 })

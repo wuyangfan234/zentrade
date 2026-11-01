@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -84,17 +84,20 @@ def build_rows(contracts: dict[str, dict], snaps: dict[str, dict], today: date) 
     return rows
 
 
-def chain(data_dir: Path, symbol: str, *, today: date, fetch=None) -> dict:
-    """{available, rows, fetched_at, source, cached}。当天已拉过 → 读缓存。"""
-    from datetime import datetime, timezone
+def chain(data_dir: Path, symbol: str, *, today: date, fetch=None, min_fetched: datetime | None = None) -> dict:
+    """{available, rows, fetched_at, source, cached}。当天已拉过 → 读缓存。
+    min_fetched (0.45.0): 缓存早于这个时刻 (如开盘前拉的) 就重拉一次; 重拉失败仍给旧缓存。"""
+    from datetime import timezone
     symbol = symbol.upper()
     p = _dir(data_dir, symbol) / f"{today.isoformat()}.json"
+    old = None
     if p.exists():
         try:
-            d = json.loads(p.read_text(encoding="utf-8"))
-            return {**d, "cached": True}
+            old = json.loads(p.read_text(encoding="utf-8"))
         except (OSError, ValueError):
-            pass
+            old = None
+        if old is not None and not _older_than(old.get("fetched_at"), min_fetched):
+            return {**old, "cached": True}
     try:
         if fetch is not None:
             contracts, snaps = fetch(symbol, today)
@@ -103,9 +106,13 @@ def chain(data_dir: Path, symbol: str, *, today: date, fetch=None) -> dict:
             contracts, snaps = _contracts(symbol, today, key, secret), _snapshots(symbol, today, key, secret)
     except Exception as e:  # noqa: BLE001
         logger.warning("alpaca options %s failed: %s", symbol, type(e).__name__)
+        if old is not None:
+            return {**old, "cached": True}
         return {"available": False, "reason": "免费期权源暂不可用", "source": "alpaca"}
     rows = build_rows(contracts, snaps, today)
     if not rows:
+        if old is not None:
+            return {**old, "cached": True}
         return {"available": False, "reason": "该股无期权或数据源无链", "source": "alpaca"}
     d = {"available": True, "rows": rows, "source": "alpaca",
          "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
@@ -113,3 +120,13 @@ def chain(data_dir: Path, symbol: str, *, today: date, fetch=None) -> dict:
     p.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(p, json.dumps(d))
     return {**d, "cached": False}
+
+
+def _older_than(fetched_at, cutoff: datetime | None) -> bool:
+    if cutoff is None:
+        return False
+    try:
+        t = datetime.fromisoformat(str(fetched_at).replace("Z", "+00:00")) if fetched_at else None
+    except ValueError:
+        return True
+    return t is None or t.tzinfo is None or t < cutoff
