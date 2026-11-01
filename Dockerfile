@@ -43,7 +43,7 @@ RUN if [ "$USE_CN_MIRROR" = "1" ]; then npm config set registry "$NPM_REGISTRY";
     && /opt/codex-native --version
 
 # === Stage 2: Python 运行时 ===
-FROM python:3.11-slim AS runtime
+FROM python:3.15-slim AS runtime
 ARG USE_CN_MIRROR=0
 ARG PYPI_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 ARG PYPI_FALLBACK=https://mirrors.aliyun.com/pypi/simple
