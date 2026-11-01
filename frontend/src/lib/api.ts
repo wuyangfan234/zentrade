@@ -3929,6 +3929,8 @@ export interface IntelCalendar {
   events: IntelEvent[]; days: string[]; today: string; level: IntelImpactLevel; fetched_at?: string | null; error?: string | null
   source?: string; is_trading_day: boolean; session_close: string
   lookahead_from?: string | null; lookahead_fetched_at?: string | null; lookahead_error?: string | null
+  /** FF 本周日历覆盖到哪天 (周六); null = FF 缺失或停在旧周, 这时 TradingView 的日子当本周用, 不算前瞻 */
+  ff_until?: string | null
 }
 export interface IntelEarningsReport { date: string; timing: string; eps: number | null; forecast: number | null; surprise_pct: number | null; react_day: string | null; move_pct: number | null }
 export interface IntelEarningsRow {

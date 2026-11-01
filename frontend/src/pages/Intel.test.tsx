@@ -175,6 +175,8 @@ it('calendar shows next-week high-impact lookahead even when collapsed', async (
   expect(ahead[0]).toContain('CPI 同比')
   expect(ahead[0]).toContain('前值 3.7%')
   expect(ahead[1]).toContain('全天')
+  const dateCell = host.querySelector('[data-cal-event="ahead"] > span')!
+  expect(dateCell.className).toContain('whitespace-nowrap')           // 「11-10 周二」不折成两行
   expect(host.querySelector('[data-cal-day="2099-01-06"]')).toBeNull()      // 前瞻日不挤占本周 3 天
   expect(host.querySelector('[data-intel="calendar"]')?.textContent).toContain('之后 3 周 TradingView')
   await act(async () => { (host.querySelector('[data-cal-more]') as HTMLButtonElement).click() })
@@ -197,6 +199,7 @@ it('calendar and news share one fixed-height card with an inner scrolling list',
   expect(PAIR_BODY).toMatch(/\boverflow-y-auto\b/)
   expect(PAIR_BODY).toMatch(/\blg:flex-1\b/)
   expect(PAIR_BODY).toMatch(/\bmax-h-\[\d+px\]/)                    // 窄屏列表也封顶, 不再整页拉长
+  expect(PAIR_BODY).toMatch(/\bpr-/)                                // 手机浮层滚动条不压右侧股票代码
   const cards = [...host.querySelectorAll<HTMLElement>('[data-pair-card]')]
   expect(cards.map((c) => c.dataset.pairCard)).toEqual(['calendar', 'news'])
   for (const c of cards) expect(c.className).toBe(PAIR_CARD)
@@ -235,4 +238,21 @@ it('calendar and news share one fixed-height card with an inner scrolling list',
   } finally {
     HTMLElement.prototype.getBoundingClientRect = proto
   }
+})
+
+// ForexFactory 缺失 (ff_until 为空) 时 TradingView 顶替本周: 这些日子正常按天列出, 不标「前瞻」, 也不进「下周起」
+it('calendar treats TradingView days as this week when ForexFactory is missing', async () => {
+  const day = P.calendar!.today
+  const nxt = new Date(`${day}T12:00:00Z`); nxt.setUTCDate(nxt.getUTCDate() + 1)
+  const d2 = nxt.toISOString().slice(0, 10)
+  const ev = (over: Partial<IntelEvent>): IntelEvent => ({ kind: 'macro', at: `${day}T08:30-05:00`, day, time: '08:30', title: 'x', past: false, impact: 'high', source: 'tradingview', ...over })
+  const cal = { ...P.calendar!, ff_until: null, source: 'TradingView 经济日历 (ForexFactory 暂缺) · 实际值 FRED', events: [
+    ev({ title: 'Non Farm Payrolls', title_zh: '非农就业' }),
+    ev({ day: d2, at: `${d2}T08:30-05:00`, title: 'Inflation Rate YoY', title_zh: 'CPI 同比' }),
+  ] }
+  await render({ ...P, calendar: cal })
+  expect(host.querySelector(`[data-cal-day="${day}"]`)?.textContent).toContain('非农就业')
+  expect(host.querySelector(`[data-cal-day="${d2}"]`)?.textContent).toContain('CPI 同比')
+  expect(host.querySelector(`[data-cal-day="${d2}"]`)?.textContent).not.toContain('前瞻')
+  expect(host.querySelectorAll('[data-cal-event="ahead"]').length).toBe(0)
 })

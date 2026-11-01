@@ -218,7 +218,8 @@ def card_context(data_dir: Path, syms: list[str], prices: dict[str, float], toda
 
 
 def _cached_context(data_dir: Path, syms: list[str], prices: dict[str, float], today: date) -> tuple[dict, dict]:
-    key = (tuple(syms), today.isoformat())
+    from app.market_clock import us_clock
+    key = (tuple(syms), today.isoformat(), us_clock.in_session())   # 跨开收盘不复用 (IV 盘中才给)
     now = time.monotonic()
     with _CTX_LOCK:
         hit = _CTX_CACHE.get(str(data_dir))

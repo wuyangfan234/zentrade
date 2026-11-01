@@ -25,7 +25,7 @@ const CARD = 'rounded-card border border-border bg-surface'
  * 窄屏整页滚动, 列表本身封顶 520px (与新闻原样一致), 卡片随内容收缩。
  */
 export const PAIR_CARD = `${CARD} flex flex-col px-3 py-2 lg:h-[640px]`
-export const PAIR_BODY = 'max-h-[520px] min-h-0 overflow-y-auto scrollbar-gutter-stable lg:max-h-none lg:flex-1'
+export const PAIR_BODY = 'max-h-[520px] min-h-0 overflow-y-auto scrollbar-gutter-stable pr-1.5 lg:max-h-none lg:flex-1'
 const WEEK = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const IMPACT_ZH: Record<string, string> = { high: '高', medium: '中', low: '低' }
 const TIMING_ZH: Record<string, string> = { bmo: '盘前', amc: '盘后', unknown: '时间未定' }
@@ -297,10 +297,12 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
   }, [showAll, cal?.today])
   if (!cal) return <div className={`${CARD} p-4 text-xs text-muted`}>无日历数据</div>
   const today = cal.today
-  const isLook = (evs: IntelEvent[]) => evs.length > 0 && evs.every((e) => e.source === 'tradingview')
+  // 前瞻 = FF 覆盖周之后的日子; FF 缺失 (ff_until 为空) 时 TradingView 顶替本周, 不算前瞻
+  const ffUntil = cal.ff_until === undefined ? '' : cal.ff_until
+  const isLook = (evs: IntelEvent[]) => ffUntil !== null && evs.length > 0 && evs.every((e) => e.source === 'tradingview' && e.day > ffUntil)
   // 收起时: 本周 (FF) 今天起 3 天 + 下周起的高重要度前瞻 (TradingView); 展开看全部
   const visible = showAll ? groups : groups.filter(([day, evs]) => day >= today && !isLook(evs)).slice(0, 3)
-  const ahead = showAll ? [] : (cal.events ?? []).filter((e) => e.source === 'tradingview' && e.impact === 'high' && e.day >= today)
+  const ahead = showAll || ffUntil === null ? [] : (cal.events ?? []).filter((e) => e.source === 'tradingview' && e.impact === 'high' && e.day >= today && e.day > ffUntil)
   return (
     <div data-pair-card="calendar" className={PAIR_CARD}>
       <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
@@ -334,8 +336,8 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
             <ul className="divide-y divide-border/60">
               {ahead.map((e, i) => (
                 <li key={`${e.at}-${e.title}-${i}`} data-cal-event="ahead" className="flex items-baseline gap-2 py-1 text-xs">
-                  <span className="w-16 shrink-0 tabular-nums text-muted">{`${md(e.day)} ${weekday(e.day)}`}</span>
-                  <span className="w-10 shrink-0 tabular-nums text-muted">{e.time || '全天'}</span>
+                  <span className="w-[4.75rem] shrink-0 whitespace-nowrap tabular-nums text-muted">{`${md(e.day)} ${weekday(e.day)}`}</span>
+                  <span className="w-10 shrink-0 whitespace-nowrap tabular-nums text-muted">{e.time || '全天'}</span>
                   <span className="min-w-0 truncate font-medium text-foreground" title={e.title}>{e.title_zh ?? e.title}</span>
                   {(e.forecast || e.previous) && (
                     <span className="ml-auto shrink-0 tabular-nums text-[11px] text-secondary">

@@ -7,12 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
+import time as _time
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
 logger = logging.getLogger(__name__)
 
+REFETCH_RETRY_S = 600      # min_fetched 重拉失败后, 这么久内同一只同一天直接给旧缓存, 不再同步重试
+_REFETCH_FAILED: dict[tuple[str, str, str], float] = {}
 HORIZON_DAYS = 70          # 只取 70 天内到期 (热力图最多 6 个到期日, 期限结构够用)
 MAX_PAGES = 20
 
@@ -98,6 +101,11 @@ def chain(data_dir: Path, symbol: str, *, today: date, fetch=None, min_fetched: 
             old = None
         if old is not None and not _older_than(old.get("fetched_at"), min_fetched):
             return {**old, "cached": True}
+    fail_key = (str(data_dir), symbol, today.isoformat())
+    if old is not None:      # 只有 min_fetched 触发的重拉才会走到这里: 刚失败过就先给旧链
+        last = _REFETCH_FAILED.get(fail_key)
+        if last is not None and _time.monotonic() - last < REFETCH_RETRY_S:
+            return {**old, "cached": True}
     try:
         if fetch is not None:
             contracts, snaps = fetch(symbol, today)
@@ -107,11 +115,13 @@ def chain(data_dir: Path, symbol: str, *, today: date, fetch=None, min_fetched: 
     except Exception as e:  # noqa: BLE001
         logger.warning("alpaca options %s failed: %s", symbol, type(e).__name__)
         if old is not None:
+            _REFETCH_FAILED[fail_key] = _time.monotonic()
             return {**old, "cached": True}
         return {"available": False, "reason": "免费期权源暂不可用", "source": "alpaca"}
     rows = build_rows(contracts, snaps, today)
     if not rows:
         if old is not None:
+            _REFETCH_FAILED[fail_key] = _time.monotonic()
             return {**old, "cached": True}
         return {"available": False, "reason": "该股无期权或数据源无链", "source": "alpaca"}
     d = {"available": True, "rows": rows, "source": "alpaca",
@@ -119,6 +129,10 @@ def chain(data_dir: Path, symbol: str, *, today: date, fetch=None, min_fetched: 
     from app.services.fs_utils import atomic_write_text
     p.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(p, json.dumps(d))
+    _REFETCH_FAILED.pop(fail_key, None)
+    if len(_REFETCH_FAILED) > 512:
+        for k in [k for k in _REFETCH_FAILED if k[2] != today.isoformat()]:
+            _REFETCH_FAILED.pop(k, None)
     return {**d, "cached": False}
 
 

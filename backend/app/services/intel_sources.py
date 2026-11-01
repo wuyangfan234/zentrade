@@ -406,10 +406,12 @@ def event_key(ev: dict) -> str:
 TV_CALENDAR_URL = "https://economic-calendar.tradingview.com/events"
 TV_ORIGIN = {"Origin": "https://www.tradingview.com"}
 TV_DAYS = 21
-TV_MAX_EVENTS = 400
+TV_MAX_EVENTS = 600
 # TradingView 重要度 1 = 高, 0 = 中, -1 = 低。这两项 TV 标 0 而 FF 标高, 升一档, 否则「仅高」档会漏掉 (初请 FF 也是中, 不升)。
 TV_HIGH_TITLES = frozenset({"Average Hourly Earnings MoM", "Core PPI MoM"})
 TV_IMPACT = {1: "high", 0: "medium", -1: "low"}
+# UTC 00:00 一般是只给日期的全天事件 (节日、选举、年会); 讲话 / 听证是有时刻的, 00:00Z 就是美东前一天晚上
+TV_TIMED_TITLE = re.compile(r"\b(Speech|Speaks|Testimony|Remarks|Press Conference)\b", re.IGNORECASE)
 TV_TITLE_ZH = {
     "Non Farm Payrolls": "非农新增就业", "Unemployment Rate": "失业率", "Average Hourly Earnings MoM": "平均时薪环比",
     "Inflation Rate MoM": "CPI 环比", "Inflation Rate YoY": "CPI 同比", "Core Inflation Rate MoM": "核心 CPI 环比",
@@ -466,7 +468,7 @@ def _tv_units(title: str, unit, scale) -> tuple:
 
 def parse_tv_events(data, *, after: date, until: date) -> list[dict]:
     """TradingView 返回 → 与 fetch_ff_week 同一形状, 只留 (after, until] 内的美国事件 (早于 after 的归 FF)。
-    UTC 00:00 的条目是只给日期的全天事件 (节日、选举), 不编造时刻, 时间留空。"""
+    UTC 00:00 的条目是只给日期的全天事件 (节日、选举), 不编造时刻, 时间留空; 讲话类除外 (按真实时刻换算)。"""
     rows = (data or {}).get("result") if isinstance(data, dict) else None
     out = []
     for e in rows or []:
@@ -476,12 +478,12 @@ def parse_tv_events(data, *, after: date, until: date) -> list[dict]:
             utc = datetime.fromisoformat(str(e.get("date")).replace("Z", "+00:00"))
         except ValueError:
             continue
-        all_day = utc.time() == time(0, 0)
+        title = str(e["title"]).strip()
+        all_day = utc.time() == time(0, 0) and not TV_TIMED_TITLE.search(title)
         at = utc.astimezone(us_clock.tz)
         day = utc.date() if all_day else at.date()
         if not (after < day <= until):
             continue
-        title = str(e["title"]).strip()
         raw_imp = e.get("importance")
         imp = "high" if title in TV_HIGH_TITLES else TV_IMPACT.get(raw_imp if isinstance(raw_imp, int) else -1, "low")
         unit, scale = _tv_units(title, e.get("unit"), e.get("scale"))
@@ -499,10 +501,11 @@ def week_end(d: date) -> date:
 
 
 def fetch_tv_lookahead(now: datetime, http_get=None, *, days: int = TV_DAYS) -> list[dict]:
-    """今天起 days 天内的美国宏观事件 (TradingView)。拿不到抛异常, 由调用方记 state、保留上一份。
-    存全窗口, 页面按 FF 实际覆盖到哪一周再裁 (FF 周日换周可能晚于本任务, 不能按今天推算本周)。"""
+    """今天起到「本周之后满 days 天」的美国宏观事件 (TradingView)。拿不到抛异常, 由调用方记 state、保留上一份。
+    存全窗口, 页面按 FF 实际覆盖到哪一周再裁 (FF 周日换周可能晚于本任务, 不能按今天推算本周)。
+    终点从本周六起算: 只从今天起算的话, 周日拉的只比 FF 那周多 15 天, 不够「之后 3 周」。"""
     today = now.date()
-    after, until = today - timedelta(days=1), today + timedelta(days=days)
+    after, until = today - timedelta(days=1), week_end(today) + timedelta(days=days)
 
     def _default(url):
         req = urllib.request.Request(url, headers={**_UA, **TV_ORIGIN, "Accept": "application/json"})

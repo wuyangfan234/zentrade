@@ -228,11 +228,19 @@ def calendar_view(data_dir: Path, now: datetime, roles: dict[str, str], settings
     st = src.read_cache(data_dir, "state") or {}
     ff_st, tv_st = st.get("macro_calendar") or {}, st.get("macro_lookahead") or {}
     tv_days = [e["day"] for e in events if e.get("source") == "tradingview"]
+    # FF 本周仍有效时才分「本周 / 前瞻」; FF 缺失或停在旧周, TV 当本周日历用 (前端不把这些日子收进前瞻)
+    ff_until = horizon if horizon and horizon >= now.date().isoformat() else None
+    if not look.get("events"):
+        source = "ForexFactory 本周日历 · 实际值 FRED"
+    elif ff_until:
+        source = "本周 ForexFactory · 之后 3 周 TradingView · 实际值 FRED"
+    else:
+        source = "TradingView 经济日历 (ForexFactory 暂缺) · 实际值 FRED"
     return {"events": events, "days": days, "today": now.date().isoformat(), "level": level,
             "fetched_at": ff.get("fetched_at"), "error": ff_st.get("error"),
-            "lookahead_from": min(tv_days) if tv_days else None,
+            "lookahead_from": min(tv_days) if tv_days else None, "ff_until": ff_until,
             "lookahead_fetched_at": look.get("fetched_at"), "lookahead_error": tv_st.get("error"),
-            "source": "本周 ForexFactory · 之后 3 周 TradingView · 实际值 FRED" if look.get("events") else "ForexFactory 本周日历 · 实际值 FRED",
+            "source": source,
             "is_trading_day": us_clock.is_trading_day(now.date()),
             "session_close": us_clock.session_close(now.date()).strftime("%H:%M")}
 
