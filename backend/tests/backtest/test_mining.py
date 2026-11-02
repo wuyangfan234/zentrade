@@ -939,3 +939,41 @@ def test_beam_search_only_receives_capped_factor_inputs():
     }
     assert searched <= set(names[:4])
     assert any(len(candidate.factor_names) == 2 for candidate in result.folds[0].candidates)
+
+
+def test_outer_refit_mismatch_skips_only_that_fold_and_later_folds_still_run():
+    """0.47.0: a fold whose outer retrain does not reproduce the voted structure is void, but the
+    following folds are still evaluated (the old `break` truncated every later fold)."""
+    panel = _panel(days=14)
+    request = MiningRequest(
+        factor_names=("good", "copy"),
+        correlation_threshold=0.8,
+        budget=MiningBudget(max_combination_size=1, max_proxy_trials=48, max_trials=24),
+        validation=NestedValidationConfig(
+            outer_train_bars=8,
+            outer_test_bars=2,
+            outer_step_bars=2,
+            inner_train_bars=4,
+            inner_test_bars=2,
+            inner_step_bars=2,
+            purge_bars=0,
+            embargo_bars=0,
+            min_train_bars=4,
+        ),
+        profile="exploratory",
+    )
+
+    def metric_provider(train, _factor_names):
+        labels = _frame_labels(train)
+        # first fold's outer train (8 bars ending early) flips the preference -> retrain mismatch;
+        # later folds keep "good" as the stronger factor in both inner and outer windows.
+        if len(labels) == 8 and labels[-1] < "2024-01-18":
+            return (FactorMetric("good", 0.5, 0.5, 1.0, 0.1), FactorMetric("copy", 1.0, 1.0, 1.0, 0.1))
+        return (FactorMetric("good", 1.0, 1.0, 1.0, 0.1), FactorMetric("copy", 0.5, 0.5, 1.0, 0.1))
+
+    result = MiningService().run(panel, request, metric_provider=metric_provider, evaluator=_Evaluator())
+    assert len(result.folds) >= 2
+    first = result.folds[0]
+    assert first.error == "outer retraining did not reproduce selected candidate structure"
+    assert first.outer_evaluation is None
+    assert any(f.outer_evaluation is not None and f.error is None for f in result.folds[1:])

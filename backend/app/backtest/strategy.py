@@ -94,6 +94,8 @@ class ResolvedFeaturePlan:
     execution_backend: str = "polars_expr"
     # 财务因子列不落 enriched 存储, 由 engine 在加载口按公告日门控附加。
     fundamental_columns: frozenset[str] = frozenset()
+    # 0.47.0: 自定义/复合因子 (uf_/cf_) 不在矩阵内置字段里, 由 engine 加载后按检验页同一补算路径附加。
+    registry_columns: frozenset[str] = frozenset()
 
 
 def _merge_resolved_feature_plans(
@@ -108,7 +110,7 @@ def _merge_resolved_feature_plans(
     def _union(field: str) -> frozenset[str]:
         merged: set[str] = set()
         for plan in plans:
-            merged.update(getattr(plan, field))
+            merged.update(getattr(plan, field, ()) or ())
         return frozenset(merged)
 
     return ResolvedFeaturePlan(
@@ -122,6 +124,7 @@ def _merge_resolved_feature_plans(
         full_feature_fallback=any(plan.full_feature_fallback for plan in plans),
         execution_backend="matrix_native",
         fundamental_columns=_union("fundamental_columns"),
+        registry_columns=_union("registry_columns"),
     )
 
 
@@ -260,6 +263,10 @@ class StrategyDependencyResolver:
         order_by = strategy.meta.get("order_by")
         if order_by and order_by != "score":
             required_features.add(str(order_by))
+        from app.backtest.registry_fields import registry_factor_names
+        registry_columns = registry_factor_names(
+            [*parameter_scoring, *scoring, *([order_by] if order_by and order_by != "score" else [])]
+        )
 
         base_columns = _resolve_base_columns(required_features | set(_EXECUTION_COLUMNS))
         base_columns = frozenset(set(base_columns) | set(_LIMIT_BASE_COLUMNS))
@@ -285,6 +292,7 @@ class StrategyDependencyResolver:
             fundamental_columns=frozenset(
                 required_features & FUNDAMENTAL_FACTOR_NAMES
             ),
+            registry_columns=registry_columns,
         )
 
 

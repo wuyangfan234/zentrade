@@ -624,6 +624,15 @@ class BacktestEngine:
                         self.repo.store.data_dir if self.repo is not None else None,
                         fundamental_names,
                     )
+                registry_names = sorted(getattr(feature_plan, "registry_columns", frozenset()) or frozenset())
+                if registry_names:
+                    # 0.47.0: 自定义/复合因子 (uf_/cf_) 用检验页同一补算路径算出后附加为矩阵字段。
+                    from app.backtest.registry_fields import attach_matrix_registry_fields
+
+                    market = attach_matrix_registry_fields(
+                        market, self, registry_names,
+                        asset_type=asset_type, expected_generation=source_generation,
+                    )
                 return market
             except EnrichedGenerationUnavailableError:
                 if attempt + 1 >= attempts:

@@ -406,3 +406,32 @@ def test_empty_pool_is_skipped_instead_of_falling_back_to_full_market(scheduled_
     assert result["status"] == "skipped_prerequisite"
     assert "pool is empty" in manifest["error"]
     assert scheduled_state.mining_manager.calls == []
+
+
+def test_weekly_scope_adds_merged_custom_factors_only(scheduled_state, tmp_path, monkeypatch):
+    """0.47.0: factors the user merged into the library (active / watch) join the weekly scope;
+    drafts and retired ones do not; never more than 48."""
+    from app.factors import registry, store
+    defs = [
+        {"id": "uf_wk_active", "kind": "custom", "label": "a", "formula": "close / ts_delay(close, 5) - 1", "status": "active", "updated_at": "2026-11-01T00:00:00"},
+        {"id": "uf_wk_watch", "kind": "custom", "label": "w", "formula": "close / ts_delay(close, 3) - 1", "status": "watch", "updated_at": "2026-11-02T00:00:00"},
+        {"id": "uf_wk_draft", "kind": "custom", "label": "d", "formula": "close / ts_delay(close, 2) - 1", "status": "draft"},
+        {"id": "uf_wk_retired", "kind": "custom", "label": "r", "formula": "close / ts_delay(close, 4) - 1", "status": "retired"},
+    ]
+    for d in defs:
+        registry.unregister_factor(d["id"])
+        store.register_definition(d)
+        store.save_one(tmp_path, d)
+    try:
+        first = mining_schedule.run_weekly_mining(scheduled_state, now=_friday())
+        names = scheduled_state.mining_manager.calls[0]["request"]["factor_names"]
+        assert first["status"] == "enqueued"
+        assert "uf_wk_active" in names and "uf_wk_watch" in names
+        assert "uf_wk_draft" not in names and "uf_wk_retired" not in names
+        assert len(names) <= 48 and len(set(names)) == len(names)
+        # room is the 48 cap minus the built-in cohort; newest first when it overflows
+        assert mining_schedule.weekly_extra_factors(tmp_path, set(), 1) == ["uf_wk_watch"]
+        assert mining_schedule.weekly_extra_factors(tmp_path, set(), 0) == []
+    finally:
+        for d in defs:
+            registry.unregister_factor(d["id"])

@@ -16,10 +16,20 @@ const KIND_META: Record<FactorLibraryItem['kind'], { label: string; cls: string;
   custom: { label: '自定义', cls: 'bg-amber-400/10 text-amber-700 dark:text-amber-500', tip: '自定义因子：你自己写的公式' },
 }
 
+// 0.47.0: 来源 = 内置 / 挖掘 / 采集 / 自写; 状态 = 自定义因子生命周期 (采集并入默认「观察」)
+const ORIGIN_LABEL: Record<NonNullable<FactorLibraryItem['origin']>, string> = { builtin: '内置', mined: '挖掘', intake: '采集', custom: '自写' }
+const STATUS_META: Record<NonNullable<FactorLibraryItem['status']>, { label: string; cls: string }> = {
+  active: { label: '在用', cls: 'bg-elevated text-foreground' },
+  watch: { label: '观察', cls: 'bg-accent/10 text-accent' },
+  draft: { label: '草稿', cls: 'bg-elevated text-secondary' },
+  retired: { label: '停用', cls: 'bg-elevated text-muted' },
+}
+
 export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: string) => void; onEdit?: (factorId: string) => void }) {
   const [query, setQuery] = useState('')
   const [kind, setKind] = useState('all')
   const [group, setGroup] = useState('all')
+  const [origin, setOrigin] = useState('all')
   const [detail, setDetail] = useState<FactorLibraryItem | null>(null)
 
   const lib = useQuery({
@@ -38,10 +48,11 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
     return factors.filter(item => {
       if (kind !== 'all' && item.kind !== kind) return false
       if (group !== 'all' && item.group !== group) return false
+      if (origin !== 'all' && (item.origin ?? 'builtin') !== origin) return false
       if (keyword && !`${item.id} ${item.label} ${item.formula}`.toLowerCase().includes(keyword)) return false
       return true
     })
-  }, [factors, query, kind, group])
+  }, [factors, query, kind, group, origin])
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-card border border-border bg-surface/80">
@@ -62,6 +73,13 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
           <option value="virtual">虚拟</option>
           <option value="composite">复合</option>
           <option value="custom">自定义</option>
+        </select>
+        <select value={origin} onChange={event => setOrigin(event.target.value)} className={`${INPUT_CLS} w-24`} aria-label="因子来源">
+          <option value="all">全部来源</option>
+          <option value="builtin">内置</option>
+          <option value="mined">挖掘</option>
+          <option value="intake">采集</option>
+          <option value="custom">自写</option>
         </select>
         <select value={group} onChange={event => setGroup(event.target.value)} className={`${INPUT_CLS} w-28`} aria-label="因子分组">
           <option value="all">全部分组</option>
@@ -87,6 +105,8 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
             <thead className="sticky top-0 bg-elevated text-left text-[11px] text-secondary">
               <tr>
                 <th className="px-3 py-2.5 font-medium">因子</th>
+                <th className="px-3 py-2.5 font-medium">来源</th>
+                <th className="px-3 py-2.5 font-medium">状态</th>
                 <th className="px-3 py-2.5 font-medium">分组</th>
                 <th className="px-3 py-2.5 font-medium">类型</th>
                 <th className="px-3 py-2.5 font-medium">公式</th>
@@ -105,6 +125,10 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
                   <td className="px-3 py-2.5">
                     <div className="font-medium text-foreground">{item.label}</div>
                     <div className="mt-0.5 font-mono text-[10px] text-muted">{item.id}</div>
+                  </td>
+                  <td className="px-3 py-2.5 text-secondary" data-origin={item.origin ?? 'builtin'}>{ORIGIN_LABEL[item.origin ?? 'builtin']}</td>
+                  <td className="px-3 py-2.5">
+                    <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[10px] font-medium ${STATUS_META[item.status ?? 'active'].cls}`}>{STATUS_META[item.status ?? 'active'].label}</span>
                   </td>
                   <td className="px-3 py-2.5 text-secondary">{item.group}</td>
                   <td className="px-3 py-2.5">

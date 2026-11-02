@@ -17,6 +17,7 @@ from app.api import (
     backtest,
     data,
     ext_data,
+    factor_lab,
     factors,
     intel,
     intraday,
@@ -489,6 +490,7 @@ app.include_router(watchlist.router)
 app.include_router(screener.router)
 app.include_router(backtest.router)
 app.include_router(factors.router)
+app.include_router(factor_lab.router)
 app.include_router(mining.router)
 app.include_router(intraday.router)
 app.include_router(overview.router)

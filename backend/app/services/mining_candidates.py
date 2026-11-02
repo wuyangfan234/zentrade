@@ -30,6 +30,13 @@ _MAX_ARTIFACT_ROWS = 32
 _MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
 _MAX_DEFINITION_BYTES = 16 * 1024
 _FACTOR_IDS = frozenset(str(item["id"]) for item in FACTOR_COLUMNS)
+
+
+def _known_factor_ids() -> frozenset[str]:
+    """0.47.0: read the live registry at call time (custom / collected factors load after import)."""
+    from app.factors.registry import factor_columns_view
+
+    return _FACTOR_IDS | frozenset(str(item["id"]) for item in factor_columns_view())
 _FACTOR_DEFINITION_FIELDS = frozenset({"kind", "factor_names", "scoring", "directions"})
 _EXISTING_DEFINITION_FIELDS = frozenset({"kind", "strategy_id"})
 _BACKLINK_FIELDS = frozenset({"promoted_candidate_id", "published_strategy_id"})
@@ -377,7 +384,7 @@ class MiningCandidateService:
                 raise ValueError("factor weights must be finite and positive")
             if directions[factor_name] not in {"high", "low"}:
                 raise ValueError("factor directions must be high or low")
-        unknown = sorted(set(factor_names) - _FACTOR_IDS)
+        unknown = sorted(set(factor_names) - _known_factor_ids())
         if unknown:
             raise ValueError(f"factor candidate contains unknown factors: {unknown}")
         selected = self._request(manifest).get("factor_names")

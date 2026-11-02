@@ -307,6 +307,9 @@ AI_TASKS = {
     "strategy_gen": {"label": "策略生成", "default_thinking": "default"},
     "assistant": {"label": "助手对话", "default_thinking": "default"},
     "market_mood": {"label": "盘前大盘情绪", "default_thinking": "off"},
+    # 0.47.0 公开因子采集: 分拣 (便宜、关思考) + 抽取; 只读文章写公式, 不判断好坏、不碰交易
+    "factor_triage": {"label": "因子采集 · 分拣", "default_thinking": "off"},
+    "factor_extract": {"label": "因子采集 · 抽取", "default_thinking": "default"},
 }
 THINKING_LEVELS = ("low", "medium", "high", "xhigh")
 THINKING_MODES = ("default", "off", *THINKING_LEVELS)
