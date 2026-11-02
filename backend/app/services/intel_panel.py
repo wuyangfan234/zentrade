@@ -322,7 +322,8 @@ NEWS_FILTERS = {
 def news_view(data_dir: Path, now: datetime, roles: dict[str, str]) -> dict:
     from datetime import UTC
 
-    from app.services import news_store
+    from app.services import news_store, preferences
+    translation_enabled = preferences.get_news_translation_enabled()
     utc_now = now.astimezone(UTC)
     rows = news_store.load_recent(data_dir, days=2, now=utc_now)
     items, tone = [], {}
@@ -357,7 +358,8 @@ def news_view(data_dir: Path, now: datetime, roles: dict[str, str]) -> dict:
     keep = {id(i) for rows in picks.values() for i in rows[:NEWS_LIMIT]}
     return {"items": [i for i in items if id(i) in keep], "total": len(items), "tone": tone, "hours": NEWS_HOURS,
             "counts": {k: len(v) for k, v in picks.items()}, "limit": NEWS_LIMIT,
-            "disclaimer": "事件类型、方向与重要度为 AI 判读，未经验证；仅供参考"}  # noqa: RUF001
+            "disclaimer": ("事件类型、方向与重要度为 AI 判读，未经验证；仅供参考" if translation_enabled  # noqa: RUF001
+                           else "新闻翻译与 AI 打标已关闭，显示英文原文")}  # noqa: RUF001
 
 
 def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) -> dict:

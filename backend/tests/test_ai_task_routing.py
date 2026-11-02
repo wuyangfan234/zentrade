@@ -408,3 +408,22 @@ def test_ai_tasks_api_saves_masks_and_clears(monkeypatch):
         settings_api.save_ai_task("news_translate", settings_api.AiTaskOverrideIn(thinking="maybe"))
     with pytest.raises(HTTPException):
         settings_api.save_ai_task("news_translate", settings_api.AiTaskOverrideIn(base_url="ftp://x"))
+
+
+def test_news_translation_toggle_is_persistent_and_returned_with_ai_tasks(monkeypatch):
+    from app.api import settings as settings_api
+    from app.services import preferences
+    stored = {}
+    monkeypatch.setattr(preferences, "load", lambda: dict(stored))
+
+    def save(updates):
+        stored.update(updates)
+        return dict(stored)
+
+    monkeypatch.setattr(preferences, "save", save)
+    monkeypatch.setattr(secrets_store, "load", lambda: {})
+    assert settings_api.get_ai_tasks()["news_translation_enabled"] is True
+    out = settings_api.save_news_translation(settings_api.NewsTranslationSettingsIn(enabled=False))
+    assert out["news_translation_enabled"] is False
+    assert stored["news_translation_enabled"] is False
+    assert settings_api.get_ai_tasks()["news_translation_enabled"] is False

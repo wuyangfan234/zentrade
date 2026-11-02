@@ -90,3 +90,23 @@ it('news badge hides when empty and turns bearish-coloured on high bearish', asy
   expect(badges[0].textContent).toBe('3')
   expect((badges[1] as HTMLElement).className).toContain('text-bear')
 })
+
+it('shows raw English without an untranslated warning when translation is disabled', async () => {
+  mocks.stockNews.mockResolvedValue({
+    symbol: 'LITE', days: 7, disclaimer: '新闻翻译与 AI 打标已关闭，显示英文原文',
+    summary: { count_24h: 1, high_bearish_48h: false, high_bullish_48h: false, top: [] },
+    items: [item({
+      headline: 'Lumentum Rips Higher As Washington Targets China', summary: 'Original English summary',
+      translated: false, translation_enabled: false, tagged: false, tag_mode: null, relevance: null,
+      event_label: null, direction: null, importance: null,
+    })],
+  })
+  await render(<StockNewsPanel symbol="LITE" />)
+  expect(host.textContent).toContain('Lumentum Rips Higher')
+  expect(host.textContent).not.toContain('（未翻译）')
+  expect(host.textContent).not.toContain('未打标')
+  expect(host.textContent).toContain('显示英文原文')
+  const title = [...host.querySelectorAll('button')].find(b => b.textContent?.includes('Lumentum Rips Higher')) as HTMLButtonElement
+  await act(async () => { title.click() })
+  expect(host.textContent).toContain('Original English summary')
+})

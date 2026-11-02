@@ -164,6 +164,22 @@ def test_ai_needs_key_url_and_model(client, store):
     assert ids["ai"]["configured"] is True and ids["ai_news"]["configured"] is True
 
 
+def test_checklist_omits_news_model_when_translation_is_disabled(client):
+    c, prefs = client
+    prefs["news_translation_enabled"] = False
+    body = c.get("/api/settings/setup-checklist").json()
+    ids = {i["id"]: i for i in body["items"]}
+    assert "ai_news" not in ids
+    assert "ai_news" not in body["summary"]["recommended_missing"]
+    assert "新闻翻译" not in ids["ai"]["purpose"]
+
+
+def test_disabled_translation_does_not_warn_about_old_failed_batches():
+    from app.api.trading import _news_translate_failing
+    state = {"translation_enabled": False, "translate": {"failed_batches": 2}, "translate_fail_streak": 2}
+    assert _news_translate_failing(state) is False
+
+
 def test_codex_provider_does_not_spawn_subprocess(client, store, monkeypatch):
     from app.services import ai_provider
     _secrets(store, ai_provider="codex_cli")

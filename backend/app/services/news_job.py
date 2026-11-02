@@ -127,7 +127,7 @@ def _fast_interval(now_et) -> int:
 def tick(data_dir: Path, loop=None, repo=None, *, now: datetime | None = None, force: bool = False) -> dict | None:
     """调度器每分钟调用; 内部按节奏决定是否真跑。返回本次结果 (未到点返回 None)。"""
     from app.market_clock import us_clock
-    from app.services import news_ingest, news_store, news_translate
+    from app.services import news_ingest, news_store, news_translate, preferences
 
     now = now or datetime.now(timezone.utc)
     now_et = now.astimezone(us_clock.tz)
@@ -166,7 +166,10 @@ def tick(data_dir: Path, loop=None, repo=None, *, now: datetime | None = None, f
                     result[k] += r.get(k, 0)
                 result["errors"] += r.get("errors", [])
         # 翻译每次唤醒都跑 (自带每轮批次数与墙钟预算), 不依赖采集是否到点
-        tr = news_translate.translate_pending_sync(data_dir, now=now, priority=set(core))
+        if preferences.get_news_translation_enabled():
+            tr = news_translate.translate_pending_sync(data_dir, now=now, priority=set(core))
+        else:
+            tr = {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0}
         if not sources and not tr.get("llm") and not tr.get("fallback"):
             return None
         pushed = notify_holdings(data_dir, held_symbols(loop), now=now)

@@ -698,15 +698,39 @@ export function AiTasksCard() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: QK.aiTasks, queryFn: () => api.aiTasks() })
   const mq = useQuery({ queryKey: QK.aiModels, queryFn: () => api.aiModels() })
+  const newsEnabled = q.data?.news_translation_enabled ?? true
+  const newsToggle = useMutation({
+    mutationFn: (enabled: boolean) => api.saveNewsTranslation(enabled),
+    onSuccess: data => {
+      qc.setQueryData(QK.aiTasks, data)
+      for (const key of ['stock-news', 'news-summary', 'news-status', 'intel-today', 'setup-checklist', 'system-status']) {
+        void qc.invalidateQueries({ queryKey: [key] })
+      }
+      void qc.invalidateQueries({ queryKey: ['opportunities', 'page'] })
+    },
+  })
   return (
     <Card icon={Layers} title="AI 模型分工" anchor="ai-tasks">
       <p className="mb-3 text-[11px] leading-relaxed text-secondary">
         每个任务可从上方模型库选一个模型，或单独填写；都不选时沿用全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：部分推理型模型的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
       </p>
+      <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
+        <div>
+          <div className="text-xs font-medium text-foreground">新闻翻译与 AI 打标</div>
+          <p className="mt-1 text-[11px] leading-relaxed text-secondary">
+            关闭后显示英文原文，不调用大模型。新闻采集继续，旧译文与标签保留，重新开启后恢复。
+          </p>
+          {!newsEnabled && <p className="mt-1 text-[11px] text-warning">翻译与 AI 打标已关闭，当前只显示英文原文。</p>}
+          {newsToggle.isError && <p className="mt-1 text-[11px] text-danger">保存失败，请重试。</p>}
+        </div>
+        <div data-news-translation-toggle>
+          <Toggle checked={newsEnabled} onChange={() => newsToggle.mutate(!newsEnabled)} />
+        </div>
+      </div>
       {q.isLoading && <div className="text-xs text-muted">加载中…</div>}
       {q.isError && <div className="text-xs text-danger">读取失败</div>}
       <div className="space-y-3">
-        {(q.data?.tasks ?? []).map(row => (
+        {(q.data?.tasks ?? []).filter(row => newsEnabled || row.task !== 'news_translate').map(row => (
           <AiTaskRowEditor key={row.task} row={row} models={mq.data?.models ?? []}
             onSaved={data => { qc.setQueryData(QK.aiTasks, data); void qc.invalidateQueries({ queryKey: QK.aiModels }) }} />
         ))}

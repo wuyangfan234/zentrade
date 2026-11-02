@@ -2246,7 +2246,7 @@ export interface StrategyAlertEvent {
 export const api = {
   health: () => request<{ status: string; version: string; mode: string }>('/health'),
 
-  aiTasks: () => request<{ tasks: AiTaskRow[] }>('/api/settings/ai/tasks'),
+  aiTasks: () => request<{ tasks: AiTaskRow[]; news_translation_enabled?: boolean }>('/api/settings/ai/tasks'),
   // ===== 模型库 (0.44.0) =====
   aiModels: () => request<{ models: AiModelEntry[] }>('/api/settings/ai/models'),
   createAiModel: (body: AiModelInput) =>
@@ -2271,6 +2271,10 @@ export const api = {
     request<{ tasks: AiTaskRow[] }>(`/api/settings/ai/tasks/${encodeURIComponent(task)}`, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  saveNewsTranslation: (enabled: boolean) =>
+    request<{ tasks: AiTaskRow[]; news_translation_enabled: boolean }>('/api/settings/ai/news-translation', {
+      method: 'POST', body: JSON.stringify({ enabled }),
     }),
   // ===== QVeris 付费数据 =====
   qverisUsage: (refreshBalance = false) => request<QverisUsage>(`/api/qveris/usage${refreshBalance ? '?refresh_balance=1' : ''}`),
@@ -3873,6 +3877,8 @@ export interface NewsItem {
   summary: string
   original_headline: string
   translated: boolean
+  /** false = 总开关已关闭，后端返回英文原文并隐藏 AI 打标 */
+  translation_enabled?: boolean
   tagged: boolean
   tag_mode: 'llm' | 'rule' | 'fallback' | null
   relevance: NewsRelevance | null

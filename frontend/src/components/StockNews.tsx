@@ -30,6 +30,7 @@ function etLabel(iso: string | null): string {
 }
 
 export function NewsTag({ item }: { item: NewsItem }) {
+  if (item.translation_enabled === false) return null
   if (!item.tagged) {
     return <span className="rounded border border-border px-1.5 py-px text-[10px] text-muted">未打标</span>
   }
@@ -67,7 +68,7 @@ export function NewsRow({ item, compact = false }: { item: NewsItem; compact?: b
         className={`mt-1 block w-full text-left text-[13px] leading-snug text-foreground ${hasDetail ? 'cursor-pointer hover:text-accent' : 'cursor-default'}`}
       >
         {item.headline}
-        {!item.translated && <span className="ml-1.5 text-[10px] text-muted">（未翻译）</span>}
+        {!item.translated && item.translation_enabled !== false && <span className="ml-1.5 text-[10px] text-muted">（未翻译）</span>}
       </button>
       {open && !compact && (
         <div className="mt-1 space-y-1 text-[12px] leading-relaxed text-secondary">

@@ -50,22 +50,28 @@ def load_recent(data_dir: Path, *, days: int = 7, now: datetime | None = None) -
     return sorted(rows.values(), key=lambda r: r.get("created_at") or "", reverse=True)
 
 
-def view(row: dict, symbol: str, *, now: datetime | None = None) -> dict:
+def view(row: dict, symbol: str, *, now: datetime | None = None,
+         translation_enabled: bool | None = None) -> dict:
     """单条新闻相对某只股票的展示视图。"""
     now = now or datetime.now(timezone.utc)
-    tag = (row.get("tags") or {}).get(symbol) or {}
+    if translation_enabled is None:
+        from app.services import preferences
+        translation_enabled = preferences.get_news_translation_enabled()
+    tag = ((row.get("tags") or {}).get(symbol) or {}) if translation_enabled else {}
     dt = _parse(row.get("created_at"))
-    tb = row.get("tagged_by") or {}
+    tb = (row.get("tagged_by") or {}) if translation_enabled else {}
     refs = row.get("refs") or []
     return {
         "id": row["id"],
         "symbol": symbol,
         "published_at": row.get("created_at"),
         "age_hours": round((now - dt).total_seconds() / 3600, 1) if dt else None,
-        "headline": row.get("zh_headline") or row.get("headline") or "",
-        "summary": row.get("zh_summary") or "",
+        "headline": ((row.get("zh_headline") or row.get("headline") or "") if translation_enabled
+                     else (row.get("headline") or "")),
+        "summary": ((row.get("zh_summary") or "") if translation_enabled else (row.get("summary") or "")),
         "original_headline": row.get("headline") or "",
-        "translated": bool(row.get("zh_headline")),
+        "translated": bool(translation_enabled and row.get("zh_headline")),
+        "translation_enabled": translation_enabled,
         "tagged": bool(tag),
         "tag_mode": tb.get("mode"),
         "relevance": tag.get("relevance"),
@@ -93,11 +99,13 @@ def for_symbol(data_dir: Path, symbol: str, *, days: int = 7, limit: int = 50, m
                now: datetime | None = None, rows: list[dict] | None = None) -> list[dict]:
     symbol = symbol.upper()
     rows = rows if rows is not None else load_recent(data_dir, days=days, now=now)
+    from app.services import preferences
+    translation_enabled = preferences.get_news_translation_enabled()
     out = []
     for r in rows:
         if symbol not in (r.get("mentions") or {}):
             continue
-        v = view(r, symbol, now=now)
+        v = view(r, symbol, now=now, translation_enabled=translation_enabled)
         if main_only and not is_main(v):
             continue
         out.append(v)
@@ -154,7 +162,9 @@ def status(data_dir: Path, *, now: datetime | None = None) -> dict:
     except (OSError, ValueError):
         state = {}
     rows = load_recent(data_dir, days=1, now=now)
+    from app.services import preferences
     return {**state, "events_24h": len(rows),
+            "translation_enabled": preferences.get_news_translation_enabled(),
             "translated_24h": sum(1 for r in rows if r.get("zh_headline")),
             "tagged_24h": sum(1 for r in rows if (r.get("tagged_by") or {}).get("mode") in ("llm", "rule"))}
 

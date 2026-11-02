@@ -54,9 +54,10 @@ def _item(id_: str, group: str, label: str, level: str, configured: bool, *, sou
 
 def _ai_items() -> list[dict]:
     from app import secrets_store
-    from app.services import ai_provider as ap
+    from app.services import ai_provider as ap, preferences
 
     out: list[dict] = []
+    news_enabled = preferences.get_news_translation_enabled()
     provider = ap.current_ai_provider()
     if ap.is_codex_cli_provider(provider):
         # 清单每次页面加载都会请求: 只看命令能否在 PATH 找到, 不实跑 `codex --version` (最长 15 秒)
@@ -69,27 +70,31 @@ def _ai_items() -> list[dict]:
         configured = bool(secrets_store.get_ai_key() and model
                           and secrets_store.get_ai_config("ai_base_url", ap.settings.ai_base_url))
     src = "设置页" if secrets_store.load().get("ai_api_key") else (".env" if os.environ.get("AI_API_KEY") else "")
+    news_purpose = "新闻翻译与打标、" if news_enabled else ""
+    impact = ("不配：新闻只有英文原标题（无利多/利空标签），个股分析、AI 策略、助手不可用。交易环与机会板不依赖 AI。"
+              if news_enabled else "不配：个股分析、AI 策略、助手不可用。新闻翻译已关闭，交易环与机会板不依赖 AI。")
     out.append(_item(
         "ai", "ai", "AI 模型（全局）", "recommended", configured, source=src,
-        purpose="个股分析、新闻翻译与打标、AI 策略生成、助手对话、盘前大盘情绪的默认模型。",
-        impact="不配：新闻只有英文原标题（无利多/利空标签），个股分析、AI 策略、助手不可用。交易环与机会板不依赖 AI。",
+        purpose=f"个股分析、{news_purpose}AI 策略生成、助手对话、盘前大盘情绪的默认模型。",
+        impact=impact,
         where="settings?tab=ai&highlight=ai-connection", env=["AI_PROVIDER", "AI_BASE_URL", "AI_API_KEY", "AI_MODEL"],
         note=f"当前模型：{model}" if configured and model else ""))
 
-    est = news_token_estimate()
-    prof = ap.task_profile("news_translate")
-    overridden = bool(prof.get("overridden"))
-    out.append(_item(
-        "ai_news", "ai", "新闻翻译模型", "recommended",
-        bool((configured or prof.get("api_key")) and prof.get("model") and prof.get("base_url")),
-        source="单独配置" if overridden else ("跟随全局" if configured else ""),
-        purpose="把自选、持仓相关的英文新闻译成中文，并标注相关度、利多/利空、重要度。",
-        impact="跟随全局模型时，新闻翻译占掉大部分 AI 调用量。",
-        where="settings?tab=ai&highlight=ai-task-news_translate",
-        note=f"当前：{prof.get('model') or '未配置'}，思考 {prof.get('thinking')}",
-        warn=(f"用量大：约 {est['items_per_day']} 条/交易日，粗估约 {est['tokens_per_day'] // 10000} 万 token/日、"
-              f"{est['tokens_per_month'] // 10000} 万 token/月（关思考时；开思考会翻数倍）。建议在「AI 模型分工」给它单独配一个"
-              f"低价、关思考的模型（如 DeepSeek / Kimi / 通义千问的轻量档），不要用旗舰推理模型。")))
+    if news_enabled:
+        est = news_token_estimate()
+        prof = ap.task_profile("news_translate")
+        overridden = bool(prof.get("overridden"))
+        out.append(_item(
+            "ai_news", "ai", "新闻翻译模型", "recommended",
+            bool((configured or prof.get("api_key")) and prof.get("model") and prof.get("base_url")),
+            source="单独配置" if overridden else ("跟随全局" if configured else ""),
+            purpose="把自选、持仓相关的英文新闻译成中文，并标注相关度、利多/利空、重要度。",
+            impact="跟随全局模型时，新闻翻译占掉大部分 AI 调用量。",
+            where="settings?tab=ai&highlight=ai-task-news_translate",
+            note=f"当前：{prof.get('model') or '未配置'}，思考 {prof.get('thinking')}",
+            warn=(f"用量大：约 {est['items_per_day']} 条/交易日，粗估约 {est['tokens_per_day'] // 10000} 万 token/日、"
+                  f"{est['tokens_per_month'] // 10000} 万 token/月（关思考时；开思考会翻数倍）。建议在「AI 模型分工」给它单独配一个"
+                  f"低价、关思考的模型（如 DeepSeek / Kimi / 通义千问的轻量档），不要用旗舰推理模型。")))
     return out
 
 

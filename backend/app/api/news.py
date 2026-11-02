@@ -14,6 +14,12 @@ from app.services import news_store
 router = APIRouter(prefix="/api/news", tags=["news"])
 
 DISCLAIMER = "事件类型、方向与重要度为 AI 判读，未经验证；仅供参考，不参与开仓决策"
+RAW_DISCLAIMER = "新闻翻译与 AI 打标已关闭，显示英文原文"
+
+
+def _disclaimer() -> str:
+    from app.services import preferences
+    return DISCLAIMER if preferences.get_news_translation_enabled() else RAW_DISCLAIMER
 
 
 def _data_dir(request: Request):
@@ -27,13 +33,13 @@ def stock_news(request: Request, symbol: str = Query(..., min_length=1, max_leng
     sym = symbol.strip().upper()
     items = news_store.for_symbol(_data_dir(request), sym, days=days, limit=limit, main_only=main_only)
     return {"symbol": sym, "days": days, "items": items, "summary": news_store.summarize(items),
-            "disclaimer": DISCLAIMER}
+            "disclaimer": _disclaimer()}
 
 
 @router.get("/summary")
 def news_summary(request: Request, symbols: str = Query("", max_length=2000)) -> dict:
     syms = [s.strip().upper() for s in symbols.split(",") if s.strip()][:100]
-    return {"summaries": news_store.batch_summary(_data_dir(request), syms) if syms else {}, "disclaimer": DISCLAIMER}
+    return {"summaries": news_store.batch_summary(_data_dir(request), syms) if syms else {}, "disclaimer": _disclaimer()}
 
 
 @router.get("/status")

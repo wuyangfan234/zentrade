@@ -173,6 +173,9 @@ async def translate_pending(data_dir: Path, *, now: datetime | None = None, ai_c
     months = [now, now.replace(day=1) - timedelta(days=1)]  # 本月 + 上月 (月初跨月的事件)
     import time as _time
     stats = {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0}
+    from app.services import preferences
+    if not preferences.get_news_translation_enabled():
+        return stats
     model = _model_label()
     t0 = _time.monotonic()
     # 兜底默认关闭; 显式注入 google_get (测试/调用方自带取数) 时视为开启。
@@ -191,6 +194,8 @@ async def translate_pending(data_dir: Path, *, now: datetime | None = None, ai_c
         batches = [todo[i:i + BATCH_SIZE] for i in range(0, len(todo), BATCH_SIZE)][:max_batches]
         max_batches -= len(batches)
         for batch in batches:
+            if not preferences.get_news_translation_enabled():
+                break
             # 开批前就判断: 已用时间 + 本批预计耗时超预算则留到下一轮 (首批总是允许, 保证有进展)
             if stats["llm"] + stats["fallback"] + stats["failed_batches"] and \
                     _time.monotonic() - t0 + EST_BATCH_S > time_budget_s:
@@ -209,7 +214,7 @@ async def translate_pending(data_dir: Path, *, now: datetime | None = None, ai_c
                     row.update(result[i])
                     row["tagged_by"] = {"model": model, "prompt_version": PROMPT_VERSION, "at": stamp, "mode": "llm"}
                     stats["llm"] += 1
-                elif not row.get("zh_headline") and not google_down:
+                elif not row.get("zh_headline") and not google_down and preferences.get_news_translation_enabled():
                     zh = google_translate(row.get("headline") or "", http_get=google_get)
                     if zh is None:
                         google_down = True
