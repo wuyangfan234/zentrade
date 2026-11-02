@@ -7,7 +7,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { AiModelEntry, AiTaskRow } from '@/lib/api'
 
-const mocks = vi.hoisted(() => ({ aiTasks: vi.fn(), saveAiTask: vi.fn(), aiModels: vi.fn() }))
+const mocks = vi.hoisted(() => ({ aiTasks: vi.fn(), saveAiTask: vi.fn(), aiModels: vi.fn(), saveNewsTranslation: vi.fn() }))
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return { ...actual, api: { ...actual.api, ...mocks } }
@@ -149,4 +149,21 @@ it('legacy per-task fields open the custom editor; dangling refs are flagged', a
   expect(refSelect('stock_analysis').value).toBe('__custom__')
   expect(host.querySelector('[data-ai-task="stock_analysis"] input[type="password"]')).not.toBeNull()
   expect(host.querySelector('[data-ai-task="assistant"] [data-ai-task-ref-missing]')).not.toBeNull()
+})
+
+it('turns off the whole news translation task and hides its model editor', async () => {
+  const invalidate = vi.spyOn(qc, 'invalidateQueries')
+  mocks.saveNewsTranslation.mockResolvedValue({ tasks: [], news_translation_enabled: false })
+  await render([row('news_translate', '新闻翻译与打标', { route: 'api' }, '', 'off')])
+  const toggle = host.querySelector('[data-news-translation-toggle] button') as HTMLButtonElement
+  expect(toggle.getAttribute('aria-pressed')).toBe('true')
+  expect(host.textContent).toContain('关闭后显示英文原文，不调用大模型')
+  await act(async () => { toggle.click() })
+  await flush()
+  expect(mocks.saveNewsTranslation).toHaveBeenCalledWith(false)
+  expect(host.querySelector('[data-news-translation-toggle] button')?.getAttribute('aria-pressed')).toBe('false')
+  expect(host.querySelector('[data-ai-task="news_translate"]')).toBeNull()
+  expect(host.textContent).toContain('翻译与 AI 打标已关闭')
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['opportunities', 'page'] })
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['system-status'] })
 })

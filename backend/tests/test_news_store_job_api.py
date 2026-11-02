@@ -330,3 +330,55 @@ def test_translate_prioritizes_core_symbols(tmp_path):
     finally:
         nt.BATCH_SIZE = old
     assert seen[0][0] == ["CORE"]   # 更旧但属核心集的新闻排在第一批最前
+
+
+def test_disabled_view_returns_original_english_and_hides_ai_enrichment(tmp_path, monkeypatch):
+    from app.services import preferences
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": False})
+    _save(tmp_path, [_row(1, tag={"importance": "high", "direction": "bearish"})])
+    item = ns.for_symbol(tmp_path, "LITE", now=NOW)[0]
+    assert item["headline"] == "Headline 1"
+    assert item["summary"] == "Summary 1"
+    assert item["original_headline"] == "Headline 1"
+    assert item["translated"] is False and item["translation_enabled"] is False
+    assert item["tagged"] is False and item["tag_mode"] is None
+    assert item["direction"] is None and item["importance"] is None
+    assert ns.status(tmp_path, now=NOW)["translation_enabled"] is False
+
+
+def test_tick_does_not_enter_translator_when_disabled(tmp_path, monkeypatch):
+    from app.services import news_translate, preferences
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": False})
+    monkeypatch.setattr(news_job, "_last", {"fast": 0.0, "sec": 0.0})
+    monkeypatch.setattr(news_job, "universe", lambda loop=None, core_only=False: ["LITE"])
+    ingested = []
+    monkeypatch.setattr(ni, "ingest", lambda d, symbols, **kw: ingested.append(list(symbols)) or
+                        {"raw": 1, "kept": 1, "added": 1, "errors": []})
+    monkeypatch.setattr(news_job, "notify_holdings", lambda *a, **kw: 0)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("disabled news translation must not be entered")
+
+    monkeypatch.setattr(news_translate, "translate_pending_sync", forbidden)
+    result = news_job.tick(tmp_path, None, None, now=NOW, force=True)
+    assert result is not None
+    assert ingested and result["ingest"]["added"] == 2
+    assert result["translate"] == {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0}
+
+
+def test_news_api_disabled_uses_raw_mode_disclaimer(tmp_path, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api import news as news_api
+    from app.services import preferences
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": False})
+    real_now = datetime.now(timezone.utc)
+    row = _row(1, tag={}, hours_ago=1, base=real_now)
+    ni.save_shard(tmp_path, real_now - timedelta(hours=1), {row["id"]: row})
+    app = FastAPI()
+    app.include_router(news_api.router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    body = TestClient(app).get("/api/news/stock", params={"symbol": "LITE"}).json()
+    assert body["items"][0]["headline"] == "Headline 1"
+    assert body["items"][0]["translation_enabled"] is False
+    assert "英文原文" in body["disclaimer"] and "AI 判读" not in body["disclaimer"]

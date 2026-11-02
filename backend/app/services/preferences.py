@@ -79,6 +79,16 @@ def get_realtime_quotes_enabled() -> bool:
     return load().get("realtime_quotes_enabled", False)
 
 
+def get_news_translation_enabled() -> bool:
+    raw = load().get("news_translation_enabled", True)
+    return raw if isinstance(raw, bool) else True
+
+
+def set_news_translation_enabled(enabled: bool) -> bool:
+    save({"news_translation_enabled": bool(enabled)})
+    return get_news_translation_enabled()
+
+
 def get_watchlist_groups_in_nav() -> bool:
     """自选分组是否显示在侧边栏（可展开二级子菜单）。默认 False。"""
     return load().get("watchlist_groups_in_nav", False)

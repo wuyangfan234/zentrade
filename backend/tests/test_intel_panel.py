@@ -408,6 +408,15 @@ def test_news_view_watch_main_and_macro(tmp_path, monkeypatch):
     assert v["items"][1]["macro"] is True
 
 
+def test_news_view_uses_raw_disclaimer_when_translation_is_disabled(tmp_path, monkeypatch):
+    from app.services import news_store, preferences
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": False})
+    monkeypatch.setattr(news_store, "load_recent", lambda data_dir, days, now: [])
+    v = panel.news_view(tmp_path, NOW, {"NVDA": "自选"})
+    assert "英文原文" in v["disclaimer"]
+    assert "AI 判读" not in v["disclaimer"]
+
+
 def test_corp_actions_window(tmp_path):
     p = tmp_path / "reference" / "corporate_actions"
     p.mkdir(parents=True)

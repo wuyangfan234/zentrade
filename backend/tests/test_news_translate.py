@@ -228,3 +228,62 @@ def test_google_fallback_breaker_resets_next_run(tmp_path):
     google_ok = lambda url: [[["Lumentum 大涨", "Lumentum rips higher"]]]  # noqa: E731
     stats = asyncio.run(nt.translate_pending(tmp_path, now=NOW, ai_call=down, google_get=google_ok))
     assert stats["fallback"] == 1  # 下一轮重新尝试兜底
+
+
+def test_translation_disabled_short_circuits_llm_and_google(tmp_path, monkeypatch):
+    _write(tmp_path, [_ev(0, "Lumentum rips higher", summary="Original summary")])
+    from app.services import preferences
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": False})
+    calls = []
+
+    async def ai(messages, **kw):
+        calls.append("llm")
+        return "[]"
+
+    def google(url):
+        calls.append("google")
+        return [[["译文", "原文"]]]
+
+    stats = asyncio.run(nt.translate_pending(tmp_path, now=NOW, ai_call=ai, google_get=google))
+    assert stats == {"llm": 0, "fallback": 0, "failed_batches": 0, "pending_after": 0}
+    assert calls == []
+    row = ni.load_shard(tmp_path, NOW)["alpaca:0"]
+    assert row["headline"] == "Lumentum rips higher" and "zh_headline" not in row
+
+
+def test_disabling_mid_run_stops_before_the_next_llm_batch(tmp_path, monkeypatch):
+    _write(tmp_path, [_ev(0, "First"), _ev(1, "Second")])
+    from app.services import preferences
+    enabled = {"value": True}
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": enabled["value"]})
+    monkeypatch.setattr(nt, "BATCH_SIZE", 1)
+    calls = []
+
+    async def ai(messages, **kw):
+        calls.append("llm")
+        enabled["value"] = False
+        return '[{"i":0,"zh_headline":"译文","zh_summary":"","tags":{}}]'
+
+    stats = asyncio.run(nt.translate_pending(tmp_path, now=NOW, ai_call=ai, max_batches=2))
+    assert calls == ["llm"]
+    assert stats["llm"] == 1 and stats["pending_after"] == 1
+
+
+def test_disabling_during_failed_llm_call_suppresses_google_fallback(tmp_path, monkeypatch):
+    _write(tmp_path, [_ev(0, "First")])
+    from app.services import preferences
+    enabled = {"value": True}
+    monkeypatch.setattr(preferences, "load", lambda: {"news_translation_enabled": enabled["value"]})
+    calls = []
+
+    async def ai(messages, **kw):
+        calls.append("llm")
+        enabled["value"] = False
+        raise RuntimeError("model failed")
+
+    def google(url):
+        calls.append("google")
+        return [[["译文", "First"]]]
+
+    asyncio.run(nt.translate_pending(tmp_path, now=NOW, ai_call=ai, google_get=google))
+    assert calls == ["llm"]

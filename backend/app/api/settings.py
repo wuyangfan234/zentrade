@@ -291,12 +291,24 @@ def _ai_tasks_view() -> dict:
                           "model_ref_name": prof.get("model_ref_name", ""),
                           "model_ref_missing": bool(prof.get("model_ref_missing"))},
         })
-    return {"tasks": out}
+    from app.services import preferences
+    return {"tasks": out, "news_translation_enabled": preferences.get_news_translation_enabled()}
 
 
 @router.get("/ai/tasks")
 def get_ai_tasks() -> dict:
     """按任务选模型 (2026-10-02 产品决策: 新闻翻译打标用 Kimi 关思考, 个股分析等沿用全局)。"""
+    return _ai_tasks_view()
+
+
+class NewsTranslationSettingsIn(BaseModel):
+    enabled: bool
+
+
+@router.post("/ai/news-translation")
+def save_news_translation(req: NewsTranslationSettingsIn) -> dict:
+    from app.services import preferences
+    preferences.set_news_translation_enabled(req.enabled)
     return _ai_tasks_view()
 
 

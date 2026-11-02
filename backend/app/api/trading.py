@@ -163,6 +163,8 @@ def _redact(text):
 
 def _news_translate_failing(nw: dict) -> bool:
     """0.41.1: 翻译失败只在连续多轮时算故障。旧 state 没有 streak 字段 → 按旧口径 (本轮有失败即算)。"""
+    if nw.get("translation_enabled") is False:
+        return False
     from app.services.news_job import TRANSLATE_FAIL_WARN_STREAK
     tr = nw.get('translate') or {}
     if not tr.get('failed_batches'):
@@ -311,16 +313,21 @@ def system_status(request: Request):
     nw = safe(lambda: news_store.status(data_dir), {}) or {}
     tr = nw.get('translate') or {}
     ing = nw.get('ingest') or {}
+    news_disabled = nw.get('translation_enabled') is False
     nw_state = ('idle' if not nw.get('last_run_at') else
                 'error' if nw.get('last_error') and str(nw.get('last_error_at') or '') >= str(nw.get('last_run_at') or '') else
                 'warn' if nw.get('ingest_errors') or _news_translate_failing(nw) else 'ok')
+    news_counts = (f"24h {nw.get('events_24h', 0)} 条（英文原文，翻译与 AI 打标已关闭）" if news_disabled else
+                   f"24h {nw.get('events_24h', 0)} 条（已译 {nw.get('translated_24h', 0)}，"
+                   f"已打标 {nw.get('tagged_24h', 0)}）")
+    news_pending = '' if news_disabled else f" · 待打标 {tr.get('pending_after', 0)}"
     add('news', '个股新闻', nw_state,
         (f"最近 {_et(nw.get('last_run_at'))} · 覆盖 {nw.get('universe', 0)} 只 · "
-         f"24h {nw.get('events_24h', 0)} 条（已译 {nw.get('translated_24h', 0)}，已打标 {nw.get('tagged_24h', 0)}）"
-         f" · 本轮新增 {ing.get('added', 0)} · 待打标 {tr.get('pending_after', 0)}"
+         f"{news_counts} · 本轮新增 {ing.get('added', 0)}{news_pending}"
          + (f"；源错误 {len(nw.get('ingest_errors') or [])} 项" if nw.get('ingest_errors') else '')
          + (f"；翻译连续 {nw.get('translate_fail_streak')} 轮有失败批次" if _news_translate_failing(nw)
-            else f"；本轮翻译 {tr.get('failed_batches')} 批失败，下一轮自动重译" if tr.get('failed_batches') else ''))
+            else f"；本轮翻译 {tr.get('failed_batches')} 批失败，下一轮自动重译"
+            if tr.get('failed_batches') and not news_disabled else ''))
         if nw.get('last_run_at') else '首次采集后显示（每分钟唤醒，盘前盘中每 5 分钟）', '/api/news/status')
     from app.services import qveris_data, qveris_gate
     qv = safe(lambda: qveris_gate.usage(data_dir), {}) or {}
