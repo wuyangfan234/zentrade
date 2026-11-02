@@ -62,9 +62,11 @@ def build_default_request(repo: Any, profile: str) -> dict[str, Any]:
     end = latest.isoformat() if latest is not None else None
     pool = build_mining_pool(Path(repo.store.data_dir))
     available = {item["id"] for item in factor_columns_view(available_only=True)}
+    # Filter the original cohort, never backfill with later unrelated factors.
+    builtin = [item["id"] for item in FACTOR_COLUMNS[:48] if item["id"] in available]
     return {
-        # Filter the original cohort, never backfill with later unrelated factors.
-        "factor_names": [item["id"] for item in FACTOR_COLUMNS[:48] if item["id"] in available],
+        # 0.47.0: 内置前 48 (过滤后) + 已并入 (在用/观察) 的自定义与采集因子; 运行时上限 48 个, 多出的按更新时间取最新。
+        "factor_names": builtin + weekly_extra_factors(Path(repo.store.data_dir), set(builtin), 48 - len(builtin)),
         "strategy_ids": [],
         # 空池不能退化成 None (= 全市场, 内存不足); 交由前置检查记为 skipped_prerequisite
         "symbols": list(pool.symbols),
@@ -79,6 +81,32 @@ def build_default_request(repo: Any, profile: str) -> dict[str, Any]:
         "slippage_bps": 5.0,
         "require_regime": False,
     }
+
+
+WEEKLY_EXTRA_STATUSES = frozenset({"active", "watch"})
+
+
+def weekly_extra_factors(data_dir: Path, taken: set[str], room: int) -> list[str]:
+    """Custom / collected factors the user merged into the library (status active or watch).
+
+    Only factors registered in the live registry count (a broken definition that failed to load is
+    skipped). Newest first when there is not enough room; returned in stable id order.
+    """
+    if room <= 0:
+        return []
+    from app.factors import store
+    from app.factors.registry import get_factor
+
+    rows = []
+    for definition in store.load_all(data_dir):
+        fid = str(definition.get("id") or "")
+        if not fid or fid in taken or str(definition.get("status")) not in WEEKLY_EXTRA_STATUSES:
+            continue
+        if get_factor(fid) is None:
+            continue
+        rows.append((str(definition.get("updated_at") or definition.get("created_at") or ""), fid))
+    rows.sort(reverse=True)
+    return sorted(fid for _, fid in rows[:room])
 
 
 def build_data_fingerprint(

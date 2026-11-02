@@ -151,6 +151,11 @@ def make_worker_task(kind: str, data_dir: Path, config) -> dict[str, Any]:
         if not isinstance(config, dict):
             raise TypeError("swing_candidates worker config must be a dict")
         encoded = dict(config)
+    elif kind == "factor_lab":
+        # 0.47.0: 周度发现 / 采集快筛 / 候选重算 (子进程跑, 不占主进程内存, 嵌套的回测额度在子进程内独立)
+        if not isinstance(config, dict):
+            raise TypeError("factor_lab worker config must be a dict")
+        encoded = dict(config)
     else:
         raise ValueError(f"unsupported worker task kind: {kind}")
     return {
@@ -234,6 +239,9 @@ def _worker_entry(task: dict[str, Any], event_queue, cancel_event) -> None:
         elif kind == "swing_candidates":
             from app.services import swing_candidates
             result = swing_candidates.worker_run(data_dir, repo, task["config"])
+        elif kind == "factor_lab":
+            from app.services import factor_discover
+            result = factor_discover.worker_run(data_dir, repo, task["config"])
         elif kind == "mining":
             from app.backtest.mining_runtime import run_mining_runtime
 

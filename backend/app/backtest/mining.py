@@ -1169,7 +1169,9 @@ class MiningService:
                     ),
                     benchmark_evaluations=run_benchmarks(nested),
                 ))
-                break
+                # 0.47.0: 只作废本折, 后续折照常跑 (旧行为 break 会截断后续所有折, 有效折常年 1-3)。
+                evaluation_phases_remaining = max(0, evaluation_phases_remaining - 1)
+                continue
 
             if trials_used >= request.budget.max_trials:
                 fold_results.append(FoldMiningResult(

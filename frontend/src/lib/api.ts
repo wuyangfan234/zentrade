@@ -1444,6 +1444,8 @@ export interface FactorLibraryItem {
   stability: FactorStability
   scale_free: boolean
   dependencies: string[]
+  origin?: 'builtin' | 'mined' | 'intake' | 'custom'
+  status?: 'draft' | 'active' | 'watch' | 'retired'
 }
 
 export interface FactorDslError {
@@ -2243,6 +2245,62 @@ export interface StrategyAlertEvent {
 }
 
 // ===== API surface =====
+// ---- 0.47.0 因子发现 + 公开采集 (/api/factor-lab) ----
+export type DiscoverCheck = [number, string, number | string | null]
+export interface DiscoverStats {
+  total_return?: number | null; annual_return?: number | null; sharpe?: number | null; calmar?: number | null
+  max_drawdown?: number | null; n_trades?: number | null; win_rate?: number | null; avg_holding_days?: number | null
+  avg_win?: number | null; avg_loss?: number | null; avg_exposure?: number | null; profit_factor?: number | null
+  yearly?: Record<string, number>
+}
+export interface DiscoverTrade { symbol: string; entry: string; exit: string; pnl_pct: number | null }
+export interface DiscoverCandidate {
+  signature: string; name?: string; error?: string
+  legs?: { factor: string; label: string; direction: string; weight: number }[]
+  oos?: { oos_sharpe?: number | null; oos_return?: number | null; oos_max_drawdown?: number | null; oos_n_trades?: number | null; valid_folds?: number | null }
+  stats?: DiscoverStats; corr_engine?: number | null; corr_spy?: number | null; checks?: DiscoverCheck[]
+  last_trades?: DiscoverTrade[]; published_strategy_id?: string | null
+}
+export interface DiscoverEngine {
+  rules: string[]; legs: { id: string; name: string; annual_return?: number | null; n_trades?: number | null }[]
+  stats: DiscoverStats; yearly: Record<string, number>; last_trades: DiscoverTrade[]; corr_spy: number | null; checks: DiscoverCheck[]
+}
+export interface DiscoverWeek {
+  week: string; run_id: string; generated_at: string; data_as_of: string; window: [string, string]; symbols: number
+  funnel: { factors_selected?: number; factors_total?: number; combos?: number; valid_folds?: number; skipped_folds?: number; pool?: number; passed?: number }
+  engine: DiscoverEngine | null; spy: { stats: DiscoverStats; yearly: Record<string, number> } | null
+  candidates: DiscoverCandidate[]; curves: Record<string, (number | null)[] | string[]> & { dates: string[] }
+}
+export interface IntakeScreen {
+  ic?: number | null; t?: number | null; nearest?: string | null; nearest_label?: string | null; corr?: number | null; duplicate?: boolean; error?: string
+  backtest?: DiscoverStats & { yearly?: Record<string, number>; curve?: { dates: string[]; values: number[] }; last_trades?: DiscoverTrade[] }
+}
+export interface IntakeFormula { name: string; quote: string; dsl: string; direction: string; warmup?: number; screen?: IntakeScreen; merged_id?: string }
+export interface IntakeCard {
+  id: string; source: string; source_name: string; title: string; link: string; published: string | null
+  stage: 'pending' | 'archived' | 'merged' | 'to_screen'; reason: string | null; summary?: string | null; duplicate?: boolean
+  formulas: IntakeFormula[]
+}
+export interface IntakeSource {
+  id: string; name: string; kind: 'person' | 'site' | 'aggregator' | 'paper'; channel: string; url: string; builtin?: boolean; enabled: boolean
+  n30: number; paywall: number; llm: number; formulas: number; status: 'active' | 'idle' | 'failed' | 'off' | 'new'; last_ok?: string | null; error?: string | null
+}
+export interface IntakeOverview {
+  funnel: { fetched: number; llm: number; us_stock: number; defined: number; formulas: number; pending: number }
+  cards: IntakeCard[]; sources: IntakeSource[]
+  usage: { today: number; limit: number; days30_calls: number; days30_tokens: number; by_task: Record<string, number>; tokens_by_task: Record<string, number> }
+  settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; queued: number; last_error: string | null
+}
+export interface FactorLabPage {
+  week: DiscoverWeek | null
+  weeks: { week: string; data_as_of: string; funnel: DiscoverWeek['funnel']; candidates: number }[]
+  intake: IntakeOverview | null
+  decisions: Record<string, { action: 'save' | 'discard'; at: string; candidate_id?: string }>
+  schedule: { next_weekly?: string; intake_every_hours?: number }
+  running: boolean
+  errors: Record<string, string>
+}
+
 export const api = {
   health: () => request<{ status: string; version: string; mode: string }>('/health'),
 
@@ -3087,6 +3145,28 @@ export const api = {
 
   researchCandidates: () =>
     request<{ items: ResearchCandidate[] }>('/api/backtest/candidates'),
+
+  factorLabPage: () => request<FactorLabPage>('/api/factor-lab/page'),
+  factorLabDecide: (week: string, signature: string, action: 'save' | 'discard' | 'reset') =>
+    request<{ candidate_id?: string }>('/api/factor-lab/candidates/decide', { method: 'POST', body: JSON.stringify({ week, signature, action }) }),
+  factorLabRecalc: (payload: { signature: string; pool: 'watchlist' | 'theme' | 'custom'; symbols?: string[]; start: string; end: string }) =>
+    request<DiscoverStats & { legs?: DiscoverEngine['legs'] }>('/api/factor-lab/recalc', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180_000 }),
+  factorLabRun: () => request<{ started: boolean }>('/api/factor-lab/run', { method: 'POST' }),
+  intakeRun: () => request<{ started: boolean }>('/api/factor-lab/intake/run', { method: 'POST' }),
+  intakeMerge: (id: string, formula = 0) =>
+    request<{ id: string; status: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/merge?formula=${formula}`, { method: 'POST' }),
+  intakeIgnore: (id: string) => request<{ id: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/ignore`, { method: 'POST' }),
+  intakeRestore: (id: string) => request<{ id: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
+  intakeSubmit: (payload: { url?: string; text?: string; title?: string }) =>
+    request<{ id: string }>('/api/factor-lab/intake/submit', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 60_000 }),
+  intakeAddSource: (payload: { name: string; url: string; kind: IntakeSource['kind'] }) =>
+    request<IntakeSource>('/api/factor-lab/intake/sources', { method: 'POST', body: JSON.stringify(payload) }),
+  intakeToggleSource: (id: string, enabled: boolean) =>
+    request<IntakeSource>(`/api/factor-lab/intake/sources/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ enabled }) }),
+  intakeDeleteSource: (id: string) =>
+    request<{ ok: boolean }>(`/api/factor-lab/intake/sources/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  intakeSettings: (daily_limit: number) =>
+    request<{ daily_limit: number }>('/api/factor-lab/intake/settings', { method: 'POST', body: JSON.stringify({ daily_limit }) }),
 
   researchCandidateCreate: (payload: ResearchCandidateCreate) =>
     request<ResearchCandidate>('/api/backtest/candidates', {

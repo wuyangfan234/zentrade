@@ -351,6 +351,29 @@ def system_status(request: Request):
             + (f"；余额查询失败 {bal['error']}" if bal.get('error') else ''), '/api/qveris/usage')
     else:
         add('qveris', 'QVeris 付费数据', 'idle', '未配置 Key（设置 → 数据源）', '/api/qveris/usage')
+    # 0.47.0 公开因子采集 / 周度发现 (只写 research/, 不进交易)
+    from app.services import factor_discover as _fd
+    from app.services import factor_intake as _fi
+    _io = safe(lambda: _fi.overview(data_dir), {}) or {}
+    if _io.get('_error'):
+        add('factor_intake', '公开因子采集', 'error', f"读取失败 {_io['_error']}", 'research/intake/')
+    else:
+        _u = _io.get('usage') or {}
+        _srcs = _io.get('sources') or []
+        _bad = [s['name'] for s in _srcs if s.get('status') == 'failed']
+        add('factor_intake', '公开因子采集',
+            'warn' if _io.get('last_error') or _bad else ('ok' if _io.get('last_fetch') else 'idle'),
+            f"来源 {sum(1 for s in _srcs if s.get('enabled'))} 个 · 最近抓取 {_et(_io.get('last_fetch'))} · 待你 {(_io.get('funnel') or {}).get('pending', 0)} 条"
+            f" · 模型今日 {_u.get('today', 0)}/{_u.get('limit', 0)} 次 · 排队 {_io.get('queued', 0)} 条"
+            + (f"；失败源 {'、'.join(_bad[:3])}" if _bad else '')
+            + (f"；模型错误 {_redact(_io['last_error'])}" if _io.get('last_error') else ''), 'research/intake/')
+    _wk = safe(lambda: _fd.load_week(data_dir), None)
+    if isinstance(_wk, dict) and not _wk.get('_error'):
+        add('factor_discover', '周度发现', 'ok',
+            f"{_wk.get('week')} · 数据截至 {_wk.get('data_as_of')} · 候选 {len(_wk.get('candidates') or [])} 个 · 生成于 {_wk.get('generated_at', '—')[:16]}",
+            'research/discover/')
+    else:
+        add('factor_discover', '周度发现', 'idle', '周五 17:40 ET 周度挖掘结束后首次生成', 'research/discover/')
     from app.services import fundamentals_sync as _fs
     _fst, _fsum = safe(lambda: _fs.status_component(data_dir), ('error', '读取同步状态失败'))
     add('fundamentals', '美股财务同步', _fst, _fsum, 'data/financials/_last_run.json')

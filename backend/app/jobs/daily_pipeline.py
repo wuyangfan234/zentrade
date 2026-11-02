@@ -1418,6 +1418,37 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=5, timezone="America/New_York"),
         id="zen_swing_candidates_queue", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
 
+    # 0.47.0 公开因子采集: 每 30 分钟唤醒, 内部每 6 小时抓一次监控清单;
+    # 模型调用受每日上限 (默认 30 次, 美东日), 快筛 / 自选回测只在非 09:00-17:00 ET 跑。只写 research/intake/, 不碰交易。
+    def _factor_intake():
+        from app.services import factor_intake
+        st = _get_app_state()
+        r = getattr(st, "repo", None)
+        if r is None:
+            return None
+        return factor_intake.tick(r.store.data_dir, r)
+
+    scheduler.add_job(_factor_intake, trigger=IntervalTrigger(minutes=30),
+        id="zen_factor_intake", max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True)
+
+    # 0.47.0 周度发现: 周度挖掘 (周五收盘后入队) 结束后, 把过样本外门的候选在自选上回测
+    # (默认 2023-01-03 → 最近收盘) 并与当前出卡引擎对照, 写 research/discover/<周>.json。不发布、不改 3+3。
+    # 周五 17:40 ET 一次 + 周六 10:30 ET 补一次 (挖掘排队晚了也能接上)。
+    def _factor_discover():
+        from app.services import factor_discover
+        st = _get_app_state()
+        r = getattr(st, "repo", None)
+        if r is None:
+            return None
+        return factor_discover.run_weekly(r.store.data_dir, r)
+
+    scheduler.add_job(_factor_discover,
+        trigger=CronTrigger(day_of_week="fri", hour=17, minute=40, timezone="America/New_York"),
+        id="zen_factor_discover", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600, replace_existing=True)
+    scheduler.add_job(_factor_discover,
+        trigger=CronTrigger(day_of_week="sat", hour=10, minute=30, timezone="America/New_York"),
+        id="zen_factor_discover_retry", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600, replace_existing=True)
+
     # 0.28.0 盘中强势卡 (10-20 产品决策: 只上机会板 + 自动结算记战绩, 不下单): 10:00-15:00 ET 每 30 分钟检查自选出卡
     # (形态用 20 分钟前已完成的 SIP 5 分钟K + 出卡时实时价), 同时按 5 分钟K 结算在途卡; 16:25 ET 再结算一次
     # (当天K线齐了, 第 5 天到期的卡按收盘结)。不碰台账、不进交易环。

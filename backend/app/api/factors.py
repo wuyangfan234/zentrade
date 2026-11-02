@@ -14,10 +14,27 @@ from app.factors.registry import selectable_factors, unregister_factor
 router = APIRouter(prefix="/api/factors", tags=["factors"])
 
 
+def _custom_meta(request: Request | None) -> dict[str, dict]:
+    """0.47.0: 自定义/复合因子的状态与来源 (内置 / 挖掘 / 采集 / 自写), 供因子库「来源」列。"""
+    if request is None or not hasattr(request, "app"):
+        return {}
+    try:
+        defs = store.load_all(_data_dir(request))
+    except Exception:  # library still renders without the extra columns
+        return {}
+    out = {}
+    for d in defs:
+        src = (d.get("source") or {}).get("type") if isinstance(d.get("source"), dict) else None
+        out[str(d.get("id"))] = {"status": d.get("status") or "draft",
+                                 "origin": "intake" if src == "intake" else ("mined" if src == "mined" else "custom")}
+    return out
+
+
 @router.get("")
-def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|etf)$")) -> dict:
+def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|etf)$"), request: Request = None) -> dict:  # type: ignore[assignment]
     """注册表因子列表; asset_type 过滤适用资产 (财务因子仅股票)。"""
     specs = selectable_factors(asset_type=asset_type)
+    meta = _custom_meta(request)
     return {
         "factors": [
             {
@@ -35,6 +52,8 @@ def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|e
                 "stability": spec.stability,
                 "scale_free": spec.scale_free,
                 "dependencies": sorted(spec.dependencies),
+                "origin": (meta.get(spec.id) or {}).get("origin") or ("custom" if spec.kind in ("custom", "composite") else "builtin"),
+                "status": (meta.get(spec.id) or {}).get("status") or ("active" if spec.kind in ("base", "virtual") else "draft"),
             }
             for spec in specs
         ]

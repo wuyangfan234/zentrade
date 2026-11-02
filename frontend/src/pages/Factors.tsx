@@ -1,17 +1,23 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { BookmarkCheck, Combine, LibrarySquare, PenLine, Pickaxe, Sigma } from 'lucide-react'
+import { BookmarkCheck, Combine, Compass, LibrarySquare, PenLine, Pickaxe, Sigma } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { FactorDiscovery } from './backtest/FactorDiscovery'
 import { FactorComposite } from './factors/FactorComposite'
+import { FactorDiscover } from './factors/FactorDiscover'
 import { FactorEditor } from './factors/FactorEditor'
 import { FactorLibrary } from './factors/FactorLibrary'
 import { MiningWorkbench } from './backtest/MiningWorkbench'
 import { ResearchCandidatesDialog } from './backtest/ResearchCandidatesDialog'
+import { api } from '@/lib/api'
+import { QK } from '@/lib/queryKeys'
 
-type Tab = 'inspect' | 'library' | 'editor' | 'composite' | 'mining'
+type Tab = 'discover' | 'inspect' | 'library' | 'editor' | 'composite' | 'mining'
 
+// 0.47.0: 「发现」做因子页首页 (默认页签), 原 5 个页签与地址不变
 const TABS: Record<Tab, { title: string; icon: typeof Sigma }> = {
+  discover: { title: '发现', icon: Compass },
   inspect: { title: '检验', icon: Sigma },
   library: { title: '因子库', icon: LibrarySquare },
   editor: { title: '编辑器', icon: PenLine },
@@ -25,9 +31,18 @@ export function Factors() {
   const navigate = useNavigate()
 
   const requestedTab = searchParams.get('tab')
-  const activeTab: Tab = requestedTab === 'library' || requestedTab === 'editor' || requestedTab === 'composite' || requestedTab === 'mining'
+  const activeTab: Tab = requestedTab === 'inspect' || requestedTab === 'library' || requestedTab === 'editor' || requestedTab === 'composite' || requestedTab === 'mining'
     ? requestedTab
-    : 'inspect'
+    : (searchParams.get('focus') ? 'inspect' : 'discover')
+  // 发现角标 = 待看候选策略 + 待你采集因子 (与发现页流程条第 6 格同一个数)
+  const lab = useQuery({ queryKey: QK.factorLabPage, queryFn: () => api.factorLabPage(), staleTime: 60_000 })
+  const pending = (() => {
+    const p = lab.data
+    if (!p) return 0
+    const w = p.week
+    const cands = w ? w.candidates.filter(c => !c.error && !p.decisions[`${w.week}|${c.signature}`]).length : 0
+    return cands + (p.intake?.funnel.pending ?? 0)
+  })()
   const focusFactor = activeTab === 'inspect' ? searchParams.get('focus') ?? '' : ''
 
   const changeTab = (tab: Tab) => {
@@ -42,7 +57,7 @@ export function Factors() {
     <div className="flex min-h-full flex-col bg-base xl:h-full">
       <PageHeader
         title="因子"
-        subtitle={<span className="hidden md:inline">{activeTab === 'library' ? '因子注册表目录' : activeTab === 'mining' ? '嵌套样本外因子与策略挖掘' : '因子研究与检验'}</span>}
+        subtitle={<span className="hidden md:inline">{activeTab === 'discover' ? '采集 · 挖掘 · 回测 · 你决定' : activeTab === 'library' ? '因子注册表目录' : activeTab === 'mining' ? '嵌套样本外因子与策略挖掘' : '因子研究与检验'}</span>}
         className="shrink-0 flex-wrap gap-x-4 gap-y-2 bg-base/95 px-3 lg:flex-nowrap lg:px-5"
         right={(
           <div className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2 lg:w-auto">
@@ -76,6 +91,9 @@ export function Factors() {
                     >
                       <Icon className="hidden h-3.5 w-3.5 sm:block" />
                       {mode.title}
+                      {tab === 'discover' && pending > 0 && (
+                        <span data-tab-badge="" className={`rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums ${active ? 'bg-black/30 text-white' : 'bg-elevated text-foreground'}`}>{pending}</span>
+                      )}
                     </button>
                   )
                 })}
@@ -86,6 +104,11 @@ export function Factors() {
       />
 
       <main className="min-h-0 flex-1 px-3 pb-3 pt-3 lg:px-4 lg:pb-4 xl:overflow-hidden">
+        {activeTab === 'discover' && (
+          <div className="h-full min-h-0 xl:overflow-y-auto">
+            <FactorDiscover onGo={tab => changeTab(tab)} />
+          </div>
+        )}
         {activeTab === 'inspect' && <FactorDiscovery focusFactor={focusFactor} />}
         {activeTab === 'editor' && <FactorEditor key={searchParams.get('edit') ?? ''} editId={searchParams.get('edit') ?? ''} />}
         {activeTab === 'composite' && <FactorComposite />}
