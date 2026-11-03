@@ -11,7 +11,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Modal } from '@/components/Modal'
 import { DatePicker } from '@/components/DatePicker'
 import { DateShortcuts } from '@/components/DateShortcuts'
-import { StockPreviewDialog } from '@/components/StockPreviewDialog'
+import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { toNavItems } from '@/lib/listNav'
 import { boardTag } from '@/components/stock-table/primitives'
 

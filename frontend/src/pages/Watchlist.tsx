@@ -14,7 +14,7 @@ import { cn } from '@/lib/cn'
 import { computeGroupPcts, loadGroupStatsConfig, type GroupStatsConfigPatch } from '@/lib/watchlistGroupStats'
 import { PageHeader } from '@/components/PageHeader'
 import { EmptyState } from '@/components/EmptyState'
-import { StockPreviewDialog } from '@/components/StockPreviewDialog'
+import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { NewsBadge } from '@/components/StockNews'
 import { toNavItems, type NavItem } from '@/lib/listNav'
 import {

@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import json
+import os
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -38,15 +40,48 @@ def _parse(s: str | None) -> datetime | None:
         return None
 
 
+# 月分片的只读索引 (0.47.2): {路径: (文件签名, {事件 id: (created_at, 原始行)})}。
+# 分片几小时才改一次, 但每个请求都把 20MB 的当月分片整份 json 解析一遍 (实测 0.5s/次);
+# 现在按 (inode, mtime_ns, size) 缓存每行的发布时间与原文, 只解析时间窗内的行。
+# 每次调用都 json.loads 出新的 dict, 调用方拿到的仍是独立对象 (不共享可变状态)。
+# 原子写 (tmp + replace) 会换 inode, 同一时钟粒度内的两次写入也能识别为新文件。
+_SHARD_INDEX: dict[str, tuple[tuple[int, int, int], dict[str, tuple[datetime | None, str]]]] = {}
+_SHARD_LOCK = threading.Lock()
+_SHARD_MAX = 6
+
+
+def _shard_index(data_dir: Path, when: datetime) -> dict[str, tuple[datetime | None, str]]:
+    p = news_ingest.shard_path(data_dir, when)
+    try:
+        st = os.stat(p)
+    except OSError:
+        return {}
+    sig = (st.st_ino, st.st_mtime_ns, st.st_size)
+    key = str(p)
+    with _SHARD_LOCK:
+        hit = _SHARD_INDEX.get(key)
+    if hit is not None and hit[0] == sig:
+        return hit[1]
+    index: dict[str, tuple[datetime | None, str]] = {}
+    for line in p.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            row = json.loads(line)
+            index[row["id"]] = (_parse(row.get("created_at")), line)   # 同 id 后写覆盖, 与 load_shard 一致
+    with _SHARD_LOCK:
+        if len(_SHARD_INDEX) >= _SHARD_MAX and key not in _SHARD_INDEX:
+            _SHARD_INDEX.pop(next(iter(_SHARD_INDEX)))
+        _SHARD_INDEX[key] = (sig, index)
+    return index
+
+
 def load_recent(data_dir: Path, *, days: int = 7, now: datetime | None = None) -> list[dict]:
     now = now or datetime.now(timezone.utc)
     since = now - timedelta(days=days)
     rows: dict[str, dict] = {}
     for when in _months(now, days):
-        for rid, row in news_ingest.load_shard(data_dir, when).items():
-            dt = _parse(row.get("created_at"))
+        for rid, (dt, line) in _shard_index(data_dir, when).items():
             if dt and since <= dt <= now + timedelta(minutes=5):
-                rows[rid] = row
+                rows[rid] = json.loads(line)
     return sorted(rows.values(), key=lambda r: r.get("created_at") or "", reverse=True)
 
 
@@ -150,7 +185,13 @@ def summarize(views: list[dict]) -> dict:
 
 def batch_summary(data_dir: Path, symbols: list[str], *, days: int = 3, now: datetime | None = None) -> dict[str, dict]:
     rows = load_recent(data_dir, days=days, now=now)
-    return {s.upper(): summarize(for_symbol(data_dir, s, rows=rows, now=now, limit=200)) for s in symbols if s}
+    # 一次遍历按票分桶 (保持原顺序), 再逐票走 for_symbol: 结果与逐票全表过滤相同, 46 只自选不再各扫一遍全表
+    buckets: dict[str, list[dict]] = {s.upper(): [] for s in symbols if s}
+    for r in rows:
+        for sym in r.get("mentions") or {}:
+            if sym in buckets:
+                buckets[sym].append(r)
+    return {s.upper(): summarize(for_symbol(data_dir, s, rows=buckets[s.upper()], now=now, limit=200)) for s in symbols if s}
 
 
 def status(data_dir: Path, *, now: datetime | None = None) -> dict:
