@@ -545,18 +545,29 @@ function SubmissionRow({ s, flash, onRetry, onIntake }: {
   )
 }
 
-function SubmissionsBlock({ page, flash, onRetry, onIntake }: {
+function SubmissionsBlock({ page, flash, onRetry, onIntake, onProcess, busy }: {
   page: FactorLabPage; flash: string | null
   onRetry: (id: string) => void; onIntake: (id: string, a: 'merge' | 'ignore' | 'restore') => void
+  onProcess: () => void; busy: boolean
 }) {
   const list = page.intake?.submissions ?? []
   const u = page.intake?.usage
   const exhausted = !!u && u.today >= u.limit
+  const waiting = list.filter(s => s.stage === 'queued' || s.stage === 'to_extract').length
+  const next = page.intake?.next_tick ? new Date(page.intake.next_tick) : null
+  const nextLabel = next && !Number.isNaN(next.getTime())
+    ? `${String(next.getHours()).padStart(2, '0')}:${String(next.getMinutes()).padStart(2, '0')}` : null
   return (
     <Card attr={{ 'data-mine': '' }}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5 text-xs">
         <span className="text-[13.5px] font-semibold text-foreground">我的投递</span>
         <span className="text-secondary">{list.length} 条</span>
+        {waiting > 0 && (
+          <span className="text-secondary" data-waiting={waiting}>
+            排队 {waiting} · {nextLabel ? `下次自动 ${nextLabel}` : '等后台唤醒'}
+          </span>
+        )}
+        {waiting > 0 && <Btn onClick={onProcess} disabled={busy} attr={{ 'data-act': 'process' }}>立即处理</Btn>}
         <span className="ml-auto flex flex-wrap items-center gap-2 text-secondary">
           <span>今日模型 <b className="tabular-nums text-foreground">{u?.today ?? 0}</b> / {u?.limit ?? 0}</span>
           {!!u?.retries_today && <span>重试 <b className="tabular-nums text-foreground">{u.retries_today}</b> · 不占额度</span>}
@@ -710,6 +721,10 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
     mutationFn: (id: string) => api.intakeRetry(id),
     onSuccess: (d) => { toast(`已重试 · 第 ${d.retry_count} 次`, 'success'); refresh() },
   })
+  const processIntake = useMutation({
+    mutationFn: () => api.intakeProcess(),
+    onSuccess: () => { toast('已开始 · 处理投递', 'success'); setTimeout(refresh, 1500); refresh() },
+  })
 
   // 选中项在新一次轮询里不存在 (换周 / 采集条目被裁剪) 时回落到默认项, 不渲染空详情
   const effectiveSel: Sel | null = useMemo(() => {
@@ -760,7 +775,8 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
         <h2 className="text-[13.5px] font-semibold text-foreground">我的投递</h2>
         <span className="text-xs text-secondary">只做外部文章 / Pine / 公式摘录入口 · 失败可重试</span>
       </div>
-      <SubmissionsBlock page={page} flash={flash}
+      <SubmissionsBlock page={page} flash={flash} busy={processIntake.isPending || page.running}
+        onProcess={() => processIntake.mutate()}
         onRetry={id => retryIntake.mutate(id)} onIntake={(id, action) => intake.mutate({ id, action })} />
 
       <div id="fl-intake" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">

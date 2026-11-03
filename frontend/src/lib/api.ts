@@ -2299,7 +2299,7 @@ export interface IntakeOverview {
   funnel: { fetched: number; llm: number; us_stock: number; defined: number; formulas: number; pending: number; queued: number; failed: number; submissions: number }
   cards: IntakeCard[]; sources: IntakeSource[]; submissions: IntakeSubmission[]
   usage: { today: number; limit: number; retries_today: number; days30_calls: number; days30_tokens: number; by_task: Record<string, number>; tokens_by_task: Record<string, number> }
-  settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; queued: number; last_error: string | null
+  settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; next_tick?: string | null; queued: number; last_error: string | null
 }
 export interface FactorLabPage {
   week: DiscoverWeek | null
@@ -3175,6 +3175,8 @@ export const api = {
     request<{ id: string; stage: string; ahead: number }>('/api/factor-lab/intake/submit', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 60_000 }),
   intakeRetry: (id: string) =>
     request<{ id: string; stage: string; retry_count: number }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
+  intakeProcess: () =>
+    request<{ started: boolean }>('/api/factor-lab/intake/process', { method: 'POST', body: JSON.stringify({}) }),
   intakeAddSource: (payload: { name: string; url: string; kind: IntakeSource['kind'] }) =>
     request<IntakeSource>('/api/factor-lab/intake/sources', { method: 'POST', body: JSON.stringify(payload) }),
   intakeToggleSource: (id: string, enabled: boolean) =>

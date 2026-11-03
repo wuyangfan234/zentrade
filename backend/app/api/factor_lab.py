@@ -129,6 +129,16 @@ def run_intake(request: Request) -> dict:
     return {"started": True}
 
 
+@router.post("/intake/process")
+def process_intake(request: Request) -> dict:
+    """只跑模型队列 + 快筛, 不抓源 (投递「立即处理」)。"""
+    if factor_intake.running():
+        raise HTTPException(status_code=409, detail="上一轮还没结束")
+    data_dir, repo = _data_dir(request), _repo(request)
+    _background("intake-process", lambda: factor_intake.process_only(data_dir, repo))
+    return {"started": True}
+
+
 @router.post("/intake/items/{item_id}/merge")
 def merge(request: Request, item_id: str, formula: int = 0) -> dict:
     try:

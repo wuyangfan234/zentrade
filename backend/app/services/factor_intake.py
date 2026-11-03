@@ -54,6 +54,7 @@ CARD_LIMIT = 40  # intake cards returned to the page (pending ones are never cut
 MANUAL_LIMIT = 20  # 我的投递 always listed, independent of CARD_LIMIT
 MODEL_TEXT_CHARS = 4000  # raw model reply kept for the failing item (4 KB)
 SCREEN_HORIZON = 5
+TICK_MINUTES = 30  # scheduler wake-up interval (start_scheduler); the page shows the next pass from it
 _UA = {"User-Agent": "Mozilla/5.0 (ZenTrade factor intake; self-hosted)"}
 
 # 0.47.3: one machine-readable bucket per archive so the page can say why, instead of a raw error string.
@@ -896,6 +897,28 @@ def _due(data_dir: Path, now: datetime) -> bool:
     return last is None or (now - last).total_seconds() >= FETCH_INTERVAL_S
 
 
+def process_only(data_dir: Path, repo, *, now: datetime | None = None) -> dict:
+    """Model queue + quick screen without touching the feeds (0.47.4: "立即处理" for 投递).
+
+    `tick(force=True)` always fetches 17 feeds first (each up to 20 s), so a pasted item could wait
+    minutes behind them. This runs only the queue, so a retry shows its result within one model call.
+    """
+    now = now or _now()
+    with _LOCK:
+        if _RUN["running"]:
+            return {"skipped": "running"}
+        _RUN["running"] = True
+    try:
+        out = {"model": process_queue(data_dir), "screen": screen_pending(data_dir, repo, now=now)}
+        st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
+        st["last_tick"] = _iso(now)
+        st["last_result"] = out
+        _write_json(_dir(data_dir) / "run_state.json", st)
+        return out
+    finally:
+        _RUN["running"] = False
+
+
 def tick(data_dir: Path, repo, *, now: datetime | None = None, force: bool = False) -> dict:
     """Scheduler entry (every 30 min wake-up): fetch every 6 h, then model queue within budget, then screen off-hours."""
     now = now or _now()
@@ -1080,6 +1103,7 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
     cards = sorted(pending_cards + other_cards[:max(0, CARD_LIMIT - len(pending_cards))],
                    key=lambda c: c.get("published") or "", reverse=True)
     st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
+    last = _parse_dt(st.get("last_tick"))
     manual = sorted((it for it in items.values() if it.get("source") == "manual"),
                     key=lambda x: x.get("published") or "", reverse=True)[:MANUAL_LIMIT]
     submissions = [{
@@ -1092,6 +1116,7 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
                      for f in (it.get("formulas") or [])],
     } for it in manual]
     return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "submissions": submissions,
+            "next_tick": _iso(last + timedelta(minutes=TICK_MINUTES)) if last else None,
             "sources": src_rows, "usage": usage(data_dir), "settings": load_settings(data_dir), "last_fetch": st.get("last_fetch"),
             "last_tick": st.get("last_tick"), "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
             "last_error": next((it.get("last_error") for it in sorted(items.values(), key=lambda x: x.get("fetched_at") or "", reverse=True) if it.get("last_error") and it.get("stage") in ("queued", "to_extract")), None)}

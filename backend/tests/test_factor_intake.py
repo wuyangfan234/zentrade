@@ -423,3 +423,22 @@ def test_retry_api_404_and_422(tmp_path):
     fi._save_items(tmp_path, items)
     res = client.post(f"/api/factor-lab/intake/items/{iid}/retry")
     assert res.status_code == 200 and res.json()["stage"] == "to_extract"
+
+
+def test_process_only_skips_feeds_and_reports_next_tick(data_dir, monkeypatch):
+    """立即处理: 只跑模型队列, 不抓源; 页面能拿到下一次自动唤醒时间。"""
+    fi.submit(data_dir, text="横截面动量: 过去 20 日收益排名", title="立即处理")
+    fetched = []
+
+    def no_fetch(*a, **k):
+        fetched.append(1)
+        raise AssertionError("process_only must not fetch feeds")
+
+    monkeypatch.setattr(fi, "_fetch", no_fetch)
+    monkeypatch.setattr(fi, "_call", lambda dd, task, prompt, *, max_tokens, counted=True: "不是 JSON")
+    out = fi.process_only(data_dir, None)
+    assert fetched == [] and out["model"]["extracted"] == 1
+    it = _manual(data_dir)
+    assert it["stage"] == "archived" and it["failure"] == "model_format"
+    page = fi.overview(data_dir)
+    assert page["next_tick"] and page["next_tick"] > (page["last_tick"] or "")
