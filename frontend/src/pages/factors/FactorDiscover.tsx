@@ -18,6 +18,7 @@ import {
   type FactorLabPage,
   type IntakeCard,
   type IntakeSource,
+  type IntakeSubmission,
 } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
@@ -500,6 +501,78 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
   )
 }
 
+// ------------------------------------------------- 我的投递 (0.47.3)
+const STAGE_LABEL: Record<string, string> = {
+  queued: '排队中', to_extract: '排队中', to_screen: '快筛中', pending: '待审', merged: '已并入', archived: '失败',
+}
+
+function SubmissionRow({ s, flash, onRetry, onIntake }: {
+  s: IntakeSubmission; flash: boolean
+  onRetry: () => void; onIntake: (a: 'merge' | 'ignore' | 'restore') => void
+}) {
+  const [open, setOpen] = useState(false)
+  const f = s.formulas[0]
+  const failed = s.stage === 'archived'
+  const ignored = s.reason === '已忽略'
+  const label = failed ? (ignored ? '已忽略' : s.reason || '失败') : STAGE_LABEL[s.stage] ?? s.stage
+  const kind = s.stage === 'pending' ? 'run' : failed && !ignored ? 'warn' : 'mute'
+  const busy = s.stage === 'queued' || s.stage === 'to_extract' || s.stage === 'to_screen'
+  return (
+    <div className={`border-t border-border/60 px-3.5 py-2 transition-colors ${flash ? 'bg-accent/10' : ''}`}
+      data-submission={s.id} data-stage={s.stage}>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+        <span className="tabular-nums text-secondary">{s.published ? s.published.slice(5, 16).replace('T', ' ') : DASH}</span>
+        <span className={`min-w-0 max-w-[38rem] flex-1 truncate ${failed ? 'text-secondary' : 'text-foreground'}`} title={s.title}>{s.title || '未命名'}</span>
+        {f && <Chip dashed={failed}>{f.name}</Chip>}
+        <Pill kind={kind}>{label}</Pill>
+        {!failed && !busy && s.retry_count > 0 && <span className="text-[11px] text-secondary">重试 {s.retry_count}</span>}
+        {s.attempts > 1 && <span className="text-[11px] text-secondary">尝试 {s.attempts}</span>}
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          {failed && !ignored && s.retry_count < 5 && <Btn onClick={onRetry} attr={{ 'data-act': 'retry' }}>重试</Btn>}
+          {failed && f && <Btn onClick={() => onIntake('restore')}>恢复</Btn>}
+          {s.stage === 'pending' && <>
+            {f?.screen?.backtest && <Btn onClick={() => onIntake('merge')} attr={{ 'data-act': 'open' }}>看回测</Btn>}
+            <Btn onClick={() => onIntake('ignore')}>忽略</Btn>
+            <Btn primary onClick={() => onIntake('merge')}>并入因子库</Btn>
+          </>}
+          {!!s.model_text && <Btn onClick={() => setOpen(v => !v)} attr={{ 'data-act': 'model' }}>{open ? '收起返回' : '模型返回'}</Btn>}
+          {s.link && <a href={s.link} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center rounded-btn border border-border px-2.5 text-xs text-secondary hover:text-foreground">原文 ↗</a>}
+        </span>
+      </div>
+      {f?.dsl && <div title={f.dsl} className="mt-1 truncate font-mono text-[11px] text-secondary">{f.dsl}</div>}
+      {open && <pre data-model-text="" className="mt-1.5 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-base p-2 text-[11px] leading-relaxed text-secondary">{s.model_text}</pre>}
+    </div>
+  )
+}
+
+function SubmissionsBlock({ page, flash, onRetry, onIntake }: {
+  page: FactorLabPage; flash: string | null
+  onRetry: (id: string) => void; onIntake: (id: string, a: 'merge' | 'ignore' | 'restore') => void
+}) {
+  const list = page.intake?.submissions ?? []
+  const u = page.intake?.usage
+  const exhausted = !!u && u.today >= u.limit
+  return (
+    <Card attr={{ 'data-mine': '' }}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5 text-xs">
+        <span className="text-[13.5px] font-semibold text-foreground">我的投递</span>
+        <span className="text-secondary">{list.length} 条</span>
+        <span className="ml-auto flex flex-wrap items-center gap-2 text-secondary">
+          <span>今日模型 <b className="tabular-nums text-foreground">{u?.today ?? 0}</b> / {u?.limit ?? 0}</span>
+          {!!u?.retries_today && <span>重试 <b className="tabular-nums text-foreground">{u.retries_today}</b> · 不占额度</span>}
+          {exhausted && <Pill kind="warn">额度用尽 · 明天自动继续</Pill>}
+        </span>
+      </div>
+      {list.length === 0
+        ? <div className="p-4 text-center text-xs text-muted">还没有投递 · 右上角「投递」放链接或正文</div>
+        : list.map(s => (
+          <SubmissionRow key={s.id} s={s} flash={flash === s.id}
+            onRetry={() => onRetry(s.id)} onIntake={a => onIntake(s.id, a)} />
+        ))}
+    </Card>
+  )
+}
+
 const KIND_LABEL: Record<IntakeSource['kind'], string> = { person: '人物', site: '网站', aggregator: '聚合', paper: '论文' }
 const STATUS_LABEL: Record<IntakeSource['status'], [string, 'run' | 'mute' | 'warn']> = {
   active: ['活跃', 'run'], idle: ['沉寂', 'mute'], failed: ['失败', 'warn'], off: ['关闭', 'mute'], new: ['待抓', 'mute'],
@@ -581,14 +654,14 @@ function SourcesSheet({ page, onClose }: { page: FactorLabPage; onClose: () => v
   )
 }
 
-function SubmitSheet({ onClose }: { onClose: () => void }) {
+function SubmitSheet({ onClose, onDone }: { onClose: () => void; onDone: (id: string, ahead: number) => void }) {
   const qc = useQueryClient()
   const [mode, setMode] = useState<'link' | 'text'>('link')
   const [url, setUrl] = useState('')
   const [text, setText] = useState('')
   const sub = useMutation({
     mutationFn: () => api.intakeSubmit(mode === 'link' ? { url } : { text }),
-    onSuccess: () => { toast('已排队 · 抽取', 'success'); void qc.invalidateQueries({ queryKey: QK.factorLabPage }); onClose() },
+    onSuccess: (d) => { void qc.invalidateQueries({ queryKey: QK.factorLabPage }); onClose(); onDone(d.id, d.ahead ?? 0) },
   })
   return (
     <Sheet title="投递" onClose={onClose} attr={{ 'data-sheet': 'submit' }}
@@ -612,7 +685,17 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
   const [candFilter, setCandFilter] = useState<'week' | 'saved' | 'discarded' | 'all'>('week')
   const [intakeFilter, setIntakeFilter] = useState<'all' | 'pending' | 'archived'>('all')
   const [sheet, setSheet] = useState<'sources' | 'submit' | null>(null)
+  const [flash, setFlash] = useState<string | null>(null)
+  const flashTimer = useRef<number | undefined>(undefined)
   const refresh = () => void qc.invalidateQueries({ queryKey: QK.factorLabPage })
+  const onSubmitted = (id: string, ahead: number) => {
+    toast(ahead > 0 ? `已收到 · 前面还有 ${ahead} 条投递` : '已收到 · 下一次抽取就轮到它', 'success')
+    setFlash(id)
+    window.clearTimeout(flashTimer.current)
+    flashTimer.current = window.setTimeout(() => setFlash(null), 6000)
+    refresh()
+    requestAnimationFrame(() => document.getElementById('fl-mine')?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
   const decide = useMutation({
     mutationFn: ({ sig, action }: { sig: string; action: 'save' | 'discard' }) => api.factorLabDecide(page!.week!.week, sig, action),
     onSuccess: (_d, v) => { toast(v.action === 'save' ? '已保存 · 候选方案' : '已放弃', 'success'); refresh(); void qc.invalidateQueries({ queryKey: QK.researchCandidates }) },
@@ -623,6 +706,10 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
     onSuccess: (_d, v) => { toast(v.action === 'merge' ? '已并入因子库 · 观察' : v.action === 'ignore' ? '已忽略' : '已恢复', 'success'); refresh(); void qc.invalidateQueries({ queryKey: ['factors-library'] }); void qc.invalidateQueries({ queryKey: QK.factorColumns }) },
   })
   const runIntake = useMutation({ mutationFn: () => api.intakeRun(), onSuccess: () => toast('已开始 · 采集', 'success') })
+  const retryIntake = useMutation({
+    mutationFn: (id: string) => api.intakeRetry(id),
+    onSuccess: (d) => { toast(`已重试 · 第 ${d.retry_count} 次`, 'success'); refresh() },
+  })
 
   // 选中项在新一次轮询里不存在 (换周 / 采集条目被裁剪) 时回落到默认项, 不渲染空详情
   const effectiveSel: Sel | null = useMemo(() => {
@@ -669,6 +756,13 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
 
       {w && effectiveSel && <Detail page={page} sel={effectiveSel} onDecide={(sig, action) => decide.mutate({ sig, action })} onIntake={(id, action) => intake.mutate({ id, action })} />}
 
+      <div id="fl-mine" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">
+        <h2 className="text-[13.5px] font-semibold text-foreground">我的投递</h2>
+        <span className="text-xs text-secondary">只做外部文章 / Pine / 公式摘录入口 · 失败可重试</span>
+      </div>
+      <SubmissionsBlock page={page} flash={flash}
+        onRetry={id => retryIntake.mutate(id)} onIntake={(id, action) => intake.mutate({ id, action })} />
+
       <div id="fl-intake" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">
         <h2 className="text-[13.5px] font-semibold text-foreground">采集</h2>
         <span className="text-xs text-secondary">近 30 天 · {(it?.sources ?? []).filter(s => s.enabled).length} 源 · {funnel?.fetched ?? 0} 篇</span>
@@ -710,7 +804,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       </>}
 
       {sheet === 'sources' && it && <SourcesSheet page={page} onClose={() => setSheet(null)} />}
-      {sheet === 'submit' && <SubmitSheet onClose={() => setSheet(null)} />}
+      {sheet === 'submit' && <SubmitSheet onClose={() => setSheet(null)} onDone={onSubmitted} />}
     </div>
   )
 }

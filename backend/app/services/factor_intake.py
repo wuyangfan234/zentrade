@@ -51,8 +51,21 @@ DEDUPE_CORR = 0.9
 # e.g. a 2021 post; old posts would eat the daily model budget for days). Undated posts count as fresh.
 FRESH_DAYS = 30
 CARD_LIMIT = 40  # intake cards returned to the page (pending ones are never cut)
+MANUAL_LIMIT = 20  # 我的投递 always listed, independent of CARD_LIMIT
+MODEL_TEXT_CHARS = 4000  # raw model reply kept for the failing item (4 KB)
 SCREEN_HORIZON = 5
 _UA = {"User-Agent": "Mozilla/5.0 (ZenTrade factor intake; self-hosted)"}
+
+# 0.47.3: one machine-readable bucket per archive so the page can say why, instead of a raw error string.
+FAILURE_LABEL = {
+    "model_empty": "模型没返回内容",
+    "model_format": "返回格式不对",
+    "dsl_compile": "公式编译失败",
+    "quote_mismatch": "原句对不上原文",
+    "duplicate": "跟已有因子重复",
+    "no_definition": "没有可算定义",
+}
+_RETRY_PREFIX = "上一次的输出无法解析成 JSON 对象。请重新抽取, 只输出一个 JSON 对象, 不要解释、不要 Markdown 代码块。\n\n"
 
 # ---------------------------------------------------------------- default watch list (11-02 measured)
 DEFAULT_SOURCES: list[dict] = [
@@ -248,6 +261,7 @@ def usage(data_dir: Path) -> dict:
     last30 = sorted((u.get("days") or {}).items())[-30:]
     return {
         "today": int(today.get("calls", 0)),
+        "retries_today": int(today.get("retries", 0)),
         "limit": load_settings(data_dir)["daily_limit"],
         "days30_calls": sum(int(v.get("calls", 0)) for _, v in last30),
         "days30_tokens": sum(int(v.get("tokens", 0)) for _, v in last30),
@@ -256,12 +270,17 @@ def usage(data_dir: Path) -> dict:
     }
 
 
-def _charge(data_dir: Path, task: str, tokens: int) -> None:
+def _charge(data_dir: Path, task: str, tokens: int, *, counted: bool = True) -> None:
+    """Record one model call. Retries are free of the daily quota (`counted=False`): they are logged as
+    `retries` and still counted in tokens, so the limit only governs fresh work."""
     path = _usage_path(data_dir)
     u = _read_json(path, {}) or {}
     days = u.setdefault("days", {})
     day = days.setdefault(_et_day(), {"calls": 0, "tokens": 0, "tasks": {}})
-    day["calls"] = int(day.get("calls", 0)) + 1
+    if counted:
+        day["calls"] = int(day.get("calls", 0)) + 1
+    else:
+        day["retries"] = int(day.get("retries", 0)) + 1
     day["tokens"] = int(day.get("tokens", 0)) + int(tokens)
     t = day.setdefault("tasks", {}).setdefault(task, {"calls": 0, "tokens": 0})
     t["calls"] += 1
@@ -499,10 +518,10 @@ def _loop() -> asyncio.AbstractEventLoop:
     return _LOOP
 
 
-def _call(data_dir: Path, task: str, prompt: str, *, max_tokens: int) -> str:
+def _call(data_dir: Path, task: str, prompt: str, *, max_tokens: int, counted: bool = True) -> str:
     """One metered model call. Raises on failure (item stays queued)."""
     text = _loop().run_until_complete(_ask(task, prompt, max_tokens=max_tokens))
-    _charge(data_dir, task, (len(prompt) + len(text or "")) // 4)
+    _charge(data_dir, task, (len(prompt) + len(text or "")) // 4, counted=counted)
     return text or ""
 
 
@@ -573,28 +592,48 @@ def _triage_result(it: dict, text: str) -> None:
     elif j.get("market") != "us_stock":
         it.update(stage="archived", reason={"us_index": "指数择时", "futures": "期货", "crypto": "加密"}.get(str(j.get("market")), "非美股个股"))
     elif j.get("kind") not in ("factor", "rule"):
-        it.update(stage="archived", reason="无可算定义")
+        it.update(stage="archived", reason="无可算定义", failure="no_definition")
     else:
         it["stage"] = "to_extract"
 
 
-def _extract_result(data_dir: Path, item_id: str, text: str) -> None:
+def _extract_result(data_dir: Path, item_id: str, text: str, *, calls: int = 1) -> None:
+    raw = (text or "").strip()
+
     def update(it: dict) -> None:
         it.pop("last_error", None)
+        it.pop("retry_grant", None)
+        it["last_model_text"] = raw[:MODEL_TEXT_CHARS]
+        it["attempts"] = int(it.get("attempts") or 0) + max(1, calls)
+        if not raw:
+            it.update(stage="archived", failure="model_empty", reason=FAILURE_LABEL["model_empty"])
+            return
         j = _parse_json(text)
         if j is None:
-            it.update(stage="archived", reason="模型输出不可解析")
+            it.update(stage="archived", failure="model_format", reason=FAILURE_LABEL["model_format"])
             return
         it["summary"] = j.get("summary_zh")
+        it.pop("failure", None)
+        it.pop("reason", None)
         # dedupe against the latest state, read under the same lock as the write
         formulas = _check_items(it, j.get("items") or [], _known_quote_hashes(load_items(data_dir)))
         if formulas:
             it["formulas"] = formulas
             it["stage"] = "to_screen"
         else:
-            it.update(stage="archived", reason=it.get("reason") or "无可编译公式")
+            code = it.get("failure") or "no_definition"
+            it.update(stage="archived", failure=code, reason=it.get("reason") or FAILURE_LABEL[code])
 
     _commit(data_dir, item_id, "to_extract", update)
+
+
+def _unusable(text: str) -> bool:
+    """True when the reply cannot be used at all (empty / not JSON / no items) — the retry trigger."""
+    j = _parse_json(text)
+    if j is None:
+        return True
+    items = j.get("items")
+    return not (isinstance(items, list) and items)
 
 
 def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
@@ -603,7 +642,7 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
     Model calls run outside the items lock; each result is written back only if the item is still in the
     stage it was read in (a decision made meanwhile wins)."""
     budget = _budget_left(data_dir) if max_calls is None else min(max_calls, _budget_left(data_dir))
-    stats = {"triaged": 0, "extracted": 0, "errors": 0, "budget_left": budget}
+    stats = {"triaged": 0, "extracted": 0, "retried": 0, "errors": 0, "budget_left": budget}
     with _ITEMS_LOCK:  # posts queued before the freshness window existed (0.47.0 first fetch)
         items = load_items(data_dir)
         stale = [it for it in items.values() if it.get("stage") == "queued" and not _fresh(it.get("published"))]
@@ -611,16 +650,17 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
             it.update(stage="archived", reason=f"超过 {FRESH_DAYS} 天", prefilter="stale")
         if stale:
             _save_items(data_dir, items)
-    order = [it["id"] for it in sorted(items.values(), key=lambda x: x.get("published") or "", reverse=True)
-             if it.get("stage") in ("queued", "to_extract")]
+    order = [it["id"] for it in _queue_order(items)]
     vocab = None
     rules = None
     for item_id in order:
-        if budget <= 0:
-            break
         it = load_items(data_dir).get(item_id)
         if it is None:
             continue
+        # A retry granted by the 投递 card (or by the automatic second attempt) ignores the daily quota.
+        granted = bool(it.get("retry_grant"))
+        if budget <= 0 and not granted:
+            break
         try:
             if it["stage"] == "queued":
                 text = _call(data_dir, "factor_triage", _fill(_TRIAGE_PROMPT, SRC=it["source_name"], TITLE=it["title"], BODY=it["body"]), max_tokens=400)
@@ -628,15 +668,26 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
                 stats["triaged"] += 1
                 _commit(data_dir, item_id, "queued", lambda x, t=text: _triage_result(x, t))
                 it = load_items(data_dir).get(item_id) or {}
-            if it.get("stage") == "to_extract" and budget > 0:
+            if it.get("stage") == "to_extract" and (budget > 0 or granted):
                 vocab = vocab or _vocab()
                 rules = rules if rules is not None else _rules_vocab(data_dir)
                 prompt = _fill(_EXTRACT_PROMPT, BASE=vocab["base"], LIB=vocab["lib"], OPS=vocab["ops"], RULES=rules,
                                SRC=it["source_name"], TITLE=it["title"], BODY=it["body"])
                 text = _call(data_dir, "factor_extract", prompt, max_tokens=4000)
-                budget -= 1
+                if budget > 0:
+                    budget -= 1
                 stats["extracted"] += 1
-                _extract_result(data_dir, item_id, text)
+                calls = 1
+                # 0.47.3: one corrective retry when the reply is empty / not JSON / has no items.
+                # Retries never consume the daily quota (counted=False); they are logged as `retries`.
+                if _unusable(text):
+                    calls = 2
+                    try:
+                        text = _call(data_dir, "factor_extract", _RETRY_PREFIX + prompt, max_tokens=4000, counted=False)
+                        stats["retried"] += 1
+                    except Exception as exc:  # retry failed: keep the first reply for the failure card
+                        logger.warning("factor intake retry failed: %s", type(exc).__name__)
+                _extract_result(data_dir, item_id, text, calls=calls)
         except Exception as exc:  # model unavailable: keep queued, never switch models silently
             stats["errors"] += 1
             message = f"{type(exc).__name__}: {str(exc)[:160]}"
@@ -647,32 +698,46 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
     return stats
 
 
+def _queue_order(items: dict[str, dict]) -> list[dict]:
+    """Manual submissions first (0.47.3): a paste should not sit behind a day of RSS posts."""
+    active = [it for it in items.values() if it.get("stage") in ("queued", "to_extract")]
+    manual = sorted((it for it in active if it.get("source") == "manual"), key=lambda x: x.get("published") or "", reverse=True)
+    other = sorted((it for it in active if it.get("source") != "manual"), key=lambda x: x.get("published") or "", reverse=True)
+    return manual + other
+
+
 def _check_items(item: dict, raw: list, seen_quotes: set) -> list[dict]:
     article = f"{item['title']} {item['body']}"
     out = []
-    reasons = []
+    reasons: list[str] = []
+    failures: list[str] = []
     for x in raw[:6]:
         if not isinstance(x, dict):
             continue
         quote = str(x.get("quote") or "")
         dsl = (x.get("dsl") or "").strip() if isinstance(x.get("dsl"), str) else ""
         if not quote_verbatim(quote, article):
-            reasons.append("原句对不上")
+            failures.append("quote_mismatch")
+            reasons.append("原句对不上原文")
             continue
         qh = hashlib.sha1(_norm(quote).encode()).hexdigest()[:16]
         if qh in seen_quotes:
-            reasons.append("跨文重复")
+            failures.append("duplicate")
+            reasons.append("跟已有因子重复")
             continue
         if not dsl:
+            failures.append("no_definition")
             reasons.append("缺数据: " + "、".join(str(m) for m in (x.get("missing") or [])[:2]) if x.get("missing") else "写不出公式")
             continue
         compiled = _compile(dsl)
         if not compiled.ok:
-            reasons.append(f"编译失败 {compiled.errors[0].code}")
+            failures.append("dsl_compile")
+            reasons.append(f"公式编译失败 {compiled.errors[0].code}")
             continue
         bad = period_mismatches(dsl, article)
         if bad:
-            reasons.append("周期不一致 " + ",".join(bad))
+            failures.append("dsl_compile")
+            reasons.append("公式周期与原文不一致 " + ",".join(bad))
             continue
         seen_quotes.add(qh)
         direction = x.get("direction") if x.get("direction") in ("high", "low") else "high"
@@ -682,7 +747,8 @@ def _check_items(item: dict, raw: list, seen_quotes: set) -> list[dict]:
                     "dup_rule": x.get("dup_rule"),
                     "checks": {"quote": True, "compile": True, "period": True}})
     if not out and reasons:
-        item["reason"] = reasons[0][:40]
+        item["reason"] = reasons[0][:60]
+        item["failure"] = failures[0]
     return out
 
 
@@ -797,7 +863,7 @@ def screen_pending(data_dir: Path, repo, *, now: datetime | None = None) -> dict
                 it["stage"] = "pending"
             else:
                 first = (it.get("formulas") or [{}])[0].get("screen") or {}
-                it.update(stage="archived", reason=f"重复 · {first.get('nearest_label') or '库内因子'}", duplicate=True)
+                it.update(stage="archived", reason=f"重复 · {first.get('nearest_label') or '库内因子'}", duplicate=True, failure="duplicate")
             it["screened_at"] = _iso(_now())
             n += 1
         _save_items(data_dir, items)
@@ -868,9 +934,11 @@ def submit(data_dir: Path, *, url: str = "", text: str = "", title: str = "") ->
         items = load_items(data_dir)
         items[iid] = {"id": iid, "source": "manual", "source_name": "投递", "title": (title or body[:60]).strip(), "link": link,
                       "published": _iso(_now()), "body": body[:MAX_BODY_CHARS], "fetched_at": _iso(_now()), "stage": "to_extract",
-                      "reason": None, "prefilter": "manual"}
+                      "reason": None, "failure": None, "prefilter": "manual", "attempts": 0, "retry_count": 0}
         _save_items(data_dir, items)
-    return {"id": iid, "stage": "to_extract"}
+        # 投递排在队首: report how many items are ahead of it (0 = next model call picks it up)
+        ahead = sum(1 for it in _queue_order(items) if it["id"] != iid and it.get("source") == "manual")
+    return {"id": iid, "stage": "to_extract", "ahead": ahead}
 
 
 # ---------------------------------------------------------------- decisions
@@ -930,6 +998,39 @@ def restore(data_dir: Path, item_id: str) -> dict:
     return {"id": item_id, "stage": "pending"}
 
 
+RETRY_LIMIT = 5
+
+
+def retry(data_dir: Path, item_id: str) -> dict:
+    """Re-queue a failed manual submission (0.47.3).
+
+    The one call it needs is granted (`retry_grant`), so the daily limit never blocks a retry; the grant is
+    cleared by the next extract result. An item that already has formulas re-enters at the quick-screen step.
+    """
+    with _ITEMS_LOCK:
+        items = load_items(data_dir)
+        it = items.get(item_id)
+        if it is None:
+            raise KeyError(item_id)
+        if it.get("source") != "manual":
+            raise ValueError("只有投递的条目可以手动重试")
+        if it.get("stage") != "archived":
+            raise ValueError("只有已归档的投递可以重试")
+        if it.get("reason") == "已忽略":
+            raise ValueError("已忽略的条目用「恢复」")
+        used = int(it.get("retry_count") or 0)
+        if used >= RETRY_LIMIT:
+            raise ValueError(f"重试已达 {RETRY_LIMIT} 次上限, 请补充原文后重新投递")
+        it["retry_count"] = used + 1
+        it["stage"] = "to_screen" if it.get("formulas") else "to_extract"
+        it["retry_grant"] = it["stage"] == "to_extract"
+        for key in ("reason", "failure", "last_error", "last_model_text", "duplicate"):
+            it.pop(key, None)
+        it["decided_at"] = None
+        _save_items(data_dir, items)
+        return {"id": item_id, "stage": it["stage"], "retry_count": it["retry_count"]}
+
+
 # ---------------------------------------------------------------- read model for the page
 def overview(data_dir: Path, *, days: int = 30) -> dict:
     items = load_items(data_dir)
@@ -961,9 +1062,14 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
         "defined": sum(1 for it in recent if it.get("stage") in ("to_screen", "pending", "merged") or it.get("formulas") or it.get("summary")),
         "formulas": sum(len(it.get("formulas") or []) for it in recent),
         "pending": sum(1 for it in items.values() if it.get("stage") == "pending"),
+        "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
+        "failed": sum(1 for it in items.values() if it.get("stage") == "archived" and it.get("failure")),
+        "submissions": sum(1 for it in items.values() if it.get("source") == "manual"),
     }
     cards = []
     for it in sorted(items.values(), key=lambda x: x.get("published") or "", reverse=True):
+        if it.get("source") == "manual":
+            continue  # 0.47.3: manual submissions live in their own block, never filtered out
         if not it.get("formulas") or it.get("stage") not in ("pending", "archived", "merged", "to_screen"):
             continue
         cards.append({k: it.get(k) for k in ("id", "source", "source_name", "title", "link", "published", "stage", "reason", "summary", "duplicate")}
@@ -974,8 +1080,19 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
     cards = sorted(pending_cards + other_cards[:max(0, CARD_LIMIT - len(pending_cards))],
                    key=lambda c: c.get("published") or "", reverse=True)
     st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
-    return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "sources": src_rows,
-            "usage": usage(data_dir), "settings": load_settings(data_dir), "last_fetch": st.get("last_fetch"),
+    manual = sorted((it for it in items.values() if it.get("source") == "manual"),
+                    key=lambda x: x.get("published") or "", reverse=True)[:MANUAL_LIMIT]
+    submissions = [{
+        "id": it.get("id"), "title": it.get("title"), "link": it.get("link") or "", "published": it.get("published"),
+        "stage": it.get("stage"), "reason": it.get("reason"), "failure": it.get("failure"),
+        "duplicate": bool(it.get("duplicate")), "summary": it.get("summary"),
+        "attempts": int(it.get("attempts") or 0), "retry_count": int(it.get("retry_count") or 0),
+        "model_text": (it.get("last_model_text") or "")[:MODEL_TEXT_CHARS],
+        "formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks")}
+                     for f in (it.get("formulas") or [])],
+    } for it in manual]
+    return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "submissions": submissions,
+            "sources": src_rows, "usage": usage(data_dir), "settings": load_settings(data_dir), "last_fetch": st.get("last_fetch"),
             "last_tick": st.get("last_tick"), "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
             "last_error": next((it.get("last_error") for it in sorted(items.values(), key=lambda x: x.get("fetched_at") or "", reverse=True) if it.get("last_error") and it.get("stage") in ("queued", "to_extract")), None)}
 

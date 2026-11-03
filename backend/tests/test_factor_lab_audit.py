@@ -116,7 +116,7 @@ def test_cross_article_dedupe_sees_quotes_from_earlier_runs(tmp_path, monkeypatc
     monkeypatch.setattr(fi, "_rules_vocab", lambda dd: "")
     fi.process_queue(tmp_path)
     new = fi.load_items(tmp_path)["new"]
-    assert new["stage"] == "archived" and new["reason"] == "跨文重复"
+    assert new["stage"] == "archived" and new["reason"] == "跟已有因子重复"
 
 
 def test_model_error_flag_clears_after_a_successful_call(tmp_path, monkeypatch):

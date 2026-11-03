@@ -307,3 +307,119 @@ def test_stale_queued_items_are_archived_before_any_model_call(data_dir, monkeyp
     monkeypatch.setattr(fi, "_call", lambda *a, **k: called.append(1) or "{}")
     fi.process_queue(data_dir)
     assert called == [] and fi.load_items(data_dir)["s1"]["reason"] == "超过 30 天"
+
+
+# ---------------------------------------------------------------- 0.47.3: 投递不再是黑箱
+def _manual(data_dir):
+    return next(v for v in fi.load_items(data_dir).values() if v.get("source") == "manual")
+
+
+def test_manual_submission_jumps_the_queue(data_dir, monkeypatch):
+    """投递优先: 当天只剩一次调用时, 先处理投递而不是更早的 RSS 文章。"""
+    fi.save_settings(data_dir, daily_limit=1)
+    body = "过去 20 日收盘位置横截面最强的前 10% 做多, 排名跌回中位数卖出"
+    _seed(data_dir, [{"id": "rss1", "title": "rss", "body": "x", "stage": "to_extract"}])
+    fi.submit(data_dir, text=body, title="我的想法")
+    seen = []
+
+    def fake_call(dd, task, prompt, *, max_tokens, counted=True):
+        seen.append("manual" if "我的想法" in prompt else "rss")
+        return json.dumps({"summary_zh": "x", "items": [
+            {"name_zh": "位置", "quote": "过去 20 日收盘位置横截面最强的前 10%", "dsl": "close", "direction": "high"}]})
+
+    monkeypatch.setattr(fi, "_call", fake_call)
+    fi.process_queue(data_dir)
+    assert seen == ["manual"]
+
+
+def test_extract_retries_once_without_quota(data_dir, monkeypatch):
+    """解析失败自动重试一次; 重试记在 retries 里, 不占每日 calls 额度。"""
+    fi.save_settings(data_dir, daily_limit=5)
+    fi.submit(data_dir, text="动量因子: 过去 20 日收益横截面排名, 最强的一批做多", title="动量")
+    replies = iter(["抱歉, 这个我无法处理。", json.dumps({"summary_zh": "动量", "items": [
+        {"name_zh": "动量20", "quote": "过去 20 日收益横截面排名", "dsl": "ts_delta(close, 20)", "direction": "high"}]})])
+    calls = []
+
+    def fake_call(dd, task, prompt, *, max_tokens, counted=True):
+        calls.append(counted)
+        fi._charge(dd, task, 10, counted=counted)
+        return next(replies)
+
+    monkeypatch.setattr(fi, "_call", fake_call)
+    out = fi.process_queue(data_dir)
+    it = _manual(data_dir)
+    assert out["extracted"] == 1 and out["retried"] == 1
+    assert calls == [True, False]
+    assert it["stage"] == "to_screen" and it["attempts"] == 2
+    assert fi.usage(data_dir)["today"] == 1 and fi.usage(data_dir)["retries_today"] == 1
+
+
+def test_extract_failure_is_classified_and_keeps_model_text(data_dir, monkeypatch):
+    """失败落到六类之一, 并留下模型原话; retry_grant 用完即清。"""
+    fi.submit(data_dir, text="某篇讲横截面动量的文章正文", title="失败样例")
+    monkeypatch.setattr(fi, "_call", lambda dd, task, prompt, *, max_tokens, counted=True: "我不能回答这个问题")
+    fi.process_queue(data_dir)
+    it = _manual(data_dir)
+    assert it["stage"] == "archived"
+    assert it["failure"] == "model_format" and it["reason"] == "返回格式不对"
+    assert it["last_model_text"] == "我不能回答这个问题"
+    assert it.get("retry_grant") is None
+    assert fi.overview(data_dir)["funnel"]["failed"] == 1
+
+
+def test_retry_requeues_without_daily_quota(data_dir, monkeypatch):
+    """手动重试: 额度已用尽也能跑一次, 跑完清掉放行标记。"""
+    fi.save_settings(data_dir, daily_limit=1)
+    fi.submit(data_dir, text="我的因子: 收盘位置", title="t")
+    iid = next(iter(fi.load_items(data_dir)))
+    items = fi.load_items(data_dir)
+    items[iid].update(stage="archived", failure="model_format", reason="返回格式不对")
+    fi._save_items(data_dir, items)
+    fi._charge(data_dir, "factor_extract", 10)  # 今日额度已用尽
+    out = fi.retry(data_dir, iid)
+    assert out["stage"] == "to_extract" and out["retry_count"] == 1
+    assert fi.load_items(data_dir)[iid]["retry_grant"] is True
+    called = []
+
+    def fake_call(dd, task, prompt, *, max_tokens, counted=True):
+        called.append(counted)
+        return "不是 JSON"
+
+    monkeypatch.setattr(fi, "_call", fake_call)
+    fi.process_queue(data_dir)
+    assert called and called[0] is True  # 额度 0 仍然执行
+    assert fi.load_items(data_dir)[iid]["stage"] == "archived"
+
+
+def test_overview_lists_submission_before_any_formula(data_dir):
+    """「我的投递」不受「至少一条公式」过滤: 排队中的也列出来, 采集网格不重复展示。"""
+    fi.submit(data_dir, text="正文内容", title="还没跑")
+    page = fi.overview(data_dir)
+    assert page["funnel"]["submissions"] == 1 and page["funnel"]["queued"] == 1
+    assert len(page["submissions"]) == 1
+    assert page["submissions"][0]["stage"] == "to_extract"
+    assert page["submissions"][0]["model_text"] == ""
+    assert page["cards"] == []
+
+
+def test_retry_api_404_and_422(tmp_path):
+    from types import SimpleNamespace
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.api.factor_lab import router
+
+    app = FastAPI()
+    app.include_router(router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path))
+    client = TestClient(app)
+    assert client.post("/api/factor-lab/intake/items/nope/retry").status_code == 404
+    fi.submit(tmp_path, text="正文", title="t")
+    iid = next(iter(fi.load_items(tmp_path)))
+    assert client.post(f"/api/factor-lab/intake/items/{iid}/retry").status_code == 422  # 还在排队
+    items = fi.load_items(tmp_path)
+    items[iid].update(stage="archived", failure="model_format", reason="返回格式不对")
+    fi._save_items(tmp_path, items)
+    res = client.post(f"/api/factor-lab/intake/items/{iid}/retry")
+    assert res.status_code == 200 and res.json()["stage"] == "to_extract"

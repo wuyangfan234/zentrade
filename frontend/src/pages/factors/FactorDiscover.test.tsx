@@ -106,3 +106,25 @@ it('no colloquial second-person labels remain on the discover page', () => {
   const source = readFileSync(resolve('src/pages/factors/FactorDiscover.tsx'), 'utf8')
   expect(source).not.toMatch(/你决定|待你|待看/)
 })
+
+it('my submissions block lists a failed paste with reason, model text and retry', async () => {
+  const p: FactorLabPage = {
+    ...page,
+    intake: {
+      ...page.intake!,
+      submissions: [{
+        id: 'm1', title: 'RSI2 组合', link: '', published: '2026-11-03T08:52:19+00:00',
+        stage: 'archived', reason: '返回格式不对', failure: 'model_format', duplicate: false,
+        attempts: 2, retry_count: 0, model_text: '抱歉, 我无法回答', formulas: [],
+      }],
+    },
+  }
+  await render(p)
+  const row = host.querySelector('[data-submission="m1"]')!
+  expect(row.textContent).toContain('返回格式不对')
+  expect(row.textContent).toContain('重试')
+  expect(host.querySelector('[data-mine]')?.textContent).toContain('今日模型')
+  const btn = [...row.querySelectorAll('button')].find(b => b.textContent === '模型返回')!
+  await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+  expect(row.querySelector('[data-model-text]')?.textContent).toContain('我无法回答')
+})

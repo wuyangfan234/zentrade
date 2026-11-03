@@ -7,6 +7,7 @@
   POST /api/factor-lab/intake/run                 立即采集一轮 (抓取 + 模型 + 快筛)
   POST /api/factor-lab/intake/items/{id}/merge    采集公式并入因子库 (状态 = 观察, 下周五进入筛因子)
   POST /api/factor-lab/intake/items/{id}/ignore   忽略
+  POST /api/factor-lab/intake/items/{id}/retry    失败重试 (不占每日模型额度)
   POST /api/factor-lab/intake/items/{id}/restore  恢复已归档条目
   POST /api/factor-lab/intake/submit              投递 (链接 / 正文 / Pine / 公式)
   POST /api/factor-lab/intake/sources             添加来源 (只允许公网 http(s))
@@ -152,6 +153,17 @@ def restore(request: Request, item_id: str) -> dict:
         return factor_intake.restore(_data_dir(request), item_id)
     except KeyError:
         raise HTTPException(status_code=404, detail="条目不存在或不可恢复") from None
+
+
+@router.post("/intake/items/{item_id}/retry")
+def retry_item(request: Request, item_id: str) -> dict:
+    """0.47.3: re-queue a failed 投递. The call it needs is exempt from the daily model quota."""
+    try:
+        return factor_intake.retry(_data_dir(request), item_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="条目不存在") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 class SubmitIn(BaseModel):

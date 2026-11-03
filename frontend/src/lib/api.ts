@@ -2283,16 +2283,22 @@ export interface IntakeFormula { name: string; quote: string; dsl: string; direc
 export interface IntakeCard {
   id: string; source: string; source_name: string; title: string; link: string; published: string | null
   stage: 'pending' | 'archived' | 'merged' | 'to_screen'; reason: string | null; summary?: string | null; duplicate?: boolean
+  failure?: string | null; attempts?: number; retry_count?: number
   formulas: IntakeFormula[]
+}
+/** 我的投递 (0.47.3): always listed, including items that never produced a formula. */
+export interface IntakeSubmission extends Omit<IntakeCard, 'stage' | 'source' | 'source_name'> {
+  stage: 'queued' | 'to_extract' | 'to_screen' | 'pending' | 'archived' | 'merged'
+  attempts: number; retry_count: number; model_text: string
 }
 export interface IntakeSource {
   id: string; name: string; kind: 'person' | 'site' | 'aggregator' | 'paper'; channel: string; url: string; builtin?: boolean; enabled: boolean
   n30: number; paywall: number; llm: number; formulas: number; status: 'active' | 'idle' | 'failed' | 'off' | 'new'; last_ok?: string | null; error?: string | null
 }
 export interface IntakeOverview {
-  funnel: { fetched: number; llm: number; us_stock: number; defined: number; formulas: number; pending: number }
-  cards: IntakeCard[]; sources: IntakeSource[]
-  usage: { today: number; limit: number; days30_calls: number; days30_tokens: number; by_task: Record<string, number>; tokens_by_task: Record<string, number> }
+  funnel: { fetched: number; llm: number; us_stock: number; defined: number; formulas: number; pending: number; queued: number; failed: number; submissions: number }
+  cards: IntakeCard[]; sources: IntakeSource[]; submissions: IntakeSubmission[]
+  usage: { today: number; limit: number; retries_today: number; days30_calls: number; days30_tokens: number; by_task: Record<string, number>; tokens_by_task: Record<string, number> }
   settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; queued: number; last_error: string | null
 }
 export interface FactorLabPage {
@@ -3166,7 +3172,9 @@ export const api = {
   intakeIgnore: (id: string) => request<{ id: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/ignore`, { method: 'POST' }),
   intakeRestore: (id: string) => request<{ id: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/restore`, { method: 'POST' }),
   intakeSubmit: (payload: { url?: string; text?: string; title?: string }) =>
-    request<{ id: string }>('/api/factor-lab/intake/submit', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 60_000 }),
+    request<{ id: string; stage: string; ahead: number }>('/api/factor-lab/intake/submit', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 60_000 }),
+  intakeRetry: (id: string) =>
+    request<{ id: string; stage: string; retry_count: number }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/retry`, { method: 'POST' }),
   intakeAddSource: (payload: { name: string; url: string; kind: IntakeSource['kind'] }) =>
     request<IntakeSource>('/api/factor-lab/intake/sources', { method: 'POST', body: JSON.stringify(payload) }),
   intakeToggleSource: (id: string, enabled: boolean) =>
