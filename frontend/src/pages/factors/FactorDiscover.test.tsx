@@ -128,3 +128,24 @@ it('my submissions block lists a failed paste with reason, model text and retry'
   await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
   expect(row.querySelector('[data-model-text]')?.textContent).toContain('我无法回答')
 })
+
+it('a queued submission shows the next automatic pass and a run-now button', async () => {
+  const last = '2026-11-03T16:20:28+00:00'
+  const p: FactorLabPage = {
+    ...page,
+    intake: {
+      ...page.intake!,
+      last_tick: last, next_tick: '2026-11-03T16:50:28+00:00',
+      submissions: [{
+        id: 'q1', title: '排队中的投递', link: '', published: '2026-11-03T16:30:00+00:00',
+        stage: 'to_extract', reason: null, failure: null, duplicate: false,
+        attempts: 0, retry_count: 0, model_text: '', formulas: [],
+      }],
+    },
+  }
+  await render(p)
+  const head = host.querySelector('[data-mine]')!.textContent!
+  expect(host.querySelector('[data-waiting]')?.textContent).toContain('排队 1')
+  expect(head).toContain('下次自动')
+  expect(host.querySelector('[data-act="process"]')?.textContent).toBe('立即处理')
+})
