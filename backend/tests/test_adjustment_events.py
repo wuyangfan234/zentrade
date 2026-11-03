@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import date, timedelta
 
 import polars as pl
@@ -67,6 +68,53 @@ def test_events_for_symbols_accepts_alpaca_bar_stream():
         return [(sym, {"t": f"{d.isoformat()}T04:00:00Z", "c": c, "v": v}) for d, (c, v) in series.items()]
     rows = events_for_symbols(stream(NVDA_RAW, "NVDA"), stream(NVDA_ALL, "NVDA"))
     assert [(r["symbol"], r["trade_date"]) for r in rows] == [("NVDA", date(2024, 6, 10))]
+
+
+def _bar_stream(series, sym):
+    return [(sym, {"t": f"{d.isoformat()}T04:00:00Z", "c": c, "v": v}) for d, (c, v) in series.items()]
+
+
+def test_invalid_symbol_is_isolated_only_when_requested(caplog):
+    """一只标的的坏复权序列只丢它自己, 不能连坐其余标的 (实测 JTAI 整段复权价为负)。"""
+    bad_all = _series([("2024-06-06", -120.65, 664_696_190), ("2024-06-07", -120.54, 412_385_800),
+                       ("2024-06-10", -121.44, 314_162_666), ("2024-06-11", -120.58, 222_551_158)])
+    raw = _bar_stream(NVDA_RAW, "NVDA") + _bar_stream(NVDA_RAW, "BAD")
+    adj = _bar_stream(NVDA_ALL, "NVDA") + _bar_stream(bad_all, "BAD")
+
+    # 默认仍是 fail closed: 坏标的存在即整体失败
+    with pytest.raises(ValueError, match="BAD: adjustment price"):
+        events_for_symbols(raw, adj)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.adjustment_events"):
+        rows = events_for_symbols(raw, adj, skip_invalid_symbols=True)
+    assert [(r["symbol"], r["trade_date"]) for r in rows] == [("NVDA", date(2024, 6, 10))]
+    assert "BAD" in caplog.text
+
+
+def test_symbol_set_mismatch_still_fails_closed_when_skipping():
+    """集合级覆盖不一致无法归属到具体标的, 开不开跳过都必须整体失败。"""
+    raw = [("A", {"t": "2024-06-07T04:00:00Z", "c": 100.0, "v": 1000.0})]
+    with pytest.raises(ValueError, match="coverage"):
+        events_for_symbols(raw, [], skip_invalid_symbols=True)
+
+
+def test_per_symbol_date_mismatch_is_isolated_when_skipping(caplog):
+    """单标的 raw/all 日期对不上只丢该标的(实测 KKRS/PCSA), 其余标的照常产出。"""
+    raw = _bar_stream(NVDA_RAW, "NVDA") + [
+        ("A", {"t": "2024-06-07T04:00:00Z", "c": 100.0, "v": 1000.0}),
+        ("A", {"t": "2024-06-10T04:00:00Z", "c": 100.0, "v": 1000.0}),
+    ]
+    adj = _bar_stream(NVDA_ALL, "NVDA") + [
+        ("A", {"t": "2024-06-07T04:00:00Z", "c": 100.0, "v": 1000.0}),
+    ]
+
+    with pytest.raises(ValueError, match="A: adjustment coverage mismatch"):
+        events_for_symbols(raw, adj)
+
+    with caplog.at_level(logging.WARNING, logger="app.services.adjustment_events"):
+        rows = events_for_symbols(raw, adj, skip_invalid_symbols=True)
+    assert [(r["symbol"], r["trade_date"]) for r in rows] == [("NVDA", date(2024, 6, 10))]
+    assert "A: adjustment coverage mismatch" in caplog.text
 
 
 def _bars(symbol, closes, volumes, start=date(2024, 6, 5)):

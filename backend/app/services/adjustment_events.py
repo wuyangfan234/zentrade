@@ -15,9 +15,12 @@ L(d) = raw_close(d) / all_close(d) 是一个「水平值」: 只在除权日跳�
 """
 from __future__ import annotations
 
+import logging
 import math
 from collections.abc import Iterable, Mapping
 from datetime import date
+
+logger = logging.getLogger(__name__)
 
 ADJ_BASIS = "event_v2"
 _CENT = 0.005          # 单个价格的最大舍入误差 (四舍五入到分)
@@ -96,8 +99,21 @@ def _volume_factor(price_factor: float, price_noise: float, prev: tuple[float, f
 def events_for_symbols(
     raw_bars: Iterable[tuple[str, dict]],
     adjusted_bars: Iterable[tuple[str, dict]],
+    *,
+    skip_invalid_symbols: bool = False,
 ) -> list[dict]:
-    """Alpaca bar 流 (symbol, bar) × 2 → 全部事件行 (含 symbol)。"""
+    """Alpaca bar 流 (symbol, bar) × 2 → 全部事件行 (含 symbol)。
+
+    skip_invalid_symbols 默认 False = 任一标的不合格即整体失败 (fail closed),
+    与 tests/test_adjustment_failure_contract.py 的契约一致。数据源边界可置 True:
+    只丢弃该标的并记 WARNING, 其余标的照常产出 —— 厂商对个别标的返回坏数据
+    (实测 JTAI 复权价整段为负、KKRS/PCSA 两套序列日期对不上) 不应让全市场
+    都拿不到除权事件。
+
+    隔离粒度是「单个标的」: 价格/成交量非法, 或该标的 raw/all 日期覆盖不一致,
+    都只影响它自己。标的**集合**不一致 (raw 有某只、all 完全没有) 无法归属到
+    具体标的, 无论开关如何都整体失败。
+    """
     def collect(stream):
         out: dict[str, dict[date, Bar]] = {}
         for sym, bar in stream:
@@ -114,10 +130,19 @@ def events_for_symbols(
         diff = sorted(raw.keys() ^ adjusted.keys())[:10]
         raise ValueError(f"adjustment coverage mismatch: raw/all symbols differ: {diff}")
     rows: list[dict] = []
+    rejected: list[str] = []
     for sym in sorted(raw):
         try:
             events = events_from_bars(raw[sym], adjusted[sym])
         except ValueError as exc:
-            raise ValueError(f"{sym}: {exc}") from exc
+            if not skip_invalid_symbols:
+                raise ValueError(f"{sym}: {exc}") from exc
+            rejected.append(f"{sym}: {exc}")
+            continue
         rows.extend({"symbol": sym, **ev} for ev in events)
+    if rejected:
+        logger.warning(
+            "除权事件跳过 %d 只数据源异常标的 (其余照常产出): %s",
+            len(rejected), "; ".join(rejected[:10]),
+        )
     return rows
