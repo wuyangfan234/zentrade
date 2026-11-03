@@ -4,26 +4,27 @@ import { Sparkles } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { toast } from '@/components/Toast'
 import { api } from '@/lib/api'
+import { QK } from '@/lib/queryKeys'
 
 const INPUT_CLS = 'h-8 w-full rounded-input border border-border bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none'
 
 /** 渲染与挖掘发布同构的单因子排名策略源码 (FactorRankResearchMatrixStrategy)。 */
 function renderStrategyCode(strategyId: string, name: string, factorId: string, direction: 'high' | 'low', description: string): string {
   const assetTypes = '["stock"]'
-  return `"""${name}: 由因子库一键生成的单因子排名策略。"""
+  return `"""${name}: 因子库生成 · 单因子排名。"""
 from app.strategy.builtin.factor_rank_research import FactorRankResearchMatrixStrategy
 
 META = {
     "id": ${JSON.stringify(strategyId)},
     "name": ${JSON.stringify(name)},
     "description": ${JSON.stringify(description)},
-    "tags": ["factor", "auto-generated"],
+    "tags": ["因子", "生成"],
     "asset_types": ${assetTypes},
     "timeframes": ["1d"],
     "params": [
-        {"id": "entry_score", "label": "入选评分下限", "type": "float", "default": 70.0, "min": 0.0, "max": 100.0, "step": 5.0},
-        {"id": "exit_score", "label": "离场评分上限", "type": "float", "default": 40.0, "min": 0.0, "max": 100.0, "step": 5.0},
-        {"id": "top_rank", "label": "每日入选上限", "type": "int", "default": 20, "min": 1, "max": 100, "step": 1},
+        {"id": "entry_score", "label": "入场最低分", "type": "float", "default": 70.0, "min": 0.0, "max": 100.0, "step": 5.0},
+        {"id": "exit_score", "label": "离场最高分", "type": "float", "default": 40.0, "min": 0.0, "max": 100.0, "step": 5.0},
+        {"id": "top_rank", "label": "每日最多入选", "type": "int", "default": 20, "min": 1, "max": 100, "step": 1},
     ],
     "scoring": {},
     "order_by": "score",
@@ -43,7 +44,7 @@ MATRIX_STRATEGY = FactorRankResearchMatrixStrategy(SCORING, DIRECTIONS)
 `
 }
 
-/** 因子库 → 一键生成完整可回测策略 (单因子排名, 参数化入场/离场评分与每日上限)。 */
+/** 因子库 → 生成完整可回测策略 (单因子排名, 参数化入场/离场评分与每日上限)。 */
 export function GenerateFactorStrategyDialog({
   item, onClose,
 }: {
@@ -52,15 +53,21 @@ export function GenerateFactorStrategyDialog({
 }) {
   const queryClient = useQueryClient()
   const [name, setName] = useState(`${item.label}排名策略`)
-  const [direction, setDirection] = useState<'high' | 'low'>(item.direction === 'low' ? 'low' : 'high')
+  // 方向未知 (内置因子全部如此) 时不预选: 旧实现默认「值大」, 反转类因子直接点生成就得到反向策略
+  const [direction, setDirection] = useState<'high' | 'low' | null>(
+    item.direction === 'low' ? 'low' : item.direction === 'high' ? 'high' : null,
+  )
 
   const generate = useMutation({
     mutationFn: async () => {
-      const baseId = `custom_factor_${item.id}`.replace(/[^a-z0-9_]/g, '').slice(0, 60)
-      const description = `Generated from factor ${item.id} (${item.label})`
-      const attempts = [baseId, `${baseId}_2`, `${baseId}_3`]
+      if (!direction) throw new Error('未选方向')
+      const baseId = `custom_factor_${item.id}`.replace(/[^a-z0-9_]/g, '').slice(0, 56)
+      const description = `${item.label} · 因子 ${item.id}`
       let lastError: Error | null = null
-      for (const strategyId of attempts) {
+      // ID 冲突时递增后缀直到空位 (旧实现只试 3 个, 同一因子第 4 次生成必失败);
+      // 冲突请求静默, 只在最终结果处提示一次
+      for (let attempt = 1; attempt <= 50; attempt += 1) {
+        const strategyId = attempt === 1 ? baseId : `${baseId}_${attempt}`
         try {
           return await api.strategySaveCodeV2({
             strategy_id: strategyId,
@@ -69,18 +76,18 @@ export function GenerateFactorStrategyDialog({
             mode: 'create',
             name: name.trim(),
             description,
-          })
+          }, { quiet: true })
         } catch (error) {
           lastError = error as Error
-          // ID 冲突时换后缀重试, 其余错误直接抛出
           if (!/已存在|already exists/i.test((error as Error).message)) throw error
         }
       }
       throw lastError ?? new Error('生成失败')
     },
     onSuccess: result => {
-      toast(`已生成策略 ${result.strategy_id}，可到回测页运行`, 'success')
-      void queryClient.invalidateQueries()
+      toast(`已生成 ${result.strategy_id}`, 'success')
+      void queryClient.invalidateQueries({ queryKey: ['screener-strategies'] })
+      void queryClient.invalidateQueries({ queryKey: QK.strategyLinkOptions() })
       onClose()
     },
     onError: (error: Error) => toast(`生成失败 · ${error.message}`, 'error'),
@@ -96,7 +103,7 @@ export function GenerateFactorStrategyDialog({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 shrink-0 text-accent" />
-            <span id="generate-factor-strategy-title" className="text-sm font-semibold text-foreground">因子生成策略</span>
+            <span id="generate-factor-strategy-title" className="text-sm font-semibold text-foreground">生成策略</span>
           </div>
           <p className="mt-1 font-mono text-[11px] text-muted">{item.id}</p>
         </div>
@@ -105,17 +112,16 @@ export function GenerateFactorStrategyDialog({
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         <div className="rounded-btn border border-border bg-base/40 px-3 py-2 text-[11px] leading-relaxed text-secondary">
-          生成一个单因子排名策略：按因子值全市场排名打分，评分高于「入选评分下限」入场、跌破「离场评分上限」出场。
-          入场/离场评分、每日入选上限都是策略参数，回测时可直接调。
+          单因子排名 · 入场 ≥ 70 · 离场 ≤ 40 · 每日前 20
         </div>
         <label className="block">
           <span className="mb-1 block text-[10px] text-muted">策略名称</span>
           <input type="text" value={name} maxLength={24} onChange={event => setName(event.target.value)} className={INPUT_CLS} />
         </label>
         <div>
-          <span className="mb-1 block text-[10px] text-muted">因子方向（打分方向）</span>
+          <span className="mb-1 block text-[10px] text-muted">方向</span>
           <div className="flex gap-1.5">
-            {([['high', '值大加分'], ['low', '值小加分']] as const).map(([value, label]) => (
+            {([['high', '值大看多'], ['low', '值小看多']] as const).map(([value, label]) => (
               <button
                 key={value}
                 type="button"
@@ -128,10 +134,9 @@ export function GenerateFactorStrategyDialog({
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[10px] text-muted">拿不准就先按默认生成，回测对比两个方向再定。</p>
         </div>
         <p className="text-[10px] leading-relaxed text-muted">
-          生成后：默认止损 -8%、最大持仓 30 个交易日、评分方式与检验/挖掘同一条计算管线（matrix_native）。策略文件保存在自定义策略目录，可在策略页查看。
+          止损 −8% · 持有 ≤ 30 日
         </p>
       </div>
 
@@ -140,11 +145,11 @@ export function GenerateFactorStrategyDialog({
         <button
           type="button"
           onClick={() => generate.mutate()}
-          disabled={generate.isPending || !name.trim()}
+          disabled={generate.isPending || !name.trim() || !direction}
           className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" />
-          {generate.isPending ? '生成中…' : '生成策略'}
+          {generate.isPending ? '生成中' : '生成策略'}
         </button>
       </div>
     </Modal>

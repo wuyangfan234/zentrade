@@ -363,7 +363,7 @@ def system_status(request: Request):
         _bad = [s['name'] for s in _srcs if s.get('status') == 'failed']
         add('factor_intake', '公开因子采集',
             'warn' if _io.get('last_error') or _bad else ('ok' if _io.get('last_fetch') else 'idle'),
-            f"来源 {sum(1 for s in _srcs if s.get('enabled'))} 个 · 最近抓取 {_et(_io.get('last_fetch'))} · 待你 {(_io.get('funnel') or {}).get('pending', 0)} 条"
+            f"来源 {sum(1 for s in _srcs if s.get('enabled'))} 个 · 最近抓取 {_et(_io.get('last_fetch'))} · 待审 {(_io.get('funnel') or {}).get('pending', 0)} 条"
             f" · 模型今日 {_u.get('today', 0)}/{_u.get('limit', 0)} 次 · 排队 {_io.get('queued', 0)} 条"
             + (f"；失败源 {'、'.join(_bad[:3])}" if _bad else '')
             + (f"；模型错误 {_redact(_io['last_error'])}" if _io.get('last_error') else ''), 'research/intake/')

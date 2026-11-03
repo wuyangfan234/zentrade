@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 import threading
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import date, timedelta
 from typing import Literal
@@ -74,6 +75,20 @@ def _resolve_start(req: BaseModel, end: date, default_days: int) -> date:
     if "start" in req.model_fields_set:
         return date(1900, 1, 1)
     return end - timedelta(days=default_days)
+
+
+@contextmanager
+def _generation_conflict_as_409():
+    """读面板期间 enriched 换代 (盘中行情每 ~10 秒提交一次) → 可读的 409, 不再裸 500。
+
+    与挖掘 / 策略回测 worker 同一文案。
+    """
+    from app.enriched_generation import EnrichedGenerationUnavailableError
+
+    try:
+        yield
+    except EnrichedGenerationUnavailableError as exc:
+        raise HTTPException(status_code=409, detail="指标数据正在发布更新, 请稍后重试") from exc
 
 
 def _guard_server_backtest_range(start: date, end: date):
@@ -206,7 +221,8 @@ def factor_run(req: FactorBacktestRequest, request: Request):
         slippage_bps=req.slippage_bps,
         asset_type=req.asset_type,
     )
-    result = svc.run(cfg)
+    with _generation_conflict_as_409():
+        result = svc.run(cfg)
     return asdict(result)
 
 
@@ -256,18 +272,19 @@ def factor_batch(req: FactorBatchRequest, request: Request):
         )
 
     svc = FactorBacktestService(_get_engine(request))
-    result = svc.run_batch(FactorBatchConfig(
-        factor_names=factor_names,
-        symbols=symbols,
-        start=start,
-        end=end,
-        n_groups=req.n_groups,
-        rebalance=req.rebalance,
-        weight=req.weight,
-        fees_pct=req.fees_pct,
-        slippage_bps=req.slippage_bps,
-        asset_type=req.asset_type,
-    ))
+    with _generation_conflict_as_409():
+        result = svc.run_batch(FactorBatchConfig(
+            factor_names=factor_names,
+            symbols=symbols,
+            start=start,
+            end=end,
+            n_groups=req.n_groups,
+            rebalance=req.rebalance,
+            weight=req.weight,
+            fees_pct=req.fees_pct,
+            slippage_bps=req.slippage_bps,
+            asset_type=req.asset_type,
+        ))
     return asdict(result)
 
 

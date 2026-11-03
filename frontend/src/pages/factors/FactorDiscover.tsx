@@ -1,7 +1,7 @@
 /**
  * 因子页「发现」首页 (0.47.0)。
  *
- * 一条自动流水线: 采集 (每 6 小时) → 筛因子 → 组合 → 验证 → 回测 (每周五) → 你决定。
+ * 一条自动流水线: 采集 (每 6 小时) → 筛因子 → 组合 → 验证 → 回测 (每周五) → 审核。
  * 页面只读 /api/factor-lab/page 一个聚合接口; 系统不主动发布, 候选只有「保存 / 放弃」。
  * 文案约定: 只放短名词 + 数字 + 状态 + 按钮, 不放整句说明。
  */
@@ -22,6 +22,7 @@ import {
 import { QK } from '@/lib/queryKeys'
 
 const DASH = '—'
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export function pct(v: number | null | undefined, digits = 1): string {
   if (v == null || !Number.isFinite(v)) return DASH
@@ -123,7 +124,7 @@ function FlowBar({ page, onStep }: { page: FactorLabPage; onStep: (i: number) =>
     { no: 3, t: '组合', tag: '每周五', big: String(w?.funnel.combos ?? DASH), unit: '个', sub: w?.week?.replace(/^\d{4}-/, '') ?? DASH },
     { no: 4, t: '验证', tag: '每周五', big: String(w?.funnel.passed ?? DASH), unit: '通过', sub: '样本外' },
     { no: 5, t: '回测', tag: '每周五', big: String((w?.candidates ?? []).filter(c => !c.error).length), unit: '候选', sub: `自选 ${w?.symbols ?? DASH}` },
-    { no: 6, t: '你决定', tag: '待你', big: String(pendingCands + pendingFactors), unit: '待看', sub: `策略 ${pendingCands} · 因子 ${pendingFactors}` },
+    { no: 6, t: '审核', tag: '人工', big: String(pendingCands + pendingFactors), unit: '待审', sub: `策略 ${pendingCands} · 因子 ${pendingFactors}` },
   ]
   return (
     <Card attr={{ 'data-flow': '' }}>
@@ -147,7 +148,7 @@ function FlowBar({ page, onStep }: { page: FactorLabPage; onStep: (i: number) =>
         <span>采集 <b className="tabular-nums text-foreground">{(it?.sources ?? []).filter(s => s.enabled).length}</b> 源</span>
         <span>股票池 <b className="tabular-nums text-foreground">{w?.funnel.pool ?? DASH}</b></span>
         <span>自选 <b className="tabular-nums text-foreground">{w?.symbols ?? DASH}</b></span>
-        <span>已发布 <b className="tabular-nums text-foreground">0</b></span>
+        <span>已发布 <b className="tabular-nums text-foreground">{(w?.candidates ?? []).filter(c => c.published_strategy_id).length}</b></span>
         <span className="ml-auto">下次 · {page.schedule.next_weekly?.slice(5) ?? DASH} 周五 收盘后</span>
       </div>
     </Card>
@@ -210,6 +211,8 @@ function NavChart({ dates, series }: { dates: string[]; series: Series[] }) {
 // ---------------------------------------------------------------- detail panel
 type Sel = { kind: 'cand'; sig: string } | { kind: 'engine' } | { kind: 'intake'; id: string }
 
+const selectionKey = (s: Sel) => (s.kind === 'cand' ? `cand:${s.sig}` : s.kind === 'intake' ? `intake:${s.id}` : 'engine')
+
 function TradesTable({ rows }: { rows: DiscoverTrade[] }) {
   return (
     <table className="w-full text-xs" data-trades="">
@@ -233,12 +236,19 @@ function Detail({ page, sel, onDecide, onIntake }: {
   const engineYearly = engine?.yearly ?? {}
   const spyYearly = w.spy?.yearly ?? {}
   const [pool, setPool] = useState<'watchlist' | 'theme' | 'custom'>('watchlist')
+  const [customSymbols, setCustomSymbols] = useState('')
   const [start, setStart] = useState(w.window[0])
   const [end, setEnd] = useState(w.window[1])
+  const symbols = customSymbols.split(/[\s,，]+/).map(x => x.trim().toUpperCase()).filter(Boolean)
+  const canRecalc = ISO_DATE.test(start) && ISO_DATE.test(end) && start < end && (pool !== 'custom' || symbols.length > 0)
   const [override, setOverride] = useState<DiscoverStats | null>(null)
-  useEffect(() => { setOverride(null) }, [sel])
+  const selKey = selectionKey(sel)
+  useEffect(() => { setOverride(null) }, [selKey])
   const recalc = useMutation({
-    mutationFn: () => api.factorLabRecalc({ signature: sel.kind === 'engine' ? 'engine' : sel.kind === 'cand' ? sel.sig : '', pool, start, end }),
+    mutationFn: () => api.factorLabRecalc({
+      signature: sel.kind === 'engine' ? 'engine' : sel.kind === 'cand' ? sel.sig : '',
+      pool, start, end, ...(pool === 'custom' ? { symbols } : {}),
+    }),
     onSuccess: d => { setOverride(d); toast('重算完成', 'success') },
   })
 
@@ -314,11 +324,12 @@ function Detail({ page, sel, onDecide, onIntake }: {
           {sel.kind !== 'intake' && <>
             <span className="ml-auto text-[11px] text-secondary">股票池</span>
             <Seg value={pool} onChange={setPool} options={[['watchlist', `自选 ${w.symbols}`], ['theme', `主题 ${w.funnel.pool ?? ''}`], ['custom', '自定义']]} />
+            {pool === 'custom' && <input value={customSymbols} onChange={e => setCustomSymbols(e.target.value)} placeholder="AAPL, NVDA" aria-label="自定义股票" className="h-7 w-36 rounded-input border border-border bg-surface px-2 text-xs" />}
             <span className="text-[11px] text-secondary">区间</span>
             <input value={start} onChange={e => setStart(e.target.value)} className="h-7 w-[92px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
             <span className="text-muted">→</span>
             <input value={end} onChange={e => setEnd(e.target.value)} className="h-7 w-[92px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
-            <Btn primary disabled={recalc.isPending || pool === 'custom'} onClick={() => recalc.mutate()}>{recalc.isPending ? '重算中' : '重算'}</Btn>
+            <Btn primary disabled={recalc.isPending || !canRecalc} onClick={() => recalc.mutate()}>{recalc.isPending ? '重算中' : '重算'}</Btn>
           </>}
         </div>
         <div className="flex flex-wrap items-center gap-4 px-4 pt-2.5 text-xs text-secondary" data-legend="">
@@ -335,7 +346,7 @@ function Detail({ page, sel, onDecide, onIntake }: {
         <table className="w-full text-xs" data-yearly="">
           <thead><tr className="text-secondary"><th className="px-4 py-1.5 text-left font-medium">年份</th>{cols.map(c => <th key={c} className="px-4 py-1.5 text-right font-medium">{c}</th>)}</tr></thead>
           <tbody>{years.map(y => {
-            const vals = sel.kind === 'engine' ? [engineYearly[y], spyYearly[y]] : [yr[y], engineYearly[y], spyYearly[y]]
+            const vals = sel.kind === 'engine' ? [yr[y], spyYearly[y]] : [yr[y], engineYearly[y], spyYearly[y]]
             return <tr key={y} className="border-t border-border/60"><td className="px-4 py-1.5 text-secondary">{y === thisYear ? '本年度' : y}</td>{vals.map((v, i) => <td key={i} className={`px-4 py-1.5 text-right font-semibold tabular-nums ${tone(v)}`}>{pct(v)}</td>)}</tr>
           })}</tbody>
         </table>
@@ -397,7 +408,7 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
           <Card key={c.signature} className={`flex min-h-[178px] min-w-0 cursor-pointer flex-col gap-2.5 p-3.5 ${active ? 'border-accent shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : ''}`} attr={{ 'data-cand': c.signature }}>
             <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} className="flex min-w-0 flex-col gap-2.5">
               <div className="flex items-center gap-2"><Chip>候选 {i + 1}</Chip><span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
-                <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>已放弃</Pill> : <Pill kind="run">待看</Pill>}</span></div>
+                <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>已放弃</Pill> : <Pill kind="run">待审</Pill>}</span></div>
               <div className="flex flex-wrap gap-1">{(c.legs ?? []).map(l => <Chip key={l.factor}>{l.label} {l.direction === 'low' ? '低' : '高'}</Chip>)}<Chip>每日前 20</Chip></div>
               <div className="grid grid-cols-4 gap-1.5">
                 <Metric label="年化" value={pct(st.annual_return)} cls={tone(st.annual_return)} />
@@ -462,7 +473,7 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
       <div className="flex min-h-[22px] items-center gap-2">
         <Chip dashed={archived}>采集</Chip>
         <span className="truncate text-[11.5px] text-secondary">{c.source_name} · {c.published?.slice(5, 10) ?? DASH} · {c.title}</span>
-        <span className="ml-auto shrink-0">{c.stage === 'pending' ? <Pill kind="run">待你</Pill> : c.stage === 'merged' ? <Pill>已并入</Pill> : <Pill>{c.duplicate ? '重复' : (c.reason ?? '已归档')}</Pill>}</span>
+        <span className="ml-auto shrink-0">{c.stage === 'pending' ? <Pill kind="run">待审</Pill> : c.stage === 'merged' ? <Pill>已并入</Pill> : <Pill>{c.duplicate ? '重复' : (c.reason ?? '已归档')}</Pill>}</span>
       </div>
       <div className={`text-sm font-semibold ${archived ? 'text-secondary' : 'text-foreground'}`}>{f?.name}</div>
       <div className="flex flex-wrap gap-1">
@@ -609,15 +620,20 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
   const intake = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'merge' | 'ignore' | 'restore' }) =>
       action === 'merge' ? api.intakeMerge(id) : action === 'ignore' ? api.intakeIgnore(id) : api.intakeRestore(id),
-    onSuccess: (_d, v) => { toast(v.action === 'merge' ? '已并入因子库 · 观察' : v.action === 'ignore' ? '已忽略' : '已恢复', 'success'); refresh(); void qc.invalidateQueries({ queryKey: ['factors-library'] }) },
+    onSuccess: (_d, v) => { toast(v.action === 'merge' ? '已并入因子库 · 观察' : v.action === 'ignore' ? '已忽略' : '已恢复', 'success'); refresh(); void qc.invalidateQueries({ queryKey: ['factors-library'] }); void qc.invalidateQueries({ queryKey: QK.factorColumns }) },
   })
   const runIntake = useMutation({ mutationFn: () => api.intakeRun(), onSuccess: () => toast('已开始 · 采集', 'success') })
 
+  // 选中项在新一次轮询里不存在 (换周 / 采集条目被裁剪) 时回落到默认项, 不渲染空详情
   const effectiveSel: Sel | null = useMemo(() => {
-    if (sel) return sel
-    const first = page?.week?.candidates.find(c => !c.error && c.stats)
+    const week = page?.week
+    const exists = (s: Sel) => s.kind === 'engine' ? !!week?.engine
+      : s.kind === 'cand' ? !!week?.candidates.some(c => c.signature === s.sig && !c.error && c.stats)
+        : !!page?.intake?.cards.some(c => c.id === s.id && c.formulas[0]?.screen?.backtest)
+    if (sel && exists(sel)) return sel
+    const first = week?.candidates.find(c => !c.error && c.stats)
     if (first) return { kind: 'cand', sig: first.signature }
-    return page?.week?.engine ? { kind: 'engine' } : null
+    return week?.engine ? { kind: 'engine' } : null
   }, [sel, page])
 
   if (q.isLoading) return <div className="p-8 text-center text-xs text-muted">加载中</div>
@@ -657,7 +673,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
         <h2 className="text-[13.5px] font-semibold text-foreground">采集</h2>
         <span className="text-xs text-secondary">近 30 天 · {(it?.sources ?? []).filter(s => s.enabled).length} 源 · {funnel?.fetched ?? 0} 篇</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Seg value={intakeFilter} onChange={setIntakeFilter} attr="intake" options={[['all', `全部 ${intakeCounts.all}`], ['pending', `待你 ${intakeCounts.pending}`], ['archived', `已归档 ${intakeCounts.archived}`]]} />
+          <Seg value={intakeFilter} onChange={setIntakeFilter} attr="intake" options={[['all', `全部 ${intakeCounts.all}`], ['pending', `待审 ${intakeCounts.pending}`], ['archived', `已归档 ${intakeCounts.archived}`]]} />
           <Btn onClick={() => runIntake.mutate()} disabled={runIntake.isPending}>立即采集</Btn>
           <Btn onClick={() => setSheet('submit')}>投递</Btn>
           <Btn onClick={() => setSheet('sources')} attr={{ 'data-open': 'sources' }}>监控清单 {(it?.sources ?? []).length}</Btn>
@@ -665,7 +681,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       </div>
       <Card>
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3.5 py-2.5 text-xs text-secondary" data-funnel="">
-          {([['抓取', funnel?.fetched], ['送模型', funnel?.llm], ['美股个股', funnel?.us_stock], ['定义', funnel?.defined], ['公式', funnel?.formulas], ['待你', funnel?.pending]] as [string, number | undefined][]).map(([k, v], i, arr) => (
+          {([['抓取', funnel?.fetched], ['送模型', funnel?.llm], ['美股个股', funnel?.us_stock], ['定义', funnel?.defined], ['公式', funnel?.formulas], ['待审', funnel?.pending]] as [string, number | undefined][]).map(([k, v], i, arr) => (
             <span key={k} className="inline-flex items-center gap-1.5">
               <span className={i === arr.length - 1 ? 'text-accent' : ''}>{k}<b className={`ml-1 text-sm tabular-nums ${i === arr.length - 1 ? 'text-accent' : 'text-foreground'}`}>{v ?? 0}</b></span>
               {i < arr.length - 1 && <span className="text-muted">›</span>}

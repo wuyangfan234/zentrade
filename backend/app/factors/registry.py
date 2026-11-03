@@ -386,12 +386,27 @@ def factor_dependencies(fids) -> frozenset[str]:
     return frozenset(resolved)
 
 
+_MISSING_SOURCE_COLUMNS = frozenset({"turnover_rate", "total_shares", "float_shares"})
+
+
+def factor_available(spec: FactorSpec) -> bool:
+    """当前数据源能否算出该因子: 点时财务 / 股本类缺数据源。
+
+    复合因子的依赖展开到成员: 成员是基础财务列时依赖里就是该列 id, 一并判为不可用
+    (旧口径只看自身 pit, 含财务成员的复合因子会进检验页但值全空)。
+    """
+    if spec.pit or "turnover" in spec.id:
+        return False
+    unavailable = _MISSING_SOURCE_COLUMNS | {
+        other.id for other in _REGISTRY.values() if other.pit or "turnover" in other.id
+    }
+    return not (spec.dependencies & unavailable)
+
+
 def factor_columns_view(*, available_only: bool = False) -> list[dict]:
     """历史 FACTOR_COLUMNS 兼容视图 (顺序、键一致; 动态注册因子追加在末尾)。"""
     return [spec.column_view() for spec in _ordered_specs()
-            if (not available_only or (
-                not spec.pit and "turnover" not in spec.id
-                and not (spec.dependencies & {"turnover_rate", "total_shares", "float_shares"}))) ]
+            if not available_only or factor_available(spec)]
 
 
 def virtual_dependencies() -> dict[str, frozenset[str]]:

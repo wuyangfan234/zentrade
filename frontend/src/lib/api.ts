@@ -1446,6 +1446,10 @@ export interface FactorLibraryItem {
   dependencies: string[]
   origin?: 'builtin' | 'mined' | 'intake' | 'custom'
   status?: 'draft' | 'active' | 'watch' | 'retired'
+  /** 自定义/复合因子的描述 (编辑时回填, 避免保存时被清空) */
+  description?: string
+  /** 当前数据源能否算出 (财务/股本类为 false: 不进检验页, 不可选入组合) */
+  available?: boolean
 }
 
 export interface FactorDslError {
@@ -2976,12 +2980,14 @@ export const api = {
   factorValidate: (formula: string) =>
     request<FactorValidateResponse>('/api/factors/validate', {
       method: 'POST',
+      quiet: true,
       body: JSON.stringify({ formula }),
     }),
 
   factorTrial: (payload: { formula: string; asset_type?: 'stock' | 'etf'; days?: number }) =>
     request<FactorTrialResponse>('/api/factors/trial', {
       method: 'POST',
+      quiet: true,
       body: JSON.stringify(payload),
     }),
 
@@ -2995,6 +3001,7 @@ export const api = {
   }) =>
     request<{ ok: boolean; id: string; version: number }>('/api/factors/custom', {
       method: 'POST',
+      quiet: true,
       body: JSON.stringify(payload),
     }),
 
@@ -3007,7 +3014,7 @@ export const api = {
   }) =>
     request<{ ok: boolean; id: string; version: number; status: string }>(
       `/api/factors/custom/${encodeURIComponent(factorId)}/update`,
-      { method: 'POST', body: JSON.stringify(payload) },
+      { method: 'POST', quiet: true, body: JSON.stringify(payload) },
     ),
 
   factorCompositeCreate: (payload: {
@@ -3020,6 +3027,7 @@ export const api = {
   }) =>
     request<{ ok: boolean; id: string; version: number }>('/api/factors/composite', {
       method: 'POST',
+      quiet: true,
       body: JSON.stringify(payload),
     }),
 
@@ -3032,13 +3040,13 @@ export const api = {
   factorSetStatus: (factorId: string, status: 'draft' | 'active' | 'watch' | 'retired') =>
     request<{ ok: boolean; id: string; status: string }>(
       `/api/factors/custom/${encodeURIComponent(factorId)}/status`,
-      { method: 'POST', body: JSON.stringify({ status }) },
+      { method: 'POST', quiet: true, body: JSON.stringify({ status }) },
     ),
 
   factorSetGroup: (factorId: string, group: string) =>
     request<{ ok: boolean; id: string; group: string }>(
       `/api/factors/custom/${encodeURIComponent(factorId)}/group`,
-      { method: 'POST', body: JSON.stringify({ group }) },
+      { method: 'POST', quiet: true, body: JSON.stringify({ group }) },
     ),
 
   factorRun: (payload: {
@@ -3594,10 +3602,11 @@ export const api = {
     mode: 'create' | 'update'
     name?: string
     description?: string
-  }) =>
+  }, opts?: { quiet?: boolean }) =>
     request<StrategyCodeSaveResult>('/api/strategies/code/save', {
       method: 'POST',
       body: JSON.stringify(payload),
+      quiet: opts?.quiet,
     }),
 
   /** 创建/更新叠加策略(composite): 声明式引用多个子策略 */

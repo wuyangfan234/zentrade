@@ -210,3 +210,14 @@ export function formatExtNumber(
 
   return str + suffix
 }
+
+/** 标的输入 → 代码列表: 逗号 / 全角逗号 / 空白分隔, 统一大写去重 (数据按大写代码存储, 小写会整体查不到)。 */
+export function parseSymbols(text: string): string[] {
+  return Array.from(new Set(text.split(/[\s,，]+/).map(value => value.trim().toUpperCase()).filter(Boolean)))
+}
+
+/** IC 胜率按因子方向折算: 反向因子 (IC 均值 < 0) 的「方向一致」= IC < 0 的天数占比。
+ *  后端给的是 IC > 0 占比, 反向因子直接显示会低于 50%, 与「与预测方向一致」的定义相反。 */
+export function directionalHitRate(icMean: number | null | undefined, icWinRate: number): number {
+  return icMean != null && icMean < 0 ? 1 - icWinRate : icWinRate
+}

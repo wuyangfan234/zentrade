@@ -16,6 +16,8 @@ export function FactorComposite() {
   const [mode, setMode] = useState<WeightMode>('equal')
   const [label, setLabel] = useState('')
   const [saveId, setSaveId] = useState('')
+  // 手动权重输入草稿: 允许编辑中清空, 失焦时再钳到 ≥ 0.1 (旧实现清空即被钳回 0.1, 再键入 2 得 0.12)
+  const [weightDrafts, setWeightDrafts] = useState<Record<string, string>>({})
 
   const queryClient = useQueryClient()
   const lib = useQuery({
@@ -23,25 +25,29 @@ export function FactorComposite() {
     queryFn: () => api.factorLibrary(),
   })
   const save = useMutation({
+    // 均等模式提交等权 (旧实现提交手动权重, 界面却显示等权)
     mutationFn: () => api.factorCompositeCreate({
       id: saveId.trim() || undefined,
       label: label.trim(),
-      members,
+      members: mode === 'equal' ? Object.fromEntries(Object.keys(members).map(id => [id, 1])) : members,
     }),
     onSuccess: data => {
-      toast(`已注册复合因子 ${data.id} (v${data.version})，策略评分中可直接引用`, 'success')
+      toast(`已注册 ${data.id} · v${data.version}`, 'success')
       void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       setMembers({})
+      setWeightDrafts({})
       setLabel('')
       setSaveId('')
     },
-    onError: (error: Error) => toast(`保存失败 · ${error.message}`, 'error'),
+    onError: (error: Error) => toast(`注册失败 · ${error.message}`, 'error'),
   })
 
   const candidates = useMemo(() => {
     const keyword = query.trim().toLowerCase()
+    // 只列当前数据源能算的因子 (与检验页同口径): 财务/股本类成员会让复合值整列为空
     return (lib.data?.factors ?? []).filter(item =>
-      item.kind === 'base' || item.kind === 'virtual'
+      (item.kind === 'base' || item.kind === 'virtual') && item.available !== false
     ).filter(item =>
       !keyword || `${item.id} ${item.label}`.toLowerCase().includes(keyword)
     )
@@ -60,8 +66,22 @@ export function FactorComposite() {
       return next
     })
   }
-  const setWeight = (id: string, weight: number) => {
-    setMembers(current => ({ ...current, [id]: weight }))
+  const editWeight = (id: string, text: string) => {
+    setWeightDrafts(current => ({ ...current, [id]: text }))
+    const value = Number(text)
+    if (text.trim() !== '' && Number.isFinite(value) && value >= 0.1) {
+      setMembers(current => ({ ...current, [id]: value }))
+    }
+  }
+  const commitWeight = (id: string) => {
+    const value = Number(weightDrafts[id])
+    const next = Number.isFinite(value) && value >= 0.1 ? value : Math.max(0.1, members[id] ?? 1)
+    setMembers(current => ({ ...current, [id]: next }))
+    setWeightDrafts(current => {
+      const rest = { ...current }
+      delete rest[id]
+      return rest
+    })
   }
   const weightSum = Object.values(effectiveWeights).reduce((left, right) => left + right, 0)
 
@@ -82,7 +102,7 @@ export function FactorComposite() {
           />
         </div>
         <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-0.5">
-          {lib.isLoading && <div className="py-4 text-center text-[10px] text-muted">因子库加载中…</div>}
+          {lib.isLoading && <div className="py-4 text-center text-[10px] text-muted">加载中</div>}
           {candidates.map(item => {
             const selected = item.id in members
             return (
@@ -106,20 +126,20 @@ export function FactorComposite() {
           })}
         </div>
         <div className="border-t border-border pt-1.5 text-[10px] text-muted">
-          已选 {memberList.length}/{MAX_MEMBERS} 个成员；点击已选成员可移除。
+          已选 {memberList.length} / {MAX_MEMBERS}
         </div>
       </section>
 
       <section className="flex min-h-0 flex-col gap-3 overflow-y-auto rounded-card border border-border bg-surface/80 p-3">
         <div className="flex items-center gap-2">
           <Combine className="h-4 w-4 text-accent" />
-          <span className="text-sm font-medium text-foreground">组合因子构建器</span>
-          <span className="text-[10px] text-muted">值 = Σ 权重 × 截面 z 分(成员)；注册后策略评分可选</span>
+          <span className="text-sm font-medium text-foreground">复合因子</span>
+          <span className="text-[10px] text-muted">Σ 权重 × 截面 z 分</span>
         </div>
 
         {memberList.length === 0 ? (
           <div className="rounded-btn border border-dashed border-border px-3 py-8 text-center text-xs text-muted">
-            从左侧选择 2~{MAX_MEMBERS} 个因子开始构建组合。
+            选 2–{MAX_MEMBERS} 个因子
           </div>
         ) : (
           <>
@@ -139,7 +159,7 @@ export function FactorComposite() {
                 </button>
               ))}
               {mode === 'manual' && (
-                <span className="text-muted">当前权重和 {weightSum.toFixed(2)}（按比例归一使用）</span>
+                <span className="text-muted">权重和 {weightSum.toFixed(2)} · 归一</span>
               )}
             </div>
             <div className="space-y-1.5">
@@ -154,8 +174,9 @@ export function FactorComposite() {
                         type="number"
                         step="0.1"
                         min="0.1"
-                        value={rawWeight}
-                        onChange={event => setWeight(id, Math.max(0.1, Number(event.target.value) || 0.1))}
+                        value={weightDrafts[id] ?? String(rawWeight)}
+                        onChange={event => editWeight(id, event.target.value)}
+                        onBlur={() => commitWeight(id)}
                         className="w-20 rounded-input border border-border bg-surface px-2 py-1 text-right font-mono text-xs"
                         aria-label={`${labelOf(id)} 权重`}
                       />
@@ -168,8 +189,8 @@ export function FactorComposite() {
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <input type="text" value={label} onChange={event => setLabel(event.target.value)} placeholder="组合名称 (必填)" className={`${INPUT_CLS} h-8 w-40`} />
-              <input type="text" value={saveId} onChange={event => setSaveId(event.target.value)} placeholder="id (可空，cf_ 前缀)" className={`${INPUT_CLS} h-8 w-44 font-mono`} />
+              <input type="text" value={label} onChange={event => setLabel(event.target.value)} maxLength={32} placeholder="名称" aria-label="名称" className={`${INPUT_CLS} h-8 w-40`} />
+              <input type="text" value={saveId} onChange={event => setSaveId(event.target.value)} maxLength={43} placeholder="id（选填）" aria-label="id" className={`${INPUT_CLS} h-8 w-44 font-mono`} />
               <button
                 type="button"
                 onClick={() => save.mutate()}
@@ -177,12 +198,8 @@ export function FactorComposite() {
                 className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-3.5 w-3.5" />
-                {save.isPending ? '保存中…' : '注册复合因子'}
+                {save.isPending ? '保存中' : '注册复合因子'}
               </button>
-            </div>
-            <div className="text-[10px] leading-relaxed text-muted">
-              注册后复合因子进入注册表（因子库可见）；在策略编辑的评分配置中直接引用即可完成研究线→交易线接入。
-              「检验」页可像普通因子一样检验组合。ICIR 自动权重模式将随 metrics 历史数据积累后开放。
             </div>
           </>
         )}

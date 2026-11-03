@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, CircleAlert, CircleCheck, FlaskConical, PenLine, Play, Save, ShieldQuestion } from 'lucide-react'
 import { toast } from '@/components/Toast'
-import { api, type FactorTrialResponse, type FactorValidateResponse } from '@/lib/api'
+import { api, type FactorDslError, type FactorTrialResponse, type FactorValidateResponse } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { RETIRED_MARKET_FIELDS } from '@/lib/retired-market-fields'
 
@@ -11,17 +11,22 @@ const INPUT_CLS = 'w-full rounded-input border border-border bg-surface px-2.5 p
 const CHIP_CLS = 'shrink-0 rounded-btn border border-border bg-base/60 px-1.5 py-0.5 font-mono text-[10px] text-secondary transition-colors hover:border-accent/40 hover:text-accent cursor-pointer'
 
 const DEFAULT_FORMULA = 'rank(-ts_sum(change_pct, 5))'
+const DEFAULT_GROUP = '自定义'
+/** 与后端 CustomFactor*Request 同上限 (id 正则 uf_ + 40 = 43) */
+const LABEL_MAX = 32
+const GROUP_MAX = 24
+const ID_MAX = 43
 
 const TEMPLATES: { label: string; formula: string; note: string }[] = [
-  { label: '5日反转', formula: 'rank(-ts_sum(change_pct, 5))', note: '近 5 日累计涨幅的截面倒数' },
-  { label: '量价相关', formula: 'ts_corr(close / ts_delay(close, 1) - 1, volume, 20)', note: '日收益与成交量的 20 日滚动相关' },
-  { label: '波动变化', formula: 'ts_std(close / ts_delay(close, 1) - 1, 20)', note: '20 日滚动日收益波动' },
-  { label: '低波动', formula: 'rank(-ts_std(change_pct, 20))', note: '20 日日收益波动最低 (低波动异象)' },
-  { label: '量比回落', formula: 'rank(-ts_zscore(vol_ratio_5d, 60))', note: '量比回落到自身 60 日低位' },
-  { label: 'RSI超卖', formula: 'rank(-ts_mean(rsi_14, 5))', note: '近 5 日 RSI 均值最低的超卖标的' },
-  { label: '低振幅', formula: 'rank(-ts_mean(amplitude, 20))', note: '20 日平均振幅最低 (缩量休整)' },
-  { label: '隔夜反转', formula: 'rank(-overnight_ret_20d)', note: '20 日累计隔夜收益的反转' },
-  { label: '距高点回落', formula: 'rank(-distance_to_high_60d)', note: '距 60 日高点回撤最深的标的' },
+  { label: '5 日反转', formula: 'rank(-ts_sum(change_pct, 5))', note: '近 5 日累计涨幅 · 反向排名' },
+  { label: '量价相关', formula: 'ts_corr(close / ts_delay(close, 1) - 1, volume, 20)', note: '日收益与成交量 · 20 日滚动相关' },
+  { label: '波动变化', formula: 'ts_std(close / ts_delay(close, 1) - 1, 20)', note: '日收益 · 20 日滚动波动' },
+  { label: '低波动', formula: 'rank(-ts_std(change_pct, 20))', note: '20 日日收益波动 · 反向排名' },
+  { label: '量比回落', formula: 'rank(-ts_zscore(vol_ratio_5d, 60))', note: '量比 · 60 日 z 分 · 反向排名' },
+  { label: 'RSI 超卖', formula: 'rank(-ts_mean(rsi_14, 5))', note: '近 5 日 RSI 均值 · 反向排名' },
+  { label: '低振幅', formula: 'rank(-ts_mean(amplitude, 20))', note: '20 日平均振幅 · 反向排名' },
+  { label: '隔夜反转', formula: 'rank(-overnight_ret_20d)', note: '20 日累计隔夜收益 · 反向排名' },
+  { label: '距高点回落', formula: 'rank(-distance_to_high_60d)', note: '距 60 日高点 · 反向排名' },
 ]
 
 /** 后端 dsl.OPERATORS 的全部 25 个算子, 按家族分组; name=chip 名, sig=完整签名, desc=中文说明。
@@ -69,12 +74,30 @@ const OPERATOR_COUNT = OPERATOR_GROUPS.reduce((n, g) => n + g.ops.length, 0)
 
 interface EditingFactor {
   id: string
-  label: string
-  group: string
   formula: string
-  description: string
-  direction: string
   version: number
+}
+
+/** 结构化 400 (`{"errors":[...]}`) → DSL 错误列表; 其余返回 null (按普通文字显示)。 */
+function parseDslErrors(message: string): FactorDslError[] | null {
+  try {
+    const parsed = JSON.parse(message) as { errors?: FactorDslError[] }
+    return Array.isArray(parsed.errors) && parsed.errors.length > 0 ? parsed.errors : null
+  } catch {
+    return null
+  }
+}
+
+function dslErrorText(error: FactorDslError): string {
+  const missing = (error.detail as { missing?: unknown } | undefined)?.missing
+  const suffix = Array.isArray(missing) && missing.length > 0 ? ` · ${missing.join(', ')}` : ''
+  return `[${error.code}] ${error.message}${suffix}`
+}
+
+function errorText(error: unknown): string {
+  const message = String((error as Error)?.message ?? error)
+  const errors = parseDslErrors(message)
+  return errors ? errors.map(dslErrorText).join('；') : message
 }
 
 /** 因子编辑器: 写公式 → 校验 → 试算 → 保存; 支持编辑已有自定义因子 (版本提升)。 */
@@ -87,13 +110,18 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
   const [trial, setTrial] = useState<FactorTrialResponse | null>(null)
   const [saveLabel, setSaveLabel] = useState('')
   const [saveId, setSaveId] = useState('')
-  const [saveGroup, setSaveGroup] = useState('自定义')
+  const [saveGroup, setSaveGroup] = useState(DEFAULT_GROUP)
   const [saveDescription, setSaveDescription] = useState('')
   const [direction, setDirection] = useState<'none' | 'high' | 'low'>('none')
   const [editing, setEditing] = useState<EditingFactor | null>(null)
   const [savedId, setSavedId] = useState('')
   const [savedVersion, setSavedVersion] = useState<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // 在途的校验/试算按发出时的公式比对: 返回时公式已改则丢弃, 结果不会挂到新公式上
+  const formulaRef = useRef(formula)
+  formulaRef.current = formula
+  // URL ?edit= 只在首次载入生效; 之后切回新建、保存刷新列表都不再把表单拉回该因子
+  const consumedEditId = useRef(false)
 
   const library = useQuery({
     queryKey: QK.factorLibrary('all'),
@@ -113,46 +141,67 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
     return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b, 'zh'))
   }, [columns.data])
 
-  const loadForEdit = (id: string) => {
-    const item = customFactors.find(f => f.id === id)
-    if (!item) return
-    setEditing({
-      id: item.id, label: item.label, group: item.group,
-      formula: item.formula, description: '', direction: item.direction,
-      version: item.version,
-    })
-    setFormula(item.formula)
-    setSaveLabel(item.label)
-    setSaveGroup(item.group)
-    setSaveId(item.id)
-    setDirection((item.direction === 'high' || item.direction === 'low') ? item.direction : 'none')
+  const clearResults = () => {
     setValidation(null)
     setTrial(null)
     setSavedId('')
     setSavedVersion(null)
   }
 
+  const resetForNew = () => {
+    setEditing(null)
+    setSaveLabel('')
+    setSaveId('')
+    setSaveGroup(DEFAULT_GROUP)
+    setSaveDescription('')
+    setDirection('none')
+    clearResults()
+  }
+
+  const loadForEdit = (id: string) => {
+    const item = customFactors.find(f => f.id === id)
+    if (!item) return
+    setEditing({ id: item.id, formula: item.formula, version: item.version })
+    setFormula(item.formula)
+    setSaveLabel(item.label)
+    setSaveGroup(item.group)
+    setSaveId(item.id)
+    setSaveDescription(item.description ?? '')
+    setDirection((item.direction === 'high' || item.direction === 'low') ? item.direction : 'none')
+    clearResults()
+  }
+
   // URL ?edit= 透传 (因子库「编辑公式」入口)
   useEffect(() => {
-    if (editId && customFactors.length && !editing) {
-      if (customFactors.some(f => f.id === editId)) loadForEdit(editId)
-    }
+    if (consumedEditId.current || !editId || !customFactors.length) return
+    consumedEditId.current = true
+    if (customFactors.some(f => f.id === editId)) loadForEdit(editId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editId, customFactors.length])
 
   const validate = useMutation({
-    mutationFn: () => api.factorValidate(formula),
-    onSuccess: data => setValidation(data),
+    mutationFn: (sent: string) => api.factorValidate(sent),
+    onSuccess: (data, sent) => { if (sent === formulaRef.current) setValidation(data) },
   })
   const runTrial = useMutation({
-    mutationFn: () => api.factorTrial({ formula, asset_type: assetType, days: 40 }),
-    onSuccess: data => setTrial(data),
+    mutationFn: (sent: string) => api.factorTrial({ formula: sent, asset_type: assetType, days: 40 }),
+    onSuccess: (data, sent) => { if (sent === formulaRef.current) setTrial(data) },
+    onError: (error, sent) => {
+      // 编译类错误 (含缺列 E013) 与校验错误同样渲染为可定位列表
+      const errors = parseDslErrors(String((error as Error).message))
+      if (errors && sent === formulaRef.current) {
+        setValidation(current => current
+          ? { ...current, ok: false, errors }
+          : { ok: false, errors, dependencies: [], referenced_factors: [], warmup_bars: 0, cross_sectional: false })
+      }
+    },
   })
+  const formulaDirty = editing != null && editing.formula !== formula
   const save = useMutation({
     mutationFn: () => {
       const payload = {
         label: saveLabel.trim(),
-        group: saveGroup.trim() || '自定义',
+        group: saveGroup.trim() || DEFAULT_GROUP,
         formula,
         description: saveDescription.trim(),
         direction,
@@ -164,21 +213,25 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
     onSuccess: data => {
       setSavedId(data.id)
       setSavedVersion(data.version)
-      if (editing) setEditing({ ...editing, version: data.version })
-      toast(editing
-        ? `${data.id} 已更新到 v${data.version}${'status' in data && data.status === 'draft' ? ' (公式变化，状态回草稿)' : ''}`
-        : `已注册自定义因子 ${data.id} (v${data.version})，可在因子库与检验页使用`, 'success')
+      // 保存后以已存公式为基准: 按钮回「保存」, 不会再点一次又升一版
+      if (editing) setEditing({ ...editing, version: data.version, formula })
+      const draftNote = 'status' in data && data.status === 'draft' && formulaDirty ? ' · 草稿' : ''
+      toast(editing ? `${data.id} · v${data.version}${draftNote}` : `已注册 ${data.id} · v${data.version}`, 'success')
       void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
     },
-    onError: (error: Error) => toast(`保存失败 · ${error.message}`, 'error'),
+    onError: (error: Error) => toast(`保存失败 · ${errorText(error)}`, 'error'),
   })
 
   const runBoth = () => {
     setTrial(null)
-    validate.mutate()
+    validate.mutate(formula)
   }
-  const canTrial = validation?.ok === true && !runTrial.isPending
-  const formulaDirty = editing != null && editing.formula !== formula
+  const validationOk = validation?.ok === true
+  const canTrial = validationOk && !runTrial.isPending
+  const trialUsable = trial != null && trial.ok && trial.n_dates > 0
+  // 新建 / 改公式: 需试算有非空输出 (服务端同样 fail-closed); 只改名称/分组/描述: 不必重新试算
+  const canShowSave = editing ? (!formulaDirty || (validationOk && trialUsable)) : (validationOk && trialUsable)
 
   // 点击错误 → 聚焦并选中出错位置附近的片段
   const locateError = (offset: number | undefined) => {
@@ -189,20 +242,21 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
     textareaRef.current.setSelectionRange(start, end)
   }
 
+  const changeFormula = (next: string) => {
+    setFormula(next)
+    clearResults()
+  }
+
   // 算子/字段 chip → 插入到公式光标处 (无光标则追加到末尾)
   const insertSnippet = (snippet: string) => {
     const el = textareaRef.current
     if (!el) {
-      setFormula(formula + snippet)
+      changeFormula(formula + snippet)
       return
     }
     const start = el.selectionStart ?? formula.length
     const end = el.selectionEnd ?? start
-    const next = formula.slice(0, start) + snippet + formula.slice(end)
-    setFormula(next)
-    setValidation(null)
-    setTrial(null)
-    setSavedId('')
+    changeFormula(formula.slice(0, start) + snippet + formula.slice(end))
     requestAnimationFrame(() => {
       el.focus()
       const pos = start + snippet.length
@@ -213,12 +267,13 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
   // 模板/我的因子整体替换公式; 非初始内容时先确认, 防误触丢失半成品
   const applyTemplate = (next: string) => {
     const untouched = !editing && (formula === DEFAULT_FORMULA || formula.trim() === '')
-    if (!untouched && !window.confirm('当前公式将被整体替换，继续?')) return
-    setFormula(next)
-    setValidation(null)
-    setTrial(null)
-    setSavedId('')
+    if (!untouched && !window.confirm('替换当前公式？')) return
+    changeFormula(next)
   }
+
+  const saveButtonText = save.isPending
+    ? '保存中'
+    : editing ? (formulaDirty ? '保存 · 回草稿' : '保存') : '保存为草稿'
 
   return (
     <div className="grid h-full min-h-0 grid-cols-1 gap-3 overflow-hidden xl:grid-cols-2">
@@ -230,22 +285,22 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
           {editing && (
             <span className="inline-flex shrink-0 items-center gap-1 rounded-btn border border-accent/40 bg-accent/5 px-1.5 py-0.5 text-[10px] font-medium text-accent">
               <PenLine className="h-3 w-3" />
-              编辑 {editing.id} · 当前 v{editing.version}
+              编辑 {editing.id} · v{editing.version}
             </span>
           )}
           {customFactors.length > 0 && (
             <select
               value={editing?.id ?? ''}
               onChange={event => {
-                if (!event.target.value) { setEditing(null); return }
+                if (!event.target.value) { resetForNew(); return }
                 loadForEdit(event.target.value)
               }}
               className="ml-auto h-7 max-w-[14rem] shrink-0 rounded-input border border-border bg-surface px-1.5 text-[10px] text-secondary"
               aria-label="编辑已有自定义因子"
             >
-              <option value="">编辑已有因子…</option>
+              <option value="">新建因子</option>
               {customFactors.map(item => (
-                <option key={item.id} value={item.id}>{item.label} ({item.id} v{item.version})</option>
+                <option key={item.id} value={item.id}>{item.label} · {item.id} v{item.version}</option>
               ))}
             </select>
           )}
@@ -267,16 +322,16 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
               }}
               aria-label="从模板开始"
             >
-              <option value="">从模板开始 / 我的因子…</option>
+              <option value="">模板 / 我的因子</option>
               <optgroup label="经典模板">
                 {TEMPLATES.map(template => (
                   <option key={template.label} value={template.label}>{template.label} · {template.note}</option>
                 ))}
               </optgroup>
               {customFactors.length > 0 && (
-                <optgroup label={`我的因子 (${customFactors.length})`}>
+                <optgroup label={`我的因子 · ${customFactors.length}`}>
                   {customFactors.map(item => (
-                    <option key={item.id} value={`my:${item.id}`}>{item.label} ({item.id})</option>
+                    <option key={item.id} value={`my:${item.id}`}>{item.label} · {item.id}</option>
                   ))}
                 </optgroup>
               )}
@@ -285,35 +340,34 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
           <textarea
             ref={textareaRef}
             value={formula}
-            onChange={event => { setFormula(event.target.value); setValidation(null); setTrial(null); setSavedId('') }}
+            onChange={event => changeFormula(event.target.value)}
             spellCheck={false}
             rows={5}
             className="w-full resize-y rounded-input border border-border bg-base/60 px-3 py-2 font-mono text-xs leading-relaxed text-foreground focus:border-accent focus:outline-none"
-            placeholder="例如: rank(-ts_sum(change_pct, 5))"
+            placeholder="rank(-ts_sum(change_pct, 5))"
           />
         </div>
 
         {/* 算子/字段点选插入: 写公式不用背名字 */}
         <div className="space-y-1.5">
           <details
-            ref={el => { if (el) el.open = true }}
+            open
             className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[10px]"
           >
             <summary className="flex cursor-pointer select-none items-center gap-1 font-medium text-foreground transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 shrink-0 text-accent transition-transform group-open:rotate-90" />
-              算子（{OPERATOR_COUNT} 个 · 时序 / 截面 / 工具）
-              <span className="font-normal text-muted">· 点击签名插入</span>
+              算子 {OPERATOR_COUNT} · 时序 / 截面 / 工具
             </summary>
             <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="插入算子">
               {OPERATOR_GROUPS.map(group => (
                 <div key={group.label} className="rounded-btn border border-border/50 bg-base/30 px-2 py-1.5">
-                  <div className="mb-1 font-medium text-secondary">{group.label} <span className="font-normal text-muted">({group.ops.length})</span></div>
+                  <div className="mb-1 font-medium text-secondary">{group.label} <span className="font-normal text-muted">{group.ops.length}</span></div>
                   <div className="space-y-0.5">
                     {group.ops.map(op => (
                       <button
                         key={op.name}
                         type="button"
-                        title={`点击插入 ${op.sig} — ${op.desc}`}
+                        title={`${op.sig} · ${op.desc}`}
                         onClick={() => insertSnippet(`${op.name}(`)}
                         className="flex w-full cursor-pointer items-baseline gap-2 rounded px-1 py-px text-left leading-4 transition-colors hover:bg-accent/10"
                       >
@@ -325,12 +379,12 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                 </div>
               ))}
             </div>
-            <div className="mt-1.5 text-muted">四则运算 <code className="font-mono text-accent">+ - * /</code> · 除零→空值 · 括号可任意分组</div>
+            <div className="mt-1.5 text-muted">四则运算 <code className="font-mono text-accent">+ - * /</code> · 除零 = 空值</div>
           </details>
           <details className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[10px]">
             <summary className="flex cursor-pointer select-none items-center gap-1 font-medium text-foreground transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 shrink-0 text-accent transition-transform group-open:rotate-90" />
-              可用字段 ({columns.data?.columns.length ?? 0}) · 点击插入
+              字段 {columns.data?.columns.length ?? 0}
             </summary>
             <div className="mt-1.5 max-h-64 space-y-1.5 overflow-y-auto">
               {fieldGroups.map(([group, cols]) => (
@@ -341,7 +395,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                       <button
                         key={col.id}
                         type="button"
-                        title={`${col.label} — ${col.desc}`}
+                        title={`${col.label} · ${col.desc}`}
                         onClick={() => insertSnippet(col.id)}
                         className={CHIP_CLS}
                       >
@@ -352,14 +406,14 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                   </div>
                 </div>
               ))}
-              {columns.isPending && <div className="text-muted">加载字段中…</div>}
+              {columns.isPending && <div className="text-muted">加载中</div>}
             </div>
           </details>
         </div>
 
         {/* 动作行: nowrap 防止按钮文字折行 */}
         <div className="flex flex-wrap items-center gap-2">
-          <select value={assetType} onChange={event => setAssetType(event.target.value as typeof assetType)} className={`${INPUT_CLS} h-8 w-24 shrink-0`} aria-label="试算资产">
+          <select value={assetType} onChange={event => { setAssetType(event.target.value as typeof assetType); setTrial(null) }} className={`${INPUT_CLS} h-8 w-24 shrink-0`} aria-label="试算资产">
             <option value="stock">股票</option>
             <option value="etf">ETF</option>
           </select>
@@ -370,23 +424,23 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             className="ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn border border-border bg-surface px-3 text-xs font-medium text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ShieldQuestion className="h-3.5 w-3.5" />
-            {validate.isPending ? '校验中…' : '校验'}
+            {validate.isPending ? '校验中' : '校验'}
           </button>
           <button
             type="button"
-            onClick={() => runTrial.mutate()}
+            onClick={() => runTrial.mutate(formula)}
             disabled={!canTrial}
             className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-            title={validation?.ok ? '用最近 40 个交易日数据试算 IC' : '请先校验通过'}
+            title={validationOk ? '最近 40 个交易日 · IC' : '需先校验'}
           >
             <Play className="h-3.5 w-3.5" />
-            {runTrial.isPending ? '试算中…' : '试算 40 日'}
+            {runTrial.isPending ? '试算中' : '试算 40 日'}
           </button>
         </div>
 
         {validate.isError && (
           <div className="rounded-btn border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {String((validate.error as Error).message)}
+            校验失败 · {errorText(validate.error)}
           </div>
         )}
       </section>
@@ -397,17 +451,15 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
 
         {!validation && !validate.isPending && (
           <div className="rounded-btn border border-dashed border-border px-3 py-6 text-center text-xs text-muted">
-            <div className="mb-2">写好公式后按顺序走完四步：</div>
             <div className="flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1">
-              <span className="rounded-btn bg-elevated px-2 py-1">1 写公式</span>
+              <span className="rounded-btn bg-elevated px-2 py-1">公式</span>
               <span>→</span>
-              <span className="rounded-btn bg-elevated px-2 py-1">2 校验语法</span>
+              <span className="rounded-btn bg-elevated px-2 py-1">校验</span>
               <span>→</span>
-              <span className="rounded-btn bg-elevated px-2 py-1">3 试算 IC</span>
+              <span className="rounded-btn bg-elevated px-2 py-1">试算</span>
               <span>→</span>
-              <span className="rounded-btn bg-elevated px-2 py-1">4 保存草稿</span>
+              <span className="rounded-btn bg-elevated px-2 py-1">保存</span>
             </div>
-            <div className="mt-2 text-[10px]">算子/字段在左侧点击插入；不知从何写起可从模板或「我的因子」开始；校验错误可点击定位到字符。</div>
           </div>
         )}
 
@@ -416,13 +468,12 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             {validation.ok ? (
               <div className="flex items-center gap-2 rounded-btn border border-bull/30 bg-bull/10 px-3 py-2 text-xs text-bull">
                 <CircleCheck className="h-4 w-4 shrink-0" />
-                公式有效。预热 {validation.warmup_bars} 个交易日
-                {validation.cross_sectional && '，含截面算子。'}
+                有效 · 预热 {validation.warmup_bars} 日{validation.cross_sectional && ' · 含截面算子'}
               </div>
             ) : (
               <div className="space-y-1.5 rounded-btn border border-danger/30 bg-danger/10 px-3 py-2">
                 <div className="flex items-center gap-2 text-xs font-medium text-danger">
-                  <CircleAlert className="h-4 w-4 shrink-0" />公式未通过校验 (点击错误可定位):
+                  <CircleAlert className="h-4 w-4 shrink-0" />校验失败
                 </div>
                 {validation.errors.map((error, index) => (
                   <button
@@ -430,9 +481,9 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                     type="button"
                     onClick={() => locateError(error.position?.offset)}
                     className="block w-full text-left font-mono text-[10px] leading-relaxed text-danger transition-colors hover:text-danger/80"
-                    title={error.position != null ? `定位到第 ${error.position.offset} 个字符附近` : undefined}
+                    title={error.position != null ? `第 ${error.position.offset} 个字符` : undefined}
                   >
-                    [{error.code}] {error.message}
+                    {dslErrorText(error)}
                   </button>
                 ))}
               </div>
@@ -440,7 +491,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             {validation.ok && (
               <div className="grid grid-cols-1 gap-2 text-[10px] sm:grid-cols-2">
                 <div className="rounded-btn border border-border bg-base/40 px-2.5 py-1.5">
-                  <div className="mb-0.5 text-muted">依赖列 (递归展开)</div>
+                  <div className="mb-0.5 text-muted">依赖列</div>
                   <code className="break-all font-mono text-secondary">{validation.dependencies.join(', ') || '—'}</code>
                 </div>
                 <div className="rounded-btn border border-border bg-base/40 px-2.5 py-1.5">
@@ -455,12 +506,12 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
         {runTrial.isPending && (
           <div className="flex items-center gap-3 rounded-btn border border-accent/30 bg-accent/5 px-3 py-2.5 text-xs text-secondary">
             <span className="h-4 w-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" />
-            正在加载面板并试算最近 40 个交易日…
+            试算中 · 40 日
           </div>
         )}
-        {runTrial.isError && (
+        {runTrial.isError && !parseDslErrors(String((runTrial.error as Error).message)) && (
           <div className="rounded-btn border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-            {String((runTrial.error as Error).message)}
+            试算失败 · {errorText(runTrial.error)}
           </div>
         )}
 
@@ -468,7 +519,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
           <div className="space-y-2">
             {trial.n_dates === 0 ? (
               <div className="rounded-btn border border-border bg-base/40 px-3 py-2 text-xs text-muted">
-                {trial.message ?? '无有效 IC 截面。'}
+                {trial.message ?? '无有效 IC 截面'}
               </div>
             ) : (
               <>
@@ -477,22 +528,22 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                     ['IC 均值', trial.ic_mean?.toFixed(4) ?? '—'],
                     ['ICIR', trial.ir?.toFixed(2) ?? '—'],
                     ['IC 胜率', trial.ic_win_rate != null ? `${(trial.ic_win_rate * 100).toFixed(0)}%` : '—'],
-                    ['t值(NW)', trial.t_newey_west != null ? trial.t_newey_west.toFixed(2) : '—'],
+                    ['t 值 (NW)', trial.t_newey_west != null ? trial.t_newey_west.toFixed(2) : '—'],
                     ['空值率', trial.null_ratio != null ? `${(trial.null_ratio * 100).toFixed(0)}%` : '—'],
                   ] as [string, string][]).map(([label, value]) => (
-                    <div key={label} className="rounded-btn border border-border bg-base/40 px-1 py-1.5" title={label === 't值(NW)' ? 'Newey-West 稳健 t 值 (滞后1), |t|≥2 视为显著；40 日样本仅作参考' : undefined}>
+                    <div key={label} className="rounded-btn border border-border bg-base/40 px-1 py-1.5" title={label === 't 值 (NW)' ? 'Newey-West t 值 · 滞后 1 · |t| ≥ 2 显著 · 40 日样本仅供参考' : undefined}>
                       <div className="whitespace-nowrap text-[10px] text-muted">{label}</div>
                       <div className="font-mono text-sm text-foreground">{value}</div>
                     </div>
                   ))}
                 </div>
                 <div className="rounded-btn border border-border bg-base/40 px-3 py-2">
-                  <div className="mb-1.5 text-[10px] text-muted">IC 走势 (最近 {trial.ic_series.length} 日)</div>
+                  <div className="mb-1.5 text-[10px] text-muted">IC 走势 · 最近 {trial.ic_series.length} 日</div>
                   <div className="flex h-16 items-center gap-px">
                     {trial.ic_series.map(point => {
                       const height = Math.min(Math.abs(point.ic) * 160, 100)
                       return (
-                        <div key={point.date} className="flex h-full flex-1 flex-col justify-center" title={`${point.date}: ${point.ic} (${point.n_symbols}只)`}>
+                        <div key={point.date} className="flex h-full flex-1 flex-col justify-center" title={`${point.date} · ${point.ic} · ${point.n_symbols} 只`}>
                           <div className="flex h-1/2 items-end"><div className="w-full rounded-t-sm bg-bull/70" style={{ height: point.ic > 0 ? `${height / 2}%` : 0 }} /></div>
                           <div className="flex h-1/2 items-start"><div className="w-full rounded-b-sm bg-bear/70" style={{ height: point.ic < 0 ? `${height / 2}%` : 0 }} /></div>
                         </div>
@@ -501,80 +552,90 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                   </div>
                 </div>
                 <div className="text-[10px] leading-relaxed text-muted">
-                  试算仅为快照预览 (无成本/分层), 完整检验请到「检验」页运行。样本内表现不代表未来。
+                  快照 · 无成本 / 分层
                 </div>
-
-                {/* 注册/更新区: 试算有非空输出才可保存 (服务端同样 fail-closed 校验) */}
-                {(editing || (trial.ok && trial.n_dates > 0)) && (
-                  <div className="rounded-btn border border-border bg-base/40 p-2.5">
-                    <div className="mb-1.5 text-[11px] font-medium text-secondary">
-                      {editing ? `更新 ${editing.id} (保存为新版本 v${editing.version + 1})` : '注册为自定义因子'}
-                    </div>
-                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-                      <input
-                        type="text"
-                        value={saveLabel}
-                        onChange={event => { setSaveLabel(event.target.value); setSavedId('') }}
-                        placeholder="名称 (必填，如 我的反转)"
-                        className={`${INPUT_CLS} h-8`}
-                      />
-                      <input
-                        type="text"
-                        value={editing ? saveGroup : saveId}
-                        onChange={event => {
-                          if (editing) setSaveGroup(event.target.value)
-                          else setSaveId(event.target.value)
-                        }}
-                        placeholder={editing ? '分组' : 'id (可空，自动生成 uf_ 前缀)'}
-                        className={`${INPUT_CLS} h-8 font-mono`}
-                      />
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                      <select value={direction} onChange={event => setDirection(event.target.value as typeof direction)} className={`${INPUT_CLS} h-8 w-32 shrink-0`} aria-label="预期方向">
-                        <option value="none">方向未知</option>
-                        <option value="high">值大看多</option>
-                        <option value="low">值小看多</option>
-                      </select>
-                      <input
-                        type="text"
-                        value={saveDescription}
-                        onChange={event => setSaveDescription(event.target.value)}
-                        placeholder="描述 (可空，记录设计意图，如: 短线超跌反转)"
-                        className={`${INPUT_CLS} h-8 min-w-[12rem] flex-1`}
-                        maxLength={500}
-                      />
-                    </div>
-                    <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => save.mutate()}
-                        disabled={!saveLabel.trim() || save.isPending}
-                        className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        {save.isPending ? '保存中…' : editing ? (formulaDirty ? '保存新版本 (回草稿)' : '保存元数据') : '保存 (草稿态)'}
-                      </button>
-                      {savedId && !save.isPending && (
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/factors?tab=inspect&focus=${savedId}`)}
-                          className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn border border-accent/40 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
-                        >
-                          去检验 {savedId}
-                        </button>
-                      )}
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted">
-                      {editing
-                        ? '公式变化会保存为新版本并回草稿态 (需重新检验后激活); 仅改名称/分组保留当前状态。'
-                        : '保存后状态为 draft；到「检验」页跑完整检验确认有效后，在因子库中激活。'}
-                    </div>
-                    {savedId && savedVersion != null && (
-                      <div className="mt-1 text-[10px] text-bull">已保存: {savedId} v{savedVersion}</div>
-                    )}
-                  </div>
-                )}
               </>
+            )}
+          </div>
+        )}
+
+        {/* 注册/更新区: 新建与改公式需试算有非空输出 (服务端同样 fail-closed 校验); 只改名称/分组可直接保存 */}
+        {canShowSave && (
+          <div className="rounded-btn border border-border bg-base/40 p-2.5">
+            <div className="mb-1.5 text-[11px] font-medium text-secondary">
+              {editing ? (formulaDirty ? `更新 ${editing.id} → v${editing.version + 1}` : `更新 ${editing.id}`) : '注册'}
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+              <input
+                type="text"
+                value={saveLabel}
+                maxLength={LABEL_MAX}
+                onChange={event => { setSaveLabel(event.target.value); setSavedId('') }}
+                placeholder="名称"
+                aria-label="名称"
+                className={`${INPUT_CLS} h-8`}
+              />
+              <input
+                type="text"
+                value={saveGroup}
+                maxLength={GROUP_MAX}
+                onChange={event => setSaveGroup(event.target.value)}
+                placeholder="分组"
+                aria-label="分组"
+                className={`${INPUT_CLS} h-8`}
+              />
+              {editing ? (
+                <div className={`${INPUT_CLS} flex h-8 items-center truncate font-mono text-muted`} title="id">{editing.id}</div>
+              ) : (
+                <input
+                  type="text"
+                  value={saveId}
+                  maxLength={ID_MAX}
+                  onChange={event => setSaveId(event.target.value)}
+                  placeholder="id（选填）"
+                  aria-label="id"
+                  className={`${INPUT_CLS} h-8 font-mono`}
+                />
+              )}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <select value={direction} onChange={event => setDirection(event.target.value as typeof direction)} className={`${INPUT_CLS} h-8 w-32 shrink-0`} aria-label="预期方向">
+                <option value="none">方向未知</option>
+                <option value="high">值大看多</option>
+                <option value="low">值小看多</option>
+              </select>
+              <input
+                type="text"
+                value={saveDescription}
+                onChange={event => setSaveDescription(event.target.value)}
+                placeholder="描述（选填）"
+                aria-label="描述"
+                className={`${INPUT_CLS} h-8 min-w-[12rem] flex-1`}
+                maxLength={500}
+              />
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => save.mutate()}
+                disabled={!saveLabel.trim() || save.isPending}
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Save className="h-3.5 w-3.5" />
+                {saveButtonText}
+              </button>
+              {savedId && !save.isPending && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/factors?tab=inspect&focus=${savedId}`)}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn border border-accent/40 px-3 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
+                >
+                  检验 {savedId}
+                </button>
+              )}
+            </div>
+            {savedId && savedVersion != null && (
+              <div className="mt-1 text-[10px] text-bull">已保存 · {savedId} v{savedVersion}</div>
             )}
           </div>
         )}

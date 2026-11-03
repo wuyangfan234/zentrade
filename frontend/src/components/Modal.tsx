@@ -37,6 +37,10 @@ const FOCUSABLE = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(',')
 
+/** 打开中的模态栈: 嵌套对话框时 Esc / Tab 只由最上层处理 (两层都挂在 document 捕获阶段,
+ *  stopPropagation 挡不住同一节点上的另一个监听, 旧实现按一次 Esc 两层一起关)。 */
+const modalStack: symbol[] = []
+
 export function Modal({
   onClose,
   children,
@@ -61,6 +65,8 @@ export function Modal({
   useEffect(() => {
     // 记住打开前的焦点, 关闭时还原
     const prevActive = document.activeElement as HTMLElement | null
+    const token = Symbol('modal')
+    modalStack.push(token)
 
     // 初始聚焦
     const focusFirst = () => {
@@ -77,6 +83,7 @@ export function Modal({
     const raf = requestAnimationFrame(focusFirst)
 
     const onKeyDown = (e: KeyboardEvent) => {
+      if (modalStack[modalStack.length - 1] !== token) return
       if (e.key === 'Escape') {
         e.stopPropagation()
         onCloseRef.current()
@@ -112,6 +119,8 @@ export function Modal({
     return () => {
       cancelAnimationFrame(raf)
       document.removeEventListener('keydown', onKeyDown, true)
+      const index = modalStack.lastIndexOf(token)
+      if (index >= 0) modalStack.splice(index, 1)
       // 还原焦点
       prevActive?.focus?.()
     }

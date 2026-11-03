@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.factors import store
 from app.factors.dsl import FACTOR_COLUMN, compile_formula
-from app.factors.registry import selectable_factors, unregister_factor
+from app.factors.registry import factor_available, selectable_factors, unregister_factor
 
 router = APIRouter(prefix="/api/factors", tags=["factors"])
 
@@ -26,7 +26,8 @@ def _custom_meta(request: Request | None) -> dict[str, dict]:
     for d in defs:
         src = (d.get("source") or {}).get("type") if isinstance(d.get("source"), dict) else None
         out[str(d.get("id"))] = {"status": d.get("status") or "draft",
-                                 "origin": "intake" if src == "intake" else ("mined" if src == "mined" else "custom")}
+                                 "origin": "intake" if src == "intake" else ("mined" if src == "mined" else "custom"),
+                                 "description": str(d.get("description") or "")}
     return out
 
 
@@ -54,6 +55,8 @@ def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|e
                 "dependencies": sorted(spec.dependencies),
                 "origin": (meta.get(spec.id) or {}).get("origin") or ("custom" if spec.kind in ("custom", "composite") else "builtin"),
                 "status": (meta.get(spec.id) or {}).get("status") or ("active" if spec.kind in ("base", "virtual") else "draft"),
+                "description": (meta.get(spec.id) or {}).get("description", ""),
+                "available": factor_available(spec),
             }
             for spec in specs
         ]
@@ -202,7 +205,7 @@ def trial_formula(req: FormulaTrialRequest, request: Request) -> dict:
 class CustomFactorCreateRequest(BaseModel):
     id: str | None = Field(default=None, max_length=48)
     label: str = Field(..., min_length=1, max_length=32)
-    group: str = Field(default="自定义", max_length=16)
+    group: str = Field(default="自定义", max_length=24)
     formula: str = Field(..., min_length=1, max_length=2000)
     description: str = Field(default="", max_length=500)
     direction: str = Field(default="none", pattern="^(high|low|none)$")
@@ -211,7 +214,7 @@ class CustomFactorCreateRequest(BaseModel):
 class CompositeFactorCreateRequest(BaseModel):
     id: str | None = Field(default=None, max_length=48)
     label: str = Field(..., min_length=1, max_length=32)
-    group: str = Field(default="组合", max_length=16)
+    group: str = Field(default="组合", max_length=24)
     members: dict[str, float] = Field(..., min_length=2, max_length=8)
     description: str = Field(default="", max_length=500)
     direction: str = Field(default="none", pattern="^(high|low|none)$")
@@ -228,23 +231,26 @@ def _data_dir(request: Request):
 
 
 def _slugify_id(label: str, prefix: str) -> str:
-    base = "".join(ch if ch.isascii() and (ch.isalnum() or ch == "_") else "_" for ch in label.lower())
-    candidate = f"{prefix}_{base}".strip("_")[:44]
+    """名称 → id。名称里没有可用的 ASCII 字符 (如纯中文「我的反转」) 时用名称哈希,
+    保证结果仍匹配 ^{prefix}_[a-z0-9_]{1,40}$ (旧实现会得到裸 ``uf``, 保存必 400)。"""
+    import hashlib
     import re
 
-    candidate = re.sub(r"_+", "_", candidate)
-    return candidate or f"{prefix}_f"
+    base = "".join(ch if ch.isascii() and (ch.isalnum() or ch == "_") else "_" for ch in label.lower())
+    base = re.sub(r"_+", "_", base).strip("_")[:40].rstrip("_")
+    if not base:
+        base = "f" + hashlib.sha1(label.strip().encode("utf-8")).hexdigest()[:8]
+    return f"{prefix}_{base}"
 
 
 def _resolve_id(requested: str | None, label: str, prefix: str) -> str:
     return requested.strip() if requested and requested.strip() else _slugify_id(label, prefix)
 
 
-def _next_version(data_dir, factor_id: str) -> int:
-    for definition in store.load_all(data_dir):
-        if str(definition.get("id")) == factor_id:
-            return int(definition.get("version", 1)) + 1
-    return 1
+def _reject_existing_id(data_dir, factor_id: str) -> None:
+    """新建不得覆盖已有因子 (旧实现把版本 +1 后整份替换: 公式被换、状态回草稿)。改已有因子走 /update。"""
+    if any(str(definition.get("id")) == factor_id for definition in store.load_all(data_dir)):
+        raise HTTPException(status_code=409, detail=f"id 已存在: {factor_id} · 换一个名称或 id, 改已有因子请从因子库进入编辑")
 
 
 def _trial_nonempty(request: Request, formula: str, asset_type: str = "stock") -> None:
@@ -275,10 +281,11 @@ def create_custom_factor(req: CustomFactorCreateRequest, request: Request) -> di
     """保存自定义公式因子: 编译通过 + 服务端试算非空 (fail-closed)。"""
     data_dir = _data_dir(request)
     factor_id = _resolve_id(req.id, req.label, "uf")
+    _reject_existing_id(data_dir, factor_id)
     definition = {
         "id": factor_id,
         "kind": "custom",
-        "version": _next_version(data_dir, factor_id),
+        "version": 1,
         "label": req.label,
         "group": req.group,
         "formula": req.formula,
@@ -306,10 +313,11 @@ def create_composite_factor(req: CompositeFactorCreateRequest, request: Request)
     """保存复合因子: 成员校验 + 循环引用检查 (无需试算, 值由成员物化路径计算)。"""
     data_dir = _data_dir(request)
     factor_id = _resolve_id(req.id, req.label, "cf")
+    _reject_existing_id(data_dir, factor_id)
     definition = {
         "id": factor_id,
         "kind": "composite",
-        "version": _next_version(data_dir, factor_id),
+        "version": 1,
         "label": req.label,
         "group": req.group,
         "members": req.members,
@@ -329,9 +337,11 @@ def create_composite_factor(req: CompositeFactorCreateRequest, request: Request)
 
 class CustomFactorUpdateRequest(BaseModel):
     label: str = Field(..., min_length=1, max_length=32)
-    group: str = Field(default="自定义", max_length=16)
+    # 与「因子库 · 改分组」(/group, 24) 同上限: 旧值 16 让在因子库改过长分组的因子再也无法在编辑器保存
+    group: str = Field(default="自定义", max_length=24)
     formula: str = Field(..., min_length=1, max_length=2000)
-    description: str = Field(default="", max_length=500)
+    # None = 不改 (旧客户端不回传描述时, 采集并入因子的出处不再被清空)
+    description: str | None = Field(default=None, max_length=500)
     direction: str = Field(default="none", pattern="^(high|low|none)$")
 
 
@@ -358,7 +368,7 @@ def update_custom_factor(factor_id: str, req: CustomFactorUpdateRequest, request
         "label": req.label,
         "group": req.group,
         "formula": req.formula,
-        "description": req.description,
+        "description": str(target.get("description") or "") if req.description is None else req.description,
         "direction": req.direction,
         "version": int(target.get("version", 1)) + 1,  # 版本提升 → 注册表允许覆盖
         "status": "draft" if formula_changed else str(target.get("status", "draft")),
@@ -433,6 +443,22 @@ def delete_custom_factor(factor_id: str, request: Request, force: bool = Query(d
     return {"ok": True, "id": factor_id, "removed_references": references}
 
 
+def _reregister_metadata(factor_id: str, definition: dict) -> None:
+    """元数据变更 (status/group) 不提升版本, 需先注销再注册; 但必须先校验新定义。
+
+    旧实现先注销: 定义已无法编译时 (DSL 收紧、成员被删) 返回 400, 因子却已从注册表消失,
+    在用的策略评分直到重启都取不到它。现在校验失败时原注册项原样保留。
+    """
+    from app.factors.registry import register_factor
+
+    try:
+        spec = store.to_spec(definition)
+        unregister_factor(factor_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    register_factor(spec)
+
+
 class FactorStatusRequest(BaseModel):
     status: str = Field(..., pattern="^(draft|active|watch|retired)$")
 
@@ -450,13 +476,7 @@ def update_factor_status(factor_id: str, req: FactorStatusRequest, request: Requ
         raise HTTPException(status_code=404, detail=f"自定义因子不存在: {factor_id}")
     target["status"] = req.status
     target["updated_at"] = store._now()
-    try:
-        # 动态因子先注销再注册: 元数据变更 (status/group) 不提升版本,
-        # 直接 register 会因"版本未提升"被拒 (启动加载后的真实路径)
-        unregister_factor(factor_id)
-        store.register_definition(target)  # 状态与 stability 联动
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _reregister_metadata(factor_id, target)  # 状态与 stability 联动
     store.save_one(data_dir, target)
     return {"ok": True, "id": factor_id, "status": req.status}
 
@@ -481,10 +501,6 @@ def update_factor_group(factor_id: str, req: FactorGroupRequest, request: Reques
         raise HTTPException(status_code=404, detail=f"自定义因子不存在: {factor_id}")
     target["group"] = group
     target["updated_at"] = store._now()
-    try:
-        unregister_factor(factor_id)
-        store.register_definition(target)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _reregister_metadata(factor_id, target)
     store.save_one(data_dir, target)
     return {"ok": True, "id": factor_id, "group": group}

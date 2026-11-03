@@ -40,6 +40,7 @@ _CONFIG_FIELDS: dict[str, frozenset[str]] = {
             "fees_pct",
             "slippage_bps",
             "asset_type",
+            "cost_basis",  # 0.47.1: 分层/多空成本口径 (turnover); 旧候选无此字段 = 每期扣满额往返
         }
     )
     | _MINING_SOURCE_CONFIG_FIELDS,

@@ -55,7 +55,7 @@ export function MiningOosChart({ folds }: MiningOosChartProps) {
         itemHeight: 8,
         itemGap: 14,
         textStyle: { color: ct.text, fontSize: 10 },
-        data: ['样本外收益', 'Sharpe', '已跳过'],
+        data: ['样本外收益', '夏普', '已跳过'],
       },
       tooltip: {
         trigger: 'axis',
@@ -83,7 +83,7 @@ export function MiningOosChart({ folds }: MiningOosChartProps) {
 
           return `<div style="font-size:11px;margin-bottom:5px">${escapeHtml(heading)}</div>
             <div style="display:flex;justify-content:space-between;gap:18px"><span>样本外收益</span><span style="font-family:monospace">${fold.return == null ? '—' : `${(fold.return * 100).toFixed(2)}%`}</span></div>
-            <div style="display:flex;justify-content:space-between;gap:18px"><span>Sharpe</span><span style="font-family:monospace">${fold.sharpe == null ? '—' : fold.sharpe.toFixed(2)}</span></div>`
+            <div style="display:flex;justify-content:space-between;gap:18px"><span>夏普</span><span style="font-family:monospace">${fold.sharpe == null ? '—' : fold.sharpe.toFixed(2)}</span></div>`
         },
       },
       xAxis: {
@@ -120,7 +120,7 @@ export function MiningOosChart({ folds }: MiningOosChartProps) {
         },
         {
           type: 'value',
-          name: 'Sharpe',
+          name: '夏普',
           nameTextStyle: { color: ct.text, fontSize: 10 },
           axisLabel: { color: ct.text, fontSize: 10 },
           axisLine: { show: false },
@@ -140,7 +140,7 @@ export function MiningOosChart({ folds }: MiningOosChartProps) {
           barMaxWidth: 28,
         },
         {
-          name: 'Sharpe',
+          name: '夏普',
           type: 'line',
           yAxisIndex: 1,
           data: preparedFolds.map(fold => fold.sharpe),
@@ -189,7 +189,7 @@ export function MiningOosChart({ folds }: MiningOosChartProps) {
         ref={chartRef}
         className="h-full w-full min-w-0"
         role="img"
-        aria-label="逐折样本外收益和 Sharpe 图"
+        aria-label="逐折样本外收益和夏普图"
       />
       {!hasDisplayData && (
         <div className="absolute inset-0 flex items-center justify-center bg-surface text-xs text-secondary">

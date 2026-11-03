@@ -4,6 +4,13 @@ export const RETIRED_MARKET_FIELDS = new Set([
   'deviate_3d', 'deviate_10d', 'deviate_30d',
 ])
 
+/** 后端 SHARE_CAPITAL_FIELDS (app/factors/registry.py) 的镜像: 缺股本数据源, 策略评分里这些因子的
+ *  权重只能保持原值 (改动即 400 「缺少股本数据」)。改后端集合时同步这里, 由单测守住。 */
+export const SHARE_CAPITAL_FIELDS = new Set([
+  'turnover_rate', 'turnover_ratio_5d', 'turnover_z_60d', 'turnover_mean_20d', 'turnover_std_20d', 'log_float_mv',
+  'total_shares', 'float_shares', 'market_cap', 'float_market_cap',
+])
+
 const RETIRED_BASIC_FILTER_KEYS = [
   'market_cap_min', 'market_cap_max', 'float_cap_min', 'float_cap_max', 'turnover_min', 'turnover_max',
 ] as const
