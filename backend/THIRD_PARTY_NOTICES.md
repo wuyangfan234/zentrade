@@ -49,6 +49,7 @@ Phantom 相关实现还涉及 `backend/app/services/phantom_4h.py`、`phantom_4h
 
 - 可选 extra `backtest` 中的 [vectorbt](https://github.com/polakowo/vectorbt) 使用 **Apache-2.0 + Commons Clause**，含额外销售限制；默认镜像不安装，只有显式启用该 extra 时才引入。
 - Docker 构建会安装 OpenAI Codex CLI（Apache-2.0），用于可选的本机 Codex 登录态 AI 通道；主机凭据目录只有叠加 `docker-compose.codex.yml` 时才会挂载。
+- 随前端构建产物分发的字体（`frontend/src/assets/fonts/`）：[Inter](https://github.com/rsms/inter)（© The Inter Project Authors）与 [JetBrains Mono](https://github.com/JetBrains/JetBrainsMono)（© The JetBrains Mono Project Authors），均为 **SIL Open Font License 1.1**，许可全文在 `frontend/public/LICENSE-font-Inter.txt`、`frontend/public/LICENSE-font-JetBrainsMono.txt`（随构建产物分发，部署后在站点根路径可访问）。
 - 测试和构建依赖不一定进入最终运行镜像，应区分运行时、构建时和研究用途的许可义务。
 
 ## 4. 外部数据源与服务

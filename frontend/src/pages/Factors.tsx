@@ -1,15 +1,16 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { BookmarkCheck, Combine, Compass, LibrarySquare, PenLine, Pickaxe, Sigma } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
-import { FactorDiscovery } from './backtest/FactorDiscovery'
 import { FactorComposite } from './factors/FactorComposite'
 import { FactorDiscover } from './factors/FactorDiscover'
 import { FactorEditor } from './factors/FactorEditor'
 import { FactorLibrary } from './factors/FactorLibrary'
-import { MiningWorkbench } from './backtest/MiningWorkbench'
-import { ResearchCandidatesDialog } from './backtest/ResearchCandidatesDialog'
+// 0.47.2: 检验 / 挖掘 / 候选方案三块带 echarts 图表 (约 340KB gzip), 按需加载, 默认的「发现」页不再等它们
+const FactorDiscovery = lazy(() => import('./backtest/FactorDiscovery').then(m => ({ default: m.FactorDiscovery })))
+const MiningWorkbench = lazy(() => import('./backtest/MiningWorkbench').then(m => ({ default: m.MiningWorkbench })))
+const ResearchCandidatesDialog = lazy(() => import('./backtest/ResearchCandidatesDialog').then(m => ({ default: m.ResearchCandidatesDialog })))
 import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
@@ -115,6 +116,7 @@ export function Factors() {
       />
 
       <main className="min-h-0 flex-1 px-3 pb-3 pt-3 lg:px-4 lg:pb-4 xl:overflow-hidden">
+        <Suspense fallback={<div className="h-full min-h-[240px]" />}>
         {activeTab === 'discover' && (
           <div className="h-full min-h-0 xl:overflow-y-auto">
             <FactorDiscover onGo={tab => changeTab(tab)} />
@@ -144,17 +146,20 @@ export function Factors() {
             }}
           />
         )}
+        </Suspense>
       </main>
 
       {candidatesOpen && (
-        <ResearchCandidatesDialog
-          onClose={() => setCandidatesOpen(false)}
-          onLoadStrategy={candidate => {
-            setCandidatesOpen(false)
-            // 跨页「载入复测」: 候选经 router state 交给回测策略页消费
-            navigate('/backtest?tab=strategy', { state: { loadCandidate: candidate } })
-          }}
-        />
+        <Suspense fallback={null}>
+          <ResearchCandidatesDialog
+            onClose={() => setCandidatesOpen(false)}
+            onLoadStrategy={candidate => {
+              setCandidatesOpen(false)
+              // 跨页「载入复测」: 候选经 router state 交给回测策略页消费
+              navigate('/backtest?tab=strategy', { state: { loadCandidate: candidate } })
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )

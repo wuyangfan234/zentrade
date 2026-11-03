@@ -14,7 +14,7 @@ import { QK } from '@/lib/queryKeys'
 import { PageHeader } from '@/components/PageHeader'
 import { SectionTitle } from '@/components/data/SectionTitle'
 import { NewsRow } from '@/components/StockNews'
-import { StockPreviewDialog } from '@/components/StockPreviewDialog'
+import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { etToday } from '@/lib/etTime'
 
 const ACTIVE = new Set(['premarket', 'open_wait', 'session'])
