@@ -32,6 +32,9 @@ CHECK_LIMITS = {"trades": 30, "oos_sharpe": 0.5, "hold_days": 7.0, "mdd": -0.25,
 # score >= 70 enters, <= 40 exits, at most 20 names a day. The Discover page shows the strategy that would be published.
 RANK_PARAMS = {"entry_score": 70.0, "exit_score": 40.0, "top_rank": 20}
 _RUN_LOCK = threading.Lock()
+_DECISIONS_LOCK = threading.Lock()  # decisions.json read-modify-write (two quick clicks must both land)
+# Weekly discover job time (jobs/daily_pipeline.py zen_factor_discover); the page shows the next run from it.
+DISCOVER_RUN_ET = (17, 40)
 
 
 # ---------------------------------------------------------------- helpers
@@ -542,24 +545,28 @@ def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=N
         except Exception as exc:  # not promotable (e.g. origin artifact gone): record the decision only
             out["candidate_error"] = type(exc).__name__
     path = _decisions_path(data_dir)
-    cur = _decisions(data_dir)
     key = f"{week}|{signature}"
-    if action == "reset":
-        cur.pop(key, None)
-    else:
-        cur[key] = {"action": action, "at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                    **({"candidate_id": out.get("candidate_id")} if out.get("candidate_id") else {})}
-    path.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_text(path, json.dumps(cur, ensure_ascii=False, indent=1))
+    with _DECISIONS_LOCK:
+        cur = _decisions(data_dir)
+        if action == "reset":
+            cur.pop(key, None)
+        else:
+            cur[key] = {"action": action, "at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                        **({"candidate_id": out.get("candidate_id")} if out.get("candidate_id") else {})}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_text(path, json.dumps(cur, ensure_ascii=False, indent=1))
     return out
 
 
 def _schedule() -> dict:
+    """Next weekly discover run: the first trading Friday whose DISCOVER_RUN_ET has not passed yet."""
     from app.market_clock import us_clock
-    today = us_clock.today()
+    now = us_clock.market_datetime(us_clock.now())
+    today = now.date()
+    before_run = (now.hour, now.minute) < DISCOVER_RUN_ET
     d = today
     for _ in range(14):
-        if d.weekday() == 4 and us_clock.is_trading_day(d) and (d > today or us_clock.now().hour < 17):
+        if d.weekday() == 4 and us_clock.is_trading_day(d) and (d > today or before_run):
             break
         d += timedelta(days=1)
     return {"next_weekly": d.isoformat(), "intake_every_hours": 6}
@@ -588,7 +595,8 @@ def _recalc_impl(data_dir: Path, repo, signature: str, *, symbols: list[str], st
         ref = engine_reference(service, Path(data_dir), symbols, start, end)
         if ref is None:
             return {"_error": "当前出卡引擎没有可回测的做多规则"}
-        return {"stats": ref["stats"], "yearly": ref["yearly"], "legs": ref["legs"]}
+        # same flat shape as a candidate recalc (the page reads DiscoverStats fields directly)
+        return {**ref["stats"], "yearly": ref["yearly"], "legs": ref["legs"]}
     w = load_week(data_dir) or {}
     cand = next((c for c in w.get("candidates") or [] if c.get("signature") == signature), None)
     if cand is None:

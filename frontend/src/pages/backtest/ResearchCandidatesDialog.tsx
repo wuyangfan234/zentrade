@@ -6,6 +6,7 @@ import { toast } from '@/components/Toast'
 import { api, type ResearchCandidate, type ResearchCandidateStatus, type ScoringDirection } from '@/lib/api'
 import { fmtPct } from '@/lib/format'
 import { QK } from '@/lib/queryKeys'
+import { SHARE_CAPITAL_FIELDS } from '@/lib/retired-market-fields'
 
 const STATUS_OPTIONS: { value: ResearchCandidateStatus; label: string; icon: typeof Clock3 }[] = [
   { value: 'pending', label: '待验证', icon: Clock3 },
@@ -39,6 +40,26 @@ function metricSummary(item: ResearchCandidate) {
     totalReturn == null ? null : `收益 ${fmtPct(totalReturn)}`,
     sharpe == null ? null : `夏普 ${sharpe.toFixed(2)}`,
   ].filter(Boolean).join(' · ') || '暂无指标摘要'
+}
+
+/** 把因子按目标权重并入策略评分: 其余可改因子按比例缩放, 使总权重仍为 1。
+ *  股本类评分因子 (换手率等) 缺数据源, 后端拒绝任何改动: 原权重原样保留、不参与缩放
+ *  (旧实现一并缩放, 对含 turnover_rate 的 3 个内置策略「加入策略」必 400)。 */
+export function mergeFactorIntoScoring(
+  current: Record<string, number>, factorName: string, targetWeight: number,
+): Record<string, number> {
+  const entries = Object.entries(current).filter(([name, weight]) => name !== factorName && Number(weight) > 0)
+  const frozen = entries.filter(([name]) => SHARE_CAPITAL_FIELDS.has(name)).map(([name, weight]) => [name, Number(weight)] as const)
+  const others = entries.filter(([name]) => !SHARE_CAPITAL_FIELDS.has(name))
+  const otherTotal = others.reduce((sum, [, weight]) => sum + Number(weight), 0)
+  if (otherTotal <= 0) return { ...Object.fromEntries(frozen), [factorName]: 1 }
+  const frozenTotal = frozen.reduce((sum, [, weight]) => sum + weight, 0)
+  const room = Math.max(0, 1 - targetWeight - frozenTotal)
+  return Object.fromEntries([
+    ...frozen,
+    ...others.map(([name, weight]) => [name, +(Number(weight) / otherTotal * room).toFixed(6)] as const),
+    [factorName, targetWeight] as const,
+  ])
 }
 
 export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
@@ -80,15 +101,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
       const detail = await api.strategyGet(draft.strategyId)
       const factorName = candidate.source_id
       const targetWeight = Math.min(100, Math.max(1, draft.weight)) / 100
-      const otherEntries = Object.entries(detail.scoring)
-        .filter(([name, weight]) => name !== factorName && Number(weight) > 0)
-      const otherTotal = otherEntries.reduce((sum, [, weight]) => sum + Number(weight), 0)
-      const scoring = otherTotal > 0
-        ? Object.fromEntries([
-            ...otherEntries.map(([name, weight]) => [name, +(Number(weight) / otherTotal * (1 - targetWeight)).toFixed(6)]),
-            [factorName, targetWeight],
-          ])
-        : { [factorName]: 1 }
+      const scoring = mergeFactorIntoScoring(detail.scoring, factorName, targetWeight)
       await api.strategyPatchConfig(draft.strategyId, {
         scoring,
         scoring_directions: {
@@ -171,7 +184,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {candidates.isLoading && (
-          <div className="px-4 py-10 text-center text-sm text-muted">加载中…</div>
+          <div className="px-4 py-10 text-center text-sm text-muted">加载中</div>
         )}
         {candidates.isError && (
           <div className="m-4 rounded-btn border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">

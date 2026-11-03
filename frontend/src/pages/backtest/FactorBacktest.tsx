@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
 import { Play, BarChart3, BookmarkPlus, Clock } from 'lucide-react'
 import { api, type FactorColumn, type FactorBacktestResult, type GroupStat } from '@/lib/api'
-import { fmtPct, priceColorClass } from '@/lib/format'
+import { directionalHitRate, fmtPct, parseSymbols, priceColorClass } from '@/lib/format'
 import { EmptyState } from '@/components/EmptyState'
 import { DatePicker } from '@/components/DatePicker'
 import { useClampEndToSettled, useSettledDate } from '@/lib/backtestEnd'
@@ -49,7 +49,7 @@ function LoadingPanel({ symbolsText }: { symbolsText: string }) {
         <div className="flex items-center justify-between gap-3">
           <div>
             <div className="text-sm font-medium text-foreground">正在计算因子分析</div>
-            <div className="mt-1 text-xs text-muted">{symbolsText} · 完成后会一次性刷新 IC、分层收益和净值曲线。</div>
+            <div className="mt-1 text-xs text-muted">{symbolsText}</div>
           </div>
           <div className="h-8 w-8 rounded-full border-2 border-accent/25 border-t-accent animate-spin" />
         </div>
@@ -131,7 +131,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
       api.factorRun({
         factor_name: factorName,
         asset_type: assetType,
-        symbols: symbols ? symbols.split(',').map(s => s.trim()).filter(Boolean) : null,
+        symbols: symbols ? parseSymbols(symbols) : null,
         start: start || null,
         end: end || undefined,
         n_groups: nGroups,
@@ -200,7 +200,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
       <section className="space-y-3 border-b xl:border-b-0 xl:border-r border-border bg-base/25 px-3 py-3 xl:overflow-y-auto">
         <div className="border-b border-border/70 pb-2">
           <div className="text-xs font-semibold text-foreground">因子配置</div>
-          <div className="mt-0.5 text-[10px] leading-4 text-muted">选择因子、区间和分组方式。默认最近 3 个月。</div>
+          <div className="mt-0.5 text-[10px] leading-4 text-muted">默认 3 个月</div>
         </div>
 
         <div>
@@ -297,9 +297,9 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
           <div>
             <label className="text-xs font-medium text-secondary block mb-1.5">分组数</label>
             <select value={nGroups} onChange={e => setNGroups(Number(e.target.value))} className={INPUT_CLS}>
-              <option value={3}>3组</option>
-              <option value={5}>5组</option>
-              <option value={10}>10组</option>
+              <option value={3}>3 组</option>
+              <option value={5}>5 组</option>
+              <option value={10}>10 组</option>
             </select>
           </div>
           <div>
@@ -318,7 +318,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
             </select>
           </div>
           <div>
-            <label className="text-[11px] text-secondary block mb-1">滑点(bp)</label>
+            <label className="text-[11px] text-secondary block mb-1" title="按实际换手扣 · 成分不变不重复扣">滑点 (bp)</label>
             <input type="number" min="0" value={slippage} onChange={e => setSlippage(e.target.value)}
               className={INPUT_CLS} />
           </div>
@@ -332,7 +332,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
             transition-colors duration-150 ease-smooth disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5" />
-          {run.isPending ? '分析中…' : '开始因子分析'}
+          {run.isPending ? '分析中' : '开始因子分析'}
         </button>
       </section>
 
@@ -354,18 +354,18 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
           <EmptyState
             icon={BarChart3}
             title="选择因子并开始分析"
-            hint="因子回测分析因子的预测能力 ( IC/IR ) 和分层收益差异。服务器建议优先使用最近3个月；长周期建议本机或 8GB 以上内存环境运行。"
+            hint="IC / IR · 分层收益 · 多空净值"
           />
         )}
 
         {run.isPending && result && (
           <div className="rounded-card border border-accent/25 bg-accent/[0.04] px-4 py-3 text-xs text-secondary">
-            正在重新计算，当前暂时展示上一次因子分析结果，完成后会自动替换。
+            计算中 · 下方为上次结果
           </div>
         )}
 
         {run.isPending && !result && (
-          <LoadingPanel symbolsText={symbols ? `${symbols.split(',').length} 只标的` : '全市场 · 当前区间'} />
+          <LoadingPanel symbolsText={symbols ? `${parseSymbols(symbols).length} 只标的` : '全市场 · 当前区间'} />
         )}
 
         {result && !result.error && (
@@ -415,11 +415,11 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
                       ? Math.abs(result.ir) > 0.5 ? (result.ir > 0 ? 'bull' : 'bear') : 'neutral'
                       : undefined}
                   />
-                  <StatCard label="IC 胜率" value={result.ic_win_rate != null ? fmtPct(result.ic_win_rate) : null} />
+                  <StatCard label="IC 胜率" value={result.ic_win_rate != null ? fmtPct(directionalHitRate(result.ic_mean, result.ic_win_rate)) : null} />
                 </div>
               ) : (
                 <div className="rounded-btn border border-border bg-base/40 px-3 py-3 text-xs text-muted">
-                  标的数量过少，无法计算 IC/IR（需 ≥2 只）。可清空标的使用全市场，或补充更多标的。
+                  {result.n_symbols < 2 ? '标的不足 · 至少 2 只' : '无有效 IC 截面'}
                 </div>
               )}
             </div>

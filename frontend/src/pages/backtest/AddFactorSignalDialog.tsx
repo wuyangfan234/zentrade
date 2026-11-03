@@ -18,6 +18,18 @@ function suggestThreshold(factorId: string, op: '>' | '<'): number {
   return 0
 }
 
+/** 新信号 id: 因子 + 方向, 与已有信号重名时递增后缀 (旧实现固定 f_<因子>, 再次保存会静默覆盖已有信号)。 */
+export function uniqueSignalId(factorName: string, op: '>' | '<', existing: Iterable<string>): string {
+  const taken = new Set(existing)
+  const base = `f_${factorName}_${op === '>' ? 'gt' : 'lt'}`.replace(/[^a-z0-9_]/g, '').slice(0, 36)
+  if (!taken.has(base)) return base
+  for (let n = 2; n < 1000; n += 1) {
+    const candidate = `${base}_${n}`
+    if (!taken.has(candidate)) return candidate
+  }
+  return `${base.slice(0, 30)}_${Date.now().toString(36).slice(-8)}`
+}
+
 interface CreatedSignal {
   id: string
   kind: 'entry' | 'exit' | 'both'
@@ -74,29 +86,31 @@ export function AddFactorSignalDialog({
     if (!item && selected) setThreshold(String(suggestThreshold(selected.factor_name, nextOp)))
   }
 
-  const signalId = selected
-    ? `f_${selected.factor_name}`.replace(/[^a-z0-9_]/g, '').slice(0, 40)
-    : ''
-
   const save = useMutation({
-    mutationFn: () => api.customSignalSave({
-      id: signalId,
-      name: name.trim() || selected!.label,
-      kind,
-      enabled: true,
-      conditions: [{ left: selected!.factor_name, op, right: threshold.trim(), leftDays: 0, rightDays: 0 }],
-    }),
-    onSuccess: () => {
+    mutationFn: async () => {
+      const existing = await api.customSignalsList()
+      const signalId = uniqueSignalId(selected!.factor_name, op, existing.signals.map(signal => signal.id))
+      await api.customSignalSave({
+        id: signalId,
+        name: name.trim() || selected!.label,
+        kind,
+        enabled: true,
+        conditions: [{ left: selected!.factor_name, op, right: threshold.trim(), leftDays: 0, rightDays: 0 }],
+      })
+      return signalId
+    },
+    onSuccess: signalId => {
       onCreated?.({ id: signalId, kind, name: name.trim() || selected!.label })
-      toast('已保存为自定义信号（信号库可查看编辑）', 'success')
+      toast(`已保存信号 · ${signalId}`, 'success')
       void queryClient.invalidateQueries({ queryKey: QK.customSignals })
       onClose()
     },
     onError: (error: Error) => toast(`保存失败 · ${error.message}`, 'error'),
   })
 
+  // 只列当前数据源能算的因子: 财务/股本类保存成功但信号列永远补算不出, 触发器恒不触发
   const grouped = !item && library.data
-    ? Object.entries(library.data.factors.reduce<Record<string, typeof library.data.factors>>((acc, f) => {
+    ? Object.entries(library.data.factors.filter(f => f.available !== false).reduce<Record<string, typeof library.data.factors>>((acc, f) => {
         ;(acc[f.group] ??= []).push(f)
         return acc
       }, {})).sort(([a], [b]) => a.localeCompare(b, 'zh'))
@@ -122,13 +136,13 @@ export function AddFactorSignalDialog({
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {!item && (
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">选择因子（内置 / 自定义 / 复合）</span>
+            <span className="mb-1 block text-[10px] text-muted">因子</span>
             <select value={selectedId} onChange={event => pickFactor(event.target.value)} className={INPUT_CLS}>
-              <option value="">{library.isPending ? '加载因子中…' : '请选择因子'}</option>
+              <option value="">{library.isPending ? '加载中' : '选择因子'}</option>
               {grouped.map(([group, factors]) => (
                 <optgroup key={group} label={group}>
                   {factors.map(f => (
-                    <option key={f.id} value={f.id}>{f.label}（{f.id}）</option>
+                    <option key={f.id} value={f.id}>{f.label} · {f.id}</option>
                   ))}
                 </optgroup>
               ))}
@@ -137,12 +151,11 @@ export function AddFactorSignalDialog({
         )}
         {item ? (
           <div className="rounded-btn border border-border bg-base/40 px-3 py-2 text-[11px] leading-relaxed text-secondary">
-            检验方向：IC {item.ic_mean == null ? '—' : (item.ic_mean * 100).toFixed(2)}%
-            {icPositive ? '（值大看多，条件取高值端）' : '（值小看多，条件取低值端）'}。方向与阈值只是预填建议，可按业务调整。
+            IC {item.ic_mean == null ? '—' : `${(item.ic_mean * 100).toFixed(2)}%`} · {icPositive ? '值大看多 · 取高值端' : '值小看多 · 取低值端'}
           </div>
         ) : (
           <div className="rounded-btn border border-border bg-base/40 px-3 py-2 text-[11px] leading-relaxed text-secondary">
-            阈值按因子族惯例给建议值（RSI/KDJ 区间、z 分 ±2、有界位置 0.2/0.8、乖离 ±5%），请结合检验结果调整。
+            阈值建议 · RSI / KDJ 区间 · z 分 ±2 · 位置 0.2 / 0.8 · 乖离 ±5%
           </div>
         )}
         <div className="grid grid-cols-[5rem_1fr] gap-2">
@@ -154,7 +167,7 @@ export function AddFactorSignalDialog({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">阈值（按因子族惯例建议）</span>
+            <span className="mb-1 block text-[10px] text-muted">阈值</span>
             <input
               type="number" step="any" value={threshold}
               onChange={event => setThreshold(event.target.value)}
@@ -175,7 +188,7 @@ export function AddFactorSignalDialog({
           </select>
         </label>
         <p className="text-[10px] leading-relaxed text-muted">
-          保存后成为 csg_ 信号列：选股、回测、盘后监控可用；因子列由历史路径自动补算（与检验同一条计算管线），盘中实时快照无滚动窗口、该信号盘中不触发。
+          选股 · 回测 · 盘后监控可用 · 盘中不触发
         </p>
       </div>
 
@@ -188,7 +201,7 @@ export function AddFactorSignalDialog({
           className="inline-flex items-center gap-1.5 rounded-btn bg-amber-500/90 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-amber-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Zap className="h-3.5 w-3.5" />
-          {save.isPending ? '保存中…' : '保存信号'}
+          {save.isPending ? '保存中' : '保存信号'}
         </button>
       </div>
     </Modal>

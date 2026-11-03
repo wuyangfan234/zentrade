@@ -39,7 +39,23 @@ logger = logging.getLogger(__name__)
 FACTOR_COLUMNS: list[dict] = _factor_columns_view()
 
 FACTOR_WARMUP_DAYS = 120
+
+
+def factor_warmup_calendar_days(factor_names) -> int:
+    """面板预热自然日: 至少 FACTOR_WARMUP_DAYS, 长窗口虚拟因子按 warmup_bars 换算 (交易日 * 1.5 + 10)。
+
+    旧实现一律 120 自然日 (≈ 82 交易日): position_240d / distance_to_high_240d 永远「过滤后无有效数据」,
+    momentum_120d 只评到区间后半段。
+    """
+    import math
+
+    from app.factors.registry import get_factor
+
+    longest = max((getattr(get_factor(str(name)), "warmup_bars", 1) or 1 for name in factor_names), default=1)
+    return max(FACTOR_WARMUP_DAYS, math.ceil(longest * 1.5) + 10)
 FACTOR_METHODOLOGY_VERSION = "factor_v2"
+# 分层/多空成本口径: turnover = 按实际换手扣 (0.47.1 起); 旧结果无此字段 = 每期扣满额往返
+FACTOR_COST_BASIS = "turnover"
 _DAILY_FORWARD_HORIZONS = (1, 3, 5)
 
 
@@ -268,7 +284,8 @@ class FactorBacktestService:
             trading_dates=trading_dates,
         )
 
-        metadata = {item["id"]: item for item in FACTOR_COLUMNS}
+        # 每次现取注册表: FACTOR_COLUMNS 是 import 期快照, 启动后才注册的自定义/复合因子不在其中
+        metadata = {item["id"]: item for item in _factor_columns_view()}
         fundamentals_missing = (
             any(name in FUNDAMENTAL_FACTOR_NAMES for name in factor_names)
             and self._fundamentals_missing()
@@ -406,7 +423,7 @@ class FactorBacktestService:
         ]
         load_start = config.start
         if any(name != "turnover_rate" for name in factor_names):
-            load_start = config.start - timedelta(days=FACTOR_WARMUP_DAYS)
+            load_start = config.start - timedelta(days=factor_warmup_calendar_days(factor_names))
 
         load_kwargs = {
             "columns": panel_columns,
@@ -623,14 +640,22 @@ class FactorBacktestService:
             market_trading_dates=market_trading_dates,
         )
 
+        if not ic_series and n_symbols >= 2 and panel.filter(pl.col("_next_return").is_not_null()).is_empty():
+            # 没有一期有「下一期收益」: 只有一个调仓日 (月频窗口落在同一个月、周频在同一周)。
+            # 旧实现无错误返回, 页面误报「标的数量过少」。其余算不出 IC 的情况 (截面无差异) 照常出分层结果。
+            return _err("调仓期不足 · 至少需 2 个调仓日")
+
         # ── 2. 分层回测 ──
         panel = self._add_groups(panel, factor_col, config.n_groups)
-        group_nav = self._calc_group_nav(panel, config)
-        group_stats = self._calc_group_stats(group_nav, config.start, config.end, config.rebalance)
+        group_costs = self._calc_group_costs(panel, config)
+        group_nav = self._calc_group_nav(panel, config, group_costs)
+        # 年化按净值实际覆盖区间折算: 「全部」区间 start=1900-01-01 时旧实现把收益摊到一百多年
+        nav_start = min(config.end, max(config.start, panel["date"].min()))
+        group_stats = self._calc_group_stats(group_nav, nav_start, config.end, config.rebalance)
         turnover = self._calc_turnover(panel, config)
 
         # ── 3. 理论因子多空组合 ──
-        long_short_nav, long_short_stats = self._calc_long_short(group_nav, config)
+        long_short_nav, long_short_stats = self._calc_long_short(group_nav, config, group_costs)
         long_short_sharpe = long_short_stats.get("sharpe")
 
         elapsed = (time.perf_counter() - t0) * 1000
@@ -990,8 +1015,73 @@ class FactorBacktestService:
         return 2.0 * commission + stamp_tax + 2.0 * slippage
 
     @staticmethod
-    def _calc_group_nav(panel: pl.DataFrame, config: FactorConfig) -> list[dict]:
+    def _group_weights(eligible: pl.DataFrame, config: FactorConfig) -> pl.DataFrame:
+        """组内持仓权重 (每个调仓日组内归一), 与分组收益同一加权口径。"""
+        if config.weight == "factor_weight":
+            raw = (
+                pl.when(pl.col("_factor_strength") > 0)
+                .then(pl.col("_factor_strength"))
+                .otherwise(1.0)
+            )
+        else:
+            raw = pl.lit(1.0)
+        return eligible.with_columns(raw.alias("_raw_weight")).with_columns(
+            (pl.col("_raw_weight") / pl.col("_raw_weight").sum().over(["date", "_group"])).alias("_weight")
+        )
+
+    @staticmethod
+    def _calc_group_costs(panel: pl.DataFrame, config: FactorConfig) -> pl.DataFrame:
+        """每个 (调仓日, 组) 的交易成本 = 成交额占比 * 单边成本 (= 往返成本 / 2)。
+
+        成交额占比 = Σ|w_t - w_{t-1}| (上一调仓日不在该组的票权重按 0): 首期从空仓建仓 = 1 (买入一边),
+        整组轮换 = 2 (卖旧 + 买新); 该组最后一期 (或下一期不再持有) 另加 1 (清仓卖出一边)。
+        整组每期轮换时合计 = 每期一次往返, 与旧口径一致; 成分不变时只在建仓和清仓各扣一次。
+        权重不计期间漂移, 与「换手率」指标同一近似。
+        """
+        eligible = panel.filter(
+            pl.col("_next_return").is_not_null() & pl.col("_group").is_not_null()
+        )
+        schema = {"date": panel.schema.get("date", pl.Date), "_group": pl.Utf8, "_cost": pl.Float64}
+        round_trip = FactorBacktestService._round_trip_cost(config)
+        if eligible.is_empty():
+            return pl.DataFrame(schema=schema)
+        weights = FactorBacktestService._group_weights(eligible, config)
+        ordered = sorted(weights["date"].unique().to_list())
+        index = pl.DataFrame({"date": ordered, "_t": list(range(len(ordered)))}, schema_overrides={"date": weights.schema["date"]})
+        current = weights.join(index, on="date").select(["symbol", "_group", "_t", "_weight"])
+        previous = current.select(
+            "symbol", "_group", (pl.col("_t") + 1).alias("_t"), pl.col("_weight").alias("_prev_weight")
+        )
+        held = current.select("_group", "_t").unique()
+        traded = (
+            current.join(previous, on=["symbol", "_group", "_t"], how="full", coalesce=True)
+            .join(held, on=["_group", "_t"], how="semi")  # 只在该组当期有持仓时计成本
+            .with_columns(
+                (pl.col("_weight").fill_null(0.0) - pl.col("_prev_weight").fill_null(0.0)).abs().alias("_delta")
+            )
+            .group_by(["_group", "_t"])
+            .agg(pl.col("_delta").sum().clip(0.0, 2.0).alias("_traded"))
+        )
+        # 清仓: 该组下一期不再持有 (含最后一期) → 本期末全部卖出
+        exits = held.join(
+            held.select("_group", (pl.col("_t") - 1).alias("_t")), on=["_group", "_t"], how="anti",
+        ).with_columns(pl.lit(1.0).alias("_exit"))
+        return (
+            traded.join(exits, on=["_group", "_t"], how="left")
+            .join(index, on="_t")
+            .select(
+                "date", "_group",
+                ((pl.col("_traded") + pl.col("_exit").fill_null(0.0)) * (round_trip / 2.0)).alias("_cost"),
+            )
+        )
+
+    @staticmethod
+    def _calc_group_nav(
+        panel: pl.DataFrame, config: FactorConfig, group_costs: pl.DataFrame | None = None,
+    ) -> list[dict]:
         """Calculate group NAV with the configured cross-sectional weighting."""
+        if group_costs is None:
+            group_costs = FactorBacktestService._calc_group_costs(panel, config)
         eligible = panel.filter(
             pl.col("_next_return").is_not_null() & pl.col("_group").is_not_null()
         )
@@ -1015,9 +1105,13 @@ class FactorBacktestService:
             group_ret = eligible.group_by(["date", "_group"]).agg(
                 pl.col("_next_return").mean().alias("group_return")
             )
-        group_ret = group_ret.with_columns(
-            (pl.col("group_return") - FactorBacktestService._round_trip_cost(config))
-            .alias("group_return")
+        # 按实际换手扣成本 (旧口径每期扣满额往返, 成分不变的组半年被白扣约 12%)
+        group_ret = (
+            group_ret.join(group_costs, on=["date", "_group"], how="left")
+            .with_columns(
+                (pl.col("group_return") - pl.col("_cost").fill_null(0.0)).alias("group_return")
+            )
+            .drop("_cost")
         )
 
         pivot = group_ret.pivot(
@@ -1122,10 +1216,11 @@ class FactorBacktestService:
             peak = np.maximum(np.maximum.accumulate(arr), 1.0)
             max_dd = float(np.min((arr - peak) / peak))
 
-            # 周期收益序列 (向量化): nav[t]/nav[t-1] - 1, 仅保留 nav[t-1] > 0 的样本
-            prev = arr[:-1]
+            # 周期收益序列 (向量化): nav[t]/nav[t-1] - 1, 起点净值 1.0 (arr[0] 已是第 1 期后的净值,
+            # 旧实现从 arr[1] 起算丢掉第 1 期, 与多空腿口径不一致); 仅保留 nav[t-1] > 0 的样本
+            prev = np.concatenate(([1.0], arr[:-1]))
             with np.errstate(divide="ignore", invalid="ignore"):
-                rets = arr[1:] / prev - 1.0
+                rets = arr / prev - 1.0
             rets = rets[prev > 0]
             if rets.size:
                 std = float(np.std(rets))
@@ -1151,9 +1246,14 @@ class FactorBacktestService:
 
     @staticmethod
     def _calc_long_short(
-        group_nav: list[dict], config: FactorConfig,
+        group_nav: list[dict], config: FactorConfig, group_costs: pl.DataFrame | None = None,
     ) -> tuple[list[dict], dict]:
-        """多空组合: 做多最高组 + 做空最低组。"""
+        """多空组合: 做多最高组 + 做空最低组。
+
+        group_nav 已按各组换手扣过成本 (净值)。空头腿要用毛收益取反, 否则成本会变成收益;
+        两腿各半仓, 本期成本 = (多头腿成本 + 空头腿成本) / 2。未传 group_costs 时按旧口径
+        (各组每期扣满额往返) 处理, 与旧版本结果一致。
+        """
         if not group_nav:
             return [], {}
 
@@ -1184,10 +1284,19 @@ class FactorBacktestService:
         with np.errstate(divide="ignore", invalid="ignore"):
             top_ret = np.where(prev_top > 0, top / prev_top - 1.0, 0.0)
             bot_ret = np.where(prev_bot > 0, bot / prev_bot - 1.0, 0.0)
-        ls_ret = (
-            (top_ret - bot_ret) / 2.0
-            - FactorBacktestService._round_trip_cost(config)
-        )  # 50/50 理论多空两腿
+        if group_costs is None:
+            round_trip = FactorBacktestService._round_trip_cost(config)
+            top_cost = np.full(len(group_nav), round_trip)
+            bot_cost = np.full(len(group_nav), round_trip)
+        else:
+            cost_by_key = {
+                (str(row["date"])[:10], str(row["_group"])): float(row["_cost"])
+                for row in group_costs.iter_rows(named=True)
+            }
+            top_cost = np.array([cost_by_key.get((r["date"], top_col), 0.0) for r in group_nav], dtype=np.float64)
+            bot_cost = np.array([cost_by_key.get((r["date"], bottom_col), 0.0) for r in group_nav], dtype=np.float64)
+        # 50/50 理论多空两腿: 净值收益还原为毛收益, 再扣两腿平均成本
+        ls_ret = ((top_ret + top_cost) - (bot_ret + bot_cost)) / 2.0 - (top_cost + bot_cost) / 2.0
         ls_value = np.cumprod(1.0 + ls_ret)
 
         # 最大回撤: 峰值 = max(1.0, 历史最高), 与原 peak 初值 1.0 一致
@@ -1235,6 +1344,7 @@ class FactorBacktestService:
             "stamp_tax_pct": c.stamp_tax_pct,
             "slippage_bps": c.slippage_bps,
             "asset_type": c.asset_type,
+            "cost_basis": FACTOR_COST_BASIS,
         }
 
     @staticmethod
@@ -1252,4 +1362,5 @@ class FactorBacktestService:
             "stamp_tax_pct": c.stamp_tax_pct,
             "slippage_bps": c.slippage_bps,
             "asset_type": c.asset_type,
+            "cost_basis": FACTOR_COST_BASIS,
         }

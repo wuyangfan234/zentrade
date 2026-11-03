@@ -8,7 +8,7 @@ import type {
 
 const FACTOR_CONFIG_FIELDS = [
   'symbols', 'start', 'end', 'n_groups', 'rebalance', 'weight', 'fees_pct',
-  'slippage_bps', 'asset_type',
+  'slippage_bps', 'asset_type', 'cost_basis',
 ] as const
 
 const STRATEGY_CONFIG_FIELDS = [

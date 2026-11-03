@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 // 0.47.0 因子页「发现」首页: 数据快照 (一周挖掘 + 两条采集) 渲染; 同屏计数一致; 不主动发布。
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -15,6 +17,8 @@ vi.mock('@/lib/api', async (importOriginal) => {
 import { FactorDiscover, pct } from './FactorDiscover'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+// jsdom 无 scrollIntoView: 选中卡片后 rAF 里滚到详情, 测试结束后才触发会报未捕获错误
+Element.prototype.scrollIntoView ??= function scrollIntoView() {}
 let root: Root
 let host: HTMLDivElement
 beforeEach(() => { host = document.createElement('div'); document.body.appendChild(host); root = createRoot(host) })
@@ -34,12 +38,13 @@ async function render(p: FactorLabPage = page) {
 it('flow bar has six steps and the last one equals pending strategies + pending factors', async () => {
   await render()
   const steps = [...host.querySelectorAll('[data-flow] [data-step]')]
-  expect(steps.map(s => s.textContent?.match(/^\d(\S+?)(每|待)/)?.[1])).toEqual(['采集', '筛因子', '组合', '验证', '回测', '你决定'])
+  expect(steps.map(s => s.textContent?.match(/^\d(\S+?)(每|人工)/)?.[1])).toEqual(['采集', '筛因子', '组合', '验证', '回测', '审核'])
   const cands = page.week!.candidates.filter(c => !c.error).length
   const factors = page.intake!.funnel.pending
-  expect(steps[5].textContent).toContain(`${cands + factors}待看`)
+  expect(steps[5].textContent).toContain(`${cands + factors}待审`)
   expect(steps[5].textContent).toContain(`策略 ${cands} · 因子 ${factors}`)
-  expect(host.querySelector('[data-flow]')?.textContent).toContain('已发布 0')
+  // 已发布 = 本周候选里已发布成策略的个数 (快照里有一条已发布; 审计前此处写死 0)
+  expect(host.querySelector('[data-flow]')?.textContent).toContain(`已发布 ${page.week!.candidates.filter(c => c.published_strategy_id).length}`)
 })
 
 it('reference card is the current card engine and is not counted as a candidate', async () => {
@@ -67,7 +72,7 @@ it('detail yearly table ends with 本年度 and checks have no beat-the-engine g
 it('intake funnel last cell equals pending intake cards; duplicate card is archived with restore only', async () => {
   await render()
   const funnel = host.querySelector('[data-funnel]')!.textContent!
-  expect(funnel).toContain(`待你${page.intake!.funnel.pending}`)
+  expect(funnel).toContain(`待审${page.intake!.funnel.pending}`)
   const pending = host.querySelectorAll('[data-intake][data-stage="pending"]')
   expect(pending.length).toBe(page.intake!.funnel.pending)
   const dup = host.querySelector('[data-intake][data-stage="archived"]')!
@@ -95,4 +100,9 @@ it('pct uses real minus and sign', () => {
   expect(pct(0.494)).toBe('+49.4%')
   expect(pct(-0.2849)).toBe('−28.5%')
   expect(pct(null)).toBe('—')
+})
+
+it('no colloquial second-person labels remain on the discover page', () => {
+  const source = readFileSync(resolve('src/pages/factors/FactorDiscover.tsx'), 'utf8')
+  expect(source).not.toMatch(/你决定|待你|待看/)
 })

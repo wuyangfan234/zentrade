@@ -25,6 +25,15 @@ const TABS: Record<Tab, { title: string; icon: typeof Sigma }> = {
   mining: { title: '挖掘', icon: Pickaxe },
 }
 
+const TAB_SUBTITLE: Record<Tab, string> = {
+  discover: '采集 · 挖掘 · 回测 · 决策',
+  inspect: '单因子 · 批量检验',
+  library: '因子目录',
+  editor: '公式 · 校验 · 试算',
+  composite: '复合因子',
+  mining: '因子与策略挖掘',
+}
+
 export function Factors() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [candidatesOpen, setCandidatesOpen] = useState(false)
@@ -34,7 +43,7 @@ export function Factors() {
   const activeTab: Tab = requestedTab === 'inspect' || requestedTab === 'library' || requestedTab === 'editor' || requestedTab === 'composite' || requestedTab === 'mining'
     ? requestedTab
     : (searchParams.get('focus') ? 'inspect' : 'discover')
-  // 发现角标 = 待看候选策略 + 待你采集因子 (与发现页流程条第 6 格同一个数)
+  // 发现角标 = 待审候选策略 + 待审采集因子 (与发现页流程条第 6 格同一个数)
   const lab = useQuery({ queryKey: QK.factorLabPage, queryFn: () => api.factorLabPage(), staleTime: 60_000 })
   const pending = (() => {
     const p = lab.data
@@ -46,6 +55,8 @@ export function Factors() {
   const focusFactor = activeTab === 'inspect' ? searchParams.get('focus') ?? '' : ''
 
   const changeTab = (tab: Tab) => {
+    // 点当前页签无副作用: 旧实现会清掉 edit 参数, 编辑器按 key 重挂载, 未保存的公式全部丢失
+    if (tab === activeTab) return
     const next = new URLSearchParams(searchParams)
     next.set('tab', tab)
     next.delete('focus') // 切 tab 清除单因子聚焦
@@ -57,7 +68,7 @@ export function Factors() {
     <div className="flex min-h-full flex-col bg-base xl:h-full">
       <PageHeader
         title="因子"
-        subtitle={<span className="hidden md:inline">{activeTab === 'discover' ? '采集 · 挖掘 · 回测 · 你决定' : activeTab === 'library' ? '因子注册表目录' : activeTab === 'mining' ? '嵌套样本外因子与策略挖掘' : '因子研究与检验'}</span>}
+        subtitle={<span className="hidden md:inline">{TAB_SUBTITLE[activeTab]}</span>}
         className="shrink-0 flex-wrap gap-x-4 gap-y-2 bg-base/95 px-3 lg:flex-nowrap lg:px-5"
         right={(
           <div className="flex w-full min-w-0 items-center gap-1.5 sm:gap-2 lg:w-auto">

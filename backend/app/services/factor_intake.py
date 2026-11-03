@@ -50,6 +50,7 @@ DEDUPE_CORR = 0.9
 # Only posts published within this many days go to the model (a feed's first fetch returns its whole history,
 # e.g. a 2021 post; old posts would eat the daily model budget for days). Undated posts count as fresh.
 FRESH_DAYS = 30
+CARD_LIMIT = 40  # intake cards returned to the page (pending ones are never cut)
 SCREEN_HORIZON = 5
 _UA = {"User-Agent": "Mozilla/5.0 (ZenTrade factor intake; self-hosted)"}
 
@@ -85,7 +86,10 @@ _NEG = re.compile(r"\b(crypto|bitcoin|solana|defi|lending|bond|treasur|retiremen
                   r"market maker|limit order|hawkes|macro|commodit|crude|gold|fx|currenc|etf rotation|sector etf)\b", re.I)
 _PAYWALL = re.compile(r"(subscriber section|paid subscribers|upgrade to paid|subscribe to read)", re.I)
 
-_LOCK = threading.Lock()
+_LOCK = threading.Lock()  # watch list + run flag
+# Every read-modify-write of items.json (fetch, model queue, screen, submit, decisions) holds this lock, so a
+# click on 并入 / 忽略 / 恢复 during a minutes-long model run is never overwritten by the run's stale snapshot.
+_ITEMS_LOCK = threading.RLock()
 _RUN = {"running": False}
 
 
@@ -380,8 +384,7 @@ def fetch_all(data_dir: Path, *, now: datetime | None = None) -> dict:
     now = now or _now()
     sources = load_sources(data_dir)
     state = _read_json(_dir(data_dir) / "fetch_state.json", {}) or {}
-    items = load_items(data_dir)
-    added = 0
+    fetched: list[tuple[dict, list[dict]]] = []
     for src in sources:
         st = state.setdefault(src["id"], {})
         if not src.get("enabled", True):
@@ -392,19 +395,24 @@ def fetch_all(data_dir: Path, *, now: datetime | None = None) -> dict:
         except Exception as exc:  # one bad source never stops the others
             st.update({"last_error_at": _iso(now), "error": type(exc).__name__, "fails": int(st.get("fails", 0)) + 1})
             continue
-        for e in entries:
-            iid = _item_id(e["link"], e["title"])
-            if iid in items:
-                continue
-            stage, reason = prefilter(e["title"], e["body"])
-            if stage == "llm" and not _fresh(e.get("published"), now):
-                stage, reason = "stale", f"超过 {FRESH_DAYS} 天"
-            items[iid] = {"id": iid, "source": src["id"], "source_name": src["name"], "title": e["title"], "link": e["link"],
-                          "published": e["published"], "body": e["body"], "fetched_at": _iso(now),
-                          "stage": {"drop": "archived", "paywall": "archived", "stale": "archived", "llm": "queued"}[stage],
-                          "reason": reason or ("付费" if stage == "paywall" else None), "prefilter": stage}
-            added += 1
-    _save_items(data_dir, items)
+        fetched.append((src, entries))
+    added = 0
+    with _ITEMS_LOCK:
+        items = load_items(data_dir)
+        for src, entries in fetched:
+            for e in entries:
+                iid = _item_id(e["link"], e["title"])
+                if iid in items:
+                    continue
+                stage, reason = prefilter(e["title"], e["body"])
+                if stage == "llm" and not _fresh(e.get("published"), now):
+                    stage, reason = "stale", f"超过 {FRESH_DAYS} 天"
+                items[iid] = {"id": iid, "source": src["id"], "source_name": src["name"], "title": e["title"], "link": e["link"],
+                              "published": e["published"], "body": e["body"], "fetched_at": _iso(now),
+                              "stage": {"drop": "archived", "paywall": "archived", "stale": "archived", "llm": "queued"}[stage],
+                              "reason": reason or ("付费" if stage == "paywall" else None), "prefilter": stage}
+                added += 1
+        _save_items(data_dir, items)
     _write_json(_dir(data_dir) / "fetch_state.json", state)
     return {"sources": sum(1 for s in sources if s.get("enabled", True)), "added": added}
 
@@ -539,36 +547,88 @@ def _compile(dsl: str):
 
 
 # ---------------------------------------------------------------- triage + extract (model calls)
+def _known_quote_hashes(items: dict[str, dict]) -> set[str]:
+    """Quote hashes of every formula already extracted (stored per formula, not on the item)."""
+    return {f["quote_hash"] for it in items.values() for f in it.get("formulas") or [] if f.get("quote_hash")}
+
+
+def _commit(data_dir: Path, item_id: str, expected_stage: str, update) -> bool:
+    """Apply `update(item)` under the items lock, only if the item is still in `expected_stage`."""
+    with _ITEMS_LOCK:
+        items = load_items(data_dir)
+        it = items.get(item_id)
+        if it is None or it.get("stage") != expected_stage:
+            return False
+        update(it)
+        _save_items(data_dir, items)
+        return True
+
+
+def _triage_result(it: dict, text: str) -> None:
+    j = _parse_json(text) or {}
+    it["triage"] = {k: j.get(k) for k in ("market", "kind", "paywall")}
+    it.pop("last_error", None)
+    if j.get("paywall"):
+        it.update(stage="archived", reason="付费")
+    elif j.get("market") != "us_stock":
+        it.update(stage="archived", reason={"us_index": "指数择时", "futures": "期货", "crypto": "加密"}.get(str(j.get("market")), "非美股个股"))
+    elif j.get("kind") not in ("factor", "rule"):
+        it.update(stage="archived", reason="无可算定义")
+    else:
+        it["stage"] = "to_extract"
+
+
+def _extract_result(data_dir: Path, item_id: str, text: str) -> None:
+    def update(it: dict) -> None:
+        it.pop("last_error", None)
+        j = _parse_json(text)
+        if j is None:
+            it.update(stage="archived", reason="模型输出不可解析")
+            return
+        it["summary"] = j.get("summary_zh")
+        # dedupe against the latest state, read under the same lock as the write
+        formulas = _check_items(it, j.get("items") or [], _known_quote_hashes(load_items(data_dir)))
+        if formulas:
+            it["formulas"] = formulas
+            it["stage"] = "to_screen"
+        else:
+            it.update(stage="archived", reason=it.get("reason") or "无可编译公式")
+
+    _commit(data_dir, item_id, "to_extract", update)
+
+
 def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
-    """Run triage / extract on queued items until the per-day budget is used. Model errors keep items queued."""
-    items = load_items(data_dir)
+    """Run triage / extract on queued items until the per-day budget is used. Model errors keep items queued.
+
+    Model calls run outside the items lock; each result is written back only if the item is still in the
+    stage it was read in (a decision made meanwhile wins)."""
     budget = _budget_left(data_dir) if max_calls is None else min(max_calls, _budget_left(data_dir))
     stats = {"triaged": 0, "extracted": 0, "errors": 0, "budget_left": budget}
+    with _ITEMS_LOCK:  # posts queued before the freshness window existed (0.47.0 first fetch)
+        items = load_items(data_dir)
+        stale = [it for it in items.values() if it.get("stage") == "queued" and not _fresh(it.get("published"))]
+        for it in stale:
+            it.update(stage="archived", reason=f"超过 {FRESH_DAYS} 天", prefilter="stale")
+        if stale:
+            _save_items(data_dir, items)
+    order = [it["id"] for it in sorted(items.values(), key=lambda x: x.get("published") or "", reverse=True)
+             if it.get("stage") in ("queued", "to_extract")]
     vocab = None
     rules = None
-    seen_quotes = {it.get("quote_hash") for it in items.values() if it.get("quote_hash")}
-    for it in items.values():  # posts queued before the freshness window existed (0.47.0 first fetch)
-        if it.get("stage") == "queued" and not _fresh(it.get("published")):
-            it.update(stage="archived", reason=f"超过 {FRESH_DAYS} 天", prefilter="stale")
-    for it in sorted(items.values(), key=lambda x: x.get("published") or "", reverse=True):
+    for item_id in order:
         if budget <= 0:
             break
+        it = load_items(data_dir).get(item_id)
+        if it is None:
+            continue
         try:
             if it["stage"] == "queued":
                 text = _call(data_dir, "factor_triage", _fill(_TRIAGE_PROMPT, SRC=it["source_name"], TITLE=it["title"], BODY=it["body"]), max_tokens=400)
                 budget -= 1
                 stats["triaged"] += 1
-                j = _parse_json(text) or {}
-                it["triage"] = {k: j.get(k) for k in ("market", "kind", "paywall")}
-                if j.get("paywall"):
-                    it.update(stage="archived", reason="付费")
-                elif j.get("market") != "us_stock":
-                    it.update(stage="archived", reason={"us_index": "指数择时", "futures": "期货", "crypto": "加密"}.get(str(j.get("market")), "非美股个股"))
-                elif j.get("kind") not in ("factor", "rule"):
-                    it.update(stage="archived", reason="无可算定义")
-                else:
-                    it["stage"] = "to_extract"
-            if it["stage"] == "to_extract" and budget > 0:
+                _commit(data_dir, item_id, "queued", lambda x, t=text: _triage_result(x, t))
+                it = load_items(data_dir).get(item_id) or {}
+            if it.get("stage") == "to_extract" and budget > 0:
                 vocab = vocab or _vocab()
                 rules = rules if rules is not None else _rules_vocab(data_dir)
                 prompt = _fill(_EXTRACT_PROMPT, BASE=vocab["base"], LIB=vocab["lib"], OPS=vocab["ops"], RULES=rules,
@@ -576,23 +636,13 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
                 text = _call(data_dir, "factor_extract", prompt, max_tokens=4000)
                 budget -= 1
                 stats["extracted"] += 1
-                j = _parse_json(text)
-                if j is None:
-                    it.update(stage="archived", reason="模型输出不可解析")
-                    continue
-                it["summary"] = j.get("summary_zh")
-                formulas = _check_items(it, j.get("items") or [], seen_quotes)
-                if formulas:
-                    it["formulas"] = formulas
-                    it["stage"] = "to_screen"
-                else:
-                    it.update(stage="archived", reason=it.get("reason") or "无可编译公式")
+                _extract_result(data_dir, item_id, text)
         except Exception as exc:  # model unavailable: keep queued, never switch models silently
             stats["errors"] += 1
-            it["last_error"] = f"{type(exc).__name__}: {str(exc)[:160]}"
+            message = f"{type(exc).__name__}: {str(exc)[:160]}"
+            _commit(data_dir, item_id, it.get("stage", ""), lambda x, m=message: x.update(last_error=m))
             logger.warning("factor intake model call failed: %s", type(exc).__name__)
             break
-    _save_items(data_dir, items)
     stats["budget_left"] = budget
     return stats
 
@@ -729,25 +779,28 @@ def screen_pending(data_dir: Path, repo, *, now: datetime | None = None) -> dict
         with shared_heavy_job_limiter.slot("normal"):
             res = run_worker_task(make_worker_task("factor_lab", Path(data_dir), cfg))
         screens = res.get("screens") or {}
+    else:
+        screens = {}
+    with _ITEMS_LOCK:
         items = load_items(data_dir)  # re-read: decisions may have landed meanwhile
         for iid, k, _f in todo:
             it = items.get(iid)
             if it is None or it.get("stage") != "to_screen" or k >= len(it.get("formulas") or []):
                 continue
             it["formulas"][k]["screen"] = screens.get(f"{iid}:{k}") or {"error": "missing"}
-    n = 0
-    for it in items.values():
-        if it.get("stage") != "to_screen" or any(not f.get("screen") for f in it.get("formulas") or []):
-            continue
-        pend = [f for f in it.get("formulas") or [] if not (f.get("screen") or {}).get("duplicate")]
-        if pend:
-            it["stage"] = "pending"
-        else:
-            first = (it.get("formulas") or [{}])[0].get("screen") or {}
-            it.update(stage="archived", reason=f"重复 · {first.get('nearest_label') or '库内因子'}", duplicate=True)
-        it["screened_at"] = _iso(_now())
-        n += 1
-    _save_items(data_dir, items)
+        n = 0
+        for it in items.values():
+            if it.get("stage") != "to_screen" or any(not f.get("screen") for f in it.get("formulas") or []):
+                continue
+            pend = [f for f in it.get("formulas") or [] if not (f.get("screen") or {}).get("duplicate")]
+            if pend:
+                it["stage"] = "pending"
+            else:
+                first = (it.get("formulas") or [{}])[0].get("screen") or {}
+                it.update(stage="archived", reason=f"重复 · {first.get('nearest_label') or '库内因子'}", duplicate=True)
+            it["screened_at"] = _iso(_now())
+            n += 1
+        _save_items(data_dir, items)
     return {"screened": n}
 
 
@@ -810,18 +863,24 @@ def submit(data_dir: Path, *, url: str = "", text: str = "", title: str = "") ->
         body = _text(_fetch(link).decode("utf-8", errors="replace"))
     if not body:
         raise ValueError("链接或正文至少填一个")
-    items = load_items(data_dir)
     iid = _item_id(link or hashlib.sha1(body.encode()).hexdigest(), title or body[:40])
-    items[iid] = {"id": iid, "source": "manual", "source_name": "投递", "title": (title or body[:60]).strip(), "link": link,
-                  "published": _iso(_now()), "body": body[:MAX_BODY_CHARS], "fetched_at": _iso(_now()), "stage": "to_extract",
-                  "reason": None, "prefilter": "manual"}
-    _save_items(data_dir, items)
+    with _ITEMS_LOCK:
+        items = load_items(data_dir)
+        items[iid] = {"id": iid, "source": "manual", "source_name": "投递", "title": (title or body[:60]).strip(), "link": link,
+                      "published": _iso(_now()), "body": body[:MAX_BODY_CHARS], "fetched_at": _iso(_now()), "stage": "to_extract",
+                      "reason": None, "prefilter": "manual"}
+        _save_items(data_dir, items)
     return {"id": iid, "stage": "to_extract"}
 
 
 # ---------------------------------------------------------------- decisions
 def merge(data_dir: Path, item_id: str, formula_index: int = 0) -> dict:
     """Human decision: create a custom factor (status watch) from a pending formula. Joins next Friday's mining."""
+    with _ITEMS_LOCK:
+        return _merge_locked(data_dir, item_id, formula_index)
+
+
+def _merge_locked(data_dir: Path, item_id: str, formula_index: int) -> dict:
     from app.factors import store
 
     items = load_items(data_dir)
@@ -854,22 +913,20 @@ def merge(data_dir: Path, item_id: str, formula_index: int = 0) -> dict:
 
 
 def ignore(data_dir: Path, item_id: str) -> dict:
-    items = load_items(data_dir)
-    it = items.get(item_id)
-    if it is None or it.get("stage") != "pending":
+    stamp = _iso(_now())
+    if not _commit(data_dir, item_id, "pending", lambda it: it.update(stage="archived", reason="已忽略", decided_at=stamp)):
         raise KeyError(item_id)
-    it.update(stage="archived", reason="已忽略", decided_at=_iso(_now()))
-    _save_items(data_dir, items)
     return {"id": item_id, "stage": "archived"}
 
 
 def restore(data_dir: Path, item_id: str) -> dict:
-    items = load_items(data_dir)
-    it = items.get(item_id)
-    if it is None or it.get("stage") != "archived" or not it.get("formulas"):
-        raise KeyError(item_id)
-    it.update(stage="pending", reason=None, restored_at=_iso(_now()))
-    _save_items(data_dir, items)
+    with _ITEMS_LOCK:
+        it = load_items(data_dir).get(item_id)
+        if it is None or not it.get("formulas"):
+            raise KeyError(item_id)
+        stamp = _iso(_now())
+        if not _commit(data_dir, item_id, "archived", lambda x: x.update(stage="pending", reason=None, restored_at=stamp)):
+            raise KeyError(item_id)
     return {"id": item_id, "stage": "pending"}
 
 
@@ -911,8 +968,13 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
             continue
         cards.append({k: it.get(k) for k in ("id", "source", "source_name", "title", "link", "published", "stage", "reason", "summary", "duplicate")}
                      | {"formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks")} for f in it["formulas"]]})
+    # every pending card is shown (the flow bar / tab badge count them); only decided ones are capped
+    pending_cards = [c for c in cards if c["stage"] == "pending"]
+    other_cards = [c for c in cards if c["stage"] != "pending"]
+    cards = sorted(pending_cards + other_cards[:max(0, CARD_LIMIT - len(pending_cards))],
+                   key=lambda c: c.get("published") or "", reverse=True)
     st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
-    return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards[:40], "sources": src_rows,
+    return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "sources": src_rows,
             "usage": usage(data_dir), "settings": load_settings(data_dir), "last_fetch": st.get("last_fetch"),
             "last_tick": st.get("last_tick"), "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
             "last_error": next((it.get("last_error") for it in sorted(items.values(), key=lambda x: x.get("fetched_at") or "", reverse=True) if it.get("last_error") and it.get("stage") in ("queued", "to_extract")), None)}

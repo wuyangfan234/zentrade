@@ -44,7 +44,8 @@ it('start button is not sticky, so it cannot cover the cost inputs above it', ()
 })
 
 it('weekly auto-mining states its bounded pool instead of implying the full market', () => {
-  expect(source).toContain('股票池：自选 + 科技/AI/存储/服务器算力/商业航天/生物医药主题，上限 200 只')
+  expect(source).toContain('股票池 · 自选 + 科技 / AI / 存储 / 算力 / 商业航天 / 生物医药主题 · 上限 200 只')
+  expect(source).not.toMatch(/内存安全上限|控制内存占用/)
 })
 
 it('sidebar realtime source label drops the parenthesised market so it fits', () => {

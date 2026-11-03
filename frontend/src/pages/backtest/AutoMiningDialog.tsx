@@ -94,7 +94,7 @@ export function AutoMiningDialog({
       start: start || null,
       end: end || null,
     })
-    toast('已提交自动挖掘：正在后台筛选因子，可离开本页，进度见「挖掘」页', 'success')
+    toast('已提交自动挖掘 · 进度见「挖掘」页', 'success')
     onClose()
     navigate('/factors?tab=mining')
   }
@@ -112,7 +112,7 @@ export function AutoMiningDialog({
             <span id="auto-mining-title" className="text-sm font-semibold text-foreground">自动挖掘达标组合</span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
-            不用挑因子：先全量统计筛选（|t|≥2、q≤0.1、IC/IR 达标），再用达标池做相关性去重 → 组合搜索 → 嵌套样本外验证。结果里能看到哪些因子/组合达标、不达标的差在哪。
+            全量筛选 (|t| ≥ 2 · q ≤ 0.1 · IC / IR 达标) → 相关性去重 → 组合搜索 → 嵌套样本外验证
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="关闭" className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:text-foreground">
@@ -167,14 +167,12 @@ export function AutoMiningDialog({
           </div>
           {currentAvailable === false && availability[profile] && (
             <div className="rounded-btn border border-danger/40 bg-danger/5 px-3 py-2 text-[11px] leading-relaxed text-danger">
-              当前区间 {bars} 个交易日，不够「{PROFILE_LABELS[profile]}」档（需 {availability[profile]!.required_bars} 日）。
-              {availability.exploratory?.eligible
-                ? '可改选「探索」档，或在数据页补充更早的历史行情后重试。'
-                : '请在数据页补充更多历史行情后重试。'}
+              交易日不足 · {bars} / {availability[profile]!.required_bars} 日 · 「{PROFILE_LABELS[profile]}」档
+              {availability.exploratory?.eligible ? ' · 可改「探索」档' : ' · 需补历史行情'}
             </div>
           )}
           <p className="text-[10px] leading-relaxed text-muted">
-            点击后立即转入「挖掘」页：第一步全量筛选（近一年窗口，约 1-3 分钟）在后台运行，可随意切换页面；筛选完成后挖掘任务自动开跑，结果在「最近运行」查看。
+            后台运行 · 筛选约 1–3 分钟 · 结果见「挖掘 · 最近运行」
           </p>
         </div>
       </div>
