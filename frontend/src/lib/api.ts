@@ -3125,7 +3125,7 @@ export const api = {
   miningRun: (runId: string) =>
     request<MiningRun>(`/api/backtest/mining/runs/${encodeURIComponent(runId)}`),
 
-  // L1 全量筛选是同步请求, 生产实测 156 秒: 必须用计算型超时 (旧默认 30 秒会先 abort,
+  // L1 全量筛选是同步请求, 大池子实测可达两三分钟: 必须用计算型超时 (旧默认 30 秒会先 abort,
   // 页面报超时而服务端照样建任务, 形成失联运行)
   miningAutoStart: (payload: MiningAutoStartPayload) =>
     request<MiningAutoStartResponse>('/api/backtest/mining/auto', {

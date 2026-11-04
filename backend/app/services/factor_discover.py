@@ -301,7 +301,7 @@ def _candidates(data_dir: Path, run_id: str) -> list[dict]:
         out.append({"signature": row.get("signature"), "definition": definition, "oos_sharpe": row.get("oos_sharpe"),
                     "oos_return": row.get("oos_return"), "oos_max_drawdown": row.get("oos_max_drawdown"),
                     "oos_n_trades": row.get("oos_n_trades"), "valid_folds": row.get("valid_folds"),
-                    # 发现页保留「夏普单项也算通过」(用户 11-04 选 B), 但标明是哪一档:
+                    # 发现页保留「夏普单项也算通过」, 但标明是哪一档:
                     # full = 过完整发布门槛; observe = 只过样本外夏普, 页面叫「观察通过」并注明
                     "passed_oos": passed_full or passed_observe,
                     "oos_gate": "full" if passed_full else ("observe" if passed_observe else None),
@@ -546,7 +546,7 @@ def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=N
 
     promoter: callable(run_id, signature) -> dict (the app's MiningCandidateService.promote); injected by the API.
     remover: callable(candidate_id) (CandidateStore.delete); 已保存过的候选再点「放弃」时撤销那条候选方案
-    (用户 11-04 选 B: 放弃 = 同时撤销保存, 不只是移出本周)。
+    (放弃 = 同时撤销保存, 不只是移出本周)。
 
     保存失败时抛 PromoteError 且不写决定: 旧实现吞掉异常、照样记 save, 页面提示「已保存 · 候选方案」,
     候选方案里却没有这一条。

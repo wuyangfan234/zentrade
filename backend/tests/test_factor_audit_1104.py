@@ -322,7 +322,7 @@ def test_decide_api_returns_409_when_promote_fails(tmp_path, monkeypatch):
 
 
 def test_discover_observe_pass_is_labelled(monkeypatch, tmp_path):
-    """Sharpe-only OR stays (user chose B) but each candidate says which gate it passed."""
+    """Sharpe-only OR stays (kept by design) but each candidate says which gate it passed."""
     from app.services import factor_discover as fd
 
     row = {"signature": "s", "definition_json": json.dumps({"kind": "factor_rank", "scoring": {"close": 1}, "directions": {"close": "high"}}),
