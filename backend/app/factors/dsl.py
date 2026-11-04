@@ -189,13 +189,18 @@ class _Parser:
         left, error = self._add_expr()
         if error:
             return None, error
+        # 连写比较按区间理解: 10 < close < 20 = (10 < close) and (close < 20)。
+        # 旧实现左结合成 (10 < close) < 20, 布尔值 0/1 永远小于 20, 恒真。
+        node = None
         while (token := self._peek()) and token[0] == "op" and token[1] in self._CMP:
             self._next()
             right, error = self._add_expr()
             if error:
                 return None, error
-            left = {"kind": "bin", "value": token[1], "children": [left, right], "offset": token[2]}
-        return left, None
+            pair = {"kind": "bin", "value": token[1], "children": [left, right], "offset": token[2]}
+            node = pair if node is None else {"kind": "bin", "value": "and", "children": [node, pair], "offset": token[2]}
+            left = right
+        return (left if node is None else node), None
 
     def _add_expr(self):
         left, error = self._mul_expr()
@@ -560,7 +565,13 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     if name == "sqrt":
         return pl.when(first >= 0).then(first.sqrt()).otherwise(None), False, False
     if name == "power":
-        return first.pow(constants.get("c", 1.0)), False, False
+        exponent = constants.get("c", 1.0)
+        powered = first.pow(exponent)
+        if exponent == int(exponent):
+            return powered, False, False
+        # 非整数次幂: 负数底在实数里没有定义, Polars 给 NaN; 0 的负非整数次幂是 inf。
+        # 与 log / sqrt 一致, 定义域外置空, 不让 NaN / inf 混进排序和 IC。
+        return pl.when(powered.is_finite()).then(powered).otherwise(None), False, False
     if name == "clamp":
         return first.clip(constants.get("lo"), constants.get("hi")), False, False
     if name == "min":
