@@ -86,7 +86,7 @@ def test_process_queue_triage_extract_and_checks(data_dir, monkeypatch):
     body = ("In this paper, the authors document that stocks with a higher frequency of negative relative to positive daily "
             "returns over the prior month tend to earn higher returns in the following month. RSI with a 2-day lookback.")
     _seed(data_dir, [{"id": "a1", "title": "Pills #26", "body": body, "stage": "queued"},
-                     {"id": "a2", "title": "Index timing", "body": body, "stage": "queued", "published": "2026-10-05T00:00:00+00:00"}])
+                     {"id": "a2", "title": "Index timing", "body": body, "stage": "queued", "published": "2026-10-20T00:00:00+00:00"}])
     calls = []
 
     def fake_call(dd, task, prompt, *, max_tokens):
