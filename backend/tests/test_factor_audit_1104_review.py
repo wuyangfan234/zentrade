@@ -12,7 +12,13 @@ from fastapi.testclient import TestClient
 
 from app.factors import store
 from app.factors.dsl import FACTOR_COLUMN, compile_formula
-from app.factors.registry import _REGISTRY, FactorSpec, get_factor, register_factor, unregister_factor
+from app.factors.registry import (
+    _REGISTRY,
+    FactorSpec,
+    get_factor,
+    register_factor,
+    unregister_factor,
+)
 
 
 @pytest.fixture()

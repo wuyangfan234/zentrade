@@ -11,6 +11,7 @@ Checks are display-only (approved 2026-11-02: no "must beat the engine" gate):
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
@@ -577,10 +578,8 @@ def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=N
         saved_id = previous.get("candidate_id") if previous.get("action") == "save" else None
         if action in ("discard", "reset") and saved_id:
             if remover is not None:
-                try:
+                with contextlib.suppress(KeyError):  # 候选方案里已被手动删掉: 视同已撤销
                     remover(saved_id)
-                except KeyError:
-                    pass  # 候选方案里已被手动删掉: 视同已撤销
             out["removed_candidate_id"] = saved_id
         if action == "reset":
             cur.pop(key, None)

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -350,7 +350,7 @@ def test_funnel_counts_oos_pass_before_backtest():
 # ── 采集状态机 ──────────────────────────────────────────────────────
 
 def _item(item_id: str, stage: str, *, source: str = "rss") -> dict:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     return {"id": item_id, "source": source, "source_name": "probe", "title": item_id, "link": "",
             "published": now, "fetched_at": now, "body": "body", "stage": stage,
             "prefilter": "manual" if source == "manual" else "llm"}
@@ -383,7 +383,8 @@ def test_extract_items_object_is_a_format_failure(tmp_path, monkeypatch):
 
 
 def test_screen_error_does_not_enter_review(tmp_path, monkeypatch):
-    from app.services import factor_discover, factor_intake as fi
+    from app.services import factor_discover
+    from app.services import factor_intake as fi
 
     it = _item("x", "to_screen")
     it["formulas"] = [{"name": "f", "dsl": "close", "direction": "high", "quote_hash": "h"}]
@@ -417,7 +418,7 @@ def test_manual_process_does_not_shift_next_auto_tick(tmp_path):
 
     st = {"last_tick": "2026-11-04T14:00:00+00:00"}
     fi._write_json(fi._dir(tmp_path) / "run_state.json", st)
-    fi._record_manual_process(tmp_path, datetime(2026, 11, 4, 14, 10, tzinfo=timezone.utc), {"model": {}})
+    fi._record_manual_process(tmp_path, datetime(2026, 11, 4, 14, 10, tzinfo=UTC), {"model": {}})
     out = fi._read_json(fi._dir(tmp_path) / "run_state.json", {})
     assert out["last_tick"] == "2026-11-04T14:00:00+00:00"
     assert out["last_process"].startswith("2026-11-04T14:10")

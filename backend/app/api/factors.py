@@ -1,6 +1,7 @@
 """因子注册表 API — 因子库 (P1) + 公式校验/试算 (P2) + 自定义/复合因子 CRUD (P3)。"""
 from __future__ import annotations
 
+import contextlib
 from datetime import date, timedelta
 
 import polars as pl
@@ -9,7 +10,12 @@ from pydantic import BaseModel, Field
 
 from app.factors import store
 from app.factors.dsl import FACTOR_COLUMN, compile_formula
-from app.factors.registry import factor_available, factor_history_available, selectable_factors, unregister_factor
+from app.factors.registry import (
+    factor_available,
+    factor_history_available,
+    selectable_factors,
+    unregister_factor,
+)
 
 router = APIRouter(prefix="/api/factors", tags=["factors"])
 
@@ -509,11 +515,9 @@ def _invalidate_runtime(request: Request) -> None:
     from app.factors.dsl import compile_formula_cached
 
     compile_formula_cached.cache_clear()
-    try:
+    # 测试/最小应用没有 repo.store 时跳过磁盘缓存
+    with contextlib.suppress(AttributeError):
         _invalidate_strategy_runtime(request)
-    except AttributeError:
-        # 测试/最小应用没有 repo.store 时跳过磁盘缓存
-        pass
 
 
 @router.delete("/custom/{factor_id}")
