@@ -55,5 +55,5 @@ it('页面滚动时淡出且不拦点击, 停止滚动后恢复', () => {
 
 it('主区底部留白 (桌面也留), 最后一行内容能滚到悬浮球上方', () => {
   const layout = readFileSync(resolve('src/components/Layout.tsx'), 'utf8')
-  expect(layout).toMatch(/className="h-full overflow-auto[^"]*md:pb-20/)
+  expect(layout).toMatch(/className="h-full[^"]*overflow-auto[^"]*md:pb-20/)
 })
