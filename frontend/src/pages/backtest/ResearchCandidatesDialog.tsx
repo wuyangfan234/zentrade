@@ -34,8 +34,17 @@ function metricSummary(item: ResearchCandidate) {
       ir == null ? null : `IR ${ir.toFixed(2)}`,
     ].filter(Boolean).join(' · ') || '暂无指标摘要'
   }
+  // 挖掘候选只存样本外字段 (oos_return / oos_sharpe): 旧实现只读回测字段, 摘要恒为「暂无」
   const totalReturn = metric('total_return')
   const sharpe = metric('sharpe')
+  const oosReturn = metric('oos_return')
+  const oosSharpe = metric('oos_sharpe')
+  if (totalReturn == null && sharpe == null && (oosReturn != null || oosSharpe != null)) {
+    return [
+      oosReturn == null ? null : `样本外收益 ${fmtPct(oosReturn)}`,
+      oosSharpe == null ? null : `样本外夏普 ${oosSharpe.toFixed(2)}`,
+    ].filter(Boolean).join(' · ')
+  }
   return [
     totalReturn == null ? null : `收益 ${fmtPct(totalReturn)}`,
     sharpe == null ? null : `夏普 ${sharpe.toFixed(2)}`,
@@ -236,7 +245,17 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                 ))}
               </select>
               <div className="flex items-center justify-end gap-1">
-                {item.kind === 'strategy' && onLoadStrategy && (
+                {item.kind === 'strategy' && onLoadStrategy && (() => {
+                  // 挖掘因子候选在发布前, strategy_id 指向的 mined_factor_* 策略还不存在, 回测表单无从复测:
+                  // 旧实现照样回填, 下拉选中一个不存在的策略。未发布时不给按钮, 写明先发布。
+                  const sid = String((item.config as Record<string, unknown>)?.strategy_id ?? '')
+                  const unpublished = Array.isArray((item.config as Record<string, unknown>)?.factor_names)
+                    && !!strategies.data && !(strategies.data.strategies ?? []).some(st => st.id === sid)
+                  return unpublished
+                    ? <span className="inline-flex h-8 items-center px-2 text-[11px] text-muted" title="挖掘候选需先在挖掘页发布为策略 · 发布后可在回测页复测">待发布</span>
+                    : null
+                })()}
+                {item.kind === 'strategy' && onLoadStrategy && (strategies.data?.strategies ?? []).some(st => st.id === String((item.config as Record<string, unknown>)?.strategy_id ?? '')) && (
                   <button
                     type="button"
                     onClick={() => onLoadStrategy(item)}

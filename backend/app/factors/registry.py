@@ -389,24 +389,57 @@ def factor_dependencies(fids) -> frozenset[str]:
 _MISSING_SOURCE_COLUMNS = frozenset({"turnover_rate", "total_shares", "float_shares"})
 
 
+def _unavailable_ids() -> set[str]:
+    """当前数据源算不出的因子 id: 点时财务 / 缺数据源的基础列, 以及 (递归) 依赖它们的因子。
+
+    按 id 精确判断, 不按子串: 旧实现用 ``"turnover" in spec.id``, 自定义 id 碰巧含
+    turnover、公式只用 close 的因子也被判不可用, 进不了检验入口。
+    """
+    missing = set(_MISSING_SOURCE_COLUMNS)
+    missing.update(spec.id for spec in _REGISTRY.values() if spec.pit)
+    changed = True
+    while changed:
+        changed = False
+        for spec in _REGISTRY.values():
+            if spec.id not in missing and spec.dependencies & missing:
+                missing.add(spec.id)
+                changed = True
+    return missing
+
+
 def factor_available(spec: FactorSpec) -> bool:
     """当前数据源能否算出该因子: 点时财务 / 股本类缺数据源。
 
     复合因子的依赖展开到成员: 成员是基础财务列时依赖里就是该列 id, 一并判为不可用
     (旧口径只看自身 pit, 含财务成员的复合因子会进检验页但值全空)。
     """
-    if spec.pit or "turnover" in spec.id:
+    if spec.pit:
         return False
-    unavailable = _MISSING_SOURCE_COLUMNS | {
-        other.id for other in _REGISTRY.values() if other.pit or "turnover" in other.id
-    }
-    return not (spec.dependencies & unavailable)
+    missing = _unavailable_ids()
+    return spec.id not in missing and not (spec.dependencies & missing)
+
+
+def snapshot_only(spec: FactorSpec) -> bool:
+    """扩展表「最新快照」字段: 只在当日 / 盘中单日帧里有值, 历史帧不挂 (避免未来函数)。
+
+    它能进信号条件 (当日比较), 却不能做历史检验: 检验 / 批量 / 挖掘读的都是多日历史帧,
+    旧实现把它算作可用, 检验跑完整段都是空列。
+    """
+    return "snapshot" in spec.tags
+
+
+def factor_history_available(spec: FactorSpec) -> bool:
+    """能否在多日历史帧上算出来 (检验 / 批量 / 挖掘的口径): 数据源可算, 且不是只有快照。"""
+    return factor_available(spec) and not snapshot_only(spec)
 
 
 def factor_columns_view(*, available_only: bool = False) -> list[dict]:
-    """历史 FACTOR_COLUMNS 兼容视图 (顺序、键一致; 动态注册因子追加在末尾)。"""
+    """历史 FACTOR_COLUMNS 兼容视图 (顺序、键一致; 动态注册因子追加在末尾)。
+
+    available_only = 检验入口口径 (历史可算): 只有快照的扩展字段不列入。
+    """
     return [spec.column_view() for spec in _ordered_specs()
-            if not available_only or factor_available(spec)]
+            if not available_only or factor_history_available(spec)]
 
 
 def virtual_dependencies() -> dict[str, frozenset[str]]:

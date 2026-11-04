@@ -65,6 +65,7 @@ FAILURE_LABEL = {
     "quote_mismatch": "原句对不上原文",
     "duplicate": "跟已有因子重复",
     "no_definition": "没有可算定义",
+    "screen_error": "快筛没跑成",
 }
 _RETRY_PREFIX = "上一次的输出无法解析成 JSON 对象。请重新抽取, 只输出一个 JSON 对象, 不要解释、不要 Markdown 代码块。\n\n"
 
@@ -585,9 +586,16 @@ def _commit(data_dir: Path, item_id: str, expected_stage: str, update) -> bool:
 
 
 def _triage_result(it: dict, text: str) -> None:
-    j = _parse_json(text) or {}
-    it["triage"] = {k: j.get(k) for k in ("market", "kind", "paywall")}
+    j = _parse_json(text)
     it.pop("last_error", None)
+    if j is None:
+        # 模型没按格式回: 是模型问题, 不是内容分类。旧实现把空 dict 当 market=None,
+        # 归档成「非美股个股」且不留原文, 用户无从判断。
+        it["last_model_text"] = (text or "").strip()[:MODEL_TEXT_CHARS]
+        code = "model_empty" if not (text or "").strip() else "model_format"
+        it.update(stage="archived", failure=code, reason=FAILURE_LABEL[code])
+        return
+    it["triage"] = {k: j.get(k) for k in ("market", "kind", "paywall")}
     if j.get("paywall"):
         it.update(stage="archived", reason="付费")
     elif j.get("market") != "us_stock":
@@ -610,14 +618,17 @@ def _extract_result(data_dir: Path, item_id: str, text: str, *, calls: int = 1) 
             it.update(stage="archived", failure="model_empty", reason=FAILURE_LABEL["model_empty"])
             return
         j = _parse_json(text)
-        if j is None:
+        raw_items = j.get("items") if j is not None else None
+        # items 必须是列表: 模型回 {"items": {...}} 时旧实现在 _check_items 里抛 TypeError,
+        # 条目卡在待抽取、attempts 不记, 下一轮又花一次模型调用。
+        if j is None or (raw_items is not None and not isinstance(raw_items, list)):
             it.update(stage="archived", failure="model_format", reason=FAILURE_LABEL["model_format"])
             return
         it["summary"] = j.get("summary_zh")
         it.pop("failure", None)
         it.pop("reason", None)
         # dedupe against the latest state, read under the same lock as the write
-        formulas = _check_items(it, j.get("items") or [], _known_quote_hashes(load_items(data_dir)))
+        formulas = _check_items(it, raw_items or [], _known_quote_hashes(load_items(data_dir)))
         if formulas:
             it["formulas"] = formulas
             it["stage"] = "to_screen"
@@ -859,8 +870,15 @@ def screen_pending(data_dir: Path, repo, *, now: datetime | None = None) -> dict
         for it in items.values():
             if it.get("stage") != "to_screen" or any(not f.get("screen") for f in it.get("formulas") or []):
                 continue
-            pend = [f for f in it.get("formulas") or [] if not (f.get("screen") or {}).get("duplicate")]
-            if pend:
+            formulas = it.get("formulas") or []
+            ok = [f for f in formulas if not (f.get("screen") or {}).get("error")]
+            pend = [f for f in ok if not (f.get("screen") or {}).get("duplicate")]
+            if not ok:
+                # 快筛全部失败: 不冒充「已快筛 · 待审」。归档为可重试的失败, 页面显示原因。
+                first_error = (formulas[0].get("screen") or {}).get("error") if formulas else None
+                it.update(stage="archived", failure="screen_error",
+                          reason=FAILURE_LABEL["screen_error"] + (f" · {first_error}" if first_error else ""))
+            elif pend:
                 it["stage"] = "pending"
             else:
                 first = (it.get("formulas") or [{}])[0].get("screen") or {}
@@ -897,6 +915,18 @@ def _due(data_dir: Path, now: datetime) -> bool:
     return last is None or (now - last).total_seconds() >= FETCH_INTERVAL_S
 
 
+def _record_manual_process(data_dir: Path, now: datetime, out: dict) -> None:
+    """「立即处理」只记 last_process, 不动 last_tick。
+
+    last_tick 是定时任务 (每 30 分钟的 IntervalTrigger) 的唤醒时刻, 页面据它推算「下次自动」。
+    旧实现手动处理也写 last_tick, 显示的下次时间被往后推, 和真实调度对不上。
+    """
+    st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
+    st["last_process"] = _iso(now)
+    st["last_result"] = out
+    _write_json(_dir(data_dir) / "run_state.json", st)
+
+
 def process_only(data_dir: Path, repo, *, now: datetime | None = None) -> dict:
     """Model queue + quick screen without touching the feeds (0.47.4: "立即处理" for 投递).
 
@@ -910,10 +940,7 @@ def process_only(data_dir: Path, repo, *, now: datetime | None = None) -> dict:
         _RUN["running"] = True
     try:
         out = {"model": process_queue(data_dir), "screen": screen_pending(data_dir, repo, now=now)}
-        st = _read_json(_dir(data_dir) / "run_state.json", {}) or {}
-        st["last_tick"] = _iso(now)
-        st["last_result"] = out
-        _write_json(_dir(data_dir) / "run_state.json", st)
+        _record_manual_process(data_dir, now, out)
         return out
     finally:
         _RUN["running"] = False
@@ -1046,6 +1073,9 @@ def retry(data_dir: Path, item_id: str) -> dict:
             raise ValueError(f"重试已达 {RETRY_LIMIT} 次上限, 请补充原文后重新投递")
         it["retry_count"] = used + 1
         it["stage"] = "to_screen" if it.get("formulas") else "to_extract"
+        # 重新快筛要清掉旧结果: screen_pending 只跑「没有 screen」的公式, 不清就原样复用旧结论
+        for formula in it.get("formulas") or []:
+            formula.pop("screen", None)
         it["retry_grant"] = it["stage"] == "to_extract"
         for key in ("reason", "failure", "last_error", "last_model_text", "duplicate"):
             it.pop(key, None)
@@ -1118,7 +1148,7 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
     return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "submissions": submissions,
             "next_tick": _iso(last + timedelta(minutes=TICK_MINUTES)) if last else None,
             "sources": src_rows, "usage": usage(data_dir), "settings": load_settings(data_dir), "last_fetch": st.get("last_fetch"),
-            "last_tick": st.get("last_tick"), "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
+            "last_tick": st.get("last_tick"), "last_process": st.get("last_process"), "queued": sum(1 for it in items.values() if it.get("stage") in ("queued", "to_extract")),
             "last_error": next((it.get("last_error") for it in sorted(items.values(), key=lambda x: x.get("fetched_at") or "", reverse=True) if it.get("last_error") and it.get("stage") in ("queued", "to_extract")), None)}
 
 

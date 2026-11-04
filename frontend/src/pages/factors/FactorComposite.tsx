@@ -25,15 +25,16 @@ export function FactorComposite() {
     queryFn: () => api.factorLibrary(),
   })
   const save = useMutation({
-    // 均等模式提交等权 (旧实现提交手动权重, 界面却显示等权)
+    // 提交的就是界面上显示的归一权重 (和为 1): 旧实现均等显示 0.5/0.5 却提交 1/1,
+    // 手动写着「归一」却原样提交, 排名不变但复合值与阈值信号整体放大
     mutationFn: () => api.factorCompositeCreate({
       id: saveId.trim() || undefined,
       label: label.trim(),
-      members: mode === 'equal' ? Object.fromEntries(Object.keys(members).map(id => [id, 1])) : members,
+      members: normalizedWeights,
     }),
     onSuccess: data => {
       toast(`已注册 ${data.id} · v${data.version}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       setMembers({})
       setWeightDrafts({})
@@ -84,6 +85,9 @@ export function FactorComposite() {
     })
   }
   const weightSum = Object.values(effectiveWeights).reduce((left, right) => left + right, 0)
+  const normalizedWeights = Object.fromEntries(
+    Object.entries(effectiveWeights).map(([id, w]) => [id, weightSum > 0 ? +(w / weightSum).toFixed(6) : 0]),
+  )
 
   const labelOf = (id: string) =>
     (lib.data?.factors ?? []).find(item => item.id === id)?.label ?? id
@@ -159,7 +163,7 @@ export function FactorComposite() {
                 </button>
               ))}
               {mode === 'manual' && (
-                <span className="text-muted">权重和 {weightSum.toFixed(2)} · 归一</span>
+                <span className="text-muted">权重和 {weightSum.toFixed(2)} · 保存时归一为 {memberList.map(([id]) => normalizedWeights[id]?.toFixed(2)).join(' / ')}</span>
               )}
             </div>
             <div className="space-y-1.5">

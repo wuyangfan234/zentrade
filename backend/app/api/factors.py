@@ -1,6 +1,7 @@
 """因子注册表 API — 因子库 (P1) + 公式校验/试算 (P2) + 自定义/复合因子 CRUD (P3)。"""
 from __future__ import annotations
 
+import contextlib
 from datetime import date, timedelta
 
 import polars as pl
@@ -9,7 +10,12 @@ from pydantic import BaseModel, Field
 
 from app.factors import store
 from app.factors.dsl import FACTOR_COLUMN, compile_formula
-from app.factors.registry import factor_available, selectable_factors, unregister_factor
+from app.factors.registry import (
+    factor_available,
+    factor_history_available,
+    selectable_factors,
+    unregister_factor,
+)
 
 router = APIRouter(prefix="/api/factors", tags=["factors"])
 
@@ -57,6 +63,8 @@ def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|e
                 "status": (meta.get(spec.id) or {}).get("status") or ("active" if spec.kind in ("base", "virtual") else "draft"),
                 "description": (meta.get(spec.id) or {}).get("description", ""),
                 "available": factor_available(spec),
+                # 当前可用 ≠ 历史可检验: 扩展表快照字段只有当日值 (信号可用, 检验整段为空)
+                "history_available": factor_history_available(spec),
             }
             for spec in specs
         ]
@@ -272,8 +280,9 @@ def _trial_nonempty(request: Request, formula: str, asset_type: str = "stock") -
     if to_compute:
         panel = FactorBacktestService._compute_missing_factors(panel, to_compute)
     prepared = compiled.frame_transform(panel) if compiled.frame_transform else None
-    if prepared is None or prepared[FACTOR_COLUMN].is_not_null().sum() == 0:
-        raise HTTPException(status_code=400, detail="公式在最近 40 个交易日输出全为空, 拒绝保存")
+    # 只认有限值: power(close-close-1, 0.5) 这类公式非空却全 NaN, 旧门禁 is_not_null 会放过
+    if prepared is None or (prepared[FACTOR_COLUMN].is_not_null() & prepared[FACTOR_COLUMN].is_finite()).sum() == 0:
+        raise HTTPException(status_code=400, detail="公式在最近 40 个交易日没有有效数值, 拒绝保存")
 
 
 @router.post("/custom")
@@ -379,11 +388,63 @@ def update_custom_factor(factor_id: str, req: CustomFactorUpdateRequest, request
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save_one(data_dir, target)
+    if formula_changed:
+        _rebuild_dependents(data_dir, factor_id)
+        _invalidate_runtime(request)
     return {"ok": True, "id": factor_id, "version": target["version"], "status": target["status"]}
 
 
+def _rebuild_dependents(data_dir, factor_id: str) -> list[str]:
+    """改公式后重建引用它的自定义 / 复合因子 (递归)。
+
+    依赖列与预热是注册时从被引用方推导出来的: 旧实现只重注册被编辑的因子,
+    uf_base 预热从 1 变 101 后, 引用它的 uf_dep 仍按 1 根预热取数, 首段结果是空的。
+    这里按新定义重推一遍 (定义文件不存推导值, 无需落盘); 某个依赖方重建失败只告警, 保留原注册项。
+    """
+    import logging
+
+    from app.factors.registry import register_factor
+
+    definitions = {str(d.get("id")): d for d in store.load_all(data_dir)}
+    rebuilt: list[str] = []
+    frontier = [factor_id]
+    seen = {factor_id}
+    while frontier:
+        current = frontier.pop(0)
+        for other_id, definition in definitions.items():
+            if other_id in seen or not _definition_references(definition, current):
+                continue
+            seen.add(other_id)
+            try:
+                spec = store.to_spec(definition)
+            except ValueError as exc:
+                logging.getLogger(__name__).warning("依赖方重建失败 %s: %s", other_id, exc)
+                continue
+            unregister_factor(other_id)
+            register_factor(spec)
+            rebuilt.append(other_id)
+            frontier.append(other_id)
+    return rebuilt
+
+
+def _definition_references(definition: dict, factor_id: str) -> bool:
+    """定义是否引用 factor_id: 复合看成员, 自定义按 DSL 编译出的 referenced_factors。"""
+    members = definition.get("members")
+    if isinstance(members, dict) and factor_id in members:
+        return True
+    if str(definition.get("kind", "custom")) == "custom":
+        compiled = compile_formula(str(definition.get("formula") or ""))
+        return factor_id in compiled.referenced_factors
+    return False
+
+
 def _find_references(data_dir, factor_id: str) -> list[str]:
-    """扫描策略与复合因子定义中的引用 (删除前 fail-closed 检查)。"""
+    """扫描策略、复合/自定义因子、自定义信号、研究候选中的引用 (删除前 fail-closed 检查)。
+
+    旧实现只看复合成员与策略文件: uf_b 公式里写 uf_a、信号条件 left=uf_a、研究候选
+    factor_names 含 uf_a 时都能静默删掉 uf_a, 留下运行期才暴露的失效引用。
+    """
+    import json
     import re
 
     # 0.39.4 (审计 M-16): 评分引用实际落在 user_data/strategy_overrides/*.json (策略页保存的配置)
@@ -413,10 +474,50 @@ def _find_references(data_dir, factor_id: str) -> list[str]:
     for definition in store.load_all(data_dir):
         if str(definition.get("id")) == factor_id:
             continue
-        members = definition.get("members")
-        if isinstance(members, dict) and factor_id in members:
+        if _definition_references(definition, factor_id):
             references.append(f"custom_factors/{definition.get('id')}.json")
+    signals_dir = data_dir / "user_data" / "custom_signals"
+    if signals_dir.is_dir():
+        for file in sorted(signals_dir.glob("*.json")):
+            try:
+                signal = json.loads(file.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                continue
+            conditions = signal.get("conditions") if isinstance(signal, dict) else None
+            if any(
+                isinstance(cond, dict) and factor_id in (str(cond.get("left") or ""), str(cond.get("right") or ""))
+                for cond in conditions or []
+            ):
+                references.append(file.relative_to(data_dir).as_posix())
+    candidates_path = data_dir / "user_data" / "research_candidates.json"
+    if candidates_path.is_file():
+        try:
+            candidates = json.loads(candidates_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            candidates = []
+        for item in candidates if isinstance(candidates, list) else []:
+            config = item.get("config") if isinstance(item, dict) else None
+            if not isinstance(config, dict):
+                continue
+            raw_names = config.get("factor_names")
+            names = [str(name) for name in raw_names] if isinstance(raw_names, list) else []
+            if config.get("factor_name") == factor_id or factor_id in names:
+                references.append(f"research_candidates.json#{item.get('id')}")
     return references
+
+
+def _invalidate_runtime(request: Request) -> None:
+    """公式变更 / 强删后: 清 DSL 编译缓存与策略结果缓存, 下一轮评分按新定义重算。
+
+    旧实现只在注册表里换了 spec, 策略页缓存 (strategy_cache) 与盘中引擎状态仍是旧公式的结果。
+    """
+    from app.api.strategy import _invalidate_strategy_runtime
+    from app.factors.dsl import compile_formula_cached
+
+    compile_formula_cached.cache_clear()
+    # 测试/最小应用没有 repo.store 时跳过磁盘缓存
+    with contextlib.suppress(AttributeError):
+        _invalidate_strategy_runtime(request)
 
 
 @router.delete("/custom/{factor_id}")
@@ -440,6 +541,8 @@ def delete_custom_factor(factor_id: str, request: Request, force: bool = Query(d
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.delete_one(data_dir, factor_id)
+    if force:
+        _invalidate_runtime(request)
     return {"ok": True, "id": factor_id, "removed_references": references}
 
 

@@ -280,32 +280,82 @@ def _rolling_corr_expr(
     ).otherwise(None)
 
 
+def _registry_order(names: Collection[str]) -> list[str]:
+    """custom / composite 因子及其引用的注册因子, 按依赖拓扑序 (被引用者在前) 排列。
+
+    custom 公式可以引用别的 uf_* / 虚拟因子, composite 的成员也可以是 custom / composite。
+    旧实现只按请求的名字逐个物化, 被引用的 uf_base 不在帧里时 frame_transform 返回 None,
+    检验/策略静默缺列 (编辑器试算会显式补 referenced_factors, 两条路径结果不一致)。
+    """
+    from app.factors.dsl import compile_formula_cached
+
+    ordered: list[str] = []
+    visiting: set[str] = set()
+    done: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in done or name in visiting:
+            return
+        spec = _registry_get_factor(name)
+        if spec is None:
+            return
+        visiting.add(name)
+        if spec.kind == "custom":
+            for ref in sorted(compile_formula_cached(spec.formula_text).referenced_factors):
+                visit(ref)
+        elif spec.kind == "composite":
+            for member, _ in spec.components:
+                visit(member)
+        visiting.discard(name)
+        done.add(name)
+        ordered.append(name)
+
+    for name in names:
+        visit(str(name))
+    return ordered
+
+
 def materialize_scoring_columns(
     frame: pl.DataFrame,
     names: Collection[str],
 ) -> pl.DataFrame:
     # custom (DSL) 因子先物化: frame_transform 可能需要多阶段临时列 (嵌套窗口规避),
     # 与单表达式路径不同, 必须整体走帧变换 —— 与检验/试算共用同一条计算路径 (P3)。
+    # 依赖按拓扑序逐个落成列: 被引用的虚拟/自定义/复合因子先于引用方物化。
     from app.factors.dsl import FACTOR_COLUMN, compile_formula_cached
 
-    for name in names:
-        spec = _registry_get_factor(str(name))
-        if spec is None or spec.kind != "custom" or name in frame.columns:
+    requested = [str(name) for name in names]
+    original = set(frame.columns)
+    for name in _registry_order(requested):
+        if name in frame.columns:
             continue
-        compiled = compile_formula_cached(spec.formula_text)
-        if compiled.frame_transform is None:
+        spec = _registry_get_factor(name)
+        if spec is None:
             continue
-        transformed = compiled.frame_transform(frame)
-        if transformed is None:
-            continue
-        frame = transformed.with_columns(pl.col(FACTOR_COLUMN).alias(str(name))).drop(FACTOR_COLUMN)
+        if spec.kind == "custom":
+            compiled = compile_formula_cached(spec.formula_text)
+            for ref in sorted(compiled.referenced_factors):
+                if ref not in frame.columns and (expr := scoring_value_expr(frame.columns, ref)) is not None:
+                    frame = frame.with_columns(expr.alias(ref))
+            if compiled.frame_transform is None:
+                continue
+            transformed = compiled.frame_transform(frame)
+            if transformed is None:
+                continue
+            frame = transformed.with_columns(pl.col(FACTOR_COLUMN).alias(name)).drop(FACTOR_COLUMN)
+        elif spec.kind == "composite" and (expr := scoring_value_expr(frame.columns, name)) is not None:
+            frame = frame.with_columns(expr.alias(name))
     expressions = [
         expression.alias(name)
-        for name in names
+        for name in requested
         if name not in frame.columns
-        and (expression := scoring_value_expr(frame.columns, str(name))) is not None
+        and (expression := scoring_value_expr(frame.columns, name)) is not None
     ]
-    return frame.with_columns(expressions) if expressions else frame
+    frame = frame.with_columns(expressions) if expressions else frame
+    # 只为算引用方而补出的中间列 (被引用的 uf_* / 虚拟因子) 不留在结果里: 输出形状与旧实现一致,
+    # 调用方按列名遍历时不会多出没请求的列
+    extra = [c for c in frame.columns if c not in original and c not in requested]
+    return frame.drop(extra) if extra else frame
 
 
 def _ratio(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:

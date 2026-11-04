@@ -320,6 +320,8 @@ def _check_call(node: dict, errors: list[DslError]) -> dict[str, float]:
         return {}
     constants: dict[str, float] = {}
     for index, const_name in enumerate(const_names):
+        if n_expr + index >= len(args):
+            continue  # 可选常量 (winsorize 的 k) 省略时用默认值
         arg = args[n_expr + index]
         value = _const_value(arg)
         if value is None:
@@ -434,14 +436,17 @@ def _compile_node(node: dict) -> tuple[pl.Expr | None, bool, bool]:
         # 基准列/base 因子/虚拟因子统一以列引用; 虚拟因子由调用方物化 (运行期缺列 fail-closed)
         return pl.col(node["value"]), False, False
     if kind == "unary":
-        operand, needs_window, _ = _compile_node(node["children"][0])
+        operand, needs_window, operand_bool = _compile_node(node["children"][0])
+        operand = _num(operand, operand_bool)
         if operand is None:
             return None, False, False
         return -operand, needs_window, False
     if kind == "bin":
         op = node["value"]
-        left, left_window, _ = _compile_node(node["children"][0])
-        right, right_window, _ = _compile_node(node["children"][1])
+        left, left_window, left_bool = _compile_node(node["children"][0])
+        right, right_window, right_bool = _compile_node(node["children"][1])
+        if op not in ("and", "or"):
+            left, right = _num(left, left_bool), _num(right, right_bool)
         if left is None or right is None:
             return None, False, False
         if left_window:
@@ -468,6 +473,12 @@ def _compile_node(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     return None, False, False
 
 
+def _num(expr: pl.Expr | None, is_bool: bool) -> pl.Expr | None:
+    """比较式落在数值位置时转成 0/1 浮点: Polars 对布尔列取负、abs、sign、clip、pow、相减都会报错,
+    旧实现编译通过、试算 500 (例如 -(close > open))。and / or 两侧与 if_else 条件仍保持布尔。"""
+    return expr.cast(pl.Float64) if expr is not None and is_bool else expr
+
+
 def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     name = node["value"]
     children = node["children"]
@@ -475,11 +486,13 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     n_expr, _ = OPERATORS[name]
 
     if name in TS_OPERATORS:
-        inner, _, _ = _compile_node(children[0])
+        inner, _, inner_bool = _compile_node(children[0])
+        inner = _num(inner, inner_bool)
         if inner is None:
             return None, False, False
         if name in ("ts_corr", "ts_cov"):
-            second, _, _ = _compile_node(children[1])
+            second, _, second_bool = _compile_node(children[1])
+            second = _num(second, second_bool)
             if second is None:
                 return None, False, False
             n = int(constants.get("n", 0))
@@ -493,7 +506,8 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
         return expr, True, False
 
     if name in CROSS_OPERATORS:
-        inner, inner_window, _ = _compile_node(children[0])
+        inner, inner_window, inner_bool = _compile_node(children[0])
+        inner = _num(inner, inner_bool)
         if inner is None:
             return None, False, False
         if inner_window:
@@ -512,8 +526,9 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
 
     if name == "if_else":
         cond, cond_window, _ = _compile_node(children[0])
-        then_expr, then_window, _ = _compile_node(children[1])
-        else_expr, else_window, _ = _compile_node(children[2])
+        then_expr, then_window, then_bool = _compile_node(children[1])
+        else_expr, else_window, else_bool = _compile_node(children[2])
+        then_expr, else_expr = _num(then_expr, then_bool), _num(else_expr, else_bool)
         if cond is None or then_expr is None or else_expr is None:
             return None, False, False
         if cond_window:
@@ -527,8 +542,8 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     args: list[pl.Expr | None] = []
     arg_windows: list[bool] = []
     for index in range(n_expr):
-        arg, arg_window, _ = _compile_node(children[index])
-        args.append(arg)
+        arg, arg_window, arg_bool = _compile_node(children[index])
+        args.append(_num(arg, arg_bool))
         arg_windows.append(arg_window)
     if any(arg is None for arg in args):
         return None, False, False
@@ -553,6 +568,68 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     if name == "max":
         return pl.max_horizontal(*resolved), False, False
     return None, False, False
+
+
+def _is_bool_node(node: dict) -> bool:
+    """比较式与由比较式组成的 and / or 是布尔; 其余 (数值、if_else、函数) 都是数值。"""
+    if node.get("kind") != "bin":
+        return False
+    value = node.get("value")
+    if value in _CMP_METHOD:
+        return True
+    if value in ("and", "or"):
+        return all(_is_bool_node(child) for child in node.get("children", []))
+    return False
+
+
+def _check_bool_types(node: dict, errors: list[DslError]) -> None:
+    """and / or 两侧、if_else 条件必须是比较式。
+
+    Polars 对数值列做 & / | 是位运算 (浮点直接报错), if_else 的数值条件在运行期才抛
+    SchemaError。旧实现编译通过、试算 500; 现在在编译期给出可定位的错误。
+    """
+    kind = node.get("kind")
+    if kind == "bin" and node.get("value") in ("and", "or"):
+        for child in node.get("children", []):
+            if not _is_bool_node(child):
+                errors.append(DslError(
+                    "E015", f"{node['value']} 两侧必须是比较式, 例如 close > 10 and volume > 1000",
+                    offset=int(child.get("offset") or node.get("offset") or 0),
+                ))
+                return
+    if kind == "call" and node.get("value") == "if_else":
+        cond = node["children"][0] if node.get("children") else None
+        if cond is not None and not _is_bool_node(cond):
+            errors.append(DslError(
+                "E015", "if_else 的第一个参数必须是比较式, 例如 if_else(close > ma20, 1, -1)",
+                offset=int(cond.get("offset") or node.get("offset") or 0),
+            ))
+            return
+    for child in node.get("children", []):
+        _check_bool_types(child, errors)
+
+
+def _lookback(node: dict) -> int:
+    """子树需要的历史根数 (当根计 1)。嵌套窗口逐层累加: ts_mean(ts_sum(x,20),10) = 20+10-1。"""
+    kind = node.get("kind")
+    if kind == "num":
+        return 1
+    if kind == "col":
+        # 引用的注册因子自带预热 (约定 warmup = 回看根数 + 1)
+        spec = get_factor(str(node.get("value")))
+        return max(1, spec.warmup_bars - 1) if spec is not None else 1
+    children = node.get("children", [])
+    inner = max((_lookback(child) for child in children), default=1)
+    if kind != "call":
+        return inner
+    name = node.get("value")
+    n_value = (node.get("_constants") or {}).get("n")
+    if name not in TS_OPERATORS or n_value is None:
+        return inner
+    n = int(n_value)
+    if name in ("ts_delay", "ts_delta"):
+        return inner + n
+    return inner + max(n, 1) - 1
 
 
 def compile_formula(text: str) -> CompiledFormula:
@@ -585,6 +662,8 @@ def compile_formula(text: str) -> CompiledFormula:
 
     constants_by_call: dict[int, dict] = {}
     _semantic_walk(ast, errors, constants_by_call)
+    if ast is not None:
+        _check_bool_types(ast, errors)
 
     dependencies: set[str] = set()
     referenced_factors: set[str] = set()
@@ -605,6 +684,17 @@ def compile_formula(text: str) -> CompiledFormula:
         n_value = node_constants.get("n")
         if n_value is not None and n_value == int(n_value) and int(n_value) > 0:
             warmup = max(warmup, int(n_value) + 1)
+
+    # 嵌套窗口要累加: ts_mean(ts_sum(close,20),10) 首个有效值在第 29 根, 取单层最大 n+1 只报 21。
+    # 只在累加根数超过单层口径时才抬高, 非嵌套公式的预热保持不变 (close 仍是 1, ts_mean(x,20) 仍是 21)。
+    def _with_constants(node: dict) -> dict:
+        out = {**node, "children": [_with_constants(child) for child in node.get("children", [])]}
+        if node.get("kind") == "call":
+            out["_constants"] = constants_by_call.get(id(node), {})
+        return out
+
+    if ast is not None and not errors:
+        warmup = max(warmup, _lookback(_with_constants(ast)))
 
     def _find_cross(node: dict) -> None:
         nonlocal cross_sectional
@@ -724,8 +814,10 @@ def compile_formula(text: str) -> CompiledFormula:
         if not required_columns.issubset(set(frame.columns)):
             return None
         result = frame
-        if staged_exprs:
-            result = result.with_columns(staged_exprs)
+        # 临时列有先后依赖 (深层先算): 后一层引用前一层的别名, 必须逐列 with_columns。
+        # 放进同一次 with_columns 时后层看不到前层, 嵌套截面 rank(rank(...)) 运行期找不到 __tsfx_N__。
+        for expr in staged_exprs:
+            result = result.with_columns(expr)
         return result.with_columns(compiled.alias(FACTOR_COLUMN))
 
     return CompiledFormula(

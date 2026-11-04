@@ -102,12 +102,30 @@ def canonicalize_request(request: Mapping[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], _canonicalize_json_value(request))
 
 
+# 只用于展示的诊断字段: 进签名会让同一份请求每次都得到新签名, 去重失效。
+_SIGNATURE_DIAGNOSTIC_KEYS = {"auto_screening": ("elapsed_ms",)}
+
+
+def signature_request(request: Mapping[str, Any]) -> dict[str, Any]:
+    """签名用的请求视图: 去掉耗时之类的诊断字段, 存盘的请求快照仍完整保留。"""
+    view = dict(request)
+    for key, fields in _SIGNATURE_DIAGNOSTIC_KEYS.items():
+        nested = view.get(key)
+        if isinstance(nested, Mapping):
+            view[key] = {k: v for k, v in nested.items() if k not in fields}
+    return view
+
+
 def compute_run_signature(request: Mapping[str, Any], data_fingerprint: Any) -> str:
-    """Hash every request dimension and the data fingerprint using BLAKE2b."""
+    """Hash every request dimension and the data fingerprint using BLAKE2b.
+
+    诊断字段 (自动挖掘筛选耗时 elapsed_ms) 不参与签名: 旧实现两次相同请求只差 1 ms
+    就得到不同签名, 自动挖掘的「同一请求复用已有运行」永远不命中。
+    """
     import hashlib
 
     signature_input = {
-        "request": canonicalize_request(request),
+        "request": canonicalize_request(signature_request(request)),
         "data_fingerprint": _canonicalize_json_value(data_fingerprint),
     }
     payload = json.dumps(

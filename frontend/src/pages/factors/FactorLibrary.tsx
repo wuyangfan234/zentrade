@@ -152,7 +152,7 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
                     {assetText(item.asset_types)}
                   </td>
                   <td className="px-3 py-2.5 text-right">
-                    {item.available !== false && (
+                    {item.available !== false && item.history_available !== false && (
                       <button
                         type="button"
                         onClick={event => { event.stopPropagation(); onInspect(item.id) }}
@@ -190,7 +190,7 @@ function FactorDetailModal({
     mutationFn: (status: 'draft' | 'active' | 'watch' | 'retired') => api.factorSetStatus(item.id, status),
     onSuccess: data => {
       toast(`${item.label} · ${statusLabel(data.status)}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },
@@ -211,7 +211,7 @@ function FactorDetailModal({
           : `${item.label} 已删除`,
         'success',
       )
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },
@@ -231,7 +231,7 @@ function FactorDetailModal({
     mutationFn: () => api.factorSetGroup(item.id, groupDraft.trim()),
     onSuccess: data => {
       toast(`${item.label} · 分组 ${data.group}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },
@@ -250,7 +250,8 @@ function FactorDetailModal({
     ['跨标的可比', item.scale_free ? '是' : '否'],
     ['依赖列', item.dependencies.length > 0 ? item.dependencies.join(', ') : '—'],
     ['状态', statusLabel(item.status)],
-    ...(item.available === false ? [['数据', '当前数据源未接入'] as [string, string]] : []),
+    ...(item.available === false ? [['数据', '当前数据源未接入'] as [string, string]]
+      : item.history_available === false ? [['数据', '只有当日快照 · 可用于信号 · 不能做历史检验'] as [string, string]] : []),
     ...(item.description ? [['描述', item.description] as [string, string]] : []),
   ]
   const ROW_TITLE: Record<string, string> = {
@@ -347,7 +348,7 @@ function FactorDetailModal({
             编辑公式
           </button>
         )}
-        {item.available !== false && (
+        {item.available !== false && item.history_available !== false && (
           <>
             <button
               type="button"

@@ -109,7 +109,16 @@ function SortableTh({ label, sortKeyName, sortKey, sortAsc, onSort, className, t
   )
 }
 
-function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: string) => void; focusFactor?: string }) {
+/** 后端批量接口上限 (api/backtest.py FactorBatchRequest.factor_names max_length) */
+export const MAX_BATCH_FACTORS = 96
+
+/** 单因子检验从批量跳过来时沿用的配置 (旧实现只带因子 id, 回到全市场 / 3 个月 / 5 组 / 日度默认) */
+export interface InspectConfig {
+  symbols: string; assetType: 'stock' | 'etf'; start: string; end: string
+  nGroups: number; rebalance: 'daily' | 'weekly' | 'monthly'; slippage: string
+}
+
+function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: string, config?: InspectConfig) => void; focusFactor?: string }) {
   const queryClient = useQueryClient()
   const initialized = useRef(false)
   const [selected, setSelected] = useState<string[]>([])
@@ -195,7 +204,11 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
     return groups
   }, [columns.data, factorQuery])
 
+  // 跑批时的配置快照: 跳单因子时带过去, 改了表单没重跑也不串
+  const [submittedConfig, setSubmittedConfig] = useState<InspectConfig | null>(null)
+  const overLimit = selected.length > MAX_BATCH_FACTORS
   const run = useMutation({
+    onMutate: () => setSubmittedConfig({ symbols, assetType, start, end, nGroups, rebalance, slippage }),
     mutationFn: () => api.factorBatch({
       factor_names: selected,
       symbols: symbols ? parseSymbols(symbols) : null,
@@ -408,7 +421,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             />
             <WatchlistGroupMenu
               onSelect={importFromWatchlist}
-              disabled={watchlist.isLoading || watchlistEntries.length === 0}
+              disabled={watchlist.isLoading || watchlistEntries.length === 0 || assetType === 'etf'}
               includeAll
               counts={watchlistCounts}
               total={watchlistEntries.length}
@@ -416,7 +429,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
               menuLabel="选择自选分组"
               align="right"
               triggerClassName="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-input border border-border bg-surface px-2 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              title="从自选分组加入筛选范围"
+              title={assetType === 'etf' ? 'ETF 模式暂不支持从自选导入 (自选按股票维护)' : '从自选分组加入筛选范围'}
               ariaLabel="从自选加入筛选范围"
             >
               <ListPlus className="h-3 w-3" />
@@ -476,11 +489,12 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
         <button
           type="button"
           onClick={() => run.mutate()}
-          disabled={run.isPending || selected.length === 0}
+          disabled={run.isPending || selected.length === 0 || overLimit}
+          title={overLimit ? `一次最多 ${MAX_BATCH_FACTORS} 个因子 · 当前 ${selected.length} 个` : undefined}
           className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5" />
-          {run.isPending ? '筛选中' : `筛选 ${selected.length} 个因子`}
+          {run.isPending ? '筛选中' : overLimit ? `超过上限 ${MAX_BATCH_FACTORS} · 已选 ${selected.length}` : `筛选 ${selected.length} 个因子`}
         </button>
       </section>
 
@@ -605,7 +619,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                           </button>
                           <button
                             type="button"
-                            onClick={() => onInspect(item.factor_name)}
+                            onClick={() => onInspect(item.factor_name, submittedConfig ?? undefined)}
                             disabled={!!item.error}
                             className="flex h-7 w-7 items-center justify-center rounded-btn text-muted transition-colors hover:bg-elevated hover:text-foreground disabled:opacity-40"
                             title="单因子检验"
@@ -632,9 +646,11 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
 export function FactorDiscovery({ focusFactor }: { focusFactor?: string } = {}) {
   const [view, setView] = useState<View>('batch')
   const [detailFactor, setDetailFactor] = useState('momentum_20d')
+  const [detailConfig, setDetailConfig] = useState<InspectConfig | undefined>(undefined)
   const [autoOpen, setAutoOpen] = useState(false)
-  const inspect = (factorName: string) => {
+  const inspect = (factorName: string, config?: InspectConfig) => {
     setDetailFactor(factorName)
+    setDetailConfig(config)
     setView('single')
   }
   return (
@@ -686,7 +702,7 @@ export function FactorDiscovery({ focusFactor }: { focusFactor?: string } = {}) 
         </div>
         {view === 'single' && (
           <div className="h-full">
-            <FactorBacktest key={detailFactor} initialFactorName={detailFactor} />
+            <FactorBacktest key={`${detailFactor}:${detailConfig ? JSON.stringify(detailConfig) : ''}`} initialFactorName={detailFactor} initialConfig={detailConfig} />
           </div>
         )}
       </div>

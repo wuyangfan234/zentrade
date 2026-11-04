@@ -1450,6 +1450,8 @@ export interface FactorLibraryItem {
   description?: string
   /** 当前数据源能否算出 (财务/股本类为 false: 不进检验页, 不可选入组合) */
   available?: boolean
+  /** 历史帧可算 (检验入口口径): 扩展表快照字段为 false */
+  history_available?: boolean
 }
 
 export interface FactorDslError {
@@ -1761,8 +1763,6 @@ export interface MiningTelemetry {
   peak_rss_bytes?: number
   panel_scans?: number
   matrix_bytes?: number
-  cache_hits?: number
-  fold_reuses?: number
   serialized_result_bytes?: number
   phase_ms?: Record<string, number>
 }
@@ -2264,6 +2264,15 @@ export interface DiscoverCandidate {
   oos?: { oos_sharpe?: number | null; oos_return?: number | null; oos_max_drawdown?: number | null; oos_n_trades?: number | null; valid_folds?: number | null }
   stats?: DiscoverStats; corr_engine?: number | null; corr_spy?: number | null; checks?: DiscoverCheck[]
   last_trades?: DiscoverTrade[]; published_strategy_id?: string | null
+  /** full = 过完整发布门槛; observe = 只过样本外夏普 (页面叫「观察通过」) */
+  oos_gate?: 'full' | 'observe' | null; oos_gate_reasons?: string[]
+}
+/** 重算响应: 指标平铺 + 自己的曲线 / 最近成交 / 检查项 (整块替换详情, 不和原回测混显) */
+export interface DiscoverRecalc extends DiscoverStats {
+  legs?: DiscoverEngine['legs']
+  curve?: { dates: string[]; values: number[] }
+  last_trades?: DiscoverTrade[]
+  checks?: DiscoverCheck[]
 }
 export interface DiscoverEngine {
   rules: string[]; legs: { id: string; name: string; annual_return?: number | null; n_trades?: number | null }[]
@@ -2271,7 +2280,7 @@ export interface DiscoverEngine {
 }
 export interface DiscoverWeek {
   week: string; run_id: string; generated_at: string; data_as_of: string; window: [string, string]; symbols: number
-  funnel: { factors_selected?: number; factors_total?: number; combos?: number; valid_folds?: number; skipped_folds?: number; pool?: number; passed?: number }
+  funnel: { factors_selected?: number; factors_total?: number; combos?: number; valid_folds?: number; skipped_folds?: number; pool?: number; oos_passed?: number; passed?: number }
   engine: DiscoverEngine | null; spy: { stats: DiscoverStats; yearly: Record<string, number> } | null
   candidates: DiscoverCandidate[]; curves: Record<string, (number | null)[] | string[]> & { dates: string[] }
 }
@@ -2299,7 +2308,7 @@ export interface IntakeOverview {
   funnel: { fetched: number; llm: number; us_stock: number; defined: number; formulas: number; pending: number; queued: number; failed: number; submissions: number }
   cards: IntakeCard[]; sources: IntakeSource[]; submissions: IntakeSubmission[]
   usage: { today: number; limit: number; retries_today: number; days30_calls: number; days30_tokens: number; by_task: Record<string, number>; tokens_by_task: Record<string, number> }
-  settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; next_tick?: string | null; queued: number; last_error: string | null
+  settings: { daily_limit: number }; last_fetch: string | null; last_tick: string | null; last_process?: string | null; next_tick?: string | null; queued: number; last_error: string | null
 }
 export interface FactorLabPage {
   week: DiscoverWeek | null
@@ -3116,10 +3125,13 @@ export const api = {
   miningRun: (runId: string) =>
     request<MiningRun>(`/api/backtest/mining/runs/${encodeURIComponent(runId)}`),
 
+  // L1 全量筛选是同步请求, 大池子实测可达两三分钟: 必须用计算型超时 (旧默认 30 秒会先 abort,
+  // 页面报超时而服务端照样建任务, 形成失联运行)
   miningAutoStart: (payload: MiningAutoStartPayload) =>
     request<MiningAutoStartResponse>('/api/backtest/mining/auto', {
       method: 'POST',
       body: JSON.stringify(payload),
+      timeoutMs: COMPUTE_REQUEST_TIMEOUT_MS,
     }),
 
   miningStart: (payload: MiningRequestV1) =>
@@ -3162,9 +3174,9 @@ export const api = {
 
   factorLabPage: () => request<FactorLabPage>('/api/factor-lab/page'),
   factorLabDecide: (week: string, signature: string, action: 'save' | 'discard' | 'reset') =>
-    request<{ candidate_id?: string }>('/api/factor-lab/candidates/decide', { method: 'POST', body: JSON.stringify({ week, signature, action }) }),
+    request<{ candidate_id?: string; removed_candidate_id?: string }>('/api/factor-lab/candidates/decide', { method: 'POST', body: JSON.stringify({ week, signature, action }) }),
   factorLabRecalc: (payload: { signature: string; pool: 'watchlist' | 'theme' | 'custom'; symbols?: string[]; start: string; end: string }) =>
-    request<DiscoverStats & { legs?: DiscoverEngine['legs'] }>('/api/factor-lab/recalc', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180_000 }),
+    request<DiscoverRecalc>('/api/factor-lab/recalc', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180_000 }),
   factorLabRun: () => request<{ started: boolean }>('/api/factor-lab/run', { method: 'POST' }),
   intakeRun: () => request<{ started: boolean }>('/api/factor-lab/intake/run', { method: 'POST' }),
   intakeMerge: (id: string, formula = 0) =>
@@ -3478,6 +3490,13 @@ export const api = {
     request<{ ok: boolean; signal: CustomSignal }>('/api/custom-signals', {
       method: 'POST',
       body: JSON.stringify(signal),
+    }),
+  /** 只新建: 同 id 已存在返回 409 (不覆盖别处刚建的同名信号); 409 不弹全局提示, 由调用方换 id 重试 */
+  customSignalCreate: (signal: CustomSignal) =>
+    request<{ ok: boolean; signal: CustomSignal }>('/api/custom-signals?create_only=true', {
+      method: 'POST',
+      body: JSON.stringify(signal),
+      quiet: true,
     }),
 
   customSignalDelete: (id: string) =>

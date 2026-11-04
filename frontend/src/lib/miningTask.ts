@@ -272,10 +272,15 @@ export async function startMining(payload: Parameters<typeof api.miningStart>[0]
   }
 }
 
+export type AutoMiningOutcome = 'started' | 'no_result' | 'error' | 'busy'
+
 /** 自动挖掘: L1 全量筛选在后端同步跑 (数十秒到几分钟)。
  *  模块级提交即返回, 弹窗可立刻关闭; 筛选期间用 progress 呈现, run 创建后走 SSE/轮询。
+ *  已有任务在跑时直接返回 busy: 旧实现先断开 A 的 SSE 并删掉重连键, B 没结果时 A 就失联了。
+ *  返回真实结果 (started / no_result / error), 调用方据此提示, 不再提交即报「已提交」。
  */
-export async function startAutoMining(payload: Parameters<typeof api.miningAutoStart>[0]) {
+export async function startAutoMining(payload: Parameters<typeof api.miningAutoStart>[0]): Promise<AutoMiningOutcome> {
+  if (current.isPending) return 'busy'
   closeEvents()
   localStorage.removeItem(ACTIVE_RUN_KEY)
   const token = connectionToken
@@ -292,7 +297,7 @@ export async function startAutoMining(payload: Parameters<typeof api.miningAutoS
   })
   try {
     const data = await api.miningAutoStart(payload)
-    if (connectionToken !== token || current.runId !== null) return
+    if (connectionToken !== token || current.runId !== null) return 'error'
     if (data.started && data.run) {
       const run = data.run
       localStorage.setItem(ACTIVE_RUN_KEY, run.run_id)
@@ -307,7 +312,7 @@ export async function startAutoMining(payload: Parameters<typeof api.miningAutoS
       } else {
         connect(run.run_id)
       }
-      return
+      return 'started'
     }
     // 无达标因子: 不创建任务, 以 task.error 呈现原因分布 (挖掘页红字展示)
     const screening = data.screening
@@ -323,13 +328,15 @@ export async function startAutoMining(payload: Parameters<typeof api.miningAutoS
         + (topReasons ? `主要失败原因：${topReasons}。` : '')
         + '可改选「探索」档（门槛更低）或拉长日期区间后重试。',
     })
+    return 'no_result'
   } catch (error) {
-    if (connectionToken !== token || current.runId !== null) return
+    if (connectionToken !== token || current.runId !== null) return 'error'
     update({
       isPending: false,
       progress: null,
       error: String((error as Error).message || error),
     })
+    return 'error'
   }
 }
 

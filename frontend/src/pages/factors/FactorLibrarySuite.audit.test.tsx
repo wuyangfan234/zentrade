@@ -166,7 +166,8 @@ it('A4/A14/A16 composite: equal mode submits equal weights, unavailable factors 
   await click(btn('均等'))
   await setVal(input('名称'), 'combo')
   await click(btn('注册复合因子'))
-  expect(mocks.factorCompositeCreate.mock.calls[0][0].members).toEqual({ ma20: 1, rsi_14: 1 })
+  // 提交 = 界面显示的归一权重 (11-04 审计: 显示 0.5 / 0.5 而提交 1 / 1)
+  expect(mocks.factorCompositeCreate.mock.calls[0][0].members).toEqual({ ma20: 0.5, rsi_14: 0.5 })
 })
 
 it('A5/A12/A13/A21 library: stale group filter falls back, status shows Chinese, unavailable factors have no 检验', async () => {
@@ -187,6 +188,18 @@ it('A5/A12/A13/A21 library: stale group filter falls back, status shows Chinese,
   expect(rows).toContain('状态=草稿')
   await click(dialogBtn('观察'))
   expect(toasts).toContainEqual(['success', '因子A · 观察'])
+})
+
+it('snapshot-only ext factor is usable but has no 检验 entry (history not available)', async () => {
+  LIB = { factors: [...LIB.factors, f({ id: 'ext_snap__px', label: '快照价', group: '扩展数据', kind: 'base', origin: 'builtin', status: 'active', available: true, history_available: false })] }
+  const client = qc()
+  await act(async () => { root.render(<QueryClientProvider client={client}><FactorLibrary onInspect={() => {}} /></QueryClientProvider>) })
+  await tick()
+  const row = Array.from(host.querySelectorAll('tbody tr')).find(r => r.textContent?.includes('ext_snap__px'))!
+  expect(row.querySelector('button')).toBeNull()
+  await click(row)
+  const rows = Array.from(host.querySelectorAll('[role="dialog"] dl > div')).map(d => `${d.querySelector('dt')?.textContent}=${d.querySelector('dd')?.textContent}`)
+  expect(rows.some(r => r.startsWith('数据=') && r.includes('当日快照'))).toBe(true)
 })
 
 it('A8 nested dialogs: one Escape closes only the generate dialog', async () => {

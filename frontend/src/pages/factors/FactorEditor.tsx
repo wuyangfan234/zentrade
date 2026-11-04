@@ -120,6 +120,10 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
   // 在途的校验/试算按发出时的公式比对: 返回时公式已改则丢弃, 结果不会挂到新公式上
   const formulaRef = useRef(formula)
   formulaRef.current = formula
+  // 试算结果同时绑定资产类型: 股票试算在途时切到 ETF, 迟到的股票结果不能放行 ETF 保存
+  const assetRef = useRef<'stock' | 'etf'>('stock')
+  // 保存响应按发出时的 (编辑对象, 公式) 比对: 不一致说明保存期间改过, 不能把当前公式记成已保存基线
+  const editingRef = useRef<string | null>(null)
   // URL ?edit= 只在首次载入生效; 之后切回新建、保存刷新列表都不再把表单拉回该因子
   const consumedEditId = useRef(false)
 
@@ -184,8 +188,11 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
     onSuccess: (data, sent) => { if (sent === formulaRef.current) setValidation(data) },
   })
   const runTrial = useMutation({
-    mutationFn: (sent: string) => api.factorTrial({ formula: sent, asset_type: assetType, days: 40 }),
-    onSuccess: (data, sent) => { if (sent === formulaRef.current) setTrial(data) },
+    mutationFn: (sent: string) => {
+      const sentAsset = assetType
+      return api.factorTrial({ formula: sent, asset_type: sentAsset, days: 40 }).then(data => ({ data, sentAsset }))
+    },
+    onSuccess: ({ data, sentAsset }, sent) => { if (sent === formulaRef.current && sentAsset === assetRef.current) setTrial(data) },
     onError: (error, sent) => {
       // 编译类错误 (含缺列 E013) 与校验错误同样渲染为可定位列表
       const errors = parseDslErrors(String((error as Error).message))
@@ -197,6 +204,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
     },
   })
   const formulaDirty = editing != null && editing.formula !== formula
+  editingRef.current = editing?.id ?? null
   const save = useMutation({
     mutationFn: () => {
       const payload = {
@@ -206,18 +214,23 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
         description: saveDescription.trim(),
         direction,
       }
-      return editing
+      const sent = { formula, editId: editing?.id ?? null }
+      return (editing
         ? api.factorCustomUpdate(editing.id, payload)
         : api.factorCustomCreate({ ...payload, id: saveId.trim() || undefined })
+      ).then(data => ({ data, sent }))
     },
-    onSuccess: data => {
+    onSuccess: ({ data, sent }) => {
       setSavedId(data.id)
       setSavedVersion(data.version)
-      // 保存后以已存公式为基准: 按钮回「保存」, 不会再点一次又升一版
-      if (editing) setEditing({ ...editing, version: data.version, formula })
+      // 保存后以「发出时的公式」为基准: 保存期间又改了公式时, 当前公式仍是未保存 (dirty),
+      // 旧实现把当前公式记成基线, 「回草稿」按钮消失, 再存也不要求重新试算。
+      if (sent.editId && sent.editId === editingRef.current) {
+        setEditing(current => current && current.id === sent.editId ? { ...current, version: data.version, formula: sent.formula } : current)
+      }
       const draftNote = 'status' in data && data.status === 'draft' && formulaDirty ? ' · 草稿' : ''
       toast(editing ? `${data.id} · v${data.version}${draftNote}` : `已注册 ${data.id} · v${data.version}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
     },
     onError: (error: Error) => toast(`保存失败 · ${errorText(error)}`, 'error'),
@@ -413,7 +426,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
 
         {/* 动作行: nowrap 防止按钮文字折行 */}
         <div className="flex flex-wrap items-center gap-2">
-          <select value={assetType} onChange={event => { setAssetType(event.target.value as typeof assetType); setTrial(null) }} className={`${INPUT_CLS} h-8 w-24 shrink-0`} aria-label="试算资产">
+          <select value={assetType} onChange={event => { const next = event.target.value as typeof assetType; assetRef.current = next; setAssetType(next); setTrial(null) }} className={`${INPUT_CLS} h-8 w-24 shrink-0`} aria-label="试算资产">
             <option value="stock">股票</option>
             <option value="etf">ETF</option>
           </select>

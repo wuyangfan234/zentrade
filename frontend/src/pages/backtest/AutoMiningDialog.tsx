@@ -29,6 +29,13 @@ const PROFILE_HINTS: Record<MiningBudgetProfile, string> = {
 }
 
 /** 自动挖掘入口弹窗: L1 全量统计筛选 → 达标因子池 → 嵌套样本外组合挖掘。 */
+/** 与后端 auto_mining.SCREEN_GATES 同值: 弹窗按所选档位显示门槛 (旧文案写死均衡档) */
+const PROFILE_GATE_TEXT: Record<string, string> = {
+  exploratory: '|t| ≥ 1.5 · q ≤ 0.2',
+  balanced: '|t| ≥ 2 · q ≤ 0.1',
+  strict: '|t| ≥ 2.5 · q ≤ 0.05',
+}
+
 export function AutoMiningDialog({
   onClose,
   defaultAssetType = 'stock',
@@ -87,17 +94,20 @@ export function AutoMiningDialog({
 
   const submitAutoMining = () => {
     // L1 全量筛选在后端要跑几分钟: 模块级任务提交后本弹窗立刻关闭,
-    // 进度/结果由挖掘页的 RunStatus + SSE 呈现 (含 0 达标原因分布)。
+    // 进度/结果由挖掘页的 RunStatus + SSE 呈现 (含 0 达标原因分布)。提示等真实结果再给。
     void startAutoMining({
       asset_type: assetType,
       budget_profile: profile,
       start: start || null,
       end: end || null,
+    }).then(outcome => {
+      if (outcome === 'started') toast('自动挖掘已开始 · 进度见「挖掘」页', 'success')
+      else if (outcome === 'busy') toast('已有挖掘在跑 · 等它结束再开新的', 'error')
     })
-    toast('已提交自动挖掘 · 进度见「挖掘」页', 'success')
     onClose()
     navigate('/factors?tab=mining')
   }
+  const gateText = PROFILE_GATE_TEXT[profile] ?? PROFILE_GATE_TEXT.balanced
 
   return (
     <Modal
@@ -112,7 +122,7 @@ export function AutoMiningDialog({
             <span id="auto-mining-title" className="text-sm font-semibold text-foreground">自动挖掘达标组合</span>
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-muted">
-            全量筛选 (|t| ≥ 2 · q ≤ 0.1 · IC / IR 达标) → 相关性去重 → 组合搜索 → 嵌套样本外验证
+            全量筛选 ({gateText}) → 相关性去重 → 组合搜索 → 嵌套样本外验证
           </p>
         </div>
         <button type="button" onClick={onClose} aria-label="关闭" className="inline-flex h-8 w-8 shrink-0 items-center justify-center text-muted transition-colors hover:text-foreground">

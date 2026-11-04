@@ -441,4 +441,5 @@ def test_process_only_skips_feeds_and_reports_next_tick(data_dir, monkeypatch):
     it = _manual(data_dir)
     assert it["stage"] == "archived" and it["failure"] == "model_format"
     page = fi.overview(data_dir)
-    assert page["next_tick"] and page["next_tick"] > (page["last_tick"] or "")
+    # 手动处理只记 last_process; last_tick / next_tick 跟定时任务走, 不被手动处理往后推
+    assert page["last_process"] and page["last_tick"] is None and page["next_tick"] is None

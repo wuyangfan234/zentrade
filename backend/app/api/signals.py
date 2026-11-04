@@ -169,13 +169,20 @@ def list_signals(request: Request):
 
 
 @router.post("")
-def save_signal(req: SignalModel, request: Request):
+def save_signal(req: SignalModel, request: Request, create_only: bool = False):
+    """新建 / 更新同一入口 (upsert)。create_only=true 时同 id 已存在返回 409:
+    因子检验「加为信号」用它, 两个标签页各自生成同名 id 时不再后者覆盖前者。"""
     sig = req.model_dump()
     try:
         custom_signals.validate(sig)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    custom_signals.save_one(_data_dir(request), sig)
+    data_dir = _data_dir(request)
+    if create_only:
+        if not custom_signals.create_one(data_dir, sig):
+            raise HTTPException(status_code=409, detail=f"信号 id 已存在: {sig['id']}")
+    else:
+        custom_signals.save_one(data_dir, sig)
     _invalidate(request)
     return {"ok": True, "signal": sig}
 

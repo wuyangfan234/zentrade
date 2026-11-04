@@ -3,20 +3,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Zap } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { toast } from '@/components/Toast'
-import { api, type FactorBatchItem } from '@/lib/api'
+import { ApiError, api, type FactorBatchItem } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
 const INPUT_CLS = 'h-8 w-full rounded-input border border-border bg-surface px-2.5 text-xs text-foreground focus:border-accent focus:outline-none'
 
-/** 按因子族给默认阈值 (RSI/KDJ 经典区间, z 分 ±2, 有界位置 0.2/0.8, 乖离 ±5%)。 */
-function suggestThreshold(factorId: string, op: '>' | '<'): number {
+/** 按因子族给默认阈值 (RSI/KDJ 经典区间, z 分 ±2, 有界位置 0.2/0.8, 乖离 ±5%)。
+ *  未知族返回 null 让用户手填: 旧实现一律给 0, 波动率这类恒非负的因子在「低值利多」时
+ *  生成 `< 0`, 后端照收, 信号永远不触发。 */
+export function suggestThreshold(factorId: string, op: '>' | '<'): number | null {
   if (/^rsi_/.test(factorId)) return op === '<' ? 30 : 70
   if (/^kdj_/.test(factorId)) return op === '<' ? 20 : 80
   if (factorId.includes('_z_')) return op === '<' ? -2 : 2
   if (/(boll_position|close_position|position_240d)/.test(factorId)) return op === '<' ? 0.2 : 0.8
   if (/_bias/.test(factorId)) return op === '<' ? -0.05 : 0.05
-  return 0
+  return null
 }
+const thresholdText = (v: number | null) => (v == null ? '' : String(v))
 
 /** 新信号 id: 因子 + 方向, 与已有信号重名时递增后缀 (旧实现固定 f_<因子>, 再次保存会静默覆盖已有信号)。 */
 export function uniqueSignalId(factorName: string, op: '>' | '<', existing: Iterable<string>): string {
@@ -68,7 +71,7 @@ export function AddFactorSignalDialog({
   const icPositive = (item?.ic_mean ?? 0) >= 0
   const [op, setOp] = useState<'>' | '<'>(item ? (icPositive ? '>' : '<') : '>')
   const [threshold, setThreshold] = useState(
-    item ? String(suggestThreshold(item.factor_name, icPositive ? '>' : '<')) : '',
+    item ? thresholdText(suggestThreshold(item.factor_name, icPositive ? '>' : '<')) : '',
   )
   const [name, setName] = useState(item ? `${item.label}·${icPositive ? '高值利多' : '低值利多'}` : '')
   const [kind, setKind] = useState<'entry' | 'exit' | 'both'>(defaultKind)
@@ -78,30 +81,38 @@ export function AddFactorSignalDialog({
     setSelectedId(factorId)
     const factor = library.data?.factors.find(f => f.id === factorId)
     if (!factor) return
-    setThreshold(String(suggestThreshold(factorId, op)))
+    setThreshold(thresholdText(suggestThreshold(factorId, op)))
     setName(`${factor.label}·${op === '>' ? '高值' : '低值'}`)
   }
   const pickOp = (nextOp: '>' | '<') => {
     setOp(nextOp)
-    if (!item && selected) setThreshold(String(suggestThreshold(selected.factor_name, nextOp)))
+    if (!item && selected) setThreshold(thresholdText(suggestThreshold(selected.factor_name, nextOp)))
   }
 
   const save = useMutation({
-    mutationFn: async () => {
-      const existing = await api.customSignalsList()
-      const signalId = uniqueSignalId(selected!.factor_name, op, existing.signals.map(signal => signal.id))
-      await api.customSignalSave({
-        id: signalId,
-        name: name.trim() || selected!.label,
-        kind,
-        enabled: true,
-        conditions: [{ left: selected!.factor_name, op, right: threshold.trim(), leftDays: 0, rightDays: 0 }],
-      })
-      return signalId
+    // 提交时拍一份快照 (id / 类型 / 名称), 回调只读快照: 请求 pending 期间用户改了类型,
+    // 旧实现回调读的是当前表单, 落盘 exit 却按 entry 接进触发器。
+    mutationFn: async (): Promise<CreatedSignal> => {
+      const snapshot = { name: name.trim() || selected!.label, kind, factor: selected!.factor_name, op, right: threshold.trim() }
+      // 只新建 (create_only): 另一个标签页刚建了同名 id 时服务端回 409, 重新取列表换下一个后缀
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const existing = await api.customSignalsList()
+        const signalId = uniqueSignalId(snapshot.factor, snapshot.op, existing.signals.map(signal => signal.id))
+        try {
+          await api.customSignalCreate({
+            id: signalId, name: snapshot.name, kind: snapshot.kind, enabled: true,
+            conditions: [{ left: snapshot.factor, op: snapshot.op, right: snapshot.right, leftDays: 0, rightDays: 0 }],
+          })
+          return { id: signalId, kind: snapshot.kind, name: snapshot.name }
+        } catch (error) {
+          if (!(error instanceof ApiError) || error.status !== 409 || attempt === 2) throw error
+        }
+      }
+      throw new Error('信号 id 冲突')
     },
-    onSuccess: signalId => {
-      onCreated?.({ id: signalId, kind, name: name.trim() || selected!.label })
-      toast(`已保存信号 · ${signalId}`, 'success')
+    onSuccess: created => {
+      onCreated?.(created)
+      toast(`已保存信号 · ${created.id}`, 'success')
       void queryClient.invalidateQueries({ queryKey: QK.customSignals })
       onClose()
     },
@@ -169,7 +180,7 @@ export function AddFactorSignalDialog({
           <label className="block">
             <span className="mb-1 block text-[10px] text-muted">阈值</span>
             <input
-              type="number" step="any" value={threshold}
+              type="number" step="any" value={threshold} placeholder="手填"
               onChange={event => setThreshold(event.target.value)}
               className={`${INPUT_CLS} font-mono`}
             />
@@ -181,7 +192,7 @@ export function AddFactorSignalDialog({
         </label>
         <label className="block">
           <span className="mb-1 block text-[10px] text-muted">类型</span>
-          <select value={kind} onChange={event => setKind(event.target.value as 'entry' | 'exit' | 'both')} className={INPUT_CLS}>
+          <select value={kind} disabled={save.isPending} onChange={event => setKind(event.target.value as 'entry' | 'exit' | 'both')} className={INPUT_CLS}>
             <option value="entry">入场</option>
             <option value="exit">出场</option>
             <option value="both">出入通用</option>
