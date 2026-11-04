@@ -419,10 +419,27 @@ def factor_available(spec: FactorSpec) -> bool:
     return spec.id not in missing and not (spec.dependencies & missing)
 
 
+def snapshot_only(spec: FactorSpec) -> bool:
+    """扩展表「最新快照」字段: 只在当日 / 盘中单日帧里有值, 历史帧不挂 (避免未来函数)。
+
+    它能进信号条件 (当日比较), 却不能做历史检验: 检验 / 批量 / 挖掘读的都是多日历史帧,
+    旧实现把它算作可用, 检验跑完整段都是空列。
+    """
+    return "snapshot" in spec.tags
+
+
+def factor_history_available(spec: FactorSpec) -> bool:
+    """能否在多日历史帧上算出来 (检验 / 批量 / 挖掘的口径): 数据源可算, 且不是只有快照。"""
+    return factor_available(spec) and not snapshot_only(spec)
+
+
 def factor_columns_view(*, available_only: bool = False) -> list[dict]:
-    """历史 FACTOR_COLUMNS 兼容视图 (顺序、键一致; 动态注册因子追加在末尾)。"""
+    """历史 FACTOR_COLUMNS 兼容视图 (顺序、键一致; 动态注册因子追加在末尾)。
+
+    available_only = 检验入口口径 (历史可算): 只有快照的扩展字段不列入。
+    """
     return [spec.column_view() for spec in _ordered_specs()
-            if not available_only or factor_available(spec)]
+            if not available_only or factor_history_available(spec)]
 
 
 def virtual_dependencies() -> dict[str, frozenset[str]]:

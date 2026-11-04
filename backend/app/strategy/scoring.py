@@ -325,6 +325,7 @@ def materialize_scoring_columns(
     from app.factors.dsl import FACTOR_COLUMN, compile_formula_cached
 
     requested = [str(name) for name in names]
+    original = set(frame.columns)
     for name in _registry_order(requested):
         if name in frame.columns:
             continue
@@ -350,7 +351,11 @@ def materialize_scoring_columns(
         if name not in frame.columns
         and (expression := scoring_value_expr(frame.columns, name)) is not None
     ]
-    return frame.with_columns(expressions) if expressions else frame
+    frame = frame.with_columns(expressions) if expressions else frame
+    # 只为算引用方而补出的中间列 (被引用的 uf_* / 虚拟因子) 不留在结果里: 输出形状与旧实现一致,
+    # 调用方按列名遍历时不会多出没请求的列
+    extra = [c for c in frame.columns if c not in original and c not in requested]
+    return frame.drop(extra) if extra else frame
 
 
 def _ratio(numerator: pl.Expr, denominator: pl.Expr) -> pl.Expr:

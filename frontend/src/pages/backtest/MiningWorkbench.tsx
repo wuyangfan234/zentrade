@@ -620,6 +620,9 @@ export function MiningWorkbench() {
     },
     onSuccess: value => {
       queryClient.invalidateQueries({ queryKey: QK.screenerStrategies(draft.assetType) })
+      // 候选方案里该条从「待发布」变成可载入复测: 刷新候选列表与策略下拉
+      void queryClient.invalidateQueries({ queryKey: QK.researchCandidates })
+      void queryClient.invalidateQueries({ queryKey: QK.strategyLinkOptions() })
       toast(`策略已发布 · ${value.strategy_id}`, 'success')
     },
     onError: error => toast(`发布失败 · ${String((error as Error).message || error)}`, 'error'),

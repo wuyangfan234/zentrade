@@ -1450,6 +1450,8 @@ export interface FactorLibraryItem {
   description?: string
   /** 当前数据源能否算出 (财务/股本类为 false: 不进检验页, 不可选入组合) */
   available?: boolean
+  /** 历史帧可算 (检验入口口径): 扩展表快照字段为 false */
+  history_available?: boolean
 }
 
 export interface FactorDslError {

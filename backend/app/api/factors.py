@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.factors import store
 from app.factors.dsl import FACTOR_COLUMN, compile_formula
-from app.factors.registry import factor_available, selectable_factors, unregister_factor
+from app.factors.registry import factor_available, factor_history_available, selectable_factors, unregister_factor
 
 router = APIRouter(prefix="/api/factors", tags=["factors"])
 
@@ -57,6 +57,8 @@ def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|e
                 "status": (meta.get(spec.id) or {}).get("status") or ("active" if spec.kind in ("base", "virtual") else "draft"),
                 "description": (meta.get(spec.id) or {}).get("description", ""),
                 "available": factor_available(spec),
+                # 当前可用 ≠ 历史可检验: 扩展表快照字段只有当日值 (信号可用, 检验整段为空)
+                "history_available": factor_history_available(spec),
             }
             for spec in specs
         ]
@@ -381,8 +383,42 @@ def update_custom_factor(factor_id: str, req: CustomFactorUpdateRequest, request
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     store.save_one(data_dir, target)
     if formula_changed:
+        _rebuild_dependents(data_dir, factor_id)
         _invalidate_runtime(request)
     return {"ok": True, "id": factor_id, "version": target["version"], "status": target["status"]}
+
+
+def _rebuild_dependents(data_dir, factor_id: str) -> list[str]:
+    """改公式后重建引用它的自定义 / 复合因子 (递归)。
+
+    依赖列与预热是注册时从被引用方推导出来的: 旧实现只重注册被编辑的因子,
+    uf_base 预热从 1 变 101 后, 引用它的 uf_dep 仍按 1 根预热取数, 首段结果是空的。
+    这里按新定义重推一遍 (定义文件不存推导值, 无需落盘); 某个依赖方重建失败只告警, 保留原注册项。
+    """
+    import logging
+
+    from app.factors.registry import register_factor
+
+    definitions = {str(d.get("id")): d for d in store.load_all(data_dir)}
+    rebuilt: list[str] = []
+    frontier = [factor_id]
+    seen = {factor_id}
+    while frontier:
+        current = frontier.pop(0)
+        for other_id, definition in definitions.items():
+            if other_id in seen or not _definition_references(definition, current):
+                continue
+            seen.add(other_id)
+            try:
+                spec = store.to_spec(definition)
+            except ValueError as exc:
+                logging.getLogger(__name__).warning("依赖方重建失败 %s: %s", other_id, exc)
+                continue
+            unregister_factor(other_id)
+            register_factor(spec)
+            rebuilt.append(other_id)
+            frontier.append(other_id)
+    return rebuilt
 
 
 def _definition_references(definition: dict, factor_id: str) -> bool:

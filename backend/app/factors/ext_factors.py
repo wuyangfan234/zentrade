@@ -122,7 +122,8 @@ def ext_factor_specs(data_dir: Path | None = None) -> list[FactorSpec]:
                 kind="base",
                 warmup_bars=1,
                 scale_free=False,
-                tags=("ext", cfg.id),
+                # snapshot 标签: 只有当日值, 历史检验不可用 (registry.factor_history_available)
+                tags=("ext", cfg.id) + (("snapshot",) if cfg.mode != "timeseries" else ()),
             ))
     return specs
 
