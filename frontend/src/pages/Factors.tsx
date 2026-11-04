@@ -115,7 +115,7 @@ export function Factors() {
         )}
       />
 
-      <main className="min-h-0 flex-1 px-3 pb-3 pt-3 lg:px-4 lg:pb-4 xl:overflow-hidden">
+      <main className="min-h-0 min-w-0 flex-1 px-3 pb-3 pt-3 lg:px-4 lg:pb-4 xl:overflow-hidden">
         <Suspense fallback={<div className="h-full min-h-[240px]" />}>
         {activeTab === 'discover' && (
           <div className="h-full min-h-0 xl:overflow-y-auto">

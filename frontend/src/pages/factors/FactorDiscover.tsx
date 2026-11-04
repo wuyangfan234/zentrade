@@ -176,10 +176,10 @@ function NavChart({ dates, series }: { dates: string[]; series: Series[] }) {
     ro.observe(el)
     return () => ro.disconnect()
   }, [])
-  const H = 260, L = 44, R = 56, T = 14, B = 28
+  const H = Math.max(180, Math.min(260, Math.round(W * 260 / 760))), L = 44, R = 56, T = 14, B = 28
   const n = dates.length
   const all = series.flatMap(s => s.values.filter((v): v is number => v != null && Number.isFinite(v)))
-  if (n < 2 || !all.length) return <div ref={ref} className="h-[260px]" />
+  if (n < 2 || !all.length) return <div ref={ref} style={{ height: H }} />
   const mx = Math.ceil(Math.max(...all)), mn = Math.min(0.6, Math.floor(Math.min(...all) * 10) / 10)
   const x = (i: number) => L + (W - L - R) * i / (n - 1)
   const y = (v: number) => T + (H - T - B) * (1 - (v - mn) / (mx - mn))
@@ -449,50 +449,60 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
   })
   const engine = w.engine
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3" data-cands="">
+    <Card className="overflow-hidden" attr={{ 'data-cands': '', 'data-layout': 'comparison' }}>
       {list.map((c, i) => {
         const st = c.stats!
         const ok = (c.checks ?? []).filter(x => x[0]).length
         const active = sel.kind === 'cand' && sel.sig === c.signature
         const d = decision(c)
         return (
-          <Card key={c.signature} className={`flex min-h-[178px] min-w-0 cursor-pointer flex-col gap-2.5 p-3.5 ${active ? 'border-accent shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : ''}`} attr={{ 'data-cand': c.signature }}>
-            <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} className="flex min-w-0 flex-col gap-2.5">
-              <div className="flex items-center gap-2"><Chip>候选 {i + 1}</Chip><span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
-                <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>已放弃</Pill> : <Pill kind="run">待审</Pill>}</span></div>
-              <div className="flex flex-wrap gap-1">{(c.legs ?? []).map(l => <Chip key={l.factor}>{l.label} {l.direction === 'low' ? '低' : '高'}</Chip>)}<Chip>每日前 20</Chip>{c.oos_gate === 'observe' && <span title={OBSERVE_NOTE}><Chip dashed>观察通过</Chip></span>}</div>
-              <div className="grid grid-cols-4 gap-1.5">
-                <Metric label="年化" value={pct(st.annual_return)} cls={tone(st.annual_return)} />
-                <Metric label="夏普" value={num(st.sharpe)} />
-                <Metric label="最大回撤" value={pct(st.max_drawdown)} cls={tone(st.max_drawdown)} />
-                <Metric label="交易" value={String(st.n_trades ?? DASH)} />
-              </div>
+          <div key={c.signature} data-cand={c.signature} data-comparison-row=""
+            className={`grid min-w-0 grid-cols-1 gap-2.5 border-b border-border/60 px-3.5 py-3 last:border-b-0 lg:grid-cols-[minmax(210px,1.05fr)_minmax(330px,1.3fr)_minmax(210px,.85fr)] lg:gap-x-4 lg:gap-y-1.5 ${active ? 'bg-accent/[0.06] shadow-[inset_3px_0_0_hsl(var(--accent))]' : ''}`}>
+            <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-identity=""
+              className="flex min-w-0 cursor-pointer items-center gap-2 lg:col-start-1 lg:row-start-1">
+              <Chip>候选 {i + 1}</Chip><span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
+              <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>已放弃</Pill> : <Pill kind="run">待审</Pill>}</span>
             </div>
-            <div className="mt-auto flex items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary">
+            <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-legs=""
+              className="flex min-w-0 cursor-pointer flex-wrap gap-1 lg:col-start-1 lg:row-start-2">
+              {(c.legs ?? []).map(l => <Chip key={l.factor}>{l.label} {l.direction === 'low' ? '低' : '高'}</Chip>)}<Chip>每日前 20</Chip>{c.oos_gate === 'observe' && <span title={OBSERVE_NOTE}><Chip dashed>观察通过</Chip></span>}
+            </div>
+            <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-metrics=""
+              className="grid min-w-0 cursor-pointer grid-cols-4 gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-x lg:border-border lg:px-4">
+              <Metric label="年化" value={pct(st.annual_return)} cls={tone(st.annual_return)} />
+              <Metric label="夏普" value={num(st.sharpe)} />
+              <Metric label="最大回撤" value={pct(st.max_drawdown)} cls={tone(st.max_drawdown)} />
+              <Metric label="交易" value={String(st.n_trades ?? DASH)} />
+            </div>
+            <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:justify-end lg:border-t-0 lg:pt-0">
               <span>检查</span><b className="text-foreground">{ok} / {(c.checks ?? []).length}</b><Bar checks={c.checks ?? []} />
-              {!d && <span className="ml-auto flex gap-1.5"><Btn onClick={() => onDecide(c.signature, 'save')}>保存</Btn><Btn onClick={() => onDecide(c.signature, 'discard')}>放弃</Btn></span>}
+              {!d && <span className="ml-auto flex flex-wrap gap-1.5 lg:ml-0 lg:justify-end"><Btn onClick={() => onDecide(c.signature, 'save')}>保存</Btn><Btn onClick={() => onDecide(c.signature, 'discard')}>放弃</Btn></span>}
             </div>
-          </Card>
+          </div>
         )
       })}
       {engine && (
-        <Card dashed className={`flex min-h-[178px] min-w-0 cursor-pointer flex-col gap-2.5 p-3.5 ${sel.kind === 'engine' ? 'border-accent shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : ''}`} attr={{ 'data-ref': '' }}>
-          <div onClick={() => setSel({ kind: 'engine' })} className="flex min-w-0 flex-col gap-2.5">
-            <div className="flex items-center gap-2"><Chip dashed>对照</Chip><span className="truncate text-sm font-semibold text-foreground">当前出卡引擎</span><span className="ml-auto"><Pill>在用</Pill></span></div>
-            <div className="flex flex-wrap gap-1">{engine.legs.map(l => <Chip key={l.id}>{l.name}</Chip>)}</div>
-            <div className="grid grid-cols-4 gap-1.5">
-              <Metric label="年化" value={pct(engine.stats.annual_return)} cls="text-secondary" />
-              <Metric label="夏普" value={num(engine.stats.sharpe)} cls="text-secondary" />
-              <Metric label="最大回撤" value={pct(engine.stats.max_drawdown)} cls="text-secondary" />
-              <Metric label="交易" value={String(engine.stats.n_trades ?? DASH)} cls="text-secondary" />
-            </div>
+        <div data-ref="" data-comparison-row=""
+          className={`grid min-w-0 cursor-pointer grid-cols-1 gap-2.5 border-b border-dashed border-muted bg-base px-3.5 py-3 last:border-b-0 lg:grid-cols-[minmax(210px,1.05fr)_minmax(330px,1.3fr)_minmax(210px,.85fr)] lg:gap-x-4 lg:gap-y-1.5 ${sel.kind === 'engine' ? 'bg-accent/[0.06] shadow-[inset_3px_0_0_hsl(var(--accent))]' : ''}`}>
+          <div onClick={() => setSel({ kind: 'engine' })} data-row-identity="" className="flex min-w-0 items-center gap-2 lg:col-start-1 lg:row-start-1">
+            <Chip dashed>对照</Chip><span className="truncate text-sm font-semibold text-foreground">当前出卡引擎</span><span className="ml-auto"><Pill>在用</Pill></span>
           </div>
-          <div className="mt-auto flex items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary">
+          <div onClick={() => setSel({ kind: 'engine' })} data-row-legs="" className="flex min-w-0 flex-wrap gap-1 lg:col-start-1 lg:row-start-2">
+            {engine.legs.map(l => <Chip key={l.id}>{l.name}</Chip>)}
+          </div>
+          <div onClick={() => setSel({ kind: 'engine' })} data-row-metrics="" className="grid min-w-0 grid-cols-4 gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-x lg:border-border lg:px-4">
+            <Metric label="年化" value={pct(engine.stats.annual_return)} cls="text-secondary" />
+            <Metric label="夏普" value={num(engine.stats.sharpe)} cls="text-secondary" />
+            <Metric label="最大回撤" value={pct(engine.stats.max_drawdown)} cls="text-secondary" />
+            <Metric label="交易" value={String(engine.stats.n_trades ?? DASH)} cls="text-secondary" />
+          </div>
+          <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:pt-0">
             <span>检查</span><b className="text-foreground">{engine.checks.filter(x => x[0]).length} / {engine.checks.length}</b><Bar checks={engine.checks} />
           </div>
-        </Card>
+        </div>
       )}
-    </div>
+      {!list.length && !engine && <div className="p-5 text-center text-xs text-muted">当前筛选暂无候选</div>}
+    </Card>
   )
 }
 
@@ -504,7 +514,7 @@ function IntakeCards({ page, sel, setSel, filter, onIntake }: {
   const cards = page.intake.cards.filter(c => filter === 'all' || (filter === 'pending' && c.stage === 'pending') || (filter === 'archived' && c.stage !== 'pending'))
   if (!cards.length) return <div className="p-6 text-center text-xs text-muted">暂无</div>
   return (
-    <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2" data-intake-cards="">
+    <div className="grid grid-cols-1" data-intake-cards="" data-layout="list">
       {cards.map(c => <IntakeCardView key={c.id} c={c} active={sel.kind === 'intake' && sel.id === c.id} onOpen={i => setSel({ kind: 'intake', id: c.id, formula: i })} onIntake={onIntake} />)}
     </div>
   )
@@ -523,33 +533,40 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
     : [['5日IC', sc.ic == null ? DASH : (sc.ic > 0 ? '+' : '') + sc.ic.toFixed(3), tone(sc.ic)], ['t', sc.t == null ? DASH : sc.t.toFixed(2), ''],
        ['最像', sc.corr == null ? DASH : sc.corr.toFixed(2), ''], ['自选年化', pct(sc.backtest?.annual_return), tone(sc.backtest?.annual_return)]]
   return (
-    <Card dashed={archived} className={`flex min-w-0 flex-col gap-2 p-3.5 ${active ? 'border-accent shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : ''}`} attr={{ 'data-intake': c.id, 'data-stage': c.stage }}>
-      <div className="flex min-h-[22px] items-center gap-2">
+    <div data-intake={c.id} data-stage={c.stage}
+      className={`grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 border-b border-border/60 px-3.5 py-3 last:border-b-0 lg:grid-cols-[minmax(180px,.75fr)_minmax(280px,1.25fr)_minmax(230px,.85fr)] ${archived ? 'border-dashed bg-base' : ''} ${active ? 'shadow-[inset_3px_0_0_hsl(var(--accent))]' : ''}`}>
+      <div className="flex min-h-[22px] min-w-0 items-center gap-2 lg:col-span-3">
         <Chip dashed={archived}>采集</Chip>
         <span className="truncate text-[11.5px] text-secondary">{c.source_name} · {c.published?.slice(5, 10) ?? DASH} · {c.title}</span>
         <span className="ml-auto shrink-0">{c.stage === 'pending' ? <Pill kind="run">待审</Pill> : c.stage === 'merged' ? <Pill>已并入</Pill> : <Pill>{c.duplicate ? '重复' : (c.reason ?? '已归档')}</Pill>}</span>
       </div>
-      <div className={`text-sm font-semibold ${archived ? 'text-secondary' : 'text-foreground'}`}>{f?.name}</div>
-      {c.formulas.length > 1 && (
-        <div className="flex flex-col gap-0.5 text-[11.5px] text-secondary" data-formulas="">
-          {c.formulas.map((x, i) => (
-            <button key={i} type="button" onClick={() => onOpen(i)} className={`truncate text-left hover:text-foreground ${i === pick ? 'text-foreground' : ''}`}>
-              {i + 1}. {x.name}{x.screen?.duplicate ? ' · 重复' : x.screen?.error ? ' · 快筛失败' : ''}
-            </button>
-          ))}
+      <div className="flex min-w-0 flex-col gap-2" data-intake-content="">
+        <div className={`text-sm font-semibold ${archived ? 'text-secondary' : 'text-foreground'}`}>{f?.name}</div>
+        {c.formulas.length > 1 && (
+          <div className="flex flex-col gap-0.5 text-[11.5px] text-secondary" data-formulas="">
+            {c.formulas.map((x, i) => (
+              <button key={i} type="button" onClick={() => onOpen(i)} className={`truncate text-left hover:text-foreground ${i === pick ? 'text-foreground' : ''}`}>
+                {i + 1}. {x.name}{x.screen?.duplicate ? ' · 重复' : x.screen?.error ? ' · 快筛失败' : ''}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex flex-wrap gap-1">
+          <Chip dashed={archived}>方向 {f?.direction === 'low' ? '低' : '高'}</Chip>
+          {sc.nearest_label && <Chip dashed={archived}>最像 {sc.nearest_label}</Chip>}
+          {f?.warmup && <Chip dashed={archived}>预热 {f.warmup} 日</Chip>}
         </div>
-      )}
-      <div className="flex flex-wrap gap-1">
-        <Chip dashed={archived}>方向 {f?.direction === 'low' ? '低' : '高'}</Chip>
-        {sc.nearest_label && <Chip dashed={archived}>最像 {sc.nearest_label}</Chip>}
-        {f?.warmup && <Chip dashed={archived}>预热 {f.warmup} 日</Chip>}
       </div>
-      <div className={`min-h-[44px] rounded-r-md border-l-[3px] border-border bg-base px-2.5 py-1.5 text-xs italic ${archived ? 'text-muted' : 'text-secondary'}`}>“{f?.quote}”</div>
-      <div title={f?.dsl} className={`truncate rounded-md border border-border bg-base px-2.5 py-1.5 font-mono text-[11.5px] ${archived ? 'text-secondary' : 'text-foreground'}`}>{f?.dsl}</div>
-      <div className="grid grid-cols-4 gap-1.5">{metrics.map(([k, v, cl]) => <Metric key={k} label={k} value={v} cls={archived ? 'text-secondary' : cl || 'text-foreground'} />)}</div>
-      <div className="mt-auto flex items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary">
+      <div className="flex min-w-0 flex-col gap-2" data-intake-evidence="">
+        <div title={f?.quote} className={`line-clamp-3 min-h-[44px] rounded-r-md border-l-[3px] border-border px-2.5 py-1.5 text-xs italic ${archived ? 'bg-surface text-muted' : 'bg-base text-secondary'}`}>“{f?.quote}”</div>
+        <div title={f?.dsl} className={`truncate rounded-md border border-border px-2.5 py-1.5 font-mono text-[11.5px] ${archived ? 'bg-surface text-secondary' : 'bg-base text-foreground'}`}>{f?.dsl}</div>
+      </div>
+      <div className={`grid grid-cols-2 gap-x-4 gap-y-2 self-center rounded-md p-2.5 ${archived ? 'bg-surface' : 'bg-base'}`} data-intake-metrics="">
+        {metrics.map(([k, v, cl]) => <Metric key={k} label={k} value={v} cls={archived ? 'text-secondary' : cl || 'text-foreground'} />)}
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-span-3">
         <span>检查</span><b className="text-foreground">{ok} / {checks.length}</b><Bar checks={checks} />
-        <span className="ml-auto flex gap-1.5">
+        <span className="ml-auto flex flex-wrap gap-1.5">
           {c.stage === 'pending' && <>
             {sc.backtest && <Btn onClick={() => onOpen(pick)} attr={{ 'data-act': 'open' }}>看回测</Btn>}
             <Btn onClick={() => onIntake(c.id, 'ignore')}>忽略</Btn>
@@ -559,7 +576,7 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
           {c.link && <a href={c.link} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center rounded-btn border border-border px-2.5 text-xs text-secondary hover:text-foreground">原文 ↗</a>}
         </span>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -845,17 +862,8 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
 
       {effectiveSel && (w || effectiveSel.kind === 'intake') && <Detail key={selectionKey(effectiveSel)} page={page} sel={effectiveSel} onDecide={(sig, action) => decide.mutate({ sig, action })} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />}
 
-      <div id="fl-mine" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">
-        <h2 className="text-[13.5px] font-semibold text-foreground">我的投递</h2>
-        <span className="text-xs text-secondary">只做外部文章 / Pine / 公式摘录入口 · 失败可重试</span>
-      </div>
-      <SubmissionsBlock page={page} flash={flash} busy={processIntake.isPending || page.running}
-        onProcess={() => processIntake.mutate()}
-        onOpen={(id, formula) => openSel({ kind: 'intake', id, formula })}
-        onRetry={id => retryIntake.mutate(id)} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />
-
       <div id="fl-intake" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">
-        <h2 className="text-[13.5px] font-semibold text-foreground">采集</h2>
+        <h2 className="text-[13.5px] font-semibold text-foreground">采集与投递</h2>
         <span className="text-xs text-secondary">{it ? `近 30 天 · ${it.sources.filter(s => s.enabled).length} 源 · ${funnel?.fetched ?? 0} 篇` : '读取失败'}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Seg value={intakeFilter} onChange={setIntakeFilter} attr="intake" options={[['all', `全部 ${intakeCounts.all}`], ['pending', `待审 ${intakeCounts.pending}`], ['archived', `已归档 ${intakeCounts.archived}`]]} />
@@ -864,7 +872,13 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
           <Btn onClick={() => setSheet('sources')} attr={{ 'data-open': 'sources' }}>监控清单 {(it?.sources ?? []).length}</Btn>
         </div>
       </div>
-      <Card>
+      <div id="fl-mine" className="scroll-mt-24">
+        <SubmissionsBlock page={page} flash={flash} busy={processIntake.isPending || page.running}
+          onProcess={() => processIntake.mutate()}
+          onOpen={(id, formula) => openSel({ kind: 'intake', id, formula })}
+          onRetry={id => retryIntake.mutate(id)} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />
+      </div>
+      <Card className="mt-3">
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3.5 py-2.5 text-xs text-secondary" data-funnel="">
           {!it && <span className="text-warning">采集读取失败{page.errors.intake ? ` · ${page.errors.intake}` : ''}</span>}
           {it && ([['抓取', funnel?.fetched], ['送模型', funnel?.llm], ['美股个股', funnel?.us_stock], ['定义', funnel?.defined], ['公式', funnel?.formulas], ['待审', funnel?.pending]] as [string, number | undefined][]).map(([k, v], i, arr) => (
@@ -880,8 +894,8 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
 
       {page.weeks.length > 0 && <>
         <div className="mb-2.5 mt-5"><h2 className="text-[13.5px] font-semibold text-foreground">近 4 周</h2></div>
-        <Card>
-          <table className="w-full text-xs" data-weeks="">
+        <Card className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-xs" data-weeks="">
             <thead><tr className="text-secondary"><th className="px-3 py-1.5" />{page.weeks.map(x => <th key={x.week} className="px-3 py-1.5 text-right font-medium">{x.week.replace(/^\d{4}-/, '')} · {x.data_as_of?.slice(5)}</th>)}</tr></thead>
             <tbody>
               {([['筛因子', (x: FactorLabPage['weeks'][number]) => `${x.funnel?.factors_selected ?? DASH} / ${x.funnel?.factors_total ?? DASH}`],

@@ -1094,7 +1094,7 @@ export function Layout() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-        className="h-full overflow-auto overflow-x-clip scrollbar-gutter-stable pt-11 pb-20 md:pt-0 md:pb-20"
+        className="h-full min-w-0 overflow-auto overflow-x-clip scrollbar-gutter-stable pt-11 pb-20 md:pt-0 md:pb-20"
       >
         {streamStatus === 'reconnecting' && (
           <div
