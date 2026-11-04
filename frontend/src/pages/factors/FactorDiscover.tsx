@@ -241,7 +241,8 @@ function Detail({ page, sel, onDecide, onIntake }: {
 }) {
   const w = page.week
   const engine = w?.engine ?? null
-  const curves = w?.curves ?? { dates: [] as string[] }
+  // 浅拷贝: 下面重算时会替换 engine / spy 曲线, 不能改到 react-query 缓存里的周度对象
+  const curves: Record<string, (number | null)[] | string[]> = { ...(w?.curves ?? { dates: [] as string[] }) }
   const engineYearly = engine?.yearly ?? {}
   const spyYearly = w?.spy?.yearly ?? {}
   const [pool, setPool] = useState<'watchlist' | 'theme' | 'custom'>('watchlist')
