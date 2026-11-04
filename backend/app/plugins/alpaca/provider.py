@@ -310,7 +310,10 @@ class AlpacaProvider:
                                   begin, end_time, "raw", "sip", None))
             adjusted = list(_iter_bars(self.key, self.secret, chunk, "1Day",
                                        begin, end_time, "all", "sip", None))
-            rows.extend(events_for_symbols(raw, adjusted))
+            # 个别标的的厂商复权序列可能是坏的 (实测 JTAI: adjustment=all 整段为负)。
+            # 这类数据只影响该标的自己的历史, 不能连坐其余成千上万只标的;
+            # 传输层失败与覆盖不一致仍由此处上抛, 保持 fail closed。
+            rows.extend(events_for_symbols(raw, adjusted, skip_invalid_symbols=True))
             if on_chunk_done:
                 on_chunk_done(ci + 1, len(chunks))
         if rows:
