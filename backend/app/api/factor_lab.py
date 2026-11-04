@@ -62,8 +62,15 @@ def _promoter(request: Request):
 
 @router.post("/candidates/decide")
 def decide(request: Request, body: DecideIn) -> dict:
+    from app.backtest.candidates import CandidateStore
+
     try:
-        return factor_discover.decide(_data_dir(request), body.week, body.signature, body.action, promoter=_promoter(request))
+        return factor_discover.decide(
+            _data_dir(request), body.week, body.signature, body.action,
+            promoter=_promoter(request), remover=CandidateStore(_data_dir(request)).delete,
+        )
+    except factor_discover.PromoteError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     except KeyError:
         raise HTTPException(status_code=404, detail="候选不存在") from None
     except ValueError as exc:

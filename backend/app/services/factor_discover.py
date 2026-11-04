@@ -296,10 +296,16 @@ def _candidates(data_dir: Path, run_id: str) -> list[dict]:
         gate = evaluate_candidate_gate(confidence=row.get("confidence"), valid_folds=row.get("valid_folds"),
                                        positive_fold_ratio=row.get("oos_positive_fold_ratio"), sharpe=row.get("oos_sharpe"),
                                        max_drawdown=row.get("oos_max_drawdown"), n_trades=row.get("oos_n_trades"))
+        passed_full = bool(gate.qualified)
+        passed_observe = (row.get("oos_sharpe") or 0) >= CHECK_LIMITS["oos_sharpe"]
         out.append({"signature": row.get("signature"), "definition": definition, "oos_sharpe": row.get("oos_sharpe"),
                     "oos_return": row.get("oos_return"), "oos_max_drawdown": row.get("oos_max_drawdown"),
                     "oos_n_trades": row.get("oos_n_trades"), "valid_folds": row.get("valid_folds"),
-                    "passed_oos": gate.qualified or (row.get("oos_sharpe") or 0) >= CHECK_LIMITS["oos_sharpe"],
+                    # 发现页保留「夏普单项也算通过」(用户 11-04 选 B), 但标明是哪一档:
+                    # full = 过完整发布门槛; observe = 只过样本外夏普, 页面叫「观察通过」并注明
+                    "passed_oos": passed_full or passed_observe,
+                    "oos_gate": "full" if passed_full else ("observe" if passed_observe else None),
+                    "oos_gate_reasons": list(gate.reasons) if not passed_full else [],
                     "published_strategy_id": row.get("published_strategy_id")})
     return out
 
@@ -379,9 +385,11 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
     ref_pos = {x: i for i, x in enumerate(ref["dates"])} if ref else {}
     spy_pos = {x: i for i, x in enumerate(ref["spy"]["dates"])} if ref and ref.get("spy") else {}
     cands = []
+    oos_passed = 0
     for c in _candidates(Path(data_dir), run_id):
         if not c["passed_oos"]:
             continue
+        oos_passed += 1
         d = c["definition"]
         scoring = {str(k): float(v) for k, v in (d.get("scoring") or {}).items()}
         directions = {str(k): str(v) for k, v in (d.get("directions") or {}).items()}
@@ -411,18 +419,19 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
             "name": " + ".join(leg["label"] + ("" if len(legs) > 1 else (" 低" if leg["direction"] == "low" else " 高")) for leg in legs),
             "oos": {k: c[k] for k in ("oos_sharpe", "oos_return", "oos_max_drawdown", "oos_n_trades", "valid_folds")},
             "stats": stats, "corr_engine": ce, "corr_spy": cs,
+            "oos_gate": c.get("oos_gate"), "oos_gate_reasons": c.get("oos_gate_reasons") or [],
             "checks": _checks(stats, ce, cs, c.get("oos_sharpe")),
             "nav": {x: round(nav[x] / nav[dates[0]], 4) for x in dates},
             "last_trades": _last_trades(res.get("trades") or []), "published_strategy_id": c.get("published_strategy_id"),
         })
-    out = _assemble(run_id, manifest, summary, symbols, start, end, ref, cands)
+    out = _assemble(run_id, manifest, summary, symbols, start, end, ref, cands, oos_passed=oos_passed)
     week = run_id.removeprefix("weekly-")
     _dir(Path(data_dir)).mkdir(parents=True, exist_ok=True)
     atomic_write_text(_dir(Path(data_dir)) / f"{week}.json", json.dumps(out, ensure_ascii=False, indent=1, default=str))
     return {"week": week, "candidates": len([c for c in cands if not c.get("error")])}
 
 
-def _assemble(run_id, manifest, summary, symbols, start, end, ref, cands) -> dict:
+def _assemble(run_id, manifest, summary, symbols, start, end, ref, cands, *, oos_passed: int | None = None) -> dict:
     dates = list(ref["dates"]) if ref else sorted({d for c in cands if not c.get("error") for d in c["nav"]})
     idx = _sample(dates)
     sampled = [dates[i] for i in idx]
@@ -456,6 +465,9 @@ def _assemble(run_id, manifest, summary, symbols, start, end, ref, cands) -> dic
         "funnel": {"factors_selected": summary.get("selected_factor_count"), "factors_total": summary.get("factor_count"),
                    "combos": summary.get("proxy_trials_used"), "valid_folds": summary.get("valid_fold_count"),
                    "skipped_folds": summary.get("skipped_fold_count"), "pool": len(req.get("symbols") or []),
+                   # oos_passed = 过样本外门的候选数 (回测前); passed = 自选回测成功出结果的数。
+                   # 旧实现只有 passed, 一个候选回测失败就把「验证通过」也拉低, 第 4、5 格恒同数。
+                   "oos_passed": oos_passed if oos_passed is not None else len(cands),
                    "passed": len([c for c in cands if not c.get("error")])},
         "engine": ref_out, "spy": ({"stats": ref["spy"]["stats"], "yearly": ref["spy"]["yearly"]} if ref and ref.get("spy") else None),
         "candidates": cands, "curves": curves,
@@ -525,10 +537,20 @@ def _decisions(data_dir: Path) -> dict:
         return {}
 
 
-def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=None) -> dict:
+class PromoteError(RuntimeError):
+    """「保存」没能在候选方案里建出条目 (产物丢失 / 存储错误)。决定不落盘, 页面如实报错。"""
+
+
+def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=None, remover=None) -> dict:
     """Save / discard a discovered candidate. Save = a pending research candidate (candidates drawer); never publishes.
 
-    promoter: callable(run_id, signature) -> dict (the app's MiningCandidateService.promote); injected by the API."""
+    promoter: callable(run_id, signature) -> dict (the app's MiningCandidateService.promote); injected by the API.
+    remover: callable(candidate_id) (CandidateStore.delete); 已保存过的候选再点「放弃」时撤销那条候选方案
+    (用户 11-04 选 B: 放弃 = 同时撤销保存, 不只是移出本周)。
+
+    保存失败时抛 PromoteError 且不写决定: 旧实现吞掉异常、照样记 save, 页面提示「已保存 · 候选方案」,
+    候选方案里却没有这一条。
+    """
     if action not in ("save", "discard", "reset"):
         raise ValueError("action 只能是 save / discard / reset")
     w = load_week(data_dir, week)
@@ -541,13 +563,25 @@ def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=N
     if action == "save" and promoter is not None:
         try:
             item = promoter(w["run_id"], signature)
-            out["candidate_id"] = item.get("id") if isinstance(item, dict) else None
-        except Exception as exc:  # not promotable (e.g. origin artifact gone): record the decision only
-            out["candidate_error"] = type(exc).__name__
+        except Exception as exc:
+            raise PromoteError(f"没能加入候选方案 · {type(exc).__name__}") from exc
+        candidate_id = item.get("id") if isinstance(item, dict) else None
+        if not candidate_id:
+            raise PromoteError("没能加入候选方案 · 未返回候选编号")
+        out["candidate_id"] = candidate_id
     path = _decisions_path(data_dir)
     key = f"{week}|{signature}"
     with _DECISIONS_LOCK:
         cur = _decisions(data_dir)
+        previous = cur.get(key) or {}
+        saved_id = previous.get("candidate_id") if previous.get("action") == "save" else None
+        if action in ("discard", "reset") and saved_id:
+            if remover is not None:
+                try:
+                    remover(saved_id)
+                except KeyError:
+                    pass  # 候选方案里已被手动删掉: 视同已撤销
+            out["removed_candidate_id"] = saved_id
         if action == "reset":
             cur.pop(key, None)
         else:
@@ -596,7 +630,14 @@ def _recalc_impl(data_dir: Path, repo, signature: str, *, symbols: list[str], st
         if ref is None:
             return {"_error": "当前出卡引擎没有可回测的做多规则"}
         # same flat shape as a candidate recalc (the page reads DiscoverStats fields directly)
-        return {**ref["stats"], "yearly": ref["yearly"], "legs": ref["legs"]}
+        # 带上曲线 / 最近成交 / 检查项: 旧响应只有指标, 页面重算后曲线和成交仍是原回测, 新旧混显。
+        checks = _checks({**ref["stats"], "yearly": ref["yearly"]}, None, None, None)
+        out = {**ref["stats"], "yearly": ref["yearly"], "legs": ref["legs"],
+               "last_trades": ref.get("last_trades") or [],
+               "checks": [c for c in checks if c[1] not in ("oos_sharpe", "corr_engine", "corr_spy")]}
+        if ref.get("dates") and ref.get("nav"):
+            out["curve"] = {"dates": list(ref["dates"]), "values": [round(v, 4) for v in ref["nav"]]}
+        return out
     w = load_week(data_dir) or {}
     cand = next((c for c in w.get("candidates") or [] if c.get("signature") == signature), None)
     if cand is None:
@@ -607,5 +648,11 @@ def _recalc_impl(data_dir: Path, repo, signature: str, *, symbols: list[str], st
     dates = sorted(nav)
     out = _summary(res)
     if dates:
-        out["yearly"] = _yearly(dates, _norm(nav, dates))
+        normed = _norm(nav, dates)
+        out["yearly"] = _yearly(dates, normed)
+        out["curve"] = {"dates": dates, "values": [round(v, 4) for v in normed]}
+    out["last_trades"] = _last_trades(res.get("trades") or [])
+    # 相关性要和当前出卡引擎同窗口重算才有意义, 这里不给: 页面对这两项显示「—」而不是沿用旧值
+    out["checks"] = [c for c in _checks(out, None, None, (cand.get("oos") or {}).get("oos_sharpe"))
+                     if c[1] not in ("corr_engine", "corr_spy")]
     return out

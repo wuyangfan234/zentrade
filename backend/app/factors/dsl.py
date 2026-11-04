@@ -555,6 +555,68 @@ def _compile_call(node: dict) -> tuple[pl.Expr | None, bool, bool]:
     return None, False, False
 
 
+def _is_bool_node(node: dict) -> bool:
+    """比较式与由比较式组成的 and / or 是布尔; 其余 (数值、if_else、函数) 都是数值。"""
+    if node.get("kind") != "bin":
+        return False
+    value = node.get("value")
+    if value in _CMP_METHOD:
+        return True
+    if value in ("and", "or"):
+        return all(_is_bool_node(child) for child in node.get("children", []))
+    return False
+
+
+def _check_bool_types(node: dict, errors: list[DslError]) -> None:
+    """and / or 两侧、if_else 条件必须是比较式。
+
+    Polars 对数值列做 & / | 是位运算 (浮点直接报错), if_else 的数值条件在运行期才抛
+    SchemaError。旧实现编译通过、试算 500; 现在在编译期给出可定位的错误。
+    """
+    kind = node.get("kind")
+    if kind == "bin" and node.get("value") in ("and", "or"):
+        for child in node.get("children", []):
+            if not _is_bool_node(child):
+                errors.append(DslError(
+                    "E015", f"{node['value']} 两侧必须是比较式, 例如 close > 10 and volume > 1000",
+                    offset=int(child.get("offset") or node.get("offset") or 0),
+                ))
+                return
+    if kind == "call" and node.get("value") == "if_else":
+        cond = node["children"][0] if node.get("children") else None
+        if cond is not None and not _is_bool_node(cond):
+            errors.append(DslError(
+                "E015", "if_else 的第一个参数必须是比较式, 例如 if_else(close > ma20, 1, -1)",
+                offset=int(cond.get("offset") or node.get("offset") or 0),
+            ))
+            return
+    for child in node.get("children", []):
+        _check_bool_types(child, errors)
+
+
+def _lookback(node: dict) -> int:
+    """子树需要的历史根数 (当根计 1)。嵌套窗口逐层累加: ts_mean(ts_sum(x,20),10) = 20+10-1。"""
+    kind = node.get("kind")
+    if kind == "num":
+        return 1
+    if kind == "col":
+        # 引用的注册因子自带预热 (约定 warmup = 回看根数 + 1)
+        spec = get_factor(str(node.get("value")))
+        return max(1, spec.warmup_bars - 1) if spec is not None else 1
+    children = node.get("children", [])
+    inner = max((_lookback(child) for child in children), default=1)
+    if kind != "call":
+        return inner
+    name = node.get("value")
+    n_value = (node.get("_constants") or {}).get("n")
+    if name not in TS_OPERATORS or n_value is None:
+        return inner
+    n = int(n_value)
+    if name in ("ts_delay", "ts_delta"):
+        return inner + n
+    return inner + max(n, 1) - 1
+
+
 def compile_formula(text: str) -> CompiledFormula:
     """编译公式文本; 永不抛异常, 失败以 errors 表达 (fail-closed)。"""
     if not isinstance(text, str) or not text.strip():
@@ -585,6 +647,8 @@ def compile_formula(text: str) -> CompiledFormula:
 
     constants_by_call: dict[int, dict] = {}
     _semantic_walk(ast, errors, constants_by_call)
+    if ast is not None:
+        _check_bool_types(ast, errors)
 
     dependencies: set[str] = set()
     referenced_factors: set[str] = set()
@@ -605,6 +669,16 @@ def compile_formula(text: str) -> CompiledFormula:
         n_value = node_constants.get("n")
         if n_value is not None and n_value == int(n_value) and int(n_value) > 0:
             warmup = max(warmup, int(n_value) + 1)
+
+    # 嵌套窗口要累加: ts_mean(ts_sum(close,20),10) 首个有效值在第 29 根, 取单层最大 n+1 只报 21。
+    def _with_constants(node: dict) -> dict:
+        out = {**node, "children": [_with_constants(child) for child in node.get("children", [])]}
+        if node.get("kind") == "call":
+            out["_constants"] = constants_by_call.get(id(node), {})
+        return out
+
+    if ast is not None and not errors:
+        warmup = max(warmup, _lookback(_with_constants(ast)) + 1)
 
     def _find_cross(node: dict) -> None:
         nonlocal cross_sectional
@@ -724,8 +798,10 @@ def compile_formula(text: str) -> CompiledFormula:
         if not required_columns.issubset(set(frame.columns)):
             return None
         result = frame
-        if staged_exprs:
-            result = result.with_columns(staged_exprs)
+        # 临时列有先后依赖 (深层先算): 后一层引用前一层的别名, 必须逐列 with_columns。
+        # 放进同一次 with_columns 时后层看不到前层, 嵌套截面 rank(rank(...)) 运行期找不到 __tsfx_N__。
+        for expr in staged_exprs:
+            result = result.with_columns(expr)
         return result.with_columns(compiled.alias(FACTOR_COLUMN))
 
     return CompiledFormula(

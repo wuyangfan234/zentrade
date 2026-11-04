@@ -35,13 +35,19 @@ def _path(data_dir: Path, factor_id: str) -> Path:
 
 
 def load_all(data_dir: Path) -> list[dict]:
-    """读取全部自定义/复合因子定义; 损坏文件跳过。"""
+    """读取全部自定义/复合因子定义; 损坏文件与顶层非对象的文件跳过。"""
     out: list[dict] = []
     for file in sorted(_dir(data_dir).glob("*.json")):
         try:
-            out.append(json.loads(file.read_text(encoding="utf-8")))
+            definition = json.loads(file.read_text(encoding="utf-8"))
         except Exception as exc:
             logger.warning("custom factor load failed %s: %s", file.name, exc)
+            continue
+        # 顶层是 [] / 字符串时旧实现在启动注册里抛 AttributeError, 排在它后面的因子全部静默丢失
+        if not isinstance(definition, dict):
+            logger.warning("custom factor load skipped %s: 顶层不是对象", file.name)
+            continue
+        out.append(definition)
     return out
 
 
@@ -122,17 +128,19 @@ def to_spec(definition: dict) -> FactorSpec:
         if get_factor(member_id) is None and member_id not in BASE_COLUMNS:
             raise ValueError(f"未知成员因子: {member_id}")
         components.append((member_id, weight))
-    # 环检测沿 components 链走 (依赖已展开, 看不到链路成员)
-    seen = {factor_id}
-    frontier = [member_id for member_id, _ in components]
-    while frontier:
-        current = frontier.pop()
-        if current in seen:
-            raise ValueError("composite 成员存在循环引用")
-        seen.add(current)
-        current_spec = get_factor(current)
-        if current_spec is not None and current_spec.kind == "composite":
-            frontier.extend(member_id for member_id, _ in current_spec.components)
+    # 环检测: 沿成员链做 DFS, 只把「当前递归路径」上的节点当环。
+    # 旧实现用全局 seen, 父子两层共用同一个基础列 (都含 volume) 就被误判为环。
+    def _reaches_self(member_id: str, path: frozenset[str]) -> bool:
+        if member_id == factor_id or member_id in path:
+            return True
+        member_spec = get_factor(member_id)
+        if member_spec is None or member_spec.kind != "composite":
+            return False
+        next_path = path | {member_id}
+        return any(_reaches_self(child, next_path) for child, _ in member_spec.components)
+
+    if any(_reaches_self(member_id, frozenset()) for member_id, _ in components):
+        raise ValueError("composite 成员存在循环引用")
     dependencies = factor_dependencies([member_id for member_id, _ in components])
     warmup = max(
         ((get_factor(member_id).warmup_bars if get_factor(member_id) else 1) for member_id, _ in components),
@@ -166,26 +174,25 @@ def register_definition(definition: dict) -> FactorSpec:
 def load_into_registry(data_dir: Path) -> list[str]:
     """启动期把存储中的因子注册进注册表; 单个失败只跳过并告警。
 
-    多轮加载: composite 成员可能引用尚未加载的 custom/其他 composite (文件按
-    字母序加载, cf_* 先于 uf_*), 失败的 composite 延后重试, 覆盖链式引用;
-    重试用尽仍失败的只告警不阻塞启动。
+    多轮加载: 定义之间可能互相引用 (composite 成员、custom 公式里的 uf_*), 文件按字母序
+    加载, 被引用方可能排在后面。失败的定义延后重试, 直到某一轮没有新加载成功为止
+    (旧实现固定 3 轮, 4 级以上反向字母序链会漏载最上层)。剩下的统一告警, 不阻塞启动。
     """
     loaded: list[str] = []
     pending = list(load_all(data_dir))
-    for round_index in range(3):
-        deferred: list[dict] = []
+    while pending:
+        deferred: list[tuple[dict, Exception]] = []
         for definition in pending:
             try:
                 register_definition(definition)
                 loaded.append(str(definition["id"]))
             except ValueError as exc:
-                if round_index < 2 and str(definition.get("kind")) == "composite":
-                    deferred.append(definition)
-                else:
-                    logger.warning("custom factor 注册失败 %s: %s", definition.get("id"), exc)
+                deferred.append((definition, exc))
             except Exception as exc:
                 logger.warning("custom factor 注册失败 %s: %s", definition.get("id"), exc)
-        if not deferred:
+        if len(deferred) == len(pending):
+            for definition, exc in deferred:
+                logger.warning("custom factor 注册失败 %s: %s", definition.get("id"), exc)
             break
-        pending = deferred
+        pending = [definition for definition, _ in deferred]
     return loaded

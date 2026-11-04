@@ -59,6 +59,13 @@ FACTOR_COST_BASIS = "turnover"
 _DAILY_FORWARD_HORIZONS = (1, 3, 5)
 
 
+def _ic_values_for_stats(ic_series: list[dict], raw: list[float] | None) -> list:
+    """统计用 IC 序列: 有未舍入原值就用原值, 否则退回页面展示用的四位小数序列。"""
+    if raw is not None and len(raw) == len(ic_series):
+        return list(raw)
+    return [row.get("ic") for row in ic_series]
+
+
 @dataclass
 class FactorConfig:
     factor_name: str
@@ -333,7 +340,7 @@ class FactorBacktestService:
                 )
                 long_short = result.long_short_stats
                 # metrics_v2: 由 IC 序列推导 NW HAC t 值与 p 值 (日频 1 日前瞻 → 滞后 1)
-                ic_values = [row.get("ic") for row in result.ic_series]
+                ic_values = _ic_values_for_stats(result.ic_series, getattr(result, "_raw_ic", None))
                 t_naive = stats_v2.naive_t(ic_values)
                 nw = stats_v2.newey_west_t(ic_values, lag=1)
                 items.append(FactorBatchItem(
@@ -649,9 +656,12 @@ class FactorBacktestService:
         panel = self._add_groups(panel, factor_col, config.n_groups)
         group_costs = self._calc_group_costs(panel, config)
         group_nav = self._calc_group_nav(panel, config, group_costs)
-        # 年化按净值实际覆盖区间折算: 「全部」区间 start=1900-01-01 时旧实现把收益摊到一百多年
-        nav_start = min(config.end, max(config.start, panel["date"].min()))
-        group_stats = self._calc_group_stats(group_nav, nav_start, config.end, config.rebalance)
+        # 年化按净值实际覆盖区间折算:
+        # 左端 = 第一期起点 (首个有净值的调仓日), 右端 = 最后一期收益真正结束的那天
+        # (下一调仓日 / 日频的下一交易日)。旧实现右端用请求的 end: 月频窗口停在月中、
+        # 或日频数据落后于 end 时, 年化被按多出来的空白天数摊薄 (实测 207% 显示成 129%)。
+        nav_start, nav_end = self._nav_window(group_nav, price_panel, config)
+        group_stats = self._calc_group_stats(group_nav, nav_start, config.end, config.rebalance, period_end=nav_end)
         turnover = self._calc_turnover(panel, config)
 
         # ── 3. 理论因子多空组合 ──
@@ -659,7 +669,7 @@ class FactorBacktestService:
         long_short_sharpe = long_short_stats.get("sharpe")
 
         elapsed = (time.perf_counter() - t0) * 1000
-        return FactorResult(
+        result = FactorResult(
             run_id=run_id,
             config=self._config_to_dict(config),
             ic_mean=round(ic_mean, 4) if ic_mean is not None else None,
@@ -681,6 +691,10 @@ class FactorBacktestService:
             n_symbols=n_symbols,
             n_dates=n_dates,
         )
+        # 未舍入的 IC 只给批量统计 (NW t / p / q) 用: 四位舍入会让 |t|≥2 的判定翻转。
+        # 不是 dataclass 字段, asdict 不会把它带进接口响应。
+        result._raw_ic = [float(v) for v in ic_values]  # type: ignore[attr-defined]
+        return result
 
     @staticmethod
     def _compute_missing_factors(
@@ -1182,12 +1196,40 @@ class FactorBacktestService:
             )
         return float(np.mean(turnovers))
 
+    @staticmethod
+    def _nav_window(group_nav: list[dict], price_panel: pl.DataFrame, config: FactorConfig) -> tuple[date, date | None]:
+        """净值实际覆盖的日历区间: (首期起点, 末期收益的结束日)。
+
+        group_nav 的日期是每期的起点 (调仓日); 末期收益落在「下一个调仓日 / 下一交易日」。
+        取不到时左端回落到面板首日、右端回落到请求 end (与旧口径一致)。
+        """
+        fallback_start = min(config.end, max(config.start, price_panel["date"].min()))
+        if not group_nav:
+            return fallback_start, None
+        first = date.fromisoformat(str(group_nav[0]["date"])[:10])
+        last = date.fromisoformat(str(group_nav[-1]["date"])[:10])
+        axis = sorted({
+            value if isinstance(value, date) else date.fromisoformat(str(value)[:10])
+            for value in price_panel["date"].unique().to_list()
+        })
+        later = [d for d in axis if d > last]
+        if not later:
+            return first, None
+        if config.rebalance == "daily":
+            return first, later[0]
+        if config.rebalance == "weekly":
+            key = lambda d: d.isocalendar()[:2]  # noqa: E731
+        else:
+            key = lambda d: (d.year, d.month)  # noqa: E731
+        boundary = next((d for d in later if key(d) != key(last)), None)
+        return first, boundary
+
     # ── 分组统计 ──
 
     @staticmethod
     def _calc_group_stats(
         group_nav: list[dict], start: date, end: date,
-        rebalance: str = "monthly",
+        rebalance: str = "monthly", *, period_end: date | None = None,
     ) -> list[dict]:
         if not group_nav:
             return []
@@ -1196,7 +1238,8 @@ class FactorBacktestService:
             [k for k in group_nav[0] if k != "date"],
             key=FactorBacktestService._group_sort_key,
         )
-        n_days = max((end - start).days, 1)
+        effective_end = period_end if period_end is not None and period_end >= start else end
+        n_days = max((effective_end - start).days, 1)
         years = n_days / 365.25
         # 夏普 — 年化系数必须匹配 group_nav 的调仓频率 (每个净值点 = 一个调仓周期收益);
         # 周/月频收益若乘 √252 会把 Sharpe 高估 √(252/期数) 倍 (月频 ≈4.6x, 周频 ≈2.2x)。

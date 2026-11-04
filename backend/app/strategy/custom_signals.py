@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 
 import polars as pl
@@ -154,6 +155,18 @@ def save_one(data_dir: Path, sig: dict) -> None:
     p = _path(data_dir, sig["id"])
     p.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_text(p, json.dumps(sig, ensure_ascii=False, indent=2))
+
+
+_CREATE_LOCK = threading.Lock()
+
+
+def create_one(data_dir: Path, sig: dict) -> bool:
+    """只新建: 同 id 已存在返回 False 且不写 (检查与写入在同一把锁里, 并发两次只有一次成功)。"""
+    with _CREATE_LOCK:
+        if _path(data_dir, sig["id"]).exists():
+            return False
+        save_one(data_dir, sig)
+        return True
 
 
 def delete_one(data_dir: Path, signal_id: str) -> bool:

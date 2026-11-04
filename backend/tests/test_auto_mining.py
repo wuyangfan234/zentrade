@@ -78,9 +78,7 @@ def _stub_batch(monkeypatch: pytest.MonkeyPatch) -> type[_StubService]:
 
 
 def test_screen_pool_order_truncation_and_reasons(monkeypatch: pytest.MonkeyPatch, _stub_batch: type[_StubService]) -> None:
-    monkeypatch.setattr(auto_mining, "factor_columns_view", lambda: [
-        {"id": name, "asset_types": ["stock"]} for name in ("a", "b", "c", "d", "e", "f")
-    ])
+    monkeypatch.setattr(auto_mining, "screen_candidates", lambda asset_type: ["a", "b", "c", "d", "e", "f"])
     items = [
         _batch_item("a", ic_mean=0.10, ir=0.8),   # |ic|*|ir|=0.08 → 第 1
         _batch_item("b", ic_mean=0.05, ir=0.4),   # 0.02 → 第 2

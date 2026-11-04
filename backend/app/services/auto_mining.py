@@ -20,7 +20,7 @@ from datetime import date, timedelta
 from typing import Any, Literal
 
 from app.backtest.factor import FactorBacktestService, FactorBatchConfig
-from app.factors.registry import factor_columns_view
+from app.factors.registry import all_factors, factor_available
 
 Profile = Literal["exploratory", "balanced", "strict"]
 
@@ -102,6 +102,15 @@ def _metric_row(item: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def screen_candidates(asset_type: str) -> list[str]:
+    """L1 筛选的因子清单: 适用该资产类型、且当前数据源算得出的注册因子。
+
+    注册表才带适用资产; factor_columns_view 是历史兼容投影, 没有 asset_types 字段
+    (旧实现读它, 键缺失时一律当 stock → ETF 池恒为空, 股票池里还混着算不出的股本类因子)。
+    """
+    return [spec.id for spec in all_factors(asset_type=asset_type) if factor_available(spec)]
+
+
 def screen_all_factors(
     engine: Any,
     *,
@@ -119,11 +128,7 @@ def screen_all_factors(
     if gate is None:
         raise ValueError(f"unknown mining profile: {profile}")
 
-    candidates = [
-        str(item["id"])
-        for item in factor_columns_view()
-        if asset_type in item.get("asset_types", ["stock"])
-    ]
+    candidates = screen_candidates(asset_type)
     screen_start = max(start or date.min, end - timedelta(days=SCREEN_WINDOW_DAYS))
     began = time.perf_counter()
     service = FactorBacktestService(engine)
