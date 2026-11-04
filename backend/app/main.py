@@ -59,6 +59,10 @@ logging.basicConfig(
     level=settings.log_level,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+# APScheduler 每执行一次任务都会在 INFO 记录 "Running job" / "executed successfully"。
+# 5 秒一次的 _hot_quotes_tick 让这些心跳占掉长期运行实例约 86% 的日志量, 把同步失败、
+# 数据源降级这类真正的信号淹掉。调度器只在异常时说话: 心跳丢弃, WARNING/ERROR 保留。
+logging.getLogger("apscheduler").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 

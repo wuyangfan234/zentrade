@@ -26,3 +26,10 @@ services:
       # 保留原始 dotenv 值供首次密码初始化读取, 避免 Compose 展开密码中的 $VAR。
       - ./.env:/app/.env:ro
     restart: unless-stopped
+    # 容器日志由 docker daemon 管理, 应用内的 RotatingFileHandler 管不到它。
+    # json-file 驱动默认不轮转, 长期运行会持续吃掉磁盘, 这里显式封顶。
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
