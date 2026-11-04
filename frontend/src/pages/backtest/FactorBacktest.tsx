@@ -84,21 +84,25 @@ function LoadingPanel({ symbolsText }: { symbolsText: string }) {
   )
 }
 
-export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initialFactorName?: string }) {
+export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConfig }: {
+  initialFactorName?: string
+  /** 从批量筛选跳过来时沿用那次的股票池 / 区间 / 分组 / 频率 / 滑点 */
+  initialConfig?: { symbols: string; assetType: 'stock' | 'etf'; start: string; end: string; nGroups: number; rebalance: 'daily' | 'weekly' | 'monthly'; slippage: string }
+}) {
   const queryClient = useQueryClient()
   const [factorName, setFactorName] = useState(initialFactorName)
-  const [symbols, setSymbols] = useState('')
-  const [assetType, setAssetType] = useState<'stock' | 'etf'>('stock')
-  const [start, setStart] = useState(THREE_MONTHS_AGO)
-  const [end, setEnd] = useState(TODAY)
+  const [symbols, setSymbols] = useState(initialConfig?.symbols ?? '')
+  const [assetType, setAssetType] = useState<'stock' | 'etf'>(initialConfig?.assetType ?? 'stock')
+  const [start, setStart] = useState(initialConfig?.start || THREE_MONTHS_AGO)
+  const [end, setEnd] = useState(initialConfig?.end || TODAY)
   // 结束日上限 = 最近定版日K (0.43.2); 数据状态没回来前沿用今天
   const settledDate = useSettledDate(assetType)
   const latestEnd = settledDate ?? TODAY
   useClampEndToSettled(end, setEnd, settledDate)
-  const [nGroups, setNGroups] = useState(5)
+  const [nGroups, setNGroups] = useState(initialConfig?.nGroups ?? 5)
   const [weight, setWeight] = useState<'equal' | 'factor_weight'>('equal')
-  const [rebalance, setRebalance] = useState<'daily' | 'weekly' | 'monthly'>('daily')
-  const [slippage, setSlippage] = useState('5')
+  const [rebalance, setRebalance] = useState<'daily' | 'weekly' | 'monthly'>(initialConfig?.rebalance ?? 'daily')
+  const [slippage, setSlippage] = useState(initialConfig?.slippage ?? '5')
   const [result, setResult] = useState<FactorBacktestResult | null>(null)
 
   const columns = useQuery({
@@ -140,13 +144,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
         fees_pct: 0,
         slippage_bps: Number(slippage),
       }),
-    onSuccess: (data) => {
-      if (data.error) {
-        setResult(data)
-      } else {
-        setResult(data)
-      }
-    },
+    onSuccess: (data) => setResult(data),
   })
 
   const saveCandidate = useMutation({
@@ -390,7 +388,8 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
                     {saveCandidate.isPending ? '保存中' : '保存候选'}
                   </button>
                   <span className="text-[11px] text-muted">
-                    Rank IC · {rebalance === 'daily' ? '日度' : rebalance === 'weekly' ? '周度' : '月度'}调仓
+                    {/* 读结果自己的频率: 改了表单还没重跑时, 不能把旧的月频结果标成日度 */}
+                    Rank IC · {(() => { const rb = String(result.config.rebalance ?? rebalance); return rb === 'daily' ? '日度' : rb === 'weekly' ? '周度' : '月度' })()}调仓
                   </span>
                   {result.elapsed_ms > 0 && (
                     <span className="flex items-center gap-1 text-[11px] text-muted">
@@ -490,7 +489,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d' }: { initial
                         <td className="px-4 py-2 text-right num text-bear">
                           {fmtPct(result.long_short_stats.max_drawdown as number)}
                         </td>
-                        <td className="px-4 py-2 text-right num">—</td>
+                        <td className="px-4 py-2 text-right num">{typeof result.long_short_stats.sharpe === 'number' ? result.long_short_stats.sharpe.toFixed(2) : '—'}</td>
                         <td className="px-4 py-2 text-right num">—</td>
                       </tr>
                     )}

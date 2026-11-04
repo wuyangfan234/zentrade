@@ -51,6 +51,8 @@ export const QK = {
   backtestStatus:       ['backtest-status'] as const,
   backtestCandidates:   ['backtest-candidates'] as const,
   factorColumns:        ['backtest-factor-columns'] as const,
+  /** 因子库全部资产类型的前缀 (失效用): 各页统一用它, 不再裸写 ['factors-library'] */
+  factorsLibrary:       ['factors-library'] as const,
   factorLibrary:        (assetType: string) => ['factors-library', assetType] as const,
   miningRuns:           ['backtest-mining-runs'] as const,
   miningAvailability:   (assetType: string, profile: string, start: string, end: string) =>

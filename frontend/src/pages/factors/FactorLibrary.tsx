@@ -190,7 +190,7 @@ function FactorDetailModal({
     mutationFn: (status: 'draft' | 'active' | 'watch' | 'retired') => api.factorSetStatus(item.id, status),
     onSuccess: data => {
       toast(`${item.label} · ${statusLabel(data.status)}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },
@@ -211,7 +211,7 @@ function FactorDetailModal({
           : `${item.label} 已删除`,
         'success',
       )
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },
@@ -231,7 +231,7 @@ function FactorDetailModal({
     mutationFn: () => api.factorSetGroup(item.id, groupDraft.trim()),
     onSuccess: data => {
       toast(`${item.label} · 分组 ${data.group}`, 'success')
-      void queryClient.invalidateQueries({ queryKey: ['factors-library'] })
+      void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
     },

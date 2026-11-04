@@ -166,7 +166,8 @@ it('A4/A14/A16 composite: equal mode submits equal weights, unavailable factors 
   await click(btn('均等'))
   await setVal(input('名称'), 'combo')
   await click(btn('注册复合因子'))
-  expect(mocks.factorCompositeCreate.mock.calls[0][0].members).toEqual({ ma20: 1, rsi_14: 1 })
+  // 提交 = 界面显示的归一权重 (11-04 审计: 显示 0.5 / 0.5 而提交 1 / 1)
+  expect(mocks.factorCompositeCreate.mock.calls[0][0].members).toEqual({ ma20: 0.5, rsi_14: 0.5 })
 })
 
 it('A5/A12/A13/A21 library: stale group filter falls back, status shows Chinese, unavailable factors have no 检验', async () => {
