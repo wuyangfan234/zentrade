@@ -198,14 +198,14 @@ function Stat({ k, v, unit, sub, cls, bar, ...rest }: { k: string; v: string; un
   & Record<`data-${string}`, string | undefined>) {
   return (
     <div {...rest} className="min-w-0 bg-surface px-3 py-1.5">
-      <div className="truncate text-[11.5px] leading-4 text-secondary">{k}</div>
-      <div className="flex items-baseline gap-1 whitespace-nowrap leading-6">
+      <div className="h-4 truncate text-[11.5px] leading-4 text-secondary">{k}</div>
+      <div className="flex h-6 items-baseline gap-1 whitespace-nowrap leading-6">
         <b className={`text-[16px] font-semibold tabular-nums ${cls ?? 'text-foreground'}`}>{v}</b>
         {unit && <span className="text-[11.5px] text-muted">{unit}</span>}
       </div>
       {bar !== undefined
         ? <div className="flex h-4 items-center"><div className="h-1 w-full overflow-hidden rounded-sm bg-zinc-300 dark:bg-zinc-700"><i className="block h-full bg-accent" style={{ width: `${Math.round(Math.min(Math.max(bar, 0), 1) * 100)}%` }} /></div></div>
-        : <div className="truncate text-[11.5px] leading-4 tabular-nums text-muted">{sub ?? '—'}</div>}
+        : <div className="h-4 truncate text-[11.5px] leading-4 tabular-nums text-muted">{sub ?? '—'}</div>}
     </div>
   )
 }
@@ -242,7 +242,7 @@ function AllSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: string
             const dl = fin(r.prev_rank) ? r.prev_rank - r.rank : null
             const earn = earnTag(r.earnings, d.day, d.hold_until)
             const dim = r.young
-            const tone = r.side === 'long' ? 'bg-bull/[0.07] shadow-[inset_3px_0_0_0_hsl(var(--bull))]' : r.side === 'short' ? 'bg-bear/[0.07] shadow-[inset_3px_0_0_0_hsl(var(--bear))]' : ''
+            const tone = r.side === 'long' ? 'bg-bull/[0.05] shadow-[inset_3px_0_0_0_hsl(var(--bull))]' : r.side === 'short' ? 'bg-bear/[0.05] shadow-[inset_3px_0_0_0_hsl(var(--bear))]' : ''
             const book = r.side ? SIDE_ZH[r.side] : r.young ? '上市不足' : BOOK_ZH[r.book ?? ''] ?? '—'
             const bookCls = r.side === 'long' ? 'text-bull' : r.side === 'short' ? 'text-bear' : BOOK_ZH[r.book ?? ''] && !r.young ? 'text-secondary' : 'text-muted'
             return (
@@ -371,7 +371,7 @@ export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) =>
         {d.demo && <span data-ls-demo className="shrink-0 rounded-btn bg-warning px-1.5 text-[11px] font-semibold leading-5 text-white dark:text-zinc-950">虚拟数据</span>}
         {d.late && <span data-ls-late title="名单日开盘后才生成 · 照常结算 · 不计入前向成绩" className="shrink-0 rounded-btn border border-warning/60 bg-warning/10 px-1.5 text-[11px] font-semibold leading-5 text-warning">盘中补出</span>}
         <span data-ls-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto xl:truncate max-xl:order-last max-xl:basis-full">
-          {meta.map((t, i) => <span key={t}>{i > 0 && ' '}<span className="whitespace-nowrap">{i > 0 ? `· ${t}` : t}</span></span>)}
+          {meta.map((t, i) => <span key={t}>{i > 0 && ' '}<span className="whitespace-nowrap">{i < meta.length - 1 ? `${t} ·` : t}</span></span>)}
         </span>
         <div className="ml-auto flex shrink-0 gap-1.5 xl:ml-0">
           <button type="button" data-ls-open="all" onClick={() => setSheet('all')} className={BTN}>{`全部 ${d.all.length}`}</button>
