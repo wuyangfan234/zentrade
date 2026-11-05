@@ -43,7 +43,8 @@ def test_asset_without_gzip_support_is_identity(tmp_path, monkeypatch) -> None:
     assert "content-encoding" not in r.headers
     assert r.content == BODY
     assert "immutable" in r.headers["cache-control"]
-    assert r.headers.get("vary") == "Accept-Encoding"  # 共享缓存 (Cloudflare) 必须按编码分开存
+    vary = {part.strip().lower() for part in (r.headers.get("vary") or "").split(",")}
+    assert "accept-encoding" in vary  # Origin 可同时存在; 关键是共享缓存必须按编码分开存
 
 
 def test_gzip_body_on_the_wire_is_smaller(tmp_path, monkeypatch) -> None:
@@ -67,7 +68,8 @@ def test_conditional_request_still_304(tmp_path, monkeypatch) -> None:
     r = c.get("/assets/index-AbC123_x.js", headers={"If-None-Match": etag, "Accept-Encoding": "gzip"})
     assert r.status_code == 304
     assert r.content == b""
-    assert r.headers.get("vary") == "Accept-Encoding"  # RFC 9110 §15.4.5: 304 带上 200 会发的 Vary
+    vary = {part.strip().lower() for part in (r.headers.get("vary") or "").split(",")}
+    assert "accept-encoding" in vary  # RFC 9110 §15.4.5: 304 带上 200 会发的 Vary
 
 
 def test_range_request_is_not_compressed(tmp_path, monkeypatch) -> None:
