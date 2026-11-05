@@ -53,6 +53,7 @@ OPERATORS: dict[str, tuple[int, tuple[str, ...]]] = {
     "ts_corr": (2, ("n",)),
     "ts_cov": (2, ("n",)),
     "ts_quantile": (1, ("n", "q")),
+    "ts_rsi": (1, ("n",)),
     "decay_linear": (1, ("n",)),
     "rank": (1, ()),
     "zscore": (1, ()),
@@ -69,7 +70,7 @@ OPERATORS: dict[str, tuple[int, tuple[str, ...]]] = {
 }
 TS_OPERATORS = frozenset({
     "ts_mean", "ts_std", "ts_sum", "ts_max", "ts_min", "ts_delay", "ts_delta",
-    "ts_rank", "ts_zscore", "ts_corr", "ts_cov", "ts_quantile", "decay_linear",
+    "ts_rank", "ts_zscore", "ts_corr", "ts_cov", "ts_quantile", "ts_rsi", "decay_linear",
 })
 CROSS_OPERATORS = frozenset({"rank", "zscore", "winsorize"})
 
@@ -105,7 +106,7 @@ class CompiledFormula:
 # ---------------------------------------------------------------- tokenizer
 
 _TOKEN_RE = re.compile(
-    r"\s*(?:(?P<num>\d+(?:\.\d+)?)|(?P<ident>[A-Za-z_][A-Za-z0-9_]*)|(?P<op>>=|<=|==|!=|[+\-*/><(),]))"
+    r"\s*(?:(?P<num>\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|(?P<ident>[A-Za-z_][A-Za-z0-9_]*)|(?P<op>>=|<=|==|!=|[+\-*/><(),]))"
 )
 _KEYWORDS = frozenset({"and", "or", "not"})
 
@@ -417,6 +418,15 @@ def _rolling_apply(inner: pl.Expr, op: str, n: int, extra: dict[str, float]) -> 
         return pl.when(std > 0).then((inner - mean) / std).otherwise(None)
     if op == "ts_quantile":
         return inner.rolling_quantile(extra.get("q", 0.5), window_size=n, min_samples=n)
+    if op == "ts_rsi":
+        # 与 backtest.matrix 的 rsi_N 一致: Wilder 指数平滑 alpha=1/n, adjust=False。
+        delta = inner - inner.shift(1)
+        gain = pl.when(delta > 0).then(delta).otherwise(0.0)
+        loss = pl.when(delta < 0).then(-delta).otherwise(0.0)
+        avg_gain = gain.ewm_mean(alpha=1.0 / n, adjust=False)
+        avg_loss = loss.ewm_mean(alpha=1.0 / n, adjust=False)
+        denominator = pl.when(avg_loss == 0).then(1e-12).otherwise(avg_loss)
+        return 100 - 100 / (1 + avg_gain / denominator)
     if op == "decay_linear":
         # 近端权重大: 权重 n, n-1, ..., 1, 总权 n(n+1)/2
         weighted = None

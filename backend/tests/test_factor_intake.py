@@ -24,6 +24,12 @@ ATOM = b"""<?xml version="1.0" encoding="utf-8"?><feed xmlns="http://www.w3.org/
 <content>Price momentum : the classic 12-to-1-month past return. Stocks cross-section factor signal equity momentum reversal volume.</content></entry></feed>"""
 
 
+@pytest.fixture(autouse=True)
+def freeze_intake_clock(monkeypatch):
+    # 样例固定在 2026-10 月; 冻结时钟, 避免真实日期越过 30 天新鲜度窗口后批量变 stale。
+    monkeypatch.setattr(fi, "_now", lambda: datetime(2026, 11, 3, 12, tzinfo=UTC))
+
+
 @pytest.fixture
 def data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(fi, "_public_http_url", lambda url: url)
@@ -53,10 +59,10 @@ def test_prefilter_drops_offtopic_and_flags_paywall():
 
 def test_default_watch_list_has_quantified_strategies_off(data_dir):
     sources = fi.load_sources(data_dir)
-    assert len(sources) == 18
+    assert len(sources) == 24
     qs = next(s for s in sources if s["id"] == "qstrat")
     assert qs["enabled"] is False
-    assert sum(1 for s in sources if s["enabled"]) == 17
+    assert sum(1 for s in sources if s["enabled"]) == 23
 
 
 def test_quote_must_be_verbatim():

@@ -91,6 +91,13 @@ DEFAULT_SOURCES: list[dict] = [
     {"id": "arxivqfin", "name": "arXiv q-fin", "kind": "paper", "channel": "API",
      "url": "https://export.arxiv.org/api/query?search_query=cat:q-fin.TR+OR+cat:q-fin.ST+OR+cat:q-fin.PM&sortBy=submittedDate&sortOrder=descending&max_results=40"},
     {"id": "osap", "name": "OSAP", "kind": "paper", "channel": "Atom", "url": "https://github.com/OpenSourceAP/CrossSection/releases.atom"},
+    # 2026-11-05 从 NAS 实测可解析且含规则研究的来源;  freshness / paywall / 美股分拣仍在入库前执行。
+    {"id": "aligrithm", "name": "Aligrithm", "kind": "site", "channel": "RSS", "url": "https://aligrithm.com/rss/"},
+    {"id": "alphanume", "name": "Alphanume Research", "kind": "site", "channel": "Substack", "url": "https://www.alphanume-research.com/feed"},
+    {"id": "quantinsti", "name": "QuantInsti", "kind": "site", "channel": "RSS", "url": "https://blog.quantinsti.com/feed/"},
+    {"id": "priceactionlab", "name": "Price Action Lab", "kind": "site", "channel": "RSS", "url": "https://www.priceactionlab.com/Blog/feed/"},
+    {"id": "financialhacker", "name": "Financial Hacker", "kind": "person", "channel": "RSS", "url": "https://www.financial-hacker.com/feed/"},
+    {"id": "nberap", "name": "NBER Asset Pricing", "kind": "paper", "channel": "RSS", "url": "https://back.nber.org/rss/newap.xml"},
 ]
 SOURCE_KINDS = ("person", "site", "aggregator", "paper")
 
@@ -150,7 +157,17 @@ def load_sources(data_dir: Path) -> list[dict]:
         seeded = [{**src, "enabled": bool(src.get("enabled", True)), "builtin": True} for src in DEFAULT_SOURCES]
         _write_json(path, seeded)
         return seeded
-    return [s for s in saved if isinstance(s, dict) and s.get("id") and s.get("url")]
+    valid = [s for s in saved if isinstance(s, dict) and s.get("id") and s.get("url")]
+    # 新增内置源要合并进已有清单; 用户已存在的 id / URL、启停状态和自定义源一律优先。
+    known_ids = {s["id"] for s in valid}
+    known_urls = {s["url"] for s in valid}
+    missing = [{**src, "enabled": bool(src.get("enabled", True)), "builtin": True}
+               for src in DEFAULT_SOURCES if src["id"] not in known_ids and src["url"] not in known_urls]
+    if missing:
+        merged = [*valid, *missing]
+        _write_json(path, merged)
+        return merged
+    return valid
 
 
 def _save_sources(data_dir: Path, sources: list[dict]) -> None:
@@ -451,10 +468,13 @@ _EXTRACT_PROMPT = (
     "你是美股量化研究助理。从文章里抽取可以用日线数据计算的交易因子或交易规则。只抽文章里明确写出的东西, 不补全、不发挥、不编造。\n"
     "数据: 美股个股日线。基础列: {BASE}。\n因子库已有(id 中文名): {LIB}\n"
     "公式算子: {OPS}。时序算子第二个参数是窗口天数(整数常量), 如 ts_mean(close, 20); rank/zscore 是当日截面算子; "
+    "任意周期 Wilder RSI 写 ts_rsi(close, n), 如 ts_rsi(close, 2), 不要用 rsi_6/14/24 冒充其他周期; "
+    "SMA(n) 写 ts_mean(close, n), 如 ts_mean(close, 20); Kaufman ER(n) 写 abs(close-ts_delay(close,n))/(ts_sum(abs(close-ts_delay(close,1)),n)+1e-12); "
     "逻辑与或非写作中缀 a and b / a or b / not a, 不要写 and(a, b); 比较用 > < >= <=; if_else(cond, a, b)。\n"
     "已有出卡规则(命中就在 dup_rule 写它的 id, 不要重复抽): {RULES}\n"
     "规则: 每条必须带 quote = 从原文逐字复制、能证明这条定义的那一句(<=300 字符, 不翻译不改写), 找不到原句就不要输出这条; "
-    "dsl 只用上面的列、因子 id 和算子, 写不出填 null 并在 missing 写缺什么; 原文的指标周期在库里没有(如 RSI(2))就填 null, 不要用相近的列代替; "
+    "dsl 只用上面的列、因子 id 和算子, 写不出填 null 并在 missing 写缺什么; "
+    "若原文含 SPY/QQQ 等跨标的闸门, 不要把它们写成个股列, 也不要因为一个闸门丢弃整篇: 保留可计算的个股因子, 在 missing 注明未包含该闸门; "
     "direction: high=分数越高越好, low=越低越好。\n"
     '只输出 JSON: {"summary_zh":"<=40字","items":[{"name_zh":"<=12字","quote":"原文逐字","dsl":"... 或 null",'
     '"direction":"high|low|null","horizon_days":5,"missing":[],"dup_rule":null,"reported":null}]}\n\n'
@@ -723,41 +743,48 @@ def _check_items(item: dict, raw: list, seen_quotes: set) -> list[dict]:
     out = []
     reasons: list[str] = []
     failures: list[str] = []
+    rejected: list[dict] = []
+
+    def reject(x: dict, code: str, reason: str, compiler_code: str | None = None) -> None:
+        failures.append(code)
+        reasons.append(reason)
+        rejected.append({"name": str(x.get("name_zh") or "未命名")[:32], "quote": str(x.get("quote") or "")[:300],
+                         "dsl": (x.get("dsl") or "") if isinstance(x.get("dsl"), str) else None,
+                         "missing": [str(m)[:160] for m in (x.get("missing") or [])[:4]], "code": code,
+                         "compiler_code": compiler_code, "reason": reason})
+
     for x in raw[:6]:
         if not isinstance(x, dict):
             continue
         quote = str(x.get("quote") or "")
         dsl = (x.get("dsl") or "").strip() if isinstance(x.get("dsl"), str) else ""
         if not quote_verbatim(quote, article):
-            failures.append("quote_mismatch")
-            reasons.append("原句对不上原文")
+            reject(x, "quote_mismatch", "原句对不上原文")
             continue
         qh = hashlib.sha1(_norm(quote).encode()).hexdigest()[:16]
         if qh in seen_quotes:
-            failures.append("duplicate")
-            reasons.append("跟已有因子重复")
+            reject(x, "duplicate", "跟已有因子重复")
             continue
         if not dsl:
-            failures.append("no_definition")
-            reasons.append("缺数据: " + "、".join(str(m) for m in (x.get("missing") or [])[:2]) if x.get("missing") else "写不出公式")
+            reason = "缺数据: " + "、".join(str(m) for m in (x.get("missing") or [])[:2]) if x.get("missing") else "写不出公式"
+            reject(x, "no_definition", reason)
             continue
         compiled = _compile(dsl)
         if not compiled.ok:
-            failures.append("dsl_compile")
-            reasons.append(f"公式编译失败 {compiled.errors[0].code}")
+            reject(x, "dsl_compile", f"公式编译失败 {compiled.errors[0].code}", compiler_code=compiled.errors[0].code)
             continue
         bad = period_mismatches(dsl, article)
         if bad:
-            failures.append("dsl_compile")
-            reasons.append("公式周期与原文不一致 " + ",".join(bad))
+            reject(x, "dsl_compile", "公式周期与原文不一致 " + ",".join(bad))
             continue
         seen_quotes.add(qh)
         direction = x.get("direction") if x.get("direction") in ("high", "low") else "high"
         out.append({"name": str(x.get("name_zh") or "采集因子")[:16], "quote": quote[:300], "quote_hash": qh, "dsl": dsl,
                     "direction": direction, "warmup": int(compiled.warmup_bars), "deps": sorted(compiled.dependencies),
                     "cross_sectional": bool(compiled.cross_sectional), "reported": x.get("reported"),
-                    "dup_rule": x.get("dup_rule"),
+                    "dup_rule": x.get("dup_rule"), "missing": [str(m)[:160] for m in (x.get("missing") or [])[:4]],
                     "checks": {"quote": True, "compile": True, "period": True}})
+    item["rejected"] = rejected
     if not out and reasons:
         item["reason"] = reasons[0][:60]
         item["failure"] = failures[0]
@@ -1068,6 +1095,21 @@ def retry(data_dir: Path, item_id: str) -> dict:
             raise ValueError("只有已归档的投递可以重试")
         if it.get("reason") == "已忽略":
             raise ValueError("已忽略的条目用「恢复」")
+        # 编译器 / 检查规则升级后, 先复核缓存的模型结果。能救回时不再调用模型, 也不消耗重试次数。
+        if not it.get("formulas"):
+            cached = _parse_json(it.get("last_model_text"))
+            raw_items = cached.get("items") if isinstance(cached, dict) else None
+            if isinstance(raw_items, list) and raw_items:
+                recovered = _check_items(it, raw_items, _known_quote_hashes(items))
+                if recovered:
+                    it["formulas"] = recovered
+                    it["stage"] = "to_screen"
+                    it["recovered_at"] = _iso(_now())
+                    for key in ("reason", "failure", "last_error", "retry_grant", "duplicate"):
+                        it.pop(key, None)
+                    it["decided_at"] = None
+                    _save_items(data_dir, items)
+                    return {"id": item_id, "stage": "to_screen", "retry_count": int(it.get("retry_count") or 0), "recovered": True}
         used = int(it.get("retry_count") or 0)
         if used >= RETRY_LIMIT:
             raise ValueError(f"重试已达 {RETRY_LIMIT} 次上限, 请补充原文后重新投递")
@@ -1126,7 +1168,7 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
         if not it.get("formulas") or it.get("stage") not in ("pending", "archived", "merged", "to_screen"):
             continue
         cards.append({k: it.get(k) for k in ("id", "source", "source_name", "title", "link", "published", "stage", "reason", "summary", "duplicate")}
-                     | {"formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks")} for f in it["formulas"]]})
+                     | {"formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks", "missing")} for f in it["formulas"]]})
     # every pending card is shown (the flow bar / tab badge count them); only decided ones are capped
     pending_cards = [c for c in cards if c["stage"] == "pending"]
     other_cards = [c for c in cards if c["stage"] != "pending"]
@@ -1142,7 +1184,8 @@ def overview(data_dir: Path, *, days: int = 30) -> dict:
         "duplicate": bool(it.get("duplicate")), "summary": it.get("summary"),
         "attempts": int(it.get("attempts") or 0), "retry_count": int(it.get("retry_count") or 0),
         "model_text": (it.get("last_model_text") or "")[:MODEL_TEXT_CHARS],
-        "formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks")}
+        "rejected": it.get("rejected") or [],
+        "formulas": [{k: f.get(k) for k in ("name", "quote", "dsl", "direction", "warmup", "screen", "merged_id", "checks", "missing")}
                      for f in (it.get("formulas") or [])],
     } for it in manual]
     return {"contract": CONTRACT, "days": days, "funnel": funnel, "cards": cards, "submissions": submissions,
