@@ -21,7 +21,6 @@ export const COL_ORDER: Record<DeskRegimeKey, DeskEngine[]> = {
   down: ['board', 'open', 'gap', 'intraday'],
 }
 export const ENGINE_ZH: Record<DeskEngine, string> = { gap: '盘前跳空', open: '开盘放量', intraday: '盘中强势', board: '机会板' }
-const MOOD_ZH: Record<string, string> = { up: '偏多', down: '偏空', range: '震荡' }
 
 function Panel({ children, className = '', ...rest }: { children: ReactNode; className?: string } & Record<`data-${string}`, string | undefined>) {
   return <section {...rest} className={`min-w-0 rounded-card border border-border bg-surface ${className}`}>{children}</section>
@@ -31,9 +30,9 @@ function Head({ title, count, meta, rank }: { title: string; count?: number; met
   return (
     <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2.5">
       {rank !== undefined && <span data-col-rank className="rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-white dark:bg-blue-700">{rank}</span>}
-      <h2 className="text-[14px] font-semibold text-foreground">{title}</h2>
-      {count !== undefined && <span className="text-[13px] font-semibold tabular-nums text-secondary">{count}</span>}
-      {meta && <span className="ml-auto whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>}
+      <h2 className="shrink-0 whitespace-nowrap text-[14px] font-semibold text-foreground">{title}</h2>
+      {count !== undefined && <span className="shrink-0 text-[13px] font-semibold tabular-nums text-secondary">{count}</span>}
+      {meta && <span title={meta} className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>}
     </div>
   )
 }
@@ -61,7 +60,8 @@ const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3
 const Err = ({ name }: { name: string }) => <div data-col-error className="px-3 pb-3 pt-1 text-[12.5px] text-danger">{`${name}读取失败`}</div>
 
 // ── 大盘状态条 ──
-export function RegimeBar({ desk, mood }: { desk: OppDesk; mood?: { stance?: string; probs?: Record<string, number> } | null }) {
+/** 0.51.0: 盘前判断移到页面上方独立一行 (MoodBar), 大盘状态条只写盘中实况 */
+export function RegimeBar({ desk }: { desk: OppDesk }) {
   const r = desk.regime
   const k = r.key
   const cls = k === 'up' ? 'bg-bull/15 text-bull' : k === 'down' ? 'bg-bear/15 text-bear' : 'bg-accent/10 text-accent'
@@ -70,7 +70,6 @@ export function RegimeBar({ desk, mood }: { desk: OppDesk; mood?: { stance?: str
       <span data-regime-badge className={`rounded-btn px-2.5 py-0.5 text-[14px] font-bold ${k ? cls : 'bg-elevated text-muted'}`}>{k ? REGIME_ZH[k] : '大盘 —'}</span>
       <span data-regime-breadth className="text-secondary">{'自选涨≥1% '}<b className="text-foreground">{`${r.up}/${r.n}`}</b>{' · 涨≥3% '}<b className="text-foreground">{r.up3}</b>{' · 跌≥1% '}<b className="text-foreground">{r.down}</b></span>
       <span data-regime-index className="text-secondary">{'SPY '}<b className={sgn(r.spy)}>{pc(r.spy)}</b>{' · QQQ '}<b className={sgn(r.qqq)}>{pc(r.qqq)}</b></span>
-      {mood?.stance && <span data-regime-mood className="text-secondary">{'盘前判断 '}<b className="text-foreground">{MOOD_ZH[mood.stance] ?? mood.stance}</b></span>}
       <span className="ml-auto text-[12px] text-muted">{`${etHm(r.at)} ET`}</span>
     </Panel>
   )

@@ -59,6 +59,7 @@ const JOB_LABEL: Record<string, string> = {
   zen_earnings_premarket: '财报日历（盘前）',
   zen_earnings_postclose: '财报日历（盘后）',
   zen_market_mood_score: '大盘情绪记分',
+  zen_ls_rank: '今日多空补出名单 (08:20 / 17:20 ET)',
   zen_market_mood_score_retry: '大盘情绪补记分',
   zen_fundamentals_sync: '美股财务同步 (18:30 ET)',
   zen_notification_outbox: '通知投递 (60 秒)',

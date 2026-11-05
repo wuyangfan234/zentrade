@@ -280,9 +280,12 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
     desk = _section("desk", lambda: opp_desk.view(
         data_dir, repo=repo, now=now, swing=swing, intraday=intraday, radar=radar, gaps=gaps,
         symbols=sorted(_watch_symbols())), errors)
+    # 0.51.0 今日多空 (只读; 没有名单 = None)
+    from app.services import ls_rank
+    lsr = _section("ls_rank", lambda: ls_rank.view(data_dir, repo=repo, now=now), errors)
     return {"contract": CONTRACT, "generated_at": now.isoformat(timespec="seconds"), "phase": phase, "stage": stage,
             "swing": swing, "intraday": intraday, "radar": radar, "gaps": gaps, "mood": mood, "ctx": ctx,
-            "settings": settings, "radar_view": radar_view, "desk": desk, "errors": errors}
+            "settings": settings, "radar_view": radar_view, "desk": desk, "ls_rank": lsr, "errors": errors}
 
 
 def _watch_symbols() -> set[str]:

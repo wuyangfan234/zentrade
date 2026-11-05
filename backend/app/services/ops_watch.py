@@ -41,6 +41,7 @@ WATCHED = {
     "zen_market_mood_score_retry": "大盘情绪补记分",
     "zen_fundamentals_sync": "美股财务同步",
     "zen_resonance_settle": "共振影子账本结算",
+    "zen_ls_rank": "今日多空补出名单",
 }
 # 可补跑的幂等任务 → 最晚补跑时刻 (ET); None 表示当天任何时候都可补。
 # daily_pipeline 有自己的开机补跑, 不在这里重复。
@@ -60,6 +61,7 @@ CATCHUP = {
     "zen_market_mood_score_retry": None,
     "zen_fundamentals_sync": None,         # 合并写、失败保留旧数据, 幂等
     "zen_resonance_settle": None,          # 只补缺的格子, 幂等
+    "zen_ls_rank": None,                   # 已有名单不动、结算只补没结的, 幂等
 }
 MISS_GRACE = timedelta(minutes=20)
 LOOP_STALE = timedelta(minutes=3)

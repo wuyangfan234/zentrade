@@ -964,7 +964,32 @@ export type OppPagePayload = {
   radar_view?: OppRadarView | null
   /** 0.41.0 大盘状态 + 共振 */
   desk?: OppDesk | null
+  /** 今日多空 (显然档预览): 盘前自选横截面排名, 只展示 */
+  ls_rank?: LsRankPayload | null
   errors: Record<string, string>
+}
+/** 今日多空 (契约 ls-rank-v1): 自选排名 → 看多 5 / 看空 5; settle = 前向结算 (单位 ATR, 1 ATR = risk_usd / stop_atr 美元) */
+export type LsRankRow = {
+  symbol: string; rank: number; pct: number; side: 'long' | 'short' | null; young: boolean
+  close: number | null; atr: number | null; spark?: number[] | null; pre_pct: number | null; ref: number | null; stop: number | null; qty: number | null
+  earnings: { date: string; timing?: string | null } | null; tags: string[]; prev_rank: number | null; is_new?: boolean; book?: string | null
+}
+export type LsSettleSeries = {
+  long: number; short: number; pair: number; rand_long: number | null; rand_short: number | null; rand_pair: number | null
+  all: number | null; long_minus_all: number | null
+  win_long: number; win_short: number; win_pair: number | null; n_lists: number; n_long: number; n_short: number
+}
+export type LsSettleLast = { made: string; settled: string; long: { symbol: string; r: number; exit: 'stop' | 'time' }[]
+  short: { symbol: string; r: number; exit: 'stop' | 'time' }[]; sum_long: number; sum_short: number }
+export type LsRankPayload = {
+  contract: string; demo?: boolean; day: string; hold_until: string; as_of: string; made_at: string | null; model: string; trained_to: string
+  hold_days: number; stop_atr: number; risk_usd: number | null; equity?: number | null; pre: { at: string | null; live: boolean } | null
+  is_today?: boolean; late?: boolean
+  backtest: { period: string; long: { mean_atr: number; win: number; rand: number }; short: { mean_atr: number; win: number; rand: number }
+    long_minus_all?: number }
+  long: LsRankRow[]; short: LsRankRow[]; all: LsRankRow[]; n?: number; missing?: string[]; stale?: string[]
+  settle: { days: number; check_days: number; late?: number; first?: string | null; last_list?: string | null; total: LsSettleSeries | null
+    weeks: (LsSettleSeries & { week: string })[]; last: LsSettleLast | null }
 }
 export type SwingBoardsPayload = {
   contract: string
