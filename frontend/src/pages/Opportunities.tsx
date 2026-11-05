@@ -2,6 +2,7 @@
  * 机会页 (0.29.0 起一个请求 GET /api/opportunities/page 取齐整页, 某块失败只在那一块写读取失败)。
  * 0.41.0 (10-28 产品决策 「非显然档」): 一页作战台 —— 状态栏 (保留) + 大盘状态条 + 共振 + 四栏同屏 + 持仓。
  *   四栏顺序按大盘状态 (普涨 / 平常 / 普跌) 换; 共振卡只进影子账本。雷达图与页底引擎明细退役。
+ * 0.51.0 (11-06 产品决策): 状态栏下 = 盘前判断 (08:35 ET 大盘三档) → 今日多空 (自选看多 5 / 看空 5), 再往下原样。
  *   状态变化由后端帧经 SSE 推送, 页面立即重取; 30/60 秒轮询保留作兜底。
  *   只改展示: 交易环 / 准入 / 许可 / 下单簿 / 台账都不变。
  */
@@ -10,6 +11,8 @@ import { Settings2 } from 'lucide-react'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
 import { StatusRail } from '@/components/opportunities/StatusRail'
 import { COL_ORDER, EngineCols, Holdings, RegimeBar, Resonance } from '@/components/opportunities/Desk'
+import { LsRank, LsRankEmpty } from '@/components/opportunities/LsRank'
+import { MoodBar } from '@/components/opportunities/MoodBar'
 import { useOppPage } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
 import type { OppPagePayload, SwingBoardsPayload } from '@/lib/api'
@@ -51,11 +54,12 @@ export function Opportunities() {
   const desk = d?.desk ?? null
   const order = COL_ORDER[desk?.regime.key ?? 'normal']
   const res = useMemo(() => new Set((desk?.resonance ?? []).map((x) => x.symbol)), [desk])
-  // 预览里左右切票顺序 = 共振 → 各栏 → 持仓, 同票只出现一次
+  // 预览里左右切票顺序 = 今日多空 → 共振 → 各栏 → 持仓, 同票只出现一次
   const navList = useMemo(() => {
     if (!d) return []
     const seen = new Set<string>()
-    const all = [...(desk?.resonance ?? []).map((x) => x.symbol), ...(d.intraday?.active ?? []).map((c) => c.symbol), ...(d.radar?.picks ?? []).map((r) => r.symbol),
+    const all = [...(d.ls_rank?.long ?? []).map((r) => r.symbol), ...(d.ls_rank?.short ?? []).map((r) => r.symbol),
+      ...(desk?.resonance ?? []).map((x) => x.symbol), ...(d.intraday?.active ?? []).map((c) => c.symbol), ...(d.radar?.picks ?? []).map((r) => r.symbol),
       ...(d.gaps?.rows ?? []).map((r) => r.symbol), ...[...(d.swing?.long ?? []), ...(d.swing?.short ?? [])].map((c) => c.symbol)]
     return all.filter((s) => !seen.has(s) && seen.add(s)).map((symbol) => ({ symbol }))
   }, [d, desk])
@@ -69,9 +73,11 @@ export function Opportunities() {
       {d && (
         <>
           {view ? <StatusRail view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
+          {errs.mood ? <SectionError name="盘前判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
+          {errs.ls_rank ? <SectionError name="今日多空" err={errs.ls_rank} /> : d.ls_rank ? <LsRank d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
           {desk ? (
             <>
-              <RegimeBar desk={desk} mood={d.mood?.judgment ?? null} />
+              <RegimeBar desk={desk} />
               <Resonance desk={desk} onOpen={setOpen} />
             </>
           ) : <SectionError name="大盘状态" err={errs.desk ?? '无数据'} />}

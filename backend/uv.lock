@@ -2939,7 +2939,7 @@ wheels = [
 
 [[package]]
 name = "zentrade-backend"
-version = "0.50.0"
+version = "0.51.0"
 source = { editable = "." }
 dependencies = [
     { name = "apscheduler" },
@@ -2964,6 +2964,7 @@ dependencies = [
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "pyyaml" },
+    { name = "scikit-learn" },
     { name = "sse-starlette" },
     { name = "tickflow", extra = ["all"] },
     { name = "uvicorn", extra = ["standard"] },
@@ -3017,6 +3018,7 @@ requires-dist = [
     { name = "pywebview", marker = "extra == 'desktop'", specifier = ">=5.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.5" },
+    { name = "scikit-learn", specifier = ">=1.5" },
     { name = "sse-starlette", specifier = ">=2.0" },
     { name = "tickflow", extras = ["all"], specifier = ">=0.1.23" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },

@@ -716,6 +716,11 @@ def _run_zen_post_close(repo, day: _date) -> dict:
         logger.info("swing settle %s: %s", day, swing_settlement.run_daily(repo.store.data_dir, repo, day=day))
     except Exception as e:
         logger.warning("swing settle failed (soft): %s", type(e).__name__)
+    try:  # 0.51.0 今日多空: 结算到期名单 + 出下一交易日名单 (只写 opportunities/ls_rank/; 不进交易环、不推送)
+        from app.services import ls_rank
+        logger.info("ls_rank %s: %s", day, ls_rank.run_post_close(repo.store.data_dir, day))
+    except Exception as e:
+        logger.warning("ls_rank failed (soft): %s", type(e).__name__)
     return {"status": "completed", "manage_events": managed["events"],
             "nav": managed["nav"]["nav"] if managed.get("nav") else None,
             "missing_symbols": managed.get("missing_symbols") or [], "cards": len(result.cards),
@@ -1417,6 +1422,22 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
     scheduler.add_job(_swing_candidates_queue,
         trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=5, timezone="America/New_York"),
         id="zen_swing_candidates_queue", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
+
+    # 0.51.0 今日多空: 正常由 16:35 盘后管道出名单 (_run_zen_post_close)。管道没跑成 / 重启错过时,
+    # 17:20 ET 与次日 08:20 ET 按最近一个已定版收盘日补一次 (已有名单不动; 只写 opportunities/ls_rank/)。
+    def _ls_rank_ensure():
+        from app.services import ls_rank
+        st = _get_app_state()
+        r = getattr(st, "repo", None)
+        if r is None:
+            return None
+        res = ls_rank.ensure(r.store.data_dir, r)
+        logger.info("ls_rank ensure: %s", res)
+        return res
+
+    scheduler.add_job(_ls_rank_ensure,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="8,17", minute=20, timezone="America/New_York"),
+        id="zen_ls_rank", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
 
     # 0.47.0 公开因子采集: 每 30 分钟唤醒, 内部每 6 小时抓一次监控清单;
     # 模型调用受每日上限 (默认 30 次, 美东日), 快筛 / 自选回测只在非 09:00-17:00 ET 跑。只写 research/intake/, 不碰交易。
