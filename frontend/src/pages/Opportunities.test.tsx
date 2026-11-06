@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
-// 0.41.0 机会页 = 状态栏 (保留) + 大盘状态条 + 共振 + 四栏同屏 + 持仓 (10-28 产品决策 「非显然档」)。
-// 0.51.0 状态栏下 = 盘前判断 → 今日多空 (11-06 产品决策)。
-// 不变量: 一个请求 (/page) 取齐; 四栏顺序随大盘状态; 某块失败只空一块; 整页失败 = 错误不是“无机会”; 齿轮一个保存口;
+// 0.52.2 A 方案 = 模型观察 → 独立策略机会 → 盘面雷达 (三引擎 + 引擎共振) → 持仓。
+// 不变量: 一个请求 (/page) 取齐; 雷达顺序随大盘状态; 机会板独立; 某块失败只空一块; 整页失败 = 错误不是“无机会”; 齿轮一个保存口;
 // 系统文字只写结果 (无说明句、无口语)。
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
@@ -203,11 +202,11 @@ it('大盘状态条: 普涨 + 自选宽度 + SPY / QQQ', async () => {
 })
 
 it.each([
-  ['up', ['intraday', 'open', 'gap', 'board']],
-  ['normal', ['board', 'intraday', 'open', 'gap']],
-  ['down', ['board', 'open', 'gap', 'intraday']],
-  [null, ['board', 'intraday', 'open', 'gap']],
-] as const)('四栏顺序随大盘状态: %s', async (key, order) => {
+  ['up', ['intraday', 'open', 'gap', 'resonance']],
+  ['normal', ['intraday', 'open', 'gap', 'resonance']],
+  ['down', ['open', 'gap', 'intraday', 'resonance']],
+  [null, ['intraday', 'open', 'gap', 'resonance']],
+] as const)('盘面雷达顺序随大盘状态, 共振固定第四栏: %s', async (key, order) => {
   mocks.oppPage.mockResolvedValue(page({ desk: desk({ key }) }))
   await render()
   expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(order)
@@ -234,11 +233,12 @@ it('四栏内容: 跳空现在涨幅 / 开盘点名 / 盘中在途与今日已�
   expect(text('[data-intraday-row="TSLA"]')).toContain('+0.46R')
   expect(text('[data-intraday-closed="AVGO"]')).toContain('10:15 止损')
   expect(text('[data-col="intraday"]')).toContain('已结算 4 · −4.11R')
-  expect(text('[data-board-row="TSLA"]')).toContain('回区 8%')
+  expect(text('[data-strategy-board] thead')).toContain('回区')
+  expect(text('[data-board-row="TSLA"]')).toContain('8%')
   expect(text('[data-board-row="TSLA"]')).toContain('距区 4.6%')
 })
 
-it('四栏同一高度, 跳空多时栏内滚动', async () => {
+it('四栏同一高度上限, 跳空多时栏内滚动 (10-29)', async () => {
   const rows = Array.from({ length: 18 }, (_, i) => ({ symbol: `G${i}`, gap_pct: -3 - i * 0.4, price: 100 }))
   mocks.oppPage.mockResolvedValue(page({ gaps: { at: '2026-10-29T04:28:00-04:00', live: true, threshold_pct: 3, checked: 41, rows } }))
   await render()
@@ -268,7 +268,8 @@ it('某块失败只空那一块', async () => {
   expect(text('[data-section-error="大盘状态"]')).toBe('大盘状态读取失败（KeyError）')
   expect(text('[data-col="open"] [data-col-error]')).toBe('开盘放量读取失败')
   expect(host.querySelector('[data-intraday-row="TSLA"]')).not.toBeNull()
-  expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(['board', 'intraday', 'open', 'gap'])
+  expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(['intraday', 'open', 'gap', 'resonance'])
+  expect(text('[data-col="resonance"] [data-col-error]')).toBe('引擎共振读取失败')
 })
 
 it('整页请求失败 = 错误, 不是“无机会”', async () => {
@@ -332,19 +333,19 @@ it('盘前判断: 非今日标出来; 没有判断显示下次生成时刻', asy
   expect(text('[data-mood-bar]')).toContain('10-26 08:35 ET 生成')
 })
 
-it('今日多空: 看多 5 / 看空 5 同屏, 计数 = 行数; 止损 / 股数 / 盘前 / 财报 / 换入', async () => {
+it('今日多空: 看多 5 / 看空 5 同屏, 计数 = 行数; 排名 / 参考价 / 盘前 / 财报 / 换入', async () => {
   await render()
   expect(host.querySelectorAll('[data-ls-side="long"] [data-ls-row]').length).toBe(5)
   expect(host.querySelectorAll('[data-ls-side="short"] [data-ls-row]').length).toBe(5)
   const counts = [...host.querySelectorAll('[data-ls-side] h3 + span')].map((e) => e.textContent)
   expect(counts).toEqual(['5', '5'])
   const row = text('[data-ls-row="AAOI"]')
-  expect(row).toContain('88.80')
-  expect(row).toContain('51')
+  expect(row).toContain('98.80')
   expect(row).toContain('−1.2%')
+  expect(row).toContain('财报 今日盘后')
   expect(host.querySelector('[data-ls-row="IREN"] [data-ls-new]')).not.toBeNull()
   expect(text('[data-ls-meta]')).toContain('换入 1')
-  expect(text('[data-ls-meta]')).toContain('每笔 $510')
+  expect(text('[data-ls-meta]')).not.toContain('每笔 $510')
   expect(text('[data-ls-open="all"]')).toBe('全部 12')
   expect(text('[data-ls-stat="progress"]')).toContain('0/65')
 })
@@ -399,12 +400,15 @@ it('盘中强势「今日已结束」按出场日: 前几天出的卡今天止�
   expect(host.querySelector('[data-intraday-closed="OLD"]')).toBeNull()
 })
 
-it('今日多空: 风险读不到时不显示美元与股数, 只显示 ATR', async () => {
+it('今日多空: 风险读不到时结算明细不显示美元换算, 只显示 ATR', async () => {
   const d = ls({ risk_usd: null, long: ls().long.map((r) => ({ ...r, qty: null })), short: ls().short.map((r) => ({ ...r, qty: null })) })
   mocks.oppPage.mockResolvedValue(page({ ls_rank: d }))
   await render()
   expect(text('[data-ls-meta]')).not.toContain('每笔 $')
-  expect(text('[data-ls-row="AAOI"]')).toContain('—')
+  act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
+  const rules = document.querySelector('[data-ls-rules]')?.textContent ?? ''
+  expect(rules).toContain('止损 2 ATR')
+  expect(rules).not.toContain('1 ATR = $')
 })
 
 it('四栏表头标题不收缩、meta 截断 (0.48.0 在 1280/1440 宽「盘中强势」被挤成竖排)', async () => {
@@ -419,6 +423,43 @@ it('四栏表头标题不收缩、meta 截断 (0.48.0 在 1280/1440 宽「盘中
       expect(meta.className).toContain('truncate')
     }
   }
+})
+
+it('0.52.2 A 方案: 今日多空只呈现模型排名, 主区不混策略与交易参数', async () => {
+  await render()
+  const model = host.querySelector('[data-ls-rank]')!
+  expect(model.getAttribute('data-source')).toBe('model')
+  expect(model.textContent).toContain('模型观察')
+  expect(model.textContent).toContain('模型评分')
+  expect(model.textContent).toContain('8 项日 K')
+  expect(model.textContent).toContain('只观察')
+  const row = text('[data-ls-row="AAOI"]')
+  expect(row).toContain('−1.2%')
+  expect(row).toContain('98.80')
+  expect(row).not.toContain('趋势突破')
+  expect(row).not.toContain('88.80')
+  expect(row).not.toContain('51')
+  for (const x of ['股数', '止损', '名义', '每笔 $510']) expect(model.textContent, x).not.toContain(x)
+  expect(text('[data-ls-open="all"]')).toBe('全部 12')
+  act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
+  expect(document.querySelector('[data-ls-settle]')?.textContent).toContain('GBM 2026Q4')
+})
+
+it('0.52.2 A 方案: 模型观察 → 独立策略机会 → 盘面雷达, 机会板不再占雷达栏', async () => {
+  await render()
+  const seq = [...host.querySelectorAll('[data-ls-rank], [data-strategy-board], [data-radar-section]')].map((e) =>
+    e.hasAttribute('data-ls-rank') ? 'model' : e.hasAttribute('data-strategy-board') ? 'strategy' : 'radar')
+  expect(seq).toEqual(['model', 'strategy', 'radar'])
+  expect(host.querySelector('[data-cols] [data-col="board"]')).toBeNull()
+  expect(host.querySelector('[data-radar-section] [data-resonance]')).not.toBeNull()
+  expect(text('[data-radar-section]')).toContain('只记录')
+  expect(text('[data-radar-section]')).toContain('不含模型')
+  const board = text('[data-strategy-board]')
+  expect(board).toContain('3+3 策略命中')
+  expect(board).toContain('4h 方向门')
+  expect(board).toContain('可下单')
+  expect(text('[data-strategy-board] [data-board-row="BABA"]')).toContain('MACD 金叉放量')
+  expect(text('[data-strategy-board] [data-board-row="TSLA"]')).toContain('41')
 })
 
 it('系统文字只写结果: 页面无说明句与禁用词', async () => {
