@@ -4,13 +4,13 @@
  *   四栏顺序按大盘状态 (普涨 / 平常 / 普跌) 换; 共振卡只进影子账本。雷达图与页底引擎明细退役。
  * 0.51.0 (11-06 产品决策): 状态栏下 = 盘前判断 (08:35 ET 大盘三档) → 今日多空 (自选看多 5 / 看空 5), 再往下原样。
  *   状态变化由后端帧经 SSE 推送, 页面立即重取; 30/60 秒轮询保留作兜底。
- *   只改展示: 交易环 / 准入 / 许可 / 下单簿 / 台账都不变。
+ * 0.52.2 (11-06 产品决策选 A): 今日多空标为模型观察; 机会板独立; 共振与三个盘面引擎归入只记录雷达。
  */
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { Settings2 } from 'lucide-react'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
 import { StatusRail } from '@/components/opportunities/StatusRail'
-import { COL_ORDER, EngineCols, Holdings, RegimeBar, Resonance } from '@/components/opportunities/Desk'
+import { COL_ORDER, EngineCols, Holdings, RegimeBar, StrategyBoard } from '@/components/opportunities/Desk'
 import { LsRank, LsRankEmpty } from '@/components/opportunities/LsRank'
 import { MoodBar } from '@/components/opportunities/MoodBar'
 import { useOppPage } from '@/components/opportunities/useOppPage'
@@ -75,14 +75,10 @@ export function Opportunities() {
           {view ? <StatusRail view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
           {errs.mood ? <SectionError name="盘前判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
           {errs.ls_rank ? <SectionError name="今日多空" err={errs.ls_rank} /> : d.ls_rank ? <LsRank d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
-          {desk ? (
-            <>
-              <RegimeBar desk={desk} />
-              <Resonance desk={desk} onOpen={setOpen} />
-            </>
-          ) : <SectionError name="大盘状态" err={errs.desk ?? '无数据'} />}
-          <EngineCols order={order} onOpen={setOpen}
-            d={{ gaps: d.gaps, radar: d.radar, intraday: d.intraday, swing: d.swing, errors: errs, chg: desk?.regime.chg ?? {}, res }} />
+          {desk ? <RegimeBar desk={desk} /> : <SectionError name="大盘状态" err={errs.desk ?? '无数据'} />}
+          <StrategyBoard swing={d.swing} error={errs.swing} res={res} onOpen={setOpen} />
+          <EngineCols order={order} onOpen={setOpen} desk={desk}
+            d={{ gaps: d.gaps, radar: d.radar, intraday: d.intraday, errors: errs, chg: desk?.regime.chg ?? {}, res }} />
           {view && <Holdings view={view} onOpen={setOpen} />}
         </>
       )}

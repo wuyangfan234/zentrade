@@ -1,7 +1,6 @@
-/** 机会页一页作战台 (0.41.0, 10-28 产品决策 「非显然档」): 大盘状态条 + 共振 + 四栏同屏 + 持仓。
- * 四栏顺序按大盘状态 (后端 desk.regime, 与 10-22 回测同口径): 普涨 = 盘中强势 → 开盘放量 → 盘前跳空 → 机会板;
- * 平常 = 机会板 → 盘中强势 → 开盘放量 → 盘前跳空; 普跌 = 机会板 → 开盘放量 → 盘前跳空 → 盘中强势。
- * 共振 = 同票 >= 2 个引擎同向, 只进影子账本 (不下单)。只展示: 交易环 / 准入 / 下单簿 / 台账不变。
+/** 机会页 A 方案 (0.52.2, 11-06 产品决策选定): 模型观察 → 独立策略机会 → 盘面雷达 → 持仓。
+ * 雷达三栏顺序沿用大盘状态; 引擎共振固定第四栏且不含模型; 机会板不再与只记录引擎混排。
+ * 共振只进影子账本。只展示: 交易环 / 准入 / 下单簿 / 台账不变。
  * 文案只写结果 (名词 + 数字), 不写说明句。 */
 import type { ReactNode } from 'react'
 import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, OpenRadarPayload, OppDesk, OppRadarView,
@@ -26,10 +25,9 @@ function Panel({ children, className = '', ...rest }: { children: ReactNode; cla
   return <section {...rest} className={`min-w-0 rounded-card border border-border bg-surface ${className}`}>{children}</section>
 }
 
-function Head({ title, count, meta, rank }: { title: string; count?: number; meta?: string; rank?: number }) {
+function Head({ title, count, meta }: { title: string; count?: number; meta?: string }) {
   return (
     <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2.5">
-      {rank !== undefined && <span data-col-rank className="rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-[18px] text-white dark:bg-blue-700">{rank}</span>}
       <h2 className="shrink-0 whitespace-nowrap text-[14px] font-semibold text-foreground">{title}</h2>
       {count !== undefined && <span className="shrink-0 text-[13px] font-semibold tabular-nums text-secondary">{count}</span>}
       {meta && <span title={meta} className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>}
@@ -75,7 +73,7 @@ export function RegimeBar({ desk }: { desk: OppDesk }) {
   )
 }
 
-// ── 共振 ──
+// ── 引擎共振 (盘面雷达第四栏, 不含今日多空模型) ──
 function chips(x: DeskResonance): string[] {
   const e = x.engines
   const out: string[] = []
@@ -86,40 +84,27 @@ function chips(x: DeskResonance): string[] {
   return out
 }
 
-export function Resonance({ desk, onOpen }: { desk: OppDesk; onOpen: (s: string) => void }) {
-  const xs = desk.resonance
-  const sh = desk.shadow
-  const meta = `影子 ${sh.n} · 已结算 ${sh.settled}${typeof sh.mean5 === 'number' ? ` · 5日 ${pc(sh.mean5)}` : ''}`
+function ResonanceCol({ desk, error, onOpen }: { desk: OppDesk | null; error?: string; onOpen: (s: string) => void }) {
+  const xs = desk?.resonance ?? []
+  const sh = desk?.shadow
+  const meta = ['不含模型', sh ? `影子 ${sh.n} · 已结算 ${sh.settled}${typeof sh.mean5 === 'number' ? ` · 5日 ${pc(sh.mean5)}` : ''}` : ''].filter(Boolean).join(' · ')
   return (
-    <Panel data-resonance className="mb-3">
-      <Head title="共振" count={xs.length} meta={meta} />
-      {xs.length === 0 ? <Empty t="无" /> : (
-        <div className="grid gap-2 px-3 pb-3 sm:grid-cols-2 lg:grid-cols-3">
-          {xs.map((x) => (
-            <div key={x.symbol} role="button" tabIndex={0} data-res={x.symbol} onClick={() => onOpen(x.symbol)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(x.symbol) } }}
-              className="cursor-pointer rounded-card border border-border bg-elevated px-3 py-2 tabular-nums hover:border-accent/60">
-              <div className="flex items-baseline gap-2">
-                <b className="text-[15px] text-foreground">{x.symbol}</b>
-                <span className={`text-[12.5px] font-semibold ${x.side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[x.side]}</span>
-                <span className="text-[12px] text-secondary">{`${x.n} 引擎`}</span>
-                <span className="ml-auto text-[13px] text-foreground">{p2(x.price)}</span>
-                <span className={`text-[13px] font-semibold ${sgn(x.chg)}`}>{pc(x.chg)}</span>
-              </div>
-              <div className="mt-1.5 flex flex-wrap gap-1">
-                {chips(x).map((c) => <span key={c} className="rounded-[4px] border border-border bg-surface px-1.5 text-[11.5px] leading-5 text-secondary">{c}</span>)}
-                <span data-res-shadow className="rounded-[4px] border border-dashed border-border px-1.5 text-[11.5px] leading-5 text-muted">{x.shadow_at ? `影子 ${etHm(x.shadow_at)}` : '影子'}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+    <Panel data-resonance data-col="resonance" className="flex flex-col">
+      <Head title="引擎共振" count={xs.length} meta={meta} />
+      <div data-col-body className={COL_BODY}>
+        {error ? <Err name="引擎共振" /> : !desk ? <Empty t="—" /> : xs.length === 0 ? <Empty t="无" /> : xs.map((x) => (
+          <Row key={x.symbol} data-res={x.symbol} symbol={x.symbol} onOpen={onOpen}
+            main={<>{`${x.n} 引擎 · `}<b className={x.side === 'long' ? 'text-bull' : 'text-bear'}>{SIDE_ZH[x.side]}</b></>}
+            sub={<>{chips(x).join(' · ')}{' · '}<span data-res-shadow>{x.shadow_at ? `影子 ${etHm(x.shadow_at)}` : '影子'}</span></>}
+            right={pc(x.chg)} rightCls={sgn(x.chg)} />
+        ))}
+      </div>
     </Panel>
   )
 }
 
-// ── 四栏 ──
-type ColData = { gaps?: GapBoardPayload | null; radar?: OpenRadarPayload | null; intraday?: IntradayPayload | null; swing?: SwingBoardsPayload | null
+// ── 盘面雷达栏 ──
+type ColData = { gaps?: GapBoardPayload | null; radar?: OpenRadarPayload | null; intraday?: IntradayPayload | null
   errors: Record<string, string>; chg: Record<string, number>; res: Set<string> }
 
 function GapCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
@@ -178,40 +163,85 @@ function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void })
   return { count: active.length, meta, body }
 }
 
-function BoardCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
-  const sw = d.swing
-  const cards = sw ? [...sw.long, ...sw.short].filter((c) => c.state !== 'holding') : []
-  const body = d.errors.swing ? <Err name="机会板" /> : !sw ? <Empty t="—" /> : cards.length === 0 ? <Empty t="无" /> : cards.map((c) => (
-    <Row key={c.card_id ?? `${c.symbol}${c.side}`} data-board-row={c.symbol} symbol={c.symbol} onOpen={onOpen} mark={d.res.has(c.symbol)}
-      main={<><b className={c.side === 'long' ? 'text-bull' : 'text-bear'}>{SIDE_ZH[c.side]}</b>{` · 区 ${p2(c.entry_zone[0])}–${p2(c.entry_zone[1])} · 止 ${p2(c.stop)}`}</>}
-      sub={[c.state === 'in_zone' ? '在区' : typeof c.dist_pct === 'number' ? `距区 ${Math.abs(c.dist_pct).toFixed(1)}%` : '',
-        typeof c.odds?.fill === 'number' ? `回区 ${(c.odds.fill * 100).toFixed(0)}%` : '', c.blocked ? '受限' : ''].filter(Boolean).join(' · ')}
-      right={p2(c.price)} />
-  ))
-  return { count: cards.length, meta: sw?.refresh?.last_at ? `刷新 ${etHm(sw.refresh.last_at)}` : '', body }
+// ── 策略机会: 唯一进入现行纸面下单链的卡片来源 ──
+export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoardsPayload | null; error?: string; res: Set<string>; onOpen: (s: string) => void }) {
+  const cards = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
+  const meta = swing ? [`信号日 ${md(swing.as_of)}`, swing.refresh?.last_at ? `刷新 ${etHm(swing.refresh.last_at)}` : ''].filter(Boolean).join(' · ') : ''
+  return (
+    <Panel data-strategy-board data-source="strategy" className="mb-3 overflow-hidden border-accent/60">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5">
+        <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted">策略机会</span>
+        <h2 className="shrink-0 text-[15px] font-semibold text-foreground">机会板</h2>
+        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">3+3 策略命中</span>
+        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">4h 方向门</span>
+        <span className="shrink-0 rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-5 text-white dark:bg-blue-700">可下单</span>
+        <span className="ml-auto whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>
+      </div>
+      {error ? <Err name="机会板" /> : !swing ? <Empty t="—" /> : cards.length === 0 ? <Empty t="无" /> : (
+        <div className="overflow-x-auto border-t border-border/70">
+          <table className="w-full min-w-[1060px] text-[12.5px] tabular-nums">
+            <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
+              {['股票', '方向', '命中策略', '4h 门', '入场区', '止损', '股数', '回区', '状态', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {cards.map((c) => {
+                const state = c.blocked ? '受限' : c.state === 'in_zone' ? '在区' : typeof c.dist_pct === 'number' ? `距区 ${Math.abs(c.dist_pct).toFixed(1)}%` : '待触发'
+                return (
+                  <tr key={c.card_id ?? `${c.symbol}${c.side}`} role="button" tabIndex={0} data-board-row={c.symbol}
+                    onClick={() => onOpen(c.symbol)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(c.symbol) } }}
+                    className="h-11 cursor-pointer border-t border-border/70 first:border-t-0 hover:bg-elevated">
+                    <td className="px-3 text-left text-[14px] font-bold text-foreground">{c.symbol}{res.has(c.symbol) && <i data-res-mark className="ml-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent" />}</td>
+                    <td className={`px-3 text-right font-semibold ${c.side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[c.side]}</td>
+                    <td className="max-w-[220px] truncate px-3 text-left text-secondary" title={c.strategies.map((s) => s.name).join(' · ')}>{c.strategies.map((s) => s.name).join(' · ') || '—'}</td>
+                    <td className="px-3 text-right text-accent">通过</td>
+                    <td className="whitespace-nowrap px-3 text-right text-foreground">{`${p2(c.entry_zone[0])}–${p2(c.entry_zone[1])}`}</td>
+                    <td className="px-3 text-right text-foreground">{p2(c.stop)}</td>
+                    <td className="px-3 text-right text-foreground">{c.odds?.qty ?? c.qty ?? '—'}</td>
+                    <td className="px-3 text-right text-secondary">{typeof c.odds?.fill === 'number' ? `${(c.odds.fill * 100).toFixed(0)}%` : '—'}</td>
+                    <td className="whitespace-nowrap px-3 text-right"><span className={`rounded-[4px] border px-1.5 text-[11px] leading-5 ${c.blocked ? 'border-warning/50 text-warning' : c.state === 'in_zone' ? 'border-accent/50 text-accent' : 'border-border text-secondary'}`}>{state}</span></td>
+                    <td className="px-3 text-right text-secondary">{p2(c.price)}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  )
 }
 
-const COLS: Record<DeskEngine, (p: { d: ColData; onOpen: (s: string) => void }) => { count: number; meta: string; body: ReactNode }> = {
-  gap: GapCol, open: OpenCol, intraday: IntradayCol, board: BoardCol,
+type RadarEngine = Exclude<DeskEngine, 'board'>
+const COLS: Record<RadarEngine, (p: { d: ColData; onOpen: (s: string) => void }) => { count: number; meta: string; body: ReactNode }> = {
+  gap: GapCol, open: OpenCol, intraday: IntradayCol,
 }
 
-// 四栏同一高度 (约 7 行), 超出在栏内滚动: 某栏行数多时不再把整排撑高。
-// 并排 (md 起) 固定高度, 数据到达或增减时页面不跳; 手机单列只设上限, 空栏不留白。
+// 雷达三栏同一高度, 引擎共振为第四栏; 机会板独立成区, 不与只记录引擎混排。
 export const COL_BODY = 'max-h-[320px] overflow-y-auto overscroll-y-contain pb-1 md:h-[320px]'
 
-export function EngineCols({ order, d, onOpen }: { order: DeskEngine[]; d: ColData; onOpen: (s: string) => void }) {
+export function EngineCols({ order, d, desk, onOpen }: { order: DeskEngine[]; d: ColData; desk: OppDesk | null; onOpen: (s: string) => void }) {
+  const radarOrder = order.filter((k): k is RadarEngine => k !== 'board')
   return (
-    <div data-cols className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-      {order.map((k, i) => {
-        const c = COLS[k]({ d, onOpen })
-        return (
-          <Panel key={k} data-col={k} className={`flex flex-col ${i === 0 ? 'ring-2 ring-inset ring-accent' : ''}`}>
-            <Head title={ENGINE_ZH[k]} count={c.count} meta={c.meta} rank={i + 1} />
-            <div data-col-body className={COL_BODY}>{c.body}</div>
-          </Panel>
-        )
-      })}
-    </div>
+    <section data-radar-section className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
+      <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
+        <span className="text-[11px] font-medium tracking-wide text-muted">盘中参考</span>
+        <h2 className="text-[15px] font-semibold text-foreground">盘面雷达</h2>
+        <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只记录</span>
+        <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">不含模型</span>
+      </div>
+      <div data-cols className="grid gap-3 border-t border-border/70 bg-base p-3 md:grid-cols-2 xl:grid-cols-4">
+        {radarOrder.map((k) => {
+          const c = COLS[k]({ d, onOpen })
+          return (
+            <Panel key={k} data-col={k} className="flex flex-col">
+              <Head title={ENGINE_ZH[k]} count={c.count} meta={c.meta} />
+              <div data-col-body className={COL_BODY}>{c.body}</div>
+            </Panel>
+          )
+        })}
+        <ResonanceCol desk={desk} error={d.errors.desk} onOpen={onOpen} />
+      </div>
+    </section>
   )
 }
 

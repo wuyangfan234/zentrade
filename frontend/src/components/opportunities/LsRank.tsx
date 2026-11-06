@@ -1,6 +1,7 @@
-/** 今日多空 (0.51.0, 11-05 产品决策「显然档 · 多空都做」): 盘前自选横截面排名 → 看多 5 / 看空 5 + 前向结算。
+/** 今日多空 (0.52.2 A 方案): 模型观察 → 看多 5 / 看空 5 + 前向结算。
+ * 主区只显示模型排名与行情, 不混放策略标签 / 止损 / 股数 / 名义金额; 结算参数留在抽屉。
  * 只展示: 不进交易环 / 不写台账 / 不推送。后端段 ls_rank (契约 ls-rank-v1, services/ls_rank.py)。
- * 版式: 两侧同列模板 + 固定行高 (5 行等高); 每侧 >= 330px 并排, 不够上下叠; 列数随每侧宽度分档; 结算条 6 格整行不留空轨。
+ * 版式: 两侧同列模板 + 固定行高 (5 行等高); 每侧 >= 330px 并排, 不够上下叠; 结算条 6 格整行不留空轨。
  * 文案只写结果 (名词 + 数字), 不写说明句。 */
 import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import type { LsRankPayload, LsRankRow, LsSettleSeries } from '@/lib/api'
@@ -16,7 +17,6 @@ const sgnCls = (v?: number | null) => (!fin(v) || v === 0 ? 'text-foreground' : 
 const num2 = (v?: number | null) => (fin(v) ? `${sg(v)}${Math.abs(v).toFixed(2)}` : '—')
 const atrS = (v?: number | null) => (fin(v) ? `${num2(v)} ATR` : '—')
 const usdS = (v?: number | null) => (fin(v) ? `${sg(Math.round(v))}$${Math.abs(Math.round(v)).toLocaleString('en-US')}` : '—')
-const usd0 = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`
 const r1 = (v: number) => Math.round(v * 10) / 10
 const pc1 = (v?: number | null) => (fin(v) ? `${sg(r1(v))}${Math.abs(r1(v)).toFixed(1)}%` : '—')
 const sgnCls1 = (v?: number | null) => sgnCls(fin(v) ? r1(v) : v)
@@ -65,16 +65,16 @@ function Chip({ children, warn, ...rest }: { children: ReactNode; warn?: boolean
 
 const BTN = 'whitespace-nowrap rounded-btn border border-border px-2.5 py-1 text-[12.5px] font-medium text-secondary hover:bg-elevated hover:text-foreground max-md:py-1.5'
 
-// 列随每侧实际宽度分档 (两侧同宽 → 同档 → 列对齐)。文本在左 (票 + 标记同一格), 数字列右对齐贴行右缘:
-// 9 = 序 · 票标记 · 20日 · 排名 · 盘前 · 参考价 · 止损 · 股数; 8 去 20日; 7 标记收成「财 / +n」; 6 再去参考价。
-// 门槛 = 该档最小列宽之和 + 列间距 4px × (列数 − 1) + 内边距 24px; 富余按 fr 摊开, 票标记格权重最大。
+// 列随每侧实际宽度分档 (两侧同宽 → 同档 → 列对齐)。主区只呈现模型排名与行情:
+// 6/7 = 序 · 票与财报 · 排名 · 盘前 · 参考价; 8/9 加 20 日走势。策略标签 / 止损 / 股数不进主区。
+// 门槛沿用现有宽度分档, 富余按 fr 摊开, 票标记格权重最大。
 type Tier = 6 | 7 | 8 | 9
 const TIER_MIN: [number, Tier][] = [[538, 9], [486, 8], [416, 7]]
 const TPL: Record<Tier, string> = {
-  6: '14px minmax(96px,1.6fr) minmax(50px,1fr) minmax(52px,1fr) minmax(58px,1.1fr) minmax(36px,0.8fr)',
-  7: '14px minmax(100px,1.6fr) minmax(50px,1fr) minmax(52px,1fr) minmax(58px,1.1fr) minmax(58px,1.1fr) minmax(36px,0.8fr)',
-  8: '14px minmax(170px,2.4fr) minmax(50px,0.8fr) minmax(52px,0.9fr) minmax(58px,1fr) minmax(58px,1fr) minmax(36px,0.7fr)',
-  9: '14px minmax(170px,2.4fr) 48px minmax(50px,0.8fr) minmax(52px,0.9fr) minmax(58px,1fr) minmax(58px,1fr) minmax(36px,0.7fr)',
+  6: '14px minmax(96px,1.6fr) minmax(50px,1fr) minmax(58px,1.1fr) minmax(58px,1.1fr)',
+  7: '14px minmax(100px,1.6fr) minmax(50px,1fr) minmax(58px,1.1fr) minmax(58px,1.1fr)',
+  8: '14px minmax(150px,2.4fr) 48px minmax(50px,0.8fr) minmax(58px,1fr) minmax(58px,1fr)',
+  9: '14px minmax(170px,2.4fr) 48px minmax(50px,0.8fr) minmax(58px,1fr) minmax(58px,1fr)',
 }
 const tierOf = (w: number): Tier => TIER_MIN.find(([m]) => w >= m)?.[1] ?? 6
 
@@ -157,14 +157,12 @@ function LsRow({ r, i, side, d, tier, onOpen }: { r: LsRankRow; i: number; side:
           {r.symbol}
           {r.is_new && <i data-ls-new title="较昨日新进" className="absolute -right-[8px] top-[1px] h-[6px] w-[6px] rounded-full bg-accent dark:bg-blue-400" />}
         </b>
-        <Marks earn={earn} tags={tier >= 8 ? r.tags : []} />
+        <Marks earn={earn} tags={[]} />
       </span>
-      {tier >= 9 && <span className="flex justify-end"><Spark xs={r.spark} /></span>}
+      {tier >= 8 && <span className="flex justify-end"><Spark xs={r.spark} /></span>}
       <span className="text-right text-secondary">{rankPct(r, side)}</span>
       <span className={`whitespace-nowrap text-right font-semibold ${sgnCls1(r.pre_pct)}`}>{pc1(r.pre_pct)}</span>
-      {tier !== 6 && <span className="text-right text-foreground">{p2(r.ref)}</span>}
-      <span className="text-right text-foreground">{p2(r.stop)}</span>
-      <span className="text-right text-foreground">{r.qty ?? '—'}</span>
+      <span className="text-right text-foreground">{p2(r.ref)}</span>
     </div>
   )
 }
@@ -173,22 +171,18 @@ function SidePanel({ side, rows, d, onOpen }: { side: Side; rows: LsRankRow[]; d
   const [ref, w] = useWidth<HTMLDivElement>()
   const tier = tierOf(w)
   const bt = d.backtest[side]
-  const notional = rows.reduce((s, r) => s + (fin(r.qty) && fin(r.ref) ? r.qty * r.ref : 0), 0)
   return (
     <div ref={ref} data-ls-side={side} data-tier={tier} className="min-w-0 bg-surface pb-1">
       <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2.5">
         <h3 className={`text-[14px] font-semibold ${side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[side]}</h3>
         <span className="text-[13px] font-semibold tabular-nums text-secondary">{rows.length}</span>
-        {tier >= 7 && <span data-ls-notional className="whitespace-nowrap text-[12px] tabular-nums text-muted">{`名义 ${usd0(notional)}`}</span>}
         <span className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{`回放 ${atrS(bt.mean_atr)}/笔 · 随机 ${num2(bt.rand)}`}</span>
       </div>
       <div data-ls-colhead style={{ gridTemplateColumns: TPL[tier] }} className={`${ROW} h-7 border-t border-border/70 text-[11.5px] text-muted`}>
-        <span>#</span><span>{tier >= 8 ? '票 · 标记' : '票'}</span>{tier >= 9 && <span className="text-right">20日</span>}
+        <span>#</span><span>票</span>{tier >= 8 && <span className="text-right">20日</span>}
         <span className="whitespace-nowrap text-right">{side === 'long' ? '排名前' : '排名后'}</span>
         <span className="text-right" title={d.pre?.open ? '开盘价对昨收' : '盘前价对昨收'}>{d.pre?.open ? '开盘' : '盘前'}</span>
-        {tier !== 6 && <span className="text-right" title="盘前最新价 · 开盘后为开盘价">参考价</span>}
-        <span className="text-right" title={`参考价 ${side === 'long' ? '−' : '+'} ${d.stop_atr} ATR`}>止损</span>
-        <span className="text-right" title={fin(d.risk_usd) ? `$${Math.round(d.risk_usd)} ÷ ${d.stop_atr} ATR` : undefined}>股数</span>
+        <span className="text-right" title="盘前最新价 · 开盘后为开盘价">参考价</span>
       </div>
       {rows.map((r, i) => <LsRow key={r.symbol} r={r} i={i} side={side} d={d} tier={tier} onOpen={onOpen} />)}
     </div>
@@ -364,13 +358,16 @@ function SettleSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: str
 export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) => void }) {
   const [sheet, setSheet] = useState<'all' | 'settle' | null>(null)
   const nNew = [...d.long, ...d.short].filter((r) => r.is_new).length
-  const meta = [`${md(d.day)} ${weekday(d.day)}`, `名单 ${md(d.as_of)} 收盘`, d.pre?.open ? '开盘价' : d.pre?.at ? `盘前 ${etHm(d.pre.at)} ET` : '', `换入 ${nNew}`,
-    `持有 ${d.hold_days} 日至 ${md(d.hold_until)}`, fin(d.risk_usd) ? `每笔 $${Math.round(d.risk_usd)}` : '', `止损 ${d.stop_atr} ATR`].filter(Boolean)
+  const meta = [`${md(d.day)} ${weekday(d.day)}`, `名单 ${md(d.as_of)} 收盘`, d.pre?.open ? '开盘价' : d.pre?.at ? `盘前 ${etHm(d.pre.at)} ET` : '', `换入 ${nNew}`].filter(Boolean)
   const open = (s: string) => { setSheet(null); onOpen(s) }
   return (
-    <section data-ls-rank className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2.5">
+    <section data-ls-rank data-source="model" className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5">
+        <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted">模型观察</span>
         <h2 className="shrink-0 text-[15px] font-semibold text-foreground">今日多空</h2>
+        <span className="shrink-0 rounded-[4px] border border-accent/40 px-1.5 text-[11px] leading-5 text-accent">模型评分</span>
+        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">8 项日 K</span>
+        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只观察</span>
         {d.demo && <span data-ls-demo className="shrink-0 rounded-btn bg-warning px-1.5 text-[11px] font-semibold leading-5 text-white dark:text-zinc-950">虚拟数据</span>}
         {d.late && <span data-ls-late title="名单日开盘后才生成 · 照常结算 · 不计入前向成绩" className="shrink-0 rounded-btn border border-warning/60 bg-warning/10 px-1.5 text-[11px] font-semibold leading-5 text-warning">盘中补出</span>}
         <span data-ls-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto xl:truncate max-xl:order-last max-xl:basis-full">
@@ -397,8 +394,10 @@ export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) =>
 /** 名单尚未生成 (上线后第一个盘后管道之前) */
 export function LsRankEmpty() {
   return (
-    <section data-ls-rank-empty className="mb-3 flex items-center gap-2 rounded-card border border-border bg-surface px-3 py-2.5">
+    <section data-ls-rank-empty data-source="model" className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface px-3 py-2.5">
+      <span className="text-[11px] font-medium tracking-wide text-muted">模型观察</span>
       <h2 className="text-[15px] font-semibold text-foreground">今日多空</h2>
+      <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只观察</span>
       <span className="ml-auto text-[12px] tabular-nums text-muted">16:35 ET 出名单</span>
     </section>
   )
