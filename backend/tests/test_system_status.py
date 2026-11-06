@@ -207,3 +207,34 @@ def test_open_radar_row_shows_push_switch_and_today_push(tmp_path, monkeypatch):
     row = _component(_status_app(tmp_path).get("/api/trading/system-status").json(), "open_radar")
     assert "NVDA\uff1b\u63a8\u9001 NVDA" in row["summary"]                                  # 点名 NVDA; 推送 NVDA
     assert row["summary"].endswith("外部推送关\uff09")                       # external push off
+
+
+def test_qveris_row_survives_unreconciled_billing_and_whole_page_still_loads(tmp_path, monkeypatch):
+    """自动财报预期调用结果未确认 → 留下 ledger.pending → usage() 返回 spent_today=None,
+    状态页 `None >= 0.9 * 150` TypeError 整个接口 500、页面空白。账本异常 = QVeris 这一行标异常并写清原因, 其余组件照常。"""
+    from app.plugins.qveris import provider as qp
+    from app.services import qveris_gate
+    monkeypatch.setattr(qp, "_api_key", lambda: "fake")
+    monkeypatch.setattr(qp, "credits", lambda *a: pytest.fail("ledger fault must not reach the balance API"))
+    qveris_gate._ledger_path(tmp_path).with_suffix(".pending").write_text(
+        '{"at": "2026-11-06T13:45:00Z", "day": "2026-11-06", "kind": "earnings_estimates", "symbol": "MRNA"}')
+    res = _status_app(tmp_path).get("/api/trading/system-status")
+    assert res.status_code == 200
+    body = res.json()
+    assert len(body["components"]) > 5
+    row = _component(body, "qveris")
+    assert row["state"] == "error"
+    assert f"今日 —/{qveris_gate.daily_limit():g}" in row["summary"] and "ledger.pending" in row["summary"]
+    assert "None" not in row["summary"]
+
+
+def test_status_page_degrades_one_row_when_a_component_builder_raises(tmp_path, monkeypatch):
+    """单个组件拼装出错不能拖垮整个状态页: 该组件标异常 + 写错误类型, 其余组件照常返回。"""
+    from app.services import qveris_gate
+    monkeypatch.setattr(qveris_gate, "usage", lambda d, **k: {"configured": True, "spent_today": "x", "daily_limit": 150,
+                                                              "balance": {"remaining": 1}})
+    res = _status_app(tmp_path).get("/api/trading/system-status")
+    assert res.status_code == 200
+    row = _component(res.json(), "qveris")
+    assert row["state"] == "error" and "状态拼装失败" in row["summary"]
+    assert len(res.json()["components"]) > 5
