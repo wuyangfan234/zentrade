@@ -1,9 +1,13 @@
 # ruff: noqa: RUF001
 """Read-only, user-visible status of the paper production chain."""
+import logging
+
 from fastapi import APIRouter, Request, HTTPException
 from pydantic import BaseModel, Field
 from app.market_clock import us_clock
 from app.services.setup_status import SETUPS, SetupStatusStore
+
+logger = logging.getLogger(__name__)
 
 router=APIRouter(prefix='/api/trading',tags=['paper-trading'])
 
@@ -109,6 +113,38 @@ def _et(value) -> str:
         return us_clock.market_datetime(str(value)).strftime('%Y-%m-%d %H:%M ET')
     except (TypeError, ValueError):
         return str(value)[:16]
+
+
+def _qveris_row(add, qv: dict, qa: dict) -> None:
+    """系统状态页 QVeris 行。账本异常 (ledger.pending 未对账 / 坏行) 时 usage() 给 spent_today=None + error:
+    标异常并写原因, 不拿 None 去比上限 (TypeError → 整页 500)。"""
+    if not qv.get('configured'):
+        add('qveris', 'QVeris 付费数据', 'idle', '未配置 Key（设置 → 数据源）', '/api/qveris/usage')
+        return
+    bal = (qv.get('balance') or {})
+    spent, limit = qv.get('spent_today'), qv.get('daily_limit')
+    spent_known = isinstance(spent, (int, float)) and not isinstance(spent, bool)
+    limit_num = float(limit) if isinstance(limit, (int, float)) and not isinstance(limit, bool) else 0.0
+    if spent is not None and not spent_known:
+        raise TypeError(f"spent_today={type(spent).__name__}")
+    ledger_err = qv.get('error')
+    near_cap = spent_known and limit_num > 0 and spent >= 0.9 * limit_num
+    # 0.22.5: 上限/失败只看「今天 (美东) 那次自动运行」; 往日旧事件不再一直挂告警
+    try:
+        qa_today = bool(qa.get('at')) and us_clock.market_datetime(str(qa['at'])).date() == us_clock.today()
+    except (TypeError, ValueError):
+        qa_today = False
+    qv_state = ('error' if ledger_err or not spent_known or bal.get('error')
+                else 'warn' if near_cap or (qa_today and (qa.get('blocked') or qa.get('failed'))) else 'ok')
+    add('qveris', 'QVeris 付费数据', qv_state,
+        f"余额 {bal.get('remaining') if bal.get('remaining') is not None else '—'} 积分 · 今日 {f'{spent:g}' if spent_known else '—'}/{limit_num:g}"
+        + (f" · 自动财报预期 {_et(qa.get('at'))}：目标 {qa.get('targets', 0)}，新取 {len(qa.get('fetched') or [])}，缓存 {len(qa.get('cached') or [])}"
+           if qa else ' · 自动财报预期：美东 08:45 首次运行后显示')
+        # bughunt-1015: 拒绝/失败文案也只对今天那次运行显示 (往日的「今日积分已用 100/100…已拒绝」与本行「今日 0/150」矛盾)
+        + (f"；{qa['blocked']}" if qa_today and qa.get('blocked') else '')
+        + (f"；失败 {len(qa['failed'])}" if qa_today and qa.get('failed') else '')
+        + (f"；账本待对账，付费调用已停：{ledger_err}" if ledger_err else '')
+        + (f"；余额查询失败 {bal['error']}" if bal.get('error') and not ledger_err else ''), '/api/qveris/usage')
 
 
 def _et_epoch(ts) -> str:
@@ -332,25 +368,11 @@ def system_status(request: Request):
     from app.services import qveris_data, qveris_gate
     qv = safe(lambda: qveris_gate.usage(data_dir), {}) or {}
     qa = safe(lambda: qveris_data.auto_state(data_dir), {}) or {}
-    if qv.get('configured'):
-        bal = (qv.get('balance') or {})
-        near_cap = qv.get('spent_today', 0) >= 0.9 * (qv.get('daily_limit') or 0) > 0
-        # 0.22.5: 上限/失败只看「今天 (美东) 那次自动运行」; 往日旧事件不再一直挂告警
-        try:
-            qa_today = bool(qa.get('at')) and us_clock.market_datetime(str(qa['at'])).date() == us_clock.today()
-        except (TypeError, ValueError):
-            qa_today = False
-        qv_state = 'error' if bal.get('error') else ('warn' if near_cap or (qa_today and (qa.get('blocked') or qa.get('failed'))) else 'ok')
-        add('qveris', 'QVeris 付费数据', qv_state,
-            f"余额 {bal.get('remaining') if bal.get('remaining') is not None else '—'} 积分 · 今日 {qv.get('spent_today', 0):g}/{qv.get('daily_limit', 0):g}"
-            + (f" · 自动财报预期 {_et(qa.get('at'))}：目标 {qa.get('targets', 0)}，新取 {len(qa.get('fetched') or [])}，缓存 {len(qa.get('cached') or [])}"
-               if qa else ' · 自动财报预期：美东 08:45 首次运行后显示')
-            # bughunt-1015: 拒绝/失败文案也只对今天那次运行显示 (往日的「今日积分已用 100/100…已拒绝」与本行「今日 0/150」矛盾)
-            + (f"；{qa['blocked']}" if qa_today and qa.get('blocked') else '')
-            + (f"；失败 {len(qa['failed'])}" if qa_today and qa.get('failed') else '')
-            + (f"；余额查询失败 {bal['error']}" if bal.get('error') else ''), '/api/qveris/usage')
-    else:
-        add('qveris', 'QVeris 付费数据', 'idle', '未配置 Key（设置 → 数据源）', '/api/qveris/usage')
+    try:
+        _qveris_row(add, qv, qa)
+    except Exception as exc:  # 单行拼装失败不能让整页 500
+        logger.warning("system-status qveris row failed: %r", exc)
+        add('qveris', 'QVeris 付费数据', 'error', f"状态拼装失败（{type(exc).__name__}）", '/api/qveris/usage')
     # 0.47.0 公开因子采集 / 周度发现 (只写 research/, 不进交易)
     from app.services import factor_discover as _fd
     from app.services import factor_intake as _fi
