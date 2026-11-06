@@ -58,9 +58,10 @@ afterEach(() => {
 
 it('earnings freshness is shown as an ET clock time, not a raw ISO string', async () => {
   await render()
-  const text = container.textContent ?? ''
-  expect(text).toContain('财报保护：已接入（来源 nasdaq，更新于 09-30 17:10 ET）')
-  expect(text).not.toContain('17:10:38.785475')
+  const chip = container.querySelector('[data-chip="earnings"]')!
+  expect(chip.textContent).toBe('财报保护 ✓')
+  expect(chip.getAttribute('title')).toBe('来源 nasdaq · 更新于 09-30 17:10 ET')
+  expect(container.innerHTML).not.toContain('17:10:38.785475')
 })
 
 it('equity curve is a red line through every day with a principal baseline, not bars', async () => {

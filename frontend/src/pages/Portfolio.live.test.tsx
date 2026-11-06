@@ -74,10 +74,14 @@ it('short holdings show the near cover target and closed rounds say buy-to-cover
   })
   await render()
   const row = container.querySelector('[data-position="SHORT"]')!
-  expect(row.textContent).toContain('目标 $89.76')
-  expect(row.textContent).not.toContain('目标 $88.00')
-  expect(row.textContent).toContain('回补负债 $950')
-  expect(container.querySelector('[data-closed="COVERED"]')?.textContent).toContain('分 2 次回补')
+  expect(row.textContent).toContain('$89.76')
+  expect(row.textContent).not.toContain('$88.00')
+  expect(row.querySelector('[data-side="short"]')!.textContent).toBe('空')
+  // 细节点开才显示: 股票式空头的回补负债
+  expect(container.querySelector('[data-position-detail="SHORT"]')).toBeNull()
+  await act(async () => { (row as HTMLElement).click() })
+  expect(container.querySelector('[data-position-detail="SHORT"]')!.textContent).toContain('回补负债 $950')
+  expect(container.querySelector('[data-closed="COVERED"]')?.textContent).toContain('分 2 次')
 })
 
 it('contract-style holdings show notional (no cover liability), risk and margin (2026-10-10)', async () => {
@@ -91,10 +95,13 @@ it('contract-style holdings show notional (no cover liability), risk and margin 
   })
   await render()
   const row = container.querySelector('[data-position="MU"]')!
-  expect(row.textContent).toContain('空 38 股 · 名义 $3,724')
-  expect(row.textContent).not.toContain('回补负债')
-  expect(row.querySelector('[data-risk]')!.textContent).toBe('风险 0.25% · 试用')
-  expect(container.querySelector('[data-margin]')!.textContent).toBe('保证金 $1,862 · 可开 $98,200')
+  await act(async () => { (row as HTMLElement).click() })
+  const detail = container.querySelector('[data-position-detail="MU"]')!
+  expect(detail.textContent).toContain('空 38 股 · 名义 $3,724')
+  expect(detail.textContent).not.toContain('回补负债')
+  expect(detail.querySelector('[data-risk]')!.textContent).toBe('0.25% · 试用')
+  expect(container.querySelector('[data-margin]')!.textContent).toBe('保证金 $1,862')
+  expect(container.querySelector('[data-kpi="buying"]')!.textContent).toContain('$98,200')
 })
 
 it('refreshes holdings every 5 seconds', () => {
@@ -105,36 +112,40 @@ it('shows entry price, live price, P&L, distances and days held for each positio
   await render()
   const row = container.querySelector('[data-position="LITE"]')!
   const t = row.textContent ?? ''
-  expect(t).toContain('入场 $1,010.52')
-  expect(t).toContain('现价 $1,048.90')
+  expect(t).toContain('$1,010.52')
+  expect(t).toContain('$1,048.90')
   expect(t).toContain('+$344.43')
   expect(t).toContain('+3.79%')
-  expect(t).toContain('止损 $911.99')
-  expect(t).toContain('-13.05%')
-  expect(t).toContain('目标 $1,360.86')
-  expect(t).toContain('第 2/7 天')
+  expect(t).toContain('$911.99')
+  expect(t).toContain('距 13.1%')     // 距离一律相对现价、取绝对值, 方向由列名表达
+  expect(t).toContain('$1,360.86')
+  expect(t).toContain('2/7')
   expect(t).toContain('突破')
   expect(t).toContain('实时 6s')
+  expect(t).toContain('+0.38R')
 })
 
 it('lists closed trades with entry, exit, return and reason', async () => {
   await render()
   const row = container.querySelector('[data-closed="BBB"]')!
-  const t = row.textContent ?? ''
-  expect(t).toContain('$20.00 → $22.50')
-  expect(t).toContain('+12.29%')
-  expect(t).toContain('+$123.00')
-  expect(t).toContain('到达目标上沿')
-  expect(t).toContain('2.46R')
+  const cells = [...row.querySelectorAll('td')].map((td) => td.textContent)
+  expect(cells).toContain('$20.00')
+  expect(cells).toContain('$22.50')
+  expect(cells).toContain('+12.29%')
+  expect(cells).toContain('+$123.00')
+  expect(cells).toContain('+2.46R')
+  expect(row.textContent).toContain('到达目标')
+  expect(row.textContent).not.toContain('上沿')
 })
 
 it('summary shows total return, realized and unrealized P&L, win rate', async () => {
   await render()
-  const s = container.querySelector('[data-summary]')!.textContent ?? ''
-  expect(s).toContain('+1.77%')
-  expect(s).toContain('已实现 +$123.00')
-  expect(s).toContain('未实现 +$1,643.05')
-  expect(s).toContain('胜率 100%')
+  const kpi = (k: string) => container.querySelector(`[data-kpi="${k}"]`)!.textContent ?? ''
+  expect(kpi('total')).toContain('+1.77%')
+  expect(kpi('realized')).toContain('+$123')
+  expect(kpi('unrealized')).toContain('+$1,643')
+  expect(kpi('nav')).toContain('$101,767')
+  expect(container.querySelector('[data-closed-stats]')!.textContent).toContain('胜率 100%')
 })
 
 it('0.26.0: summary splits win rate by scope (board cards vs legacy rules)', async () => {
@@ -144,9 +155,11 @@ it('0.26.0: summary splits win rate by scope (board cards vs legacy rules)', asy
     { key: 'legacy', label: '旧规则', closed_trades: 12, win_rate: 0.667, avg_r: 0.26 },
   ] } })
   await render()
-  const s = container.querySelector('[data-summary]')!
-  expect(s.querySelector('[data-scope="swing"]')!.textContent).toBe('机会板 已平仓 1 笔 · 胜率 100% · 平均 0.8R')
-  expect(s.querySelector('[data-scope="legacy"]')!.textContent).toBe('旧规则 已平仓 12 笔 · 胜率 67% · 平均 0.26R')
+  const stats = () => container.querySelector('[data-closed-stats]')!.textContent
+  await act(async () => { (container.querySelector('[data-scope="swing"]') as HTMLButtonElement).click() })
+  expect(stats()).toContain('胜率 100% · 平均 +0.80R')
+  await act(async () => { (container.querySelector('[data-scope="legacy"]') as HTMLButtonElement).click() })
+  expect(stats()).toContain('胜率 67% · 平均 +0.26R')
 })
 
 it('shows the Alpaca paper mirror with per-order deviation and a kill switch', async () => {
@@ -159,6 +172,8 @@ it('shows the Alpaca paper mirror with per-order deviation and a kill switch', a
       ledger_kind: 'fill', qty: 100, filled_qty: 100, filled_price: 50.05, deviation_bps: 10 }],
   })
   await render()
+  expect(container.querySelector('[data-mirror]')).toBeNull()   // 镜像收在「记录」第二个页签
+  await act(async () => { (container.querySelector('[data-tab="mirror"]') as HTMLButtonElement).click() })
   const t = container.querySelector('[data-mirror]')?.textContent ?? ''
   expect(t).toContain('Alpaca 纸面镜像 · 运行中')
   expect(t).toContain('内部 $50.00 → Alpaca $50.05')

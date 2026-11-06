@@ -93,8 +93,9 @@ it('L-16 来源列不显示 strategy:swing 原始码', async () => {
 it('L-17 台账事件区不含机会流水, 空头止损写成止损下移', async () => {
   await render()
   const text = container.textContent ?? ''
-  expect(text).toContain('台账事件 (3)')
+  expect(container.querySelector('[data-tab="ledger"]')!.textContent).toBe('台账 3')
   expect(text).not.toContain('SQQQ')
-  expect(text).toContain('#2 止损下移 IREN')
-  expect(text).toContain('#3 止损上移 CRCL')
+  expect(container.querySelectorAll('[data-event]')).toHaveLength(3)
+  expect(container.querySelector('[data-event="2"]')!.textContent).toContain('止损下移IREN')
+  expect(container.querySelector('[data-event="3"]')!.textContent).toContain('止损上移CRCL')
 })
