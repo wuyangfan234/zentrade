@@ -7,6 +7,8 @@
  *    来源 (窗口 / 名单 / 数据截至) 由文件自己的元数据给出, 齿轮不再写死日期与票数; 成交不足 5 笔的标「样本少」。
  *  - 挖掘 / AI 策略 (source=custom|ai): research/swing_candidates.json, 发布后与周度挖掘后自动验收; 失败写原因。
  *  - 「重新回放」只重跑挖掘 / AI 策略: 收盘后立即跑, 交易时段排队到盘后管道之后; 只写回放结果, 不动 3+3 与交易。
+ *  - 0.52.0 排序因子 (kind=ranker, 研究系统导入): 只进做多列表。不是“命中才出卡”的信号, 而是在 4h 门内按值挑前 5;
+ *    右侧数字 = ZenTrade 用同一候选池 (research/rank_lab/) 自己复核的全窗成绩, 悬停看挖掘段 / 留出段。
  *
  * 0.35.0: 面板底部「开盘放量推送」= 开关 + 门槛档位,
  *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道跟随全局推送设置。 */
@@ -22,9 +24,9 @@ const MAX = 3
 const tone = (n: number | null | undefined) => (n == null ? '' : n > 0 ? 'text-bull' : n < 0 ? 'text-bear' : '')
 
 type Candidate = WatchlistRuleCatalogItem['candidate']
-type Row = { id: string; name: string; history: WatchlistRuleHistory | null | undefined; candidate?: Candidate; kind?: string }
+type Row = { id: string; name: string; history: WatchlistRuleHistory | null | undefined; candidate?: Candidate; kind?: string; formula?: string | null; direction?: string | null }
 
-const isDiscovered = (kind?: string) => kind === 'custom' || kind === 'ai'
+const isDiscovered = (kind?: string) => kind === 'custom' || kind === 'ai' || kind === 'ranker'
 
 const HIST_SRC_FALLBACK = '机会板同一张卡（内置策略离线回放）'
 
@@ -39,6 +41,7 @@ export function histSource(meta: WatchlistRulesPayload['history_meta'] | undefin
   return `离线回放（${span} 信号日${who}${end}，机会板同一张卡）`
 }
 const CAND_SRC = '按机会板卡回放（2023-01 起，自选，含账户上限）'
+const RANK_SRC = '排序因子 · 4h 门内按值挑前 5，机会板卡回放（2023-01 起，自选，含账户上限）'
 
 /** 挖掘 / AI 验收失败的原因 (后端 error 类名 + detail) 转短句; 全文放悬停 */
 export function candidateError(c: NonNullable<Candidate>): string {
@@ -49,6 +52,7 @@ export function candidateError(c: NonNullable<Candidate>): string {
   }
   if (c.error === 'EnrichedGenerationUnavailableError' || /parquet scan failed|thrift|snapshot/.test(d)) return '盘中读数失败 · 收盘后重跑'
   if (c.error === 'no_watchlist_data') return '自选无数据'
+  if (c.error === 'no_pool') return '候选池未导出 · 收盘后自动'
   return `回放失败（${c.error ?? '未知'}）`
 }
 
@@ -60,10 +64,17 @@ export function historyCell(r: Row, src: string = HIST_SRC_FALLBACK): HistCell {
     const c = r.candidate
     if (c?.error) return { left: candidateError(c), title: c.detail || c.error || '', note: true }
     if (c && typeof c.n === 'number') {
-      const title = `${CAND_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R`
+      const seg = (k: 'mining' | 'holdout', label: string) => {
+        const x = c.segments?.[k]
+        return x && typeof x.n === 'number' ? `${label} ${x.n} 笔 · 每笔多 ${rr(x.excess)}` : `${label} —`
+      }
+      const title = r.kind === 'ranker'
+        ? `${RANK_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R。${seg('mining', '挖掘段 2023–2024')}；${seg('holdout', '留出段 2025 起')}${r.formula ? `。公式 ${r.formula}（${r.direction === 'low' ? '值小优先' : '值大优先'}）` : ''}`
+        : `${CAND_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R`
       if (c.n === 0) return { left: '0 笔', title, note: true }
       return { left: `${c.n} · ${rr(c.mean_r)}`, right: rr(c.excess), rightTone: tone(c.excess), title }
     }
+    if (r.kind === 'ranker') return { left: '未复核', title: '导入后用当前候选池复核；候选池每个交易日美东 17:40 重导', note: true }
     return { left: '未回放', title: '发布后与周度挖掘后自动回放；也可点下方「重新回放」', note: true }
   }
   const h = r.history
@@ -97,7 +108,7 @@ function PickList({ side, rows, picked, onToggle, src }: { side: 'long' | 'short
               <span data-swing-name className="line-clamp-2 min-w-0 flex-1 break-words leading-4" title={name}>{name}</span>
               {r.candidate?.passed && (
                 <span data-candidate={r.id} className="shrink-0 rounded border border-accent/40 px-1 text-[10px] leading-4 text-accent"
-                  title={`系统发现 · 按机会板卡回放赢过“4h 门内随便挑”: 每笔多 ${rr(r.candidate.excess)}（区间 ${r.candidate.excess_ci ? `${rr(r.candidate.excess_ci[0])} ~ ${rr(r.candidate.excess_ci[1])}` : '—'}），${r.candidate.n} 笔`}>候选</span>
+                  title={`${r.kind === 'ranker' ? '排序因子 · 全窗赢过“4h 门内随便挑”且留出段（2025 起）也赢' : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'}: 每笔多 ${rr(r.candidate.excess)}（区间 ${r.candidate.excess_ci ? `${rr(r.candidate.excess_ci[0])} ~ ${rr(r.candidate.excess_ci[1])}` : '—'}），${r.candidate.n} 笔`}>候选</span>
               )}
               <span data-swing-hist={r.id} data-note={cell.note ? '' : undefined} title={cell.title}
                 className={`shrink-0 tabular-nums text-muted ${cell.note ? 'line-clamp-2 max-w-[9rem] text-right text-[11px] leading-4' : ''}`}>{cell.left}</span>
@@ -230,13 +241,13 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
   const nameOf = (id: string) => catalog.find((r) => r.id === id)?.name ?? (d?.short_rules ?? []).find((r) => r.id === id)?.name ?? id
   // 已选但不在目录里的 id (例如只存在于 swing.json) 仍显示, 避免勾选“消失”
   const sticky = (ids: string[], known: Row[]): Row[] => ids.filter((id) => !known.some((r) => r.id === id)).map((id) => ({ id, name: nameOf(id), history: null }))
-  const longRows: Row[] = catalog.map((r) => ({ id: r.id, name: r.name, history: r.history, candidate: r.candidate, kind: r.kind })).sort(byExcess)
+  const longRows: Row[] = catalog.map((r) => ({ id: r.id, name: r.name, history: r.history, candidate: r.candidate, kind: r.kind, formula: r.formula, direction: r.direction })).sort(byExcess)
   const shortBase: Row[] = [
     // 做空列表用空头卡的名字 (吊灯翻空 / 挤压动能转弱 …), 不用 META 里的做多名 (吊灯止损翻多 / 挤压释放做多)
     ...catalog.filter((r) => r.short_capable).map((r) => ({ id: r.id, name: r.name_short || r.name, history: r.history_short ?? r.history, kind: r.kind })),
     ...(d?.short_rules ?? []).filter((r) => !BAN.has(r.id) && !catalog.some((c) => c.id === r.id)).map((r) => ({ id: r.id, name: r.name, history: r.history })),
   ].sort(byExcess)
-  const hasDiscovered = catalog.some((r) => isDiscovered(r.kind))
+  const hasDiscovered = catalog.some((r) => r.kind === 'custom' || r.kind === 'ai')
   const src = histSource(d?.history_meta)
   const err = q.isError ? (q.error as Error).message : null
 

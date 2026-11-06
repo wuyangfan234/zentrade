@@ -94,6 +94,13 @@ def strategy_name(rule: str, side: str = "long") -> str:
     """卡上显示的策略名: 空头 → SHORT_NAMES; 多头 → NAMES; 再退到内置策略 META 的 name; 都没有才用 id。"""
     if side == "short" and rule in SHORT_NAMES:
         return SHORT_NAMES[rule]
+    if rule.startswith("rank_"):              # 0.52.0 排序因子: 名字在 research/rank_lab/rankers.json (不缓存, 可改名)
+        try:
+            from app.config import settings
+            from app.services import rank_lab
+            return rank_lab.ranker_names(settings.data_dir).get(rule, rule)
+        except Exception:
+            return rule
     if rule in NAMES:
         return NAMES[rule]
     if rule not in _META_NAMES:
@@ -289,6 +296,7 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
     if geo is None:
         return None
     score = float(len(hit_rules)) + sum(EXCESS_WEIGHT.get(r, 0.05) * 0.1 for r in hit_rules)
+    pos = [h["rank_pos"] for h in hits if isinstance(h.get("rank_pos"), int)]
     return {
         "contract": CONTRACT,
         "symbol": symbol,
@@ -306,6 +314,8 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
         # 兼容旧前端包 (部署时未刷新的页面读 invalidate_when[0])
         "invalidate_when": ["收盘破止损, 次日开盘离场", f"{ENTRY_DAYS} 日内未回到挂单区作废", f"持有满 {HOLD_DAYS} 日"],
         "as_of": as_of.isoformat(),
+        # 0.52.0: 排序因子给的名次 (1 = 当天 4h 门内值最高); 没勾排序因子 = None。同分卡按它排先后
+        "rank_pos": min(pos) if pos else None,
     }
 
 
@@ -320,17 +330,26 @@ def compose_boards(
     atr: dict[str, float] | None = None,
     h4_state: dict[str, str] | None = None,
     short_ok: bool | None = True,
+    rank_values: dict | None = None,
 ) -> dict[str, Any]:
     """纯函数: 信号快照 → LONG/SHORT 板。
 
     4h 门: 同向"条件齐备"事件 或 h4_state 同向。打分: 同向 3 策略命中数 ≥ 1。
+    0.52.0 排序因子 (多头 3 条里的 rank_*): 在 4h 门同向、能出紧几何卡的自选里按当天值取前 5 当作命中
+    (与验收合同 rank-lab-v1 同一选法); 只勾排序因子时, 板 = 这 5 只。
     short_ok: SPY 收盘 < 50 日线 (True) / 不满足 (False) / 数据缺 (None, fail-closed 不出空)。
     atr 缺的票不出卡 (旧信号表没有 atr → 板为空, 等下一次盘后扫描)。
     """
     ph_l, ph_s = _phantom_maps(signals)
     h4_state = h4_state or {}
     atr = atr or {}
-    hits_l = _hits_by_symbol(signals, long_rules, "long")
+    rank_rows: list[dict] = []
+    if rank_values and any(str(r).startswith("rank_") for r in long_rules):
+        from app.services import rank_lab
+        gated = set(ph_l) | {s for s, v in h4_state.items() if v == "long"}
+        elig = {s for s in gated if geometry("long", closes.get(s), atr.get(s)) is not None}
+        rank_rows = rank_lab.board_hits(rank_values, tuple(long_rules), elig)
+    hits_l = _hits_by_symbol(list(signals) + rank_rows, long_rules, "long")
     hits_s = _hits_by_symbol(signals, short_rules, "short")
     skipped: list[dict] = []
 
@@ -350,7 +369,7 @@ def compose_boards(
                 skipped.append({"symbol": sym, "side": side, "reason": reason})
                 continue
             out.append(c)
-        out.sort(key=lambda c: (-c["score"], -c["hit_count"], c["gate"] != "event", c["symbol"]))
+        out.sort(key=lambda c: (-c["score"], -c["hit_count"], c.get("rank_pos") or 99, c["gate"] != "event", c["symbol"]))
         return out
 
     long_all = side_cards("long", hits_l, ph_l, long_rules)
@@ -374,6 +393,7 @@ def compose_boards(
             "h4_long_state": sum(1 for v in h4_state.values() if v == "long"),
             "h4_short_state": sum(1 for v in h4_state.values() if v == "short"),
             "raw_long_hits": len(hits_l),
+            "rank_hits": len(rank_rows),
             "raw_short_hits": len(hits_s),
             "short_gate": short_ok,
             "skipped": skipped,
@@ -415,8 +435,10 @@ def board_for_day(data_dir: Path, day: date, repo=None) -> dict[str, Any] | None
     closes = {k: float(v) for k, v in (snap.get("closes") or {}).items() if isinstance(v, (int, float))}
     atr = {k: float(v) for k, v in (snap.get("atr") or {}).items() if isinstance(v, (int, float))}
     h4 = {k: v for k, v in (snap.get("h4_state") or {}).items() if v in ("long", "short")}
+    rv = snap.get("rank_values") if isinstance(snap.get("rank_values"), dict) else None
     boards = compose_boards(signals=list(snap.get("signals") or []), closes=closes, as_of=day,
-                            long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok)
+                            long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok,
+                            rank_values=rv)
     if gate_info is not None:
         boards["meta"]["spy"] = {"close": gate_info.get("close"), "ma50": gate_info.get("ma50")}
     if not atr:

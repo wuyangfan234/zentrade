@@ -3,7 +3,8 @@
  *
  * 生成对外 API 密钥, 让其他 agent / 脚本接入: 回测、策略增删改、自选、规则集… 全系统操作。
  * - 明文密钥只在生成后显示一次; 服务端只存摘要。
- * - 两档: 完全控制 (与网页登录同等) / 只读 (GET + 回测、选股这类不改数据的计算)。
+ * - 三档: 完全控制 (与网页登录同等) / 只读 (GET + 回测、选股这类不改数据的计算) /
+ *   研究投递 (0.52.0: 只读 + 投递机会板排序因子; 给外部研究系统用, 导入 ≠ 启用)。
  * - 任何密钥都不能改登录密码、不能管理密钥 (只能在这里网页登录后操作)。
  * - MCP 端点: <站点>/api/mcp (Streamable HTTP, 无状态), 认证头 Authorization: Bearer <密钥>。
  */
@@ -55,7 +56,7 @@ export function SettingsApiAccessPanel() {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: QK.apiKeys, queryFn: () => api.apiKeys() })
   const [name, setName] = useState('')
-  const [scope, setScope] = useState<'full' | 'read'>('read')
+  const [scope, setScope] = useState<'full' | 'read' | 'research'>('read')
   const [expiry, setExpiry] = useState('')
   const [fresh, setFresh] = useState<{ token: string; key: ApiKeyInfo } | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
@@ -94,14 +95,15 @@ export function SettingsApiAccessPanel() {
           <h2 className="text-sm font-medium text-foreground">API 密钥</h2>
         </div>
         <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-          「完全控制」与网页登录后的权限相同：回测、新建 / 编辑 / 删除策略、自选增删、规则集、纸面交易设置等都能操作。「只读」只能查询，以及跑回测、选股这类不改数据的计算。任何密钥都不能改登录密码，也不能生成或吊销密钥。
+          「完全控制」与网页登录后的权限相同：回测、新建 / 编辑 / 删除策略、自选增删、规则集、纸面交易设置等都能操作。「只读」只能查询，以及跑回测、选股这类不改数据的计算。「研究投递」= 只读 + 投递机会板排序因子（给外部研究系统用；投递进来只是候选，要不要用由你在机会页齿轮里勾）。任何密钥都不能改登录密码，也不能生成或吊销密钥。
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input className={`${INPUT_CLS} w-48`} placeholder="名称（如 Claude Desktop）" value={name}
             onChange={e => setName(e.target.value)} maxLength={60} data-api-key-name />
-          <select className={INPUT_CLS} value={scope} onChange={e => setScope(e.target.value as 'full' | 'read')}
+          <select className={INPUT_CLS} value={scope} onChange={e => setScope(e.target.value as 'full' | 'read' | 'research')}
             aria-label="权限" data-api-key-scope>
             <option value="read">只读</option>
+            <option value="research">研究投递</option>
             <option value="full">完全控制</option>
           </select>
           <select className={INPUT_CLS} value={expiry} onChange={e => setExpiry(e.target.value)} aria-label="有效期">
@@ -163,7 +165,7 @@ export function SettingsApiAccessPanel() {
                         <span className={k.scope === 'full'
                           ? 'rounded-full bg-red-500/10 px-1.5 py-px text-red-700 dark:text-red-300'
                           : 'rounded-full bg-elevated px-1.5 py-px text-secondary'}>
-                          {k.scope === 'full' ? '完全控制' : '只读'}
+                          {k.scope === 'full' ? '完全控制' : k.scope === 'research' ? '研究投递' : '只读'}
                         </span>
                       </td>
                       <td className="py-1.5 pr-3 font-mono text-secondary">{k.prefix}…</td>

@@ -27,7 +27,7 @@ from app.services.fs_utils import atomic_write_text
 logger = logging.getLogger(__name__)
 
 TOKEN_PREFIX = "zt_"
-SCOPES = ("full", "read")
+SCOPES = ("full", "read", "research")
 MAX_KEYS = 50
 _TOUCH_INTERVAL_S = 60.0
 
@@ -48,6 +48,9 @@ READ_SCOPE_POST_ALLOW = frozenset({
     "/api/kline/instruments/names",
     "/api/factors/validate",
 })
+# research 档 (0.52.0, 给外部研究系统): read 的全部 + 投递排序因子 (只写 research/rank_lab/,
+# 导入 ≠ 启用, 不能改 3+3 / 交易 / 规则集)
+RESEARCH_SCOPE_POST_ALLOW = READ_SCOPE_POST_ALLOW | frozenset({"/api/factor-lab/rankers/import"})
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 _lock = threading.Lock()
@@ -182,6 +185,9 @@ def permission_error(scope: str, method: str, path: str) -> str | None:
         return None
     if method.upper() in _READ_METHODS:
         return None
-    if method.upper() == "POST" and path.rstrip("/") in READ_SCOPE_POST_ALLOW:
+    allow = RESEARCH_SCOPE_POST_ALLOW if scope == "research" else READ_SCOPE_POST_ALLOW
+    if method.upper() == "POST" and path.rstrip("/") in allow:
         return None
+    if scope == "research":
+        return "研究投递密钥只能读和投递排序因子 (需要「完全控制」密钥)"
     return "只读密钥不能执行写操作 (需要「完全控制」密钥)"

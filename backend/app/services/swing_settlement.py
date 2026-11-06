@@ -463,6 +463,8 @@ def replay_rule_hits(data_dir: Path, repo, day: date, symbols: list[str], rules:
         for r in ids:
             if side == "short" and r not in wv.SELL_IS_SHORT:
                 continue
+            if str(r).startswith("rank_"):     # 0.52.0 排序因子: 不是信号策略, 板层对账照常覆盖它出的卡
+                continue
             want.setdefault(r, set()).add(side)
     out: dict[str, set[str]] = {}
     for sid, sides in sorted(want.items()):

@@ -156,6 +156,11 @@ def make_worker_task(kind: str, data_dir: Path, config) -> dict[str, Any]:
         if not isinstance(config, dict):
             raise TypeError("factor_lab worker config must be a dict")
         encoded = dict(config)
+    elif kind == "rank_lab":
+        # 0.52.0: 机会板排序因子候选池导出 + 复核 (子进程跑, 30 分钟K 回放不占主进程内存)
+        if not isinstance(config, dict):
+            raise TypeError("rank_lab worker config must be a dict")
+        encoded = dict(config)
     else:
         raise ValueError(f"unsupported worker task kind: {kind}")
     return {
@@ -242,6 +247,9 @@ def _worker_entry(task: dict[str, Any], event_queue, cancel_event) -> None:
         elif kind == "factor_lab":
             from app.services import factor_discover
             result = factor_discover.worker_run(data_dir, repo, task["config"])
+        elif kind == "rank_lab":
+            from app.services import rank_lab
+            result = rank_lab.worker_run(data_dir, repo, task["config"])
         elif kind == "mining":
             from app.backtest.mining_runtime import run_mining_runtime
 
