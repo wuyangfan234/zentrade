@@ -367,6 +367,38 @@ it('今日多空: 开盘后才补出的名单标「盘中补出」', async () =>
   expect(text('[data-ls-late]')).toBe('盘中补出')
 })
 
+it('今日多空: 开盘后涨跌列改标「开盘」, 元信息写开盘价 (与参考价同源)', async () => {
+  mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ pre: { at: '2026-10-23T09:00:00-04:00', live: false, open: true } }) }))
+  await render()
+  const head = text('[data-ls-side="long"] [data-ls-colhead]')
+  expect(head).toContain('开盘')
+  expect(head).not.toContain('盘前')
+  expect(text('[data-ls-meta]')).toContain('开盘价')
+  expect(text('[data-ls-meta]')).not.toContain('盘前 09:00')
+})
+
+it('今日多空: 结算明细里停牌缺 K 线的票标「缺」', async () => {
+  const last = { made: '2026-10-16', settled: '2026-10-22', long: [{ symbol: 'AAOI', r: 0.4, exit: 'time' as const }], short: [],
+    sum_long: 0.4, sum_short: 0, missing: { long: ['LITE'], short: [] } }
+  mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ settle: { ...ls().settle, last } }) }))
+  await render()
+  act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
+  expect(document.querySelector('[data-ls-missing="long"]')?.textContent).toBe('缺 LITE')
+  expect(document.querySelector('[data-ls-missing="short"]')).toBeNull()
+})
+
+it('盘中强势「今日已结束」按出场日: 前几天出的卡今天止损也列出, 今天出卡但前一天已出场的不列', async () => {
+  const it0 = page().intraday!
+  const history = [icard('GOOGL', { day: '2026-10-21', status: 'closed', exit_reason: 'stop', exit_at: '2026-10-23T10:05', r: -1, r_now: null }),
+    icard('LLY', { status: 'closed', exit_reason: 'target', exit_at: '2026-10-23T11:00', r: 2, r_now: null }),
+    icard('OLD', { day: '2026-10-20', status: 'closed', exit_reason: 'stop', exit_at: '2026-10-22T10:05', r: -1, r_now: null })]
+  mocks.oppPage.mockResolvedValue(page({ intraday: { ...it0, history } }))
+  await render()
+  expect(host.querySelector('[data-intraday-closed="GOOGL"]')).not.toBeNull()
+  expect(host.querySelector('[data-intraday-closed="LLY"]')).not.toBeNull()
+  expect(host.querySelector('[data-intraday-closed="OLD"]')).toBeNull()
+})
+
 it('今日多空: 风险读不到时不显示美元与股数, 只显示 ATR', async () => {
   const d = ls({ risk_usd: null, long: ls().long.map((r) => ({ ...r, qty: null })), short: ls().short.map((r) => ({ ...r, qty: null })) })
   mocks.oppPage.mockResolvedValue(page({ ls_rank: d }))

@@ -979,6 +979,8 @@ export type OppPagePayload = {
 export type LsRankRow = {
   symbol: string; rank: number; pct: number; side: 'long' | 'short' | null; young: boolean
   close: number | null; atr: number | null; spark?: number[] | null; pre_pct: number | null; ref: number | null; stop: number | null; qty: number | null
+  /** 名单日之后的拆股比例 (close / atr 已除以它, 换到今天原始价) */
+  split?: number
   earnings: { date: string; timing?: string | null } | null; tags: string[]; prev_rank: number | null; is_new?: boolean; book?: string | null
 }
 export type LsSettleSeries = {
@@ -987,10 +989,14 @@ export type LsSettleSeries = {
   win_long: number; win_short: number; win_pair: number | null; n_lists: number; n_long: number; n_short: number
 }
 export type LsSettleLast = { made: string; settled: string; long: { symbol: string; r: number; exit: 'stop' | 'time' }[]
-  short: { symbol: string; r: number; exit: 'stop' | 'time' }[]; sum_long: number; sum_short: number }
+  short: { symbol: string; r: number; exit: 'stop' | 'time' }[]; sum_long: number; sum_short: number
+  /** 持有期内缺 K 线 (停牌 / 退市) 的上榜票: 记缺, 不进成绩 */
+  missing?: { long: string[]; short: string[] } }
 export type LsRankPayload = {
   contract: string; demo?: boolean; day: string; hold_until: string; as_of: string; made_at: string | null; model: string; trained_to: string
-  hold_days: number; stop_atr: number; risk_usd: number | null; equity?: number | null; pre: { at: string | null; live: boolean } | null
+  hold_days: number; stop_atr: number; risk_usd: number | null; equity?: number | null
+  /** open = 已开盘: 参考价是开盘价, 涨跌列是开盘价对昨收 */
+  pre: { at?: string | null; live?: boolean; open?: boolean } | null
   is_today?: boolean; late?: boolean
   backtest: { period: string; long: { mean_atr: number; win: number; rand: number }; short: { mean_atr: number; win: number; rand: number }
     long_minus_all?: number }

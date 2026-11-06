@@ -333,21 +333,44 @@ def _side_symbols(radar: dict | None, intraday: dict | None, gaps: dict | None) 
 _PC_CACHE: dict[tuple, dict[str, float]] = {}
 
 
+def prev_close_today_basis(data_dir, rows: dict[str, tuple[date, float | None, float | None]], today: date) -> dict[str, float]:
+    """{票: (昨收那天, 复权收盘, 原始收盘)} → 今天原始价口径的昨收。
+    取原始收盘 (复权价会在当晚盘后才整体回溯, 除权日盘中还是拆前口径), 再除以 (昨收那天, 今天] 内的拆股比例:
+    除权日 8 拆 1 的票昨收 800 → 100, 与盘前价 / 现价同口径。缺原始收盘退回复权收盘。"""
+    out: dict[str, float] = {}
+    last: dict[str, date] = {}
+    for s, (d, c, rc) in rows.items():
+        v = rc if isinstance(rc, (int, float)) and rc > 0 else c
+        if isinstance(v, (int, float)) and v > 0:
+            out[s], last[s] = float(v), d
+    if out and data_dir is not None:
+        try:
+            from app.services.corporate_actions import split_factors
+            for s, f in split_factors(data_dir, sorted(out), last, today).items():
+                out[s] = out[s] / f
+        except Exception as e:
+            logger.warning("prev close: split factors unavailable: %s", type(e).__name__)
+    return out
+
+
 def _prev_closes(repo, syms: list[str], today: date) -> dict[str, float]:
-    """今天之前最近一个交易日的官方收盘 (只读日K, 不含今天的盘中快照行)。同一天同一批票只读一次 (盘前页面 30 秒一轮)。"""
+    """今天之前最近一个交易日的官方收盘, 今天原始价口径 (只读日K, 不含今天的盘中快照行; 除权日按拆股比例换算)。
+    同一天同一批票只读一次 (盘前页面 30 秒一轮)。"""
     getter = getattr(repo, "get_daily_batch", None)
     if not syms or getter is None:
         return {}
     key = (today.isoformat(), tuple(sorted(syms)))
     if key in _PC_CACHE:
         return _PC_CACHE[key]
-    b = getter(sorted(syms), today - timedelta(days=14), today - timedelta(days=1), columns=["symbol", "date", "close"])
-    out: dict[str, float] = {}
+    b = getter(sorted(syms), today - timedelta(days=14), today - timedelta(days=1), columns=["symbol", "date", "close", "raw_close"])
+    rows: dict[str, tuple] = {}
     if b is not None and not b.is_empty():
         for g in b.sort("date").partition_by("symbol"):
-            c = g["close"][-1]
-            if isinstance(c, (int, float)) and c > 0:
-                out[str(g["symbol"][0])] = float(c)
+            d = g["date"][-1]
+            rows[str(g["symbol"][0])] = (d if isinstance(d, date) else date.fromisoformat(str(d)[:10]), g["close"][-1],
+                                         g["raw_close"][-1] if "raw_close" in g.columns else None)
+    store = getattr(repo, "store", None)
+    out = prev_close_today_basis(getattr(store, "data_dir", None), rows, today)
     if out:
         if len(_PC_CACHE) > 8:
             _PC_CACHE.clear()

@@ -196,6 +196,13 @@ class MarketClock:
         d = now.date()
         return self.in_session(now) and self._before_close(d, US_PRE_CLOSE_OPEN) <= now.time() < self.session_close(d)
 
+    def calendar_available(self, start: date, end: date) -> bool:
+        """[start, end] 的交易日历此刻拿得到 (含本地缓存)。没有注入提供者 (测试 / 工作日近似模式) 视为可用。
+        用于 "按日历写未来日期" 的落盘动作: 拿不到时不要用工作日近似写死一个可能是休市日的日期。"""
+        if self._calendar_provider is None:
+            return True
+        return self._calendar_days(start, end) is not None
+
     def next_trading_day(self, d: date) -> date:
         """严格晚于 d 的首个交易日（日历缺失时按工作日近似）。"""
         days = self.trading_days_between(d + timedelta(days=1), d + timedelta(days=_TRADING_DAY_SEARCH_SPAN))

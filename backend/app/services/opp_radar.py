@@ -624,7 +624,8 @@ def project(*, now: datetime, swing: dict | None, intraday: dict | None, radar: 
         sl["state"] = state
         rel = sorted({h for h in sl["holders"] if blips.get(h, {}).get("kind") == "exit"})
         sl["release_by"] = rel
-        sl["release_at"] = ck["entry_close"] if rel and ck["trading_day"] and now.time() < dtime(16, 0) else None
+        # 名额在收盘前的平仓窗口释放: 只在今天收盘 (半日市 13:00) 之前给时刻
+        sl["release_at"] = ck["entry_close"] if rel and ck["trading_day"] and ck["close"] and now.strftime("%H:%M") < ck["close"] else None
         for s in sl["waiting"]:
             blips[s]["slot"] = k
             if state == "full" and blips[s]["kind"] == "order":      # 名额已满: 交易环此刻同样会以 sector_side_cap 拒开
