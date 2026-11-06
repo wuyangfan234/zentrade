@@ -1,12 +1,13 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { BookmarkCheck, Combine, Compass, LibrarySquare, PenLine, Pickaxe, Sigma } from 'lucide-react'
+import { BookmarkCheck, Combine, Compass, Grid3x3, LayoutGrid, LibrarySquare, PenLine, Pickaxe, Sigma, Wrench } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { FactorComposite } from './factors/FactorComposite'
 import { FactorDiscover } from './factors/FactorDiscover'
 import { FactorEditor } from './factors/FactorEditor'
 import { FactorLibrary } from './factors/FactorLibrary'
+import { FactorMatrix, FactorSlots, pendingCount } from './factors/FactorSlots'
 // 0.47.2: 检验 / 挖掘 / 候选方案三块带 echarts 图表 (约 340KB gzip), 按需加载, 默认的「发现」页不再等它们
 const FactorDiscovery = lazy(() => import('./backtest/FactorDiscovery').then(m => ({ default: m.FactorDiscovery })))
 const MiningWorkbench = lazy(() => import('./backtest/MiningWorkbench').then(m => ({ default: m.MiningWorkbench })))
@@ -14,22 +15,33 @@ const ResearchCandidatesDialog = lazy(() => import('./backtest/ResearchCandidate
 import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 
-type Tab = 'discover' | 'inspect' | 'library' | 'editor' | 'composite' | 'mining'
+type Tab = 'slots' | 'matrix' | 'discover' | 'library' | ToolTab
+type ToolTab = 'inspect' | 'editor' | 'composite' | 'mining'
+type NavKey = 'slots' | 'matrix' | 'discover' | 'library' | 'tools'
 
-// 0.47.0: 「发现」做因子页首页 (默认页签), 原 5 个页签与地址不变
-const TABS: Record<Tab, { title: string; icon: typeof Sigma }> = {
-  discover: { title: '发现', icon: Compass },
-  inspect: { title: '检验', icon: Sigma },
-  library: { title: '因子库', icon: LibrarySquare },
-  editor: { title: '编辑器', icon: PenLine },
-  composite: { title: '组合', icon: Combine },
-  mining: { title: '挖掘', icon: Pickaxe },
-}
+// 0.54.0 C 方案: 首页 = 按用途看因子 (槽位), 第二视图 = 依赖矩阵; 原「发现」改名「进件」,
+// 检验 / 编辑器 / 组合 / 挖掘收进「工具」。旧地址 ?tab=discover|inspect|library|editor|composite|mining 照旧可用。
+const NAV: { key: NavKey; title: string; icon: typeof Sigma }[] = [
+  { key: 'slots', title: '槽位', icon: LayoutGrid },
+  { key: 'matrix', title: '依赖矩阵', icon: Grid3x3 },
+  { key: 'discover', title: '进件', icon: Compass },
+  { key: 'library', title: '因子库', icon: LibrarySquare },
+  { key: 'tools', title: '工具', icon: Wrench },
+]
+const TOOLS: { key: ToolTab; title: string; icon: typeof Sigma }[] = [
+  { key: 'inspect', title: '检验', icon: Sigma },
+  { key: 'editor', title: '编辑器', icon: PenLine },
+  { key: 'composite', title: '组合', icon: Combine },
+  { key: 'mining', title: '挖掘', icon: Pickaxe },
+]
+const isTool = (t: string | null): t is ToolTab => t === 'inspect' || t === 'editor' || t === 'composite' || t === 'mining'
 
 const TAB_SUBTITLE: Record<Tab, string> = {
-  discover: '采集 · 挖掘 · 回测 · 决策',
-  inspect: '单因子 · 批量检验',
+  slots: '在用 vs 挑战 · 每个槽位一把尺子',
+  matrix: '打分因子 × 策略族',
+  discover: '采集 · 投递 · 周度挖掘',
   library: '因子目录',
+  inspect: '单因子 · 批量检验',
   editor: '公式 · 校验 · 试算',
   composite: '复合因子',
   mining: '因子与策略挖掘',
@@ -41,25 +53,23 @@ export function Factors() {
   const navigate = useNavigate()
 
   const requestedTab = searchParams.get('tab')
-  const activeTab: Tab = requestedTab === 'inspect' || requestedTab === 'library' || requestedTab === 'editor' || requestedTab === 'composite' || requestedTab === 'mining'
+  const activeTab: Tab = requestedTab === 'matrix' || requestedTab === 'discover' || requestedTab === 'library' || isTool(requestedTab)
     ? requestedTab
-    : (searchParams.get('focus') ? 'inspect' : 'discover')
-  // 发现角标 = 待审候选策略 + 待审采集因子 (与发现页流程条第 6 格同一个数)
+    : (searchParams.get('focus') ? 'inspect' : 'slots')
+  const activeNav: NavKey = isTool(activeTab) ? 'tools' : activeTab
+  // 进件角标 = 待审候选策略 + 待审采集因子 (与进件页流程条第 6 格同一个数)
   const lab = useQuery({ queryKey: QK.factorLabPage, queryFn: () => api.factorLabPage(), staleTime: 60_000 })
-  const pending = (() => {
-    const p = lab.data
-    if (!p) return 0
-    const w = p.week
-    const cands = w ? w.candidates.filter(c => !c.error && !p.decisions[`${w.week}|${c.signature}`]).length : 0
-    return cands + (p.intake?.funnel.pending ?? 0)
-  })()
+  const pending = pendingCount(lab.data)
   const focusFactor = activeTab === 'inspect' ? searchParams.get('focus') ?? '' : ''
 
+  const lastTool = useRef<ToolTab>('inspect')
+  if (isTool(activeTab)) lastTool.current = activeTab
   const changeTab = (tab: Tab) => {
     // 点当前页签无副作用: 旧实现会清掉 edit 参数, 编辑器按 key 重挂载, 未保存的公式全部丢失
     if (tab === activeTab) return
     const next = new URLSearchParams(searchParams)
-    next.set('tab', tab)
+    if (tab === 'slots') next.delete('tab')
+    else next.set('tab', tab)
     next.delete('focus') // 切 tab 清除单因子聚焦
     next.delete('edit') // 切 tab 清除编辑器载入目标
     setSearchParams(next, { replace: true })
@@ -86,27 +96,29 @@ export function Factors() {
             <span className="h-5 w-px shrink-0 bg-border" aria-hidden="true" />
             <nav className="min-w-0 flex-1 overflow-x-auto lg:flex-none" aria-label="因子视图">
               <div className="inline-flex min-w-max items-center gap-0.5 rounded-btn border border-border bg-surface/80 p-0.5">
-                {(Object.keys(TABS) as Tab[]).map(tab => {
-                  const mode = TABS[tab]
-                  const Icon = mode.icon
-                  const active = activeTab === tab
+                {NAV.map(item => {
+                  const Icon = item.icon
+                  const active = activeNav === item.key
                   return (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() => changeTab(tab)}
-                      aria-current={active ? 'page' : undefined}
-                      className={`inline-flex h-7 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:text-xs ${active
-                        ? 'bg-accent text-white shadow-sm'
-                        : 'text-secondary hover:bg-elevated hover:text-foreground'
-                      }`}
-                    >
-                      <Icon className="hidden h-3.5 w-3.5 sm:block" />
-                      {mode.title}
-                      {tab === 'discover' && pending > 0 && (
-                        <span data-tab-badge="" className={`rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums ${active ? 'bg-black/30 text-white' : 'bg-elevated text-foreground'}`}>{pending}</span>
-                      )}
-                    </button>
+                    <span key={item.key} className="contents">
+                      {item.key === 'discover' && <span className="mx-0.5 h-4 w-px shrink-0 bg-border" aria-hidden="true" />}
+                      <button
+                        type="button"
+                        data-nav={item.key}
+                        onClick={() => changeTab(item.key === 'tools' ? lastTool.current : item.key)}
+                        aria-current={active ? 'page' : undefined}
+                        className={`inline-flex h-7 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:text-xs ${active
+                          ? 'bg-accent text-white shadow-sm'
+                          : 'text-secondary hover:bg-elevated hover:text-foreground'
+                        }`}
+                      >
+                        <Icon className="hidden h-3.5 w-3.5 sm:block" />
+                        {item.title}
+                        {item.key === 'discover' && pending > 0 && (
+                          <span data-tab-badge="" className={`rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums ${active ? 'bg-black/30 text-white' : 'bg-elevated text-foreground'}`}>{pending}</span>
+                        )}
+                      </button>
+                    </span>
                   )
                 })}
               </div>
@@ -117,17 +129,53 @@ export function Factors() {
 
       <main className="min-h-0 min-w-0 flex-1 px-3 pb-3 pt-3 lg:px-4 lg:pb-4 xl:overflow-hidden">
         <Suspense fallback={<div className="h-full min-h-[240px]" />}>
+        {activeNav === 'tools' && (
+          <div className="flex h-full min-h-0 flex-col">
+          <div data-tools="" className="mb-3 inline-flex self-start items-center gap-0.5 rounded-btn border border-border bg-surface p-0.5" role="tablist" aria-label="工具">
+            {TOOLS.map(t => {
+              const Icon = t.icon
+              const on = activeTab === t.key
+              return (
+                <button key={t.key} type="button" role="tab" aria-selected={on} data-tool={t.key} onClick={() => changeTab(t.key)}
+                  className={`inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-xs font-medium transition-colors ${on ? 'bg-accent/15 text-foreground shadow-[inset_0_-2px_0_hsl(var(--accent))]' : 'text-secondary hover:bg-elevated hover:text-foreground'}`}>
+                  <Icon className="h-3.5 w-3.5" />{t.title}
+                </button>
+              )
+            })}
+          </div>
+          <div className="min-h-0 flex-1">
+            {activeTab === 'inspect' && <FactorDiscovery focusFactor={focusFactor} />}
+            {activeTab === 'editor' && <FactorEditor key={searchParams.get('edit') ?? ''} editId={searchParams.get('edit') ?? ''} />}
+            {activeTab === 'composite' && <FactorComposite />}
+            {activeTab === 'mining' && (
+              <div className="h-full min-h-0 xl:overflow-y-auto">
+                <MiningWorkbench />
+              </div>
+            )}
+          </div>
+          </div>
+        )}
+        {activeTab === 'slots' && (
+          <div className="h-full min-h-0 xl:overflow-y-auto">
+            <FactorSlots
+              onInspect={factorId => {
+                const next = new URLSearchParams(searchParams)
+                next.set('tab', 'inspect')
+                next.set('focus', factorId)
+                setSearchParams(next)
+              }}
+              onOpenReview={() => changeTab('discover')}
+            />
+          </div>
+        )}
+        {activeTab === 'matrix' && (
+          <div className="h-full min-h-0 xl:overflow-y-auto">
+            <FactorMatrix />
+          </div>
+        )}
         {activeTab === 'discover' && (
           <div className="h-full min-h-0 xl:overflow-y-auto">
             <FactorDiscover onGo={tab => changeTab(tab)} />
-          </div>
-        )}
-        {activeTab === 'inspect' && <FactorDiscovery focusFactor={focusFactor} />}
-        {activeTab === 'editor' && <FactorEditor key={searchParams.get('edit') ?? ''} editId={searchParams.get('edit') ?? ''} />}
-        {activeTab === 'composite' && <FactorComposite />}
-        {activeTab === 'mining' && (
-          <div className="h-full min-h-0 xl:overflow-y-auto">
-            <MiningWorkbench />
           </div>
         )}
         {activeTab === 'library' && (
