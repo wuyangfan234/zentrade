@@ -463,6 +463,16 @@ def rules_get(request: Request) -> dict:
     from app.services import decision_desk as dd
     names = wt._names(getattr(request.app.state, "strategy_engine", None))
     disp = wv.display_rules(data_dir)
+    try:   # 0.52.0 排序因子 (研究系统导入): 只进做多列表, 右侧数字 = ZenTrade 用同一候选池复核的结果
+        from app.services import rank_lab
+        rk_res = rank_lab.read_results(data_dir).get("rankers") or {}
+        for rid, rk in sorted(rank_lab.read_rankers(data_dir).items()):
+            catalog.append({"id": rid, "name": f"排序 · {rk.get('name') or rid}", "kind": "ranker", "enabled": False,
+                            "forward": None, "history": None, "formula": rk.get("formula"),
+                            "direction": rk.get("direction"), "candidate_raw": rk_res.get(rid)})
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("rank lab catalog skipped: %s", type(e).__name__)
     for r in catalog:
         r["show"] = r["id"] in disp["long"] or r["enabled"]
         r["short_capable"] = wv.short_capable(r["id"])
@@ -471,7 +481,12 @@ def rules_get(request: Request) -> dict:
         # 0.30.0: short list shows the short-side name the board cards use (META name is the long one, e.g. 翻多)
         r["name_short"] = sd.strategy_name(r["id"], "short") if r["short_capable"] else None
         # 0.26.0: 系统发现的策略按机会板卡回放赢过“4h 门内随便挑” -> 标候选 (只标记, 勾不勾由人决定)
-        r["candidate"] = _candidate_view(cand_rules.get(r["id"]))
+        if r.get("kind") == "ranker":
+            from app.services import rank_lab
+            r["candidate"] = rank_lab.gear_view(r.pop("candidate_raw", None))
+            r["short_capable"] = False
+        else:
+            r["candidate"] = _candidate_view(cand_rules.get(r["id"]))
     # 空头规则 (生来做空): 不进看多规则集, 可在“看空”列勾选进 short 列表, 过 SPY 50 日线门槛后出卡下单
     short_rules = [{"id": sid, "name": names.get(sid, sid), "history": hist.get(sid), "show_short": sid in disp["short"]}
                    for sid in sorted(dd.SHORT_SOURCES)]

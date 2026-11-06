@@ -301,7 +301,8 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
     _shadow_forward_snapshot(data_dir, as_of, frames=frames, hits=hits, stops=stops, stops_by_symbol=stops_by_symbol,
                              out=out, s1s2=s1s2)
     _watchlist_v4_snapshot(data_dir, as_of, watchlist=watchlist, frames=frames, hits=hits, stops=stops,
-                           stops_by_symbol=stops_by_symbol, s1s2=s1s2, out=out, sell_hits=sell_hits, h4_state=h4_state)
+                           stops_by_symbol=stops_by_symbol, s1s2=s1s2, out=out, sell_hits=sell_hits, h4_state=h4_state,
+                           repo=repo)
     out.summary["sell_hits"] = {sid: len(v) for sid, v in sell_hits.items()}
     runs = _desk_dir(data_dir) / "runs"
     runs.mkdir(parents=True, exist_ok=True)
@@ -383,7 +384,7 @@ def merge_side_signals(long_rows: dict[str, list[dict]], short_rows: dict[str, l
 
 
 def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hits, stops, stops_by_symbol, s1s2,
-                           out, sell_hits: dict | None = None, h4_state: dict | None = None) -> None:
+                           out, sell_hits: dict | None = None, h4_state: dict | None = None, repo=None) -> None:
     """自选影子账本 (v4, 不占资金): 全部规则在自选上的 +1 卡 + 同票基线卡; 同时落当日自选信号表 (另含只观察的看空卡)。
     失败只记日志。"""
     try:
@@ -406,9 +407,17 @@ def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hi
             lineage, row_extra = card_lineage.stamp(data_dir, as_of, rules=sorted(table))
         except Exception as e:  # noqa: BLE001
             logger.warning("watchlist lineage stamp skipped: %s", type(e).__name__)
+        rank_values = None
+        try:   # 0.52.0 排序因子当日值 (只写信号表新键); 失败照常落表, 当天排序因子不出卡
+            from app.services import rank_lab
+            rank_values = rank_lab.scan_values(data_dir, frames, set(watchlist), as_of, repo=repo) or None
+            if rank_values:
+                out.summary["rank_lab"] = {rid: len(v.get("values") or {}) for rid, v in rank_values.items()}
+        except Exception as e:
+            logger.warning("rank lab scan skipped: %s", type(e).__name__)
         wv.save_signals(data_dir, as_of, table, watchlist=watchlist, frames=frames,
                         lineage=lineage, row_extra=row_extra, extra_rows=_evo_rows(data_dir, as_of, watchlist, out),
-                        h4_state=h4_state, atr=_atr_map(frames, watchlist))
+                        h4_state=h4_state, atr=_atr_map(frames, watchlist), rank_values=rank_values)
         out.summary["watchlist_v4"] = {"recorded": sum(added.values()), "rules_with_signal": sorted(sig),
                                        "short_signals": sum(len(v) for v in short.values())}
     except Exception as e:  # noqa: BLE001

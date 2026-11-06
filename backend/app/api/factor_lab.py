@@ -14,6 +14,10 @@
   POST /api/factor-lab/intake/sources/{id}        开关来源
   DELETE /api/factor-lab/intake/sources/{id}      删除自建来源 (内置只能关)
   POST /api/factor-lab/intake/settings            每日模型调用上限
+  GET  /api/factor-lab/rankers                    机会板排序因子: 候选池状态 + 已导入的排序因子 + ZenTrade 复核结果 (0.52.0)
+  POST /api/factor-lab/rankers/import             导入一条排序因子 (研究投递密钥可调; 导入 ≠ 启用, 只写 research/rank_lab/)
+  POST /api/factor-lab/rankers/{id}/remove        移除 (正在机会板做多 3 条里的拒绝)
+  POST /api/factor-lab/rankers/rebuild            立即重导候选池并复核 (盘中拒绝; 平时每个交易日 17:40 ET 自动)
 """
 from __future__ import annotations
 
@@ -246,3 +250,84 @@ def intake_settings(request: Request, body: IntakeSettingsIn) -> dict:
         return factor_intake.save_settings(_data_dir(request), daily_limit=body.daily_limit)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+# ── 0.52.0 机会板排序因子 (rank lab) ────────────────────────────────────────
+
+class RankerImportIn(BaseModel):
+    name: str = Field("", max_length=80)
+    formula: str = Field(..., min_length=1, max_length=600)
+    direction: str = Field(..., pattern="^(high|low)$")
+    idea: str = Field("", max_length=1000)
+    source: dict | None = None
+
+
+def _ranker_rows(data_dir) -> list[dict]:
+    from app.services import rank_lab
+    from app.services import swing_desk as sd
+    long_ids, _ = sd.strategies_from_ruleset(data_dir)
+    results = (rank_lab.read_results(data_dir).get("rankers") or {})
+    out = []
+    for rid, rk in sorted(rank_lab.read_rankers(data_dir).items(), key=lambda x: x[1].get("imported_at") or ""):
+        res = results.get(rid)
+        out.append({**rk, "enabled_long": rid in long_ids, "result": res, "verdict": rank_lab.verdict(res)
+                    if isinstance(res, dict) and not res.get("error") else {"passed": False}})
+    return out
+
+
+@router.get("/rankers")
+def rankers(request: Request) -> dict:
+    from app.services import rank_lab
+    data_dir = _data_dir(request)
+    return {"status": rank_lab.status(data_dir), "rankers": _ranker_rows(data_dir)}
+
+
+@router.post("/rankers/import")
+def rankers_import(request: Request, body: RankerImportIn) -> dict:
+    from app.services import rank_lab
+    try:
+        out = rank_lab.import_ranker(_data_dir(request), name=body.name, formula=body.formula,
+                                     direction=body.direction, idea=body.idea, source=body.source)
+    except rank_lab.RankFormulaError as exc:
+        raise HTTPException(status_code=422, detail={"code": exc.code, "message": exc.message}) from None
+    res = out.get("result") or {}
+    out["verdict"] = rank_lab.verdict(res) if not res.get("error") else {"passed": False}
+    try:   # 补算最近一份信号表的当日值 (勾上后当天预览就能出卡); 失败不影响导入
+        out["backfill"] = rank_lab.backfill_latest(_data_dir(request), _repo(request))
+    except Exception as e:
+        out["backfill"] = {"error": type(e).__name__}
+    return out
+
+
+@router.post("/rankers/{ranker_id}/remove")
+def rankers_remove(request: Request, ranker_id: str) -> dict:
+    from app.services import rank_lab
+    from app.services import swing_desk as sd
+    data_dir = _data_dir(request)
+    long_ids, _ = sd.strategies_from_ruleset(data_dir)
+    try:
+        return {"ok": True, "ranker": rank_lab.remove_ranker(data_dir, ranker_id, enabled_long=list(long_ids))}
+    except KeyError:
+        raise HTTPException(status_code=404, detail="排序因子不存在") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+
+@router.post("/rankers/rebuild")
+def rankers_rebuild(request: Request) -> dict:
+    from app.services import rank_lab
+    from app.services import swing_candidates as sc
+    if not sc.can_run_now():
+        raise HTTPException(status_code=409, detail="交易日 09:00-17:00 (美东) 不重导候选池; 收盘后 17:40 自动导出")
+    if rank_lab.is_running():
+        return {"started": False, "running": True}
+    data_dir, repo = _data_dir(request), _repo(request)
+
+    def run():
+        try:
+            rank_lab.run_nightly(data_dir, repo)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("rank lab rebuild failed: %s", type(e).__name__)
+    threading.Thread(target=run, name="rank-lab-rebuild", daemon=True).start()
+    return {"started": True, "running": True}

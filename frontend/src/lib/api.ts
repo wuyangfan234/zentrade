@@ -746,7 +746,12 @@ export interface WatchlistRuleCatalogItem {
     passed: boolean; excess?: number | null; excess_ci?: number[] | null; n?: number; mean_r?: number | null
     r_per_year?: number | null; base_r_per_year?: number | null; first_passed?: string | null
     error?: string; detail?: string
+    /** 0.52.0 排序因子: 挖掘段 (2023-2024) / 留出段 (2025 起) 分开的成绩 */
+    segments?: Record<'mining' | 'holdout', { n?: number | null; mean_r?: number | null; excess?: number | null; excess_ci?: number[] | null; passed?: boolean } | null> | null
   } | null
+  /** 0.52.0 排序因子 (kind=ranker): DSL 公式 + 方向 (high = 值大优先) */
+  formula?: string | null
+  direction?: 'high' | 'low' | null
 }
 
 /** 0.30.0 挖掘 / AI 策略卡回放验收的状态 (规则齿轮里「重新回放」按钮旁) */
@@ -759,6 +764,8 @@ export type SwingBoardCard = {
   score: number
   hit_count: number
   strategies: { id: string; name: string }[]
+  /** 0.52.0 排序因子给的名次 (1 = 当天 4h 门内值最高); 没勾排序因子 = null */
+  rank_pos?: number | null
   /** 4h 门: event = 窗口内条件齐备; state = 4h 方向同向 */
   gate?: 'event' | 'state'
   close?: number | null
@@ -2362,7 +2369,7 @@ export const api = {
       `/api/settings/ai/models/${encodeURIComponent(id)}/test`, { method: 'POST', timeoutMs: 30_000 }),
   // ===== 对外 API 密钥 (0.44.0) =====
   apiKeys: () => request<{ keys: ApiKeyInfo[] }>('/api/settings/api-keys'),
-  createApiKey: (body: { name: string; scope: 'full' | 'read'; expires_days?: number | null }) =>
+  createApiKey: (body: { name: string; scope: 'full' | 'read' | 'research'; expires_days?: number | null }) =>
     request<{ key: ApiKeyInfo; token: string; keys: ApiKeyInfo[] }>('/api/settings/api-keys', { method: 'POST', body: JSON.stringify(body) }),
   revokeApiKey: (id: string) =>
     request<{ keys: ApiKeyInfo[] }>(`/api/settings/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -3983,7 +3990,7 @@ export interface AiModelInput {
 export interface ApiKeyInfo {
   id: string
   name: string
-  scope: 'full' | 'read'
+  scope: 'full' | 'read' | 'research'
   prefix: string
   created_at: number
   last_used_at: number | null

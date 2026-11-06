@@ -1439,6 +1439,23 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="mon-fri", hour="8,17", minute=20, timezone="America/New_York"),
         id="zen_ls_rank", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
 
+    # 0.52.0 机会板排序因子: 交易日 17:40 ET 重导候选池 (自选 x 4h 门 x 卡结局, 子进程) 并复核已导入的排序因子。
+    # 只写 research/rank_lab/; 外部研究系统只读这份池子挖排序公式。
+    def _rank_lab_nightly():
+        from app.market_clock import us_clock as _uc
+        from app.services import rank_lab
+        st = _get_app_state()
+        r = getattr(st, "repo", None)
+        if r is None or not _uc.is_trading_day(_uc.today()):
+            return None
+        res = rank_lab.run_nightly(r.store.data_dir, r)
+        logger.info("rank lab nightly: %s", res)
+        return res
+
+    scheduler.add_job(_rank_lab_nightly,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=17, minute=40, timezone="America/New_York"),
+        id="zen_rank_lab", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
+
     # 0.47.0 公开因子采集: 每 30 分钟唤醒, 内部每 6 小时抓一次监控清单;
     # 模型调用受每日上限 (默认 30 次, 美东日), 快筛 / 自选回测只在非 09:00-17:00 ET 跑。只写 research/intake/, 不碰交易。
     def _factor_intake():

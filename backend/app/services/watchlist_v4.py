@@ -280,7 +280,7 @@ def signals_dir(data_dir: Path) -> Path:
 
 def save_signals(data_dir: Path, as_of: date, signals: dict[str, list[dict]], *, watchlist: set[str], frames: dict,
                  lineage: dict | None = None, row_extra=None, extra_rows: list[dict] | None = None,
-                 h4_state: dict | None = None, atr: dict | None = None) -> None:
+                 h4_state: dict | None = None, atr: dict | None = None, rank_values: dict | None = None) -> None:
     """当日自选信号表 (机会页读这份): 每条规则命中的票与卡几何 (side: long/short; 旧文件无此字段 = long),
     以及扫描时的自选名单与收盘价。不含许可 (读时现算)。看空行只供机会卡展示, 自选表/盘前推送只读看多行。
     lineage / row_extra (2026-10-11 方向 A 谱系, card_lineage.stamp): 只追加新键 (顶层 lineage, 每行 mode/params_hash),
@@ -316,6 +316,10 @@ def save_signals(data_dir: Path, as_of: date, signals: dict[str, list[dict]], *,
         payload["h4_state"] = {s: v for s, v in h4_state.items() if s in watchlist and v in ("long", "short")}
     if atr:
         payload["atr"] = {s: v for s, v in atr.items() if s in watchlist}
+    # 0.52.0 排序因子 (只追加新键): 每条已导入排序因子在自选上的当日定向值, 机会板按它在 4h 门内挑前 5
+    if rank_values:
+        payload["rank_values"] = {rid: {**v, "values": {s: x for s, x in (v.get("values") or {}).items() if s in watchlist}}
+                                  for rid, v in rank_values.items() if isinstance(v, dict)}
     d = signals_dir(data_dir)
     d.mkdir(parents=True, exist_ok=True)
     atomic_write_text(d / f"{as_of.isoformat()}.json", json.dumps(payload, ensure_ascii=False))

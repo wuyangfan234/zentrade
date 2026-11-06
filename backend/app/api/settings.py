@@ -473,7 +473,7 @@ async def test_ai_model(model_id: str) -> dict:
 
 class ApiKeyCreateIn(BaseModel):
     name: str = Field(..., min_length=1, max_length=60)
-    scope: Literal["full", "read"] = "read"
+    scope: Literal["full", "read", "research"] = "read"
     expires_days: int | None = Field(default=None, ge=1, le=3650)
 
 
