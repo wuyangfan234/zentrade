@@ -184,7 +184,8 @@ function SidePanel({ side, rows, d, onOpen }: { side: Side; rows: LsRankRow[]; d
       </div>
       <div data-ls-colhead style={{ gridTemplateColumns: TPL[tier] }} className={`${ROW} h-7 border-t border-border/70 text-[11.5px] text-muted`}>
         <span>#</span><span>{tier >= 8 ? '票 · 标记' : '票'}</span>{tier >= 9 && <span className="text-right">20日</span>}
-        <span className="whitespace-nowrap text-right">{side === 'long' ? '排名前' : '排名后'}</span><span className="text-right">盘前</span>
+        <span className="whitespace-nowrap text-right">{side === 'long' ? '排名前' : '排名后'}</span>
+        <span className="text-right" title={d.pre?.open ? '开盘价对昨收' : '盘前价对昨收'}>{d.pre?.open ? '开盘' : '盘前'}</span>
         {tier !== 6 && <span className="text-right" title="盘前最新价 · 开盘后为开盘价">参考价</span>}
         <span className="text-right" title={`参考价 ${side === 'long' ? '−' : '+'} ${d.stop_atr} ATR`}>止损</span>
         <span className="text-right" title={fin(d.risk_usd) ? `$${Math.round(d.risk_usd)} ÷ ${d.stop_atr} ATR` : undefined}>股数</span>
@@ -229,7 +230,7 @@ function settleCells(d: LsRankPayload): { k: string; v: string; unit?: string; s
 // 跟榜口径: 前 5 进 · 掉出前 10 换 → 6-10 名 = 保留区
 const BOOK_ZH: Record<string, string> = { keep_long: '保留多', keep_short: '保留空', out_long: '换出多', out_short: '换出空' }
 function AllSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: string) => void; onClose: () => void }) {
-  const head: [string, string][] = [['#', 'w-7 text-right'], ['票', 'pl-3 text-left'], ['排名', 'text-right'], ['较昨日', 'text-right'], ['盘前', 'text-right'],
+  const head: [string, string][] = [['#', 'w-7 text-right'], ['票', 'pl-3 text-left'], ['排名', 'text-right'], ['较昨日', 'text-right'], [d.pre?.open ? '开盘' : '盘前', 'text-right'],
     ['收盘', 'text-right'], ['ATR', 'text-right'], ['财报', 'text-right'], ['名单', 'text-right']]
   return (
     <Sheet attr={{ 'data-ls-all': '' }} onClose={onClose} title={`全部 ${d.all.length} · ${md(d.day)} 名单`}>
@@ -314,12 +315,14 @@ function SettleSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: str
           <div className="grid gap-3 sm:grid-cols-2">
             {(['long', 'short'] as const).map((side) => {
               const xs = last[side]
+              const miss = last.missing?.[side] ?? []
               const sum = side === 'long' ? last.sum_long : last.sum_short
               return (
                 <div key={side} data-ls-last={side} className="overflow-hidden rounded-card border border-border">
                   <div className="flex items-baseline gap-2 bg-elevated px-3 py-1.5">
                     <b className={`text-[13px] ${side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[side]}</b>
                     <span className="text-[12px] text-secondary">{xs.length}</span>
+                    {miss.length > 0 && <span data-ls-missing={side} title="持有期内缺 K 线 (停牌 / 退市), 不计入成绩" className="text-[11.5px] font-semibold text-warning">{`缺 ${miss.join(' ')}`}</span>}
                     <span className={`ml-auto text-[12.5px] font-semibold tabular-nums ${sgnCls(sum)}`}>{u === null ? `${num2(sum)} ATR` : `${num2(sum)} ATR · ${usdS(sum * u)}`}</span>
                   </div>
                   {xs.map((x) => (
@@ -361,7 +364,7 @@ function SettleSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: str
 export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) => void }) {
   const [sheet, setSheet] = useState<'all' | 'settle' | null>(null)
   const nNew = [...d.long, ...d.short].filter((r) => r.is_new).length
-  const meta = [`${md(d.day)} ${weekday(d.day)}`, `名单 ${md(d.as_of)} 收盘`, d.pre?.at ? `盘前 ${etHm(d.pre.at)} ET` : '', `换入 ${nNew}`,
+  const meta = [`${md(d.day)} ${weekday(d.day)}`, `名单 ${md(d.as_of)} 收盘`, d.pre?.open ? '开盘价' : d.pre?.at ? `盘前 ${etHm(d.pre.at)} ET` : '', `换入 ${nNew}`,
     `持有 ${d.hold_days} 日至 ${md(d.hold_until)}`, fin(d.risk_usd) ? `每笔 $${Math.round(d.risk_usd)}` : '', `止损 ${d.stop_atr} ATR`].filter(Boolean)
   const open = (s: string) => { setSheet(null); onOpen(s) }
   return (

@@ -16,8 +16,13 @@
   失败判据: 前向 65 个交易日后 看多 − 自选全体 < 0。
 
 时点: 盘后管道 (16:35 ET 起, 官方收盘定版之后) 先结算到期名单, 再出下一交易日名单; 17:20 / 08:20 ET 补一次。
-  页面: 盘前参考价 = 09:00 盘前跳空记录 (09:00 前用盘前实时价缓存, 请求里不出网); 开盘后 = 今天开盘价;
-  止损 = 参考价 ∓ 2 ATR; 股数 = 单笔风险 (纸面权益 × 规则集单笔风险) ÷ 2 ATR, 向下取整。
+  页面: 盘前参考价 = 09:00 盘前跳空记录 (09:00 前用盘前实时价缓存, 请求里不出网); 开盘后 = 今天开盘价,
+  "盘前" 列同时换成开盘价对昨收 (ref_kind = open, 两列同源);
+  止损 = 参考价 ∓ 2 ATR; 股数 = 单笔风险 (纸面权益 × 规则集单笔风险) ÷ 2 ATR 与 权益 25% ÷ 参考价 取小, 向下取整。
+价位口径 (0.52.1): 名单记 as_of 当天的原始价 (close = raw_close, atr 按当天复权比换成原始价口径)。
+  页面: as_of 之后到今天有拆股 / 反向拆股 (公司行动缓存) → close / atr 按比例换到今天的原始价, 与盘前价 / 开盘价同口径。
+  结算: 持有期日K (复权, 自身一致) 按 as_of 当天的 原始价 ÷ 复权价 换回名单日原始价口径, 与名单 ATR 同口径。
+  上榜票持有期内缺 K 线 (停牌 / 退市) → 到期照常结算其余票, 该票记入 settled.missing, 不进成绩。
 记录: data/opportunities/ls_rank/<名单日>.json (原子整写); 模型: data/opportunities/ls_rank/model/<季度>.pkl。
   名单日开盘之后才生成的名单 (上线当天 / 补跑) 记 late = true: 照常展示和结算, 但不计入前向成绩。
 不写台账、不进下单簿、不推送。
@@ -49,6 +54,7 @@ CUTOFF_BUFFER_DAYS = 8
 MIN_TRAIN_ROWS = 5000
 TRAIN_THREADS = 2                  # 训练限 2 个计算线程: 季度重训在主进程里跑, 不抢交易环的 CPU
 TOP_N = 5
+NOTIONAL_CAP = 0.25                # 单票名义 <= 权益 25% (与交易环 / 机会板 plan_qty 同式)
 HOLD_DAYS = 5
 STOP_ATR = 2.0
 COST = 0.001                       # 往返 10bp
@@ -257,7 +263,13 @@ def feature_rows(daily, symbols: list[str]) -> dict[str, dict]:
                  "rev5": -(c[-1] / c[-6] - 1), "mom": c[-6] / c[-61] - 1,
                  "hksoc": float((c / o - 1)[-20:].mean()), "on20": float((o[1:] / c[:-1] - 1)[-20:].mean()),
                  "atrp": atr / c[-1], "ladv": math.log(mdv) if mdv > 0 else float("nan")}
-        out[str(sym)] = {**{k: float(v) for k, v in f.items()}, "close": float(c[-1]), "atr": atr, "bars": n,
+        # 0.52.1 原始价口径: 当天 原始价 ÷ 复权价 (最新一天 = 1; 补跑 / 其后已除权时 != 1)。缺原始价按 1 处理
+        k = 1.0
+        if "raw_close" in g.columns:
+            rc = _num(g["raw_close"][-1])
+            if rc and rc > 0 and c[-1] > 0:
+                k = rc / float(c[-1])
+        out[str(sym)] = {**{k_: float(v) for k_, v in f.items()}, "close": float(c[-1]) * k, "atr": atr * k, "bars": n,
                          "last": g["date"][-1]}
     return out
 
@@ -382,6 +394,9 @@ def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch
 
     from app.market_clock import us_clock
     data_dir = Path(data_dir)
+    if next_day is None and not us_clock.calendar_available(as_of + timedelta(days=1), as_of + timedelta(days=14)):
+        # 日历拉不到时 next_trading_day 退回 "工作日即交易日", 名单可能写给休市日: 不出, 等下一次补跑
+        return {"status": "skipped", "reason": "calendar_unavailable"}
     nd = next_day or us_clock.next_trading_day(as_of)
     if load_day(data_dir, nd) is not None and not force:
         return {"status": "exists", "day": nd.isoformat()}
@@ -437,7 +452,8 @@ def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch
            "made_at": made.isoformat(timespec="seconds"), **({"late": True} if late else {}),
            "model": {"version": MODEL_VERSION, "quarter": model["meta"]["quarter"],
                      "trained_to": model["meta"]["trained_to"], "rows": model["meta"]["rows"]},
-           "params": {"top": TOP_N, "hold_days": HOLD_DAYS, "stop_atr": STOP_ATR, "cost": COST, "min_history": MIN_HISTORY},
+           "params": {"top": TOP_N, "hold_days": HOLD_DAYS, "stop_atr": STOP_ATR, "cost": COST, "min_history": MIN_HISTORY,
+                      "basis": "raw"},
            "n": n, "missing": sorted(set(syms) - set(feats)), "stale": stale, "prev_day": (prev or {}).get("day"),
            "long": longs, "short": shorts, "random": {"long": pool[:TOP_N], "short": pool[TOP_N:2 * TOP_N]},
            "rows": rows}
@@ -466,17 +482,47 @@ def exit_r(bars: list[tuple], side: str, atr: float, *, stop_atr: float = STOP_A
     return sg * (bars[HOLD_DAYS - 1][3] - e) / atr - c, "time"
 
 
-def settle_record(rec: dict, daily) -> dict | None:
-    """一份名单的结算: 名单上全部可结算的票 (自选全体也要, 用来算 "看多 − 自选全体")。缺上榜票的 K 线 → None (下次再试)。"""
+def _to_list_basis(daily, as_of: date) -> dict[str, float]:
+    """{票: as_of 当天 原始价 ÷ 复权价}。持有期复权K × 它 = 名单日原始价口径 (中间的拆股 / 分红都换算掉)。
+    as_of 那根没有 / 缺原始价 → 不给 (按 1, 即复权价本身)。"""
+    import polars as pl
+    if "raw_close" not in daily.columns:
+        return {}
+    out: dict[str, float] = {}
+    for sym, c, rc in daily.filter(pl.col("date") == as_of).select(["symbol", "close", "raw_close"]).iter_rows():
+        c, rc = _num(c), _num(rc)
+        if c and rc and c > 0 and rc > 0:
+            out[str(sym)] = rc / c
+    return out
+
+
+def hold_end(day: date) -> date | None:
+    """名单持有期最后一天 (第 HOLD_DAYS 个交易日)。"""
+    from app.market_clock import us_clock
+    days = us_clock.trading_days_between(day, day + timedelta(days=3 * HOLD_DAYS + 10))
+    return days[HOLD_DAYS - 1] if len(days) >= HOLD_DAYS else None
+
+
+def settle_record(rec: dict, daily, through: date | None = None) -> dict | None:
+    """一份名单的结算: 名单上全部可结算的票 (自选全体也要, 用来算 "看多 − 自选全体")。
+    返回 {票: 结果}; 上榜票缺 K 线时: 持有期还没走完 (或 through 未给) → None (下次再试);
+    持有期已走完且那天的日K已到 → 照常结算, 缺的票在 "__missing__" 里列出 (停牌 / 退市记缺)。"""
     import polars as pl
     day = date.fromisoformat(rec["day"])
     rows = {r["symbol"]: r for r in rec.get("rows") or [] if isinstance(r, dict) and r.get("symbol")}
+    try:
+        as_of = date.fromisoformat(str(rec.get("as_of")))
+    except ValueError:
+        as_of = None
+    kb = _to_list_basis(daily.filter(pl.col("symbol").is_in(list(rows))), as_of) if as_of else {}
     out: dict[str, dict] = {}
     for (sym,), g in daily.filter((pl.col("date") >= day) & pl.col("symbol").is_in(list(rows))).group_by(["symbol"]):
         g = g.sort("date").head(HOLD_DAYS)
         if g.height < HOLD_DAYS or g["date"][0] != day:
             continue
-        bars = list(zip(g["open"].to_list(), g["high"].to_list(), g["low"].to_list(), g["close"].to_list(), strict=True))
+        k = kb.get(str(sym), 1.0)
+        bars = [tuple(float(x) * k for x in b)
+                for b in zip(g["open"].to_list(), g["high"].to_list(), g["low"].to_list(), g["close"].to_list(), strict=True)]
         a = _num(rows[sym].get("atr"))
         rl = exit_r(bars, "long", a) if a else None
         rs = exit_r(bars, "short", a) if a else None
@@ -484,9 +530,14 @@ def settle_record(rec: dict, daily) -> dict | None:
             out[str(sym)] = {"long": round(rl[0], 4), "long_exit": rl[1], "short": round(rs[0], 4), "short_exit": rs[1],
                              "end": g["date"][-1].isoformat()}
     need = set(rec.get("long") or []) | set(rec.get("short") or [])
-    if not need or not need <= set(out):
+    if not need:
         return None
-    return out
+    if need <= set(out):
+        return out
+    end = hold_end(day)
+    if through is None or end is None or through < end or not any(v["end"] == end.isoformat() for v in out.values()):
+        return None
+    return {**out, "__missing__": sorted(need - set(out))}
 
 
 def settle(data_dir: Path, through: date, *, daily=None) -> dict:
@@ -498,18 +549,29 @@ def settle(data_dir: Path, through: date, *, daily=None) -> dict:
     if not todo:
         return {"settled": 0}
     if daily is None:
-        lo = min(date.fromisoformat(r["day"]) for r in todo)
+        lo = min(min(date.fromisoformat(r["day"]), _as_of_or(r)) for r in todo)
         syms = sorted({r["symbol"] for rec in todo for r in rec.get("rows") or [] if isinstance(r, dict) and r.get("symbol")})
-        daily = load_daily(data_dir, lo, through, symbols=syms, columns=("open", "high", "low", "close"))
+        daily = load_daily(data_dir, lo, through, symbols=syms, columns=("open", "high", "low", "close", "raw_close"))
     n = 0
     for rec in todo:
-        res = settle_record(rec, daily)
+        res = settle_record(rec, daily, through)
         if res is None:
             continue
-        rec["settled"] = {"at": us_clock.now().isoformat(timespec="seconds"), "end": max(v["end"] for v in res.values()), "r": res}
+        missing = res.pop("__missing__", [])
+        if not res:
+            continue
+        rec["settled"] = {"at": us_clock.now().isoformat(timespec="seconds"), "end": max(v["end"] for v in res.values()), "r": res,
+                          **({"missing": missing} if missing else {})}
         _write_json(day_path(data_dir, date.fromisoformat(rec["day"])), rec)
         n += 1
     return {"settled": n, "pending": len(todo) - n}
+
+
+def _as_of_or(rec: dict) -> date:
+    try:
+        return date.fromisoformat(str(rec.get("as_of")))
+    except ValueError:
+        return date.fromisoformat(rec["day"])
 
 
 def _mean(xs: list[float]) -> float | None:
@@ -577,7 +639,9 @@ def settle_view(data_dir: Path) -> dict:
         lr, rr = recs[-1], recs[-1]["settled"]["r"]
         sides = {side: [{"symbol": s, "r": round(rr[s][side], 3), "exit": rr[s][f"{side}_exit"]} for s in lr.get(side) or [] if s in rr]
                  for side in ("long", "short")}
+        miss = set(lr["settled"].get("missing") or [])
         last = {"made": lr["day"], "settled": lr["settled"]["end"], **sides,
+                "missing": {side: [s for s in lr.get(side) or [] if s in miss] for side in ("long", "short")},
                 "sum_long": round(sum(x["r"] for x in sides["long"]), 3), "sum_short": round(sum(x["r"] for x in sides["short"]), 3)}
     out = {"days": len(recs), "check_days": CHECK_DAYS, "late": n_late, "first": recs[0]["day"] if recs else None,
            "last_list": recs[-1]["day"] if recs else None, "total": series(recs), "weeks": wk, "last": last}
@@ -607,7 +671,8 @@ def risk_usd(data_dir: Path) -> tuple[float | None, float | None]:
 
 def ref_prices(data_dir: Path, repo, now: datetime, syms: list[str]) -> tuple[dict[str, float], dict[str, float], dict | None]:
     """参考价 / 盘前涨跌 / 盘前时点。开盘后 = 今天开盘价 (盘中快照); 盘前 = 09:00 跳空记录, 09:00 前用盘前实时价缓存。
-    请求里不出网 (盘前缓存没有时后台单飞取, 本次不给)。"""
+    请求里不出网 (盘前缓存没有时后台单飞取, 本次不给)。
+    有开盘价的票: 参考价换成开盘价, 涨跌列不再给 09:00 的值 (调用方按开盘价对昨收重算, 两列同源); meta.open = True。"""
     from app.services import card_volume as cv
     from app.services import premarket_gap
     from app.services import swing_desk as sd
@@ -634,9 +699,14 @@ def ref_prices(data_dir: Path, repo, now: datetime, syms: list[str]) -> tuple[di
         bars = sd._today_bars(repo, today, set(syms)) if repo is not None else {}
     except Exception:
         bars = {}
+    opened = False
     for s, (o, _h, _l, _c) in bars.items():
         if _num(o):
             px[s] = float(o)
+            pre.pop(s, None)
+            opened = True
+    if opened:
+        meta = {**(meta or {}), "open": True}
     return px, pre, meta
 
 
@@ -697,11 +767,24 @@ def view(data_dir: Path, *, repo=None, now: datetime | None = None) -> dict | No
     except ValueError:
         pass
     listed = set(rec.get("long") or []) | set(rec.get("short") or [])
-    sp = sparks(data_dir, sorted(listed), date.fromisoformat(rec["as_of"]))
+    as_of = date.fromisoformat(rec["as_of"])
+    sp = sparks(data_dir, sorted(listed), as_of)
+    # 名单记的是 as_of 当天原始价口径 (0.52.1 前的名单在最新收盘日生成, 复权价 = 原始价, 同口径);
+    # 其后到今天除权的拆股按比例换到今天的原始价 (与盘前价 / 开盘价同口径)
+    try:
+        from app.services.corporate_actions import split_factors
+        splits = split_factors(data_dir, syms, as_of, max(today, pick))
+    except Exception as e:
+        logger.warning("ls_rank: split factors unavailable: %s", type(e).__name__)
+        splits = {}
     rows = []
     for r in rows_all:
         s = r["symbol"]
         close, atr = _num(r.get("close")), _num(r.get("atr"))
+        f = splits.get(s)
+        if f:
+            close = close / f if close else close
+            atr = atr / f if atr else atr
         ref = px.get(s) or close
         pre_pct = pre.get(s)
         if pre_pct is None and s in px and close:
@@ -710,11 +793,15 @@ def view(data_dir: Path, *, repo=None, now: datetime | None = None) -> dict | No
         stop = qty = None
         if side and ref and atr:
             stop = round(ref - STOP_ATR * atr if side == "long" else ref + STOP_ATR * atr, 2)
-            qty = math.floor(risk / (STOP_ATR * atr)) if risk else None
+            if risk:
+                qty = math.floor(risk / (STOP_ATR * atr))
+                if eq and eq > 0:
+                    qty = max(min(qty, math.floor(eq * NOTIONAL_CAP / ref)), 0)
         rows.append({"symbol": s, "rank": r.get("rank"), "pct": r.get("pct"), "side": side, "young": bool(r.get("young")),
                      "earnings": r.get("earnings"), "tags": list(r.get("tags") or []), "prev_rank": r.get("prev_rank"),
                      "is_new": bool(r.get("is_new")), "book": r.get("book"),
-                     "close": close, "atr": atr, "ref": round(ref, 2) if ref else None,
+                     "close": round(close, 4) if close else close, "atr": round(atr, 4) if atr else atr,
+                     "ref": round(ref, 2) if ref else None, **({"split": f} if f else {}),
                      "pre_pct": round(pre_pct, 2) if pre_pct is not None else None, "stop": stop, "qty": qty,
                      "spark": sp.get(s)})
     by = {r["symbol"]: r for r in rows}

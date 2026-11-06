@@ -99,6 +99,43 @@ def parse_actions(payload: dict) -> list[dict]:
     return out
 
 
+SPLIT_TYPES = ("forward_split", "reverse_split")
+
+
+def split_factor(actions: list[dict], symbol: str, after: date, through: date) -> float:
+    """(after, through] 内除权的拆股 / 反向拆股累计比例 (新股数 ÷ 旧股数; 8 拆 1 = 8, 10 并 1 = 0.1)。
+    after 当天的原始价 ÷ 它 = through 当天的原始价口径。比例非法的记录不计 (parse_actions 已标 auto=False)。"""
+    f = 1.0
+    for a in actions or []:
+        if a.get("symbol") != symbol or a.get("type") not in SPLIT_TYPES:
+            continue
+        k = _num(a.get("factor"))
+        try:
+            ex = date.fromisoformat(str(a.get("ex_date"))[:10])
+        except ValueError:
+            continue
+        if k and k > 0 and after < ex <= through:
+            f *= k
+    return f
+
+
+def split_factors(data_dir: Path | str, symbols, after: date | dict, through: date) -> dict[str, float]:
+    """批量: {票: 比例} 只列 != 1 的票。after 可以是 {票: 日期} (每只票自己的起点)。读不到缓存 = 空 (当作没有拆股)。"""
+    try:
+        actions = CorporateActionService(data_dir).actions()
+    except Exception:
+        return {}
+    out: dict[str, float] = {}
+    for s in symbols:
+        a = after.get(s) if isinstance(after, dict) else after
+        if a is None:
+            continue
+        f = split_factor(actions, s, a, through)
+        if f != 1.0:
+            out[s] = f
+    return out
+
+
 def _default_http_get(url: str) -> dict:
     from app.plugins.alpaca.provider import _get, _load_credentials
     key, secret = _load_credentials()

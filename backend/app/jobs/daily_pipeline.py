@@ -721,6 +721,11 @@ def _run_zen_post_close(repo, day: _date) -> dict:
         logger.info("ls_rank %s: %s", day, ls_rank.run_post_close(repo.store.data_dir, day))
     except Exception as e:
         logger.warning("ls_rank failed (soft): %s", type(e).__name__)
+    try:  # 0.52.1 盘前判断按定版收盘补记 (16:10 那次可能是盘中快照价; 管道拖过 18:00 时这里兜底)
+        from app.services import market_mood
+        market_mood.score(repo.store.data_dir, repo, day=day)
+    except Exception as e:
+        logger.warning("market mood rescore failed (soft): %s", type(e).__name__)
     return {"status": "completed", "manage_events": managed["events"],
             "nav": managed["nav"]["nav"] if managed.get("nav") else None,
             "missing_symbols": managed.get("missing_symbols") or [], "cards": len(result.cards),

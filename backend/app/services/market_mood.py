@@ -3,7 +3,8 @@
 
 - 六项清单取数 → LLM 按清单写三档概率与每项倾向 → 代码兜底 (guard): 概率取 5 的倍数且和为 100,
   前两档并列一律"观望", VIX/VIX3M > 1.05 只降档 ("收紧多头"), 缺数据不触发, 每项必须引用原始值。
-- 每天只生成一次, 生成后锁定不改写 (judgments/<日>.json); 记分追加到 scores.jsonl。
+- 每天只生成一次, 生成后锁定不改写 (judgments/<日>.json); 记分追加到 scores.jsonl
+  (16:10 可能是盘中快照价; 18:00 按定版收盘补记, 收盘价不同则追加覆盖行, 读时同日后写的生效)。
 - 记分口径: QQQ 当日收盘 vs 前一交易日收盘, > +0.3% 涨, < -0.3% 跌, 其余震荡。
 """
 from __future__ import annotations
@@ -101,9 +102,9 @@ def _ms(dt: datetime) -> int:
 
 
 def fetch_overnight(now: datetime) -> dict:
-    """HL xyz 纳指100/标普500 永续 5 分钟线: 相对前一交易日 16:00 ET 的涨跌、最近 30 分钟涨跌。"""
+    """HL xyz 纳指100/标普500 永续 5 分钟线: 相对前一交易日收盘时刻 (半日市 13:00) 的涨跌、最近 30 分钟涨跌。"""
     prev = us_clock.previous_trading_day(now.date())
-    close_at = datetime.combine(prev, time(16, 0), tzinfo=us_clock.tz)
+    close_at = datetime.combine(prev, us_clock.session_close(prev), tzinfo=us_clock.tz)
     out: dict = {}
     for key, coin in (("ndx", "xyz:XYZ100"), ("spx", "xyz:SP500")):
         rows = _post_json("https://api.hyperliquid.xyz/info", {"type": "candleSnapshot", "req": {
@@ -472,23 +473,41 @@ def outcome(chg_pct: float) -> str:
     return "range"
 
 
+def _official(repo, day: date) -> bool:
+    """day 的日K已按官方收盘定版 (盘后管道标记过)。读不到 = 否。"""
+    try:
+        got = repo.latest_settled_daily_date()
+    except Exception:
+        return False
+    return isinstance(got, date) and got >= day
+
+
 def score(data_dir, repo, *, day: date | None = None) -> dict | None:
-    """16:10 ET 记分: 用日K库 QQQ 当日收盘。日K未到 / 当日无判断 → None (盘后管道后会再调一次)。"""
+    """16:10 ET 记分: 用日K库 QQQ 当日收盘。日K未到 / 当日无判断 → None (盘后管道后会再调一次)。
+    16:10 那次可能还是盘中快照价 (收盘竞价没进); 18:00 补记分按定版收盘重算, 收盘价不同就覆盖 (追加一行, 读时后写的生效)。
+    已按定版收盘记过 (final) 的不再改。"""
     day = day or us_clock.today()
     j = load_judgment(data_dir, day)
     if not j:
         return None
-    if day.isoformat() in load_scores(data_dir):
-        return load_scores(data_dir)[day.isoformat()]
+    old = load_scores(data_dir).get(day.isoformat())
+    if old and old.get("final"):
+        return old
     df = repo.get_daily(SCORE_SYMBOL, day - timedelta(days=10), day, columns=["date", "close"])
     if df is None or df.height < 2 or str(df["date"][-1])[:10] != day.isoformat():
-        return None
+        return old
     c0, c1 = float(df["close"][-2]), float(df["close"][-1])
+    final = _official(repo, day)
+    if old and old.get("close") == c1 and not final:
+        return old
     chg = round((c1 / c0 - 1) * 100, 2)
     res = outcome(chg)
     row = {"day": day.isoformat(), "close": c1, "chg_pct": chg, "outcome": res, "main": j["main"],
            "stance": j["stance"], "hit": j["main"] == res, "p_outcome": j["probs"].get(res),
-           "scored_at": us_clock.now().isoformat(timespec="seconds")}
+           "scored_at": us_clock.now().isoformat(timespec="seconds"), "final": final,
+           **({"rescored_from": old.get("close")} if old else {})}
+    if old and old.get("close") == c1:
+        row = {**old, "final": True}
     with _LOCK, (_root(data_dir) / "scores.jsonl").open("a", encoding="utf-8") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     return row

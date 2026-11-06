@@ -157,7 +157,8 @@ function OpenCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
 function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
   const it = d.intraday
   const active = it?.active ?? []
-  const closedToday = (it?.history ?? []).filter((c) => c.day === it?.today)
+  // 今日已结束 = 今天出场的卡 (含前几天出的卡今天止损 / 到期); exit_at 是美东墙钟 ISO, 前 10 位即美东日期
+  const closedToday = (it?.history ?? []).filter((c) => (c.exit_at ? c.exit_at.slice(0, 10) : c.day) === it?.today)
   const st = it?.stats
   const body = d.errors.intraday ? <Err name="盘中强势" /> : !it ? <Empty t="—" /> : active.length + closedToday.length === 0 ? <Empty t={it.next_check ? `${it.next_check} ET` : '无'} /> : (
     <>

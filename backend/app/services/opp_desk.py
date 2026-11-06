@@ -199,15 +199,25 @@ def settle(data_dir: Path, repo, today: date | None = None) -> int:
         targets = {h: tds[h - 1] for h in HORIZONS if len(tds) >= h and tds[h - 1] <= today}
         if not targets:
             continue
-        b = getter(sorted({r["symbol"] for r in todo}), d, max(targets.values()), columns=["symbol", "date", "close"])
+        b = getter(sorted({r["symbol"] for r in todo}), d, max(targets.values()), columns=["symbol", "date", "close", "raw_close"])
         if b is None or b.is_empty():
             continue
-        closes = {(str(s), str(dt)[:10]): float(c) for s, dt, c in b.select(["symbol", "date", "close"]).iter_rows()}
+        # 记账价是记录当天的原始价: 收盘取原始价, 再乘 (记录日, 目标日] 内的拆股比例换回记录日口径
+        raw = b["raw_close"].to_list() if "raw_close" in b.columns else [None] * b.height
+        closes = {(str(s), str(dt)[:10]): float(c2 if isinstance(c2, (int, float)) and c2 > 0 else c)
+                  for (s, dt, c), c2 in zip(b.select(["symbol", "date", "close"]).iter_rows(), raw, strict=True)}
+        try:
+            from app.services.corporate_actions import CorporateActionService, split_factor
+            actions = CorporateActionService(data_dir).actions()
+        except Exception:
+            actions = []
         changed = False
         for r in todo:
             sg = 1 if r["side"] == "long" else -1
             for h, td in targets.items():
                 c = closes.get((r["symbol"], td.isoformat()))
+                if c:
+                    c *= split_factor(actions, r["symbol"], d, td)
                 if f"r{h}" not in r and c and r.get("entry"):
                     r[f"r{h}"] = round(sg * (c / float(r["entry"]) - 1) * 100, 3)
                     filled += 1

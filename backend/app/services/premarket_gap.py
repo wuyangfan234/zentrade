@@ -83,13 +83,20 @@ def _inputs(data_dir: Path, loop) -> tuple[dict[str, list[str]], dict[str, float
     repo = getattr(loop, "repo", None)
     if repo is not None:
         today = us_clock.today()
+        rows: dict[str, tuple] = {}
         for s in mids:
             try:
-                df = repo.get_daily(s, today - timedelta(days=10), today - timedelta(days=1))
+                df = repo.get_daily(s, today - timedelta(days=10), today - timedelta(days=1),
+                                    columns=["date", "close", "raw_close"])
                 if not df.is_empty():
-                    prev_close[s] = float(df["close"][-1])
+                    d = df["date"][-1]
+                    rows[s] = (d if isinstance(d, date) else date.fromisoformat(str(d)[:10]), df["close"][-1],
+                               df["raw_close"][-1] if "raw_close" in df.columns else None)
             except Exception:  # noqa: BLE001
                 continue
+        # 昨收按今天原始价口径 (除权日拆股换算), 与 HL 盘前价同口径
+        from app.services.opp_page import prev_close_today_basis
+        prev_close = prev_close_today_basis(data_dir, rows, today)
     return scope, prev_close, mids
 
 
@@ -101,7 +108,8 @@ def run(data_dir: Path, loop, *, now: datetime | None = None) -> dict:
     res.update(day=day.isoformat(), at=now.isoformat())
     out = Path(data_dir) / "premarket_gap"
     out.mkdir(parents=True, exist_ok=True)
-    (out / f"{day.isoformat()}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+    from app.services.fs_utils import atomic_write_text
+    atomic_write_text(out / f"{day.isoformat()}.json", json.dumps(res, ensure_ascii=False, indent=1))
     from app.services import strategy_evaluation
     from app.services import swing_desk as sd
     if strategy_evaluation.evidence_mode(data_dir) == "v4" and sd.swing_config_path(data_dir).exists():
@@ -198,11 +206,14 @@ def preopen_message(table: dict, res: dict, day: date, at: datetime) -> dict:
 
 
 def latest(data_dir: Path) -> dict | None:
+    """最新一份可读的记录 (最新一份坏了 / 读到一半 → 退回上一份; 调用方按 day 判断是不是今天)。"""
     d = Path(data_dir) / "premarket_gap"
     files = sorted(d.glob("*.json")) if d.exists() else []
-    if not files:
-        return None
-    try:
-        return json.loads(files[-1].read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
+    for f in reversed(files[-5:]):
+        try:
+            rec = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(rec, dict):
+            return rec
+    return None
