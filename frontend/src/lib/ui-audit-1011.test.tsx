@@ -63,7 +63,9 @@ it('版式: 持仓/系统状态页头与其它页一致通栏; 手机净值卡�
   for (const f of ['pages/Portfolio.tsx', 'pages/SystemStatus.tsx']) {
     expect(src(f)).not.toMatch(/<div className="mx-auto max-w-3xl p-6">\s*<PageHeader/)
   }
-  expect(src('pages/Portfolio.tsx')).toContain('data-nav-cards className="grid grid-cols-3 gap-2 sm:gap-3"')
+  // 0.53.0 账本表格: 总账六格手机 2 列、平板 3 列、桌面 6 列, 每格 min-w-0 可收缩, 数字 truncate
+  expect(src('pages/Portfolio.tsx')).toContain('data-nav-cards className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-card border border-border bg-border md:grid-cols-3 xl:grid-cols-6"')
+  expect(src('pages/Portfolio.tsx')).toMatch(/data-kpi=\{k\}[^>]*className="min-w-0 /)
   expect(src('components/Layout.tsx')).toContain('ml-auto shrink-0 whitespace-nowrap text-[11px] leading-none text-muted">未配置')
 })
 
@@ -124,12 +126,11 @@ it('字号: 全站不用 text-base (会把文字染成背景色)', () => {
   expect(bad).toEqual([])
 })
 
-it('持仓: 净值/现金/组合风险三卡都显式给文字色, 不靠 body 继承', () => {
+it('持仓: 总账六格都显式给文字色, 不靠 body 继承; 组合风险用琥珀不用红', () => {
   const s = src('pages/Portfolio.tsx')
-  const cards = [...s.matchAll(/className="mt-1 truncate ([^"]+)"/g)].map((m) => m[1])
-  expect(cards.length).toBe(3)
-  for (const cls of cards) {
-    expect(cls, cls).toMatch(/\btext-\[16px\]/)
-    expect(cls, cls).toMatch(/\btext-(foreground|danger)\b/)
-  }
+  const kpis = [...s.matchAll(/<Kpi k="(\w+)"[^>]*?valueClass=\{?"?([^"}]+)"?\}?/g)].map((m) => [m[1], m[2]])
+  expect(kpis.map((k) => k[0])).toEqual(['nav', 'total', 'unrealized', 'realized', 'risk', 'buying'])
+  for (const [k, cls] of kpis) expect(cls, k).toMatch(/text-(foreground|warning)|tone\(/)
+  expect(Object.fromEntries(kpis).risk).toBe('text-warning')
+  expect(s).toMatch(/text-\[22px\] font-bold[^']*max-md:text-\[18px\]/)
 })

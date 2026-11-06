@@ -12,6 +12,8 @@ const STROKE = 'hsl(var(--bull))'
 const FALLBACK_W = 640
 // 一个日期标签 (MM-DD, 10px) 约 32px 宽, 相邻标签至少隔这么多像素才全标
 const LABEL_MIN_GAP = 44
+// 首/末标签贴边对齐后, 与相邻标签之间还要额外留出的像素 (约半个标签宽)
+const EDGE_EXTRA = 18
 
 function fmtUsd(n: number): string {
   return `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -78,6 +80,9 @@ export function EquityCurve({ points, principal }: { points: EquityPoint[]; prin
       if (labels.length > 1 && (last - labels[labels.length - 1]) * step < LABEL_MIN_GAP) labels.pop()
       labels.push(last)
     }
+    // 首末标签贴边对齐 (不居中), 实际占位比中间标签多半个标签宽; 紧邻的那个要多让出 EDGE_EXTRA, 否则两串日期粘连
+    if (labels.length > 2 && (labels[1] - labels[0]) * step < LABEL_MIN_GAP + EDGE_EXTRA) labels.splice(1, 1)
+    if (labels.length > 2 && (last - labels[labels.length - 2]) * step < LABEL_MIN_GAP + EDGE_EXTRA) labels.splice(labels.length - 2, 1)
     return { xy, line, area, baseY, bottom: PAD.top + innerH, step, labels }
   }, [points, principal, W, last])
 

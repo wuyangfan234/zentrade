@@ -1359,6 +1359,8 @@ export interface LivePosition {
 export interface ClosedTrip {
   symbol: string
   side?: 'long' | 'short'
+  /** 回合开仓卡 id (含 -book-swing- = 机会板, 其余旧规则) */
+  card_id?: string | null
   setup_type?: string | null
   setup_label?: string | null
   entry_date?: string | null

@@ -113,11 +113,16 @@ it('connected protections show source and freshness', async () => {
     corporate_actions_auto: 'connected',
   }))
   await render()
-  expect(text()).toContain('财报保护：已接入（来源 nasdaq，更新于 10-01 08:00 ET）')
-  expect(text()).toContain('公司行动保护：已接入')
+  const earn = container.querySelector('[data-chip="earnings"]')!
+  expect(earn.textContent).toBe('财报保护 ✓')
+  expect(earn.getAttribute('title')).toBe('来源 nasdaq · 更新于 10-01 08:00 ET')
+  expect(container.querySelector('[data-chip="corp"]')!.textContent).toBe('公司行动保护 ✓')
   expect(text()).not.toContain('已暂停新开仓')
   expect(text()).not.toContain('尚未接入')
-  expect(text()).toContain('当前结果仅作纸面验证，不等同可实盘策略。')
+  expect(container.querySelector('[data-alerts]')).toBeNull()
+  // 纸面免责: 胶囊常显「纸面账户 · 无真实下单」, 完整免责在悬停说明
+  expect(container.querySelector('[data-chip="paper"]')!.textContent).toBe('纸面账户 · 无真实下单')
+  expect(container.querySelector('[data-chip="paper"]')!.getAttribute('title')).toBe('当前结果仅作纸面验证，不等同可实盘策略')
 })
 
 it('unavailable protections are shown in red as pausing new entries', async () => {
@@ -130,8 +135,10 @@ it('unavailable protections are shown in red as pausing new entries', async () =
   await render()
   expect(divWithText('财报日历不可用，已暂停新开仓')?.className).toContain('text-danger')
   expect(divWithText('公司行动数据不可用，已暂停新开仓')?.className).toContain('text-danger')
-  expect(text()).not.toContain('已接入')
-  expect(text()).toContain('当前结果仅作纸面验证，不等同可实盘策略。')
+  expect(container.querySelector('[data-chip="earnings"]')!.textContent).toBe('财报保护 ✕')
+  expect(container.querySelector('[data-chip="earnings"]')!.className).toContain('text-danger')
+  expect(container.querySelector('[data-chip="corp"]')!.textContent).toBe('公司行动保护 ✕')
+  expect(container.querySelector('[data-chip="paper"]')!.textContent).toBe('纸面账户 · 无真实下单')
 })
 
 // 10-10 全量 review: 后端公司行动状态有 connected / stale / unavailable 三种。缓存超过 26 小时
