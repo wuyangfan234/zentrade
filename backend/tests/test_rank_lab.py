@@ -134,12 +134,86 @@ def test_evaluate_segments_and_verdict(tmp_path):
     assert rl.evaluate_formula(rl.load_pool(data_dir), "ts_delta(close,5)/ts_delay(close,5)", "high") == r
 
 
-def test_verdict_requires_holdout_positive():
+def test_verdict_requires_holdout_ci_above_zero():
+    """0.55.0: 留出段要自己的区间下限 > 0; 点估计为正但区间跨 0 (如 [-0.026, 0.197]) 不算候选。"""
     ok_full = {"passed": True, "excess": 0.1, "n": 500}
-    assert rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": {"excess": 0.01, "n": 200}})["passed"]
-    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": {"excess": -0.01, "n": 200}})["passed"]
-    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": {"excess": 0.3, "n": 12}})["passed"]
+    hold = {"excess": 0.0846, "excess_ci": [-0.0262, 0.1966], "n": 604}
+    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": hold})["passed"]
+    assert rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300},
+                       "holdout": {**hold, "excess_ci": [0.004, 0.19]}})["passed"]
+    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300},
+                           "holdout": {"excess": 0.3, "excess_ci": [0.1, 0.5], "n": 12}})["passed"]   # 笔数不足
+    assert not rl.verdict({"full": {**ok_full, "passed": False}, "mining": {"excess": 0.2, "n": 300},
+                           "holdout": {**hold, "excess_ci": [0.004, 0.19]}})["passed"]
+    for bad in (None, [], [float("nan"), 1.0], ["0.1", 0.2], [0.1]):
+        assert not rl.verdict({"full": ok_full, "holdout": {**hold, "excess_ci": bad}})["passed"]
     assert not rl.verdict(None)["passed"]
+    # both_segments_positive 仍是点估计口径 (只作标注)
+    assert rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": hold})["both_segments_positive"]
+
+
+# ── 复权基准无关 (R008) 与覆盖率 (R009) ──────────────────────────────
+
+@pytest.mark.parametrize("formula", [
+    "close",                                              # 跨股票比价格水平 (前复权因子由未来拆股决定)
+    "close*volume/max(amount,0.0001)",                    # 前复权价 x 拆股后量 ÷ 当日原成交额
+    "ts_mean(raw_close*volume/max(amount,0.0001)-1,5)",   # 原价 x 拆股后量 ÷ 原成交额
+    "amount/max(volume,0.0001)/max(prev_close,0.0001)-1",
+    "high-low",                                           # 价格差 = 价格水平
+    "rank(volume)",                                       # 跨股票比成交量水平 (拆股会改)
+    "close/raw_close",
+])
+def test_check_formula_rejects_adjustment_dependent(formula):
+    with pytest.raises(rl.RankFormulaError) as e:
+        rl.check_formula(formula)
+    assert e.value.code == "R008"
+
+
+@pytest.mark.parametrize("formula", [
+    "ts_delta(close,20)/ts_delay(close,20)", "close/ts_max(close,20)-1", "open/prev_close-1",
+    "ts_mean(high-low,5)/ts_mean(high-low,40)", "ts_std(close/prev_close-1,20)", "volume/ts_mean(volume,20)",
+    "rank(ts_delta(close,20)/ts_delay(close,20))", "ts_mean(amount,5)/ts_mean(amount,20)", "rank(ts_mean(amount,20))",
+    "ts_corr(close,volume,20)", "(close-low)/max(high-low,0.0001)", "ts_rsi(close,14)", "ts_rank(close,20)",
+    "ts_mean(turnover_rate,5)", "raw_close/ts_mean(raw_close,20)", "ts_min(low,10)/max(ts_min(low,60),0.0001)-1",
+    "decay_linear(close/prev_close-1,10)", "if_else(close>open, 1, -1)",
+    # 嵌套滚动的浮点残差不算复权相关
+    "ts_corr(close/max(prev_close,0.0001)-1,volume/max(ts_mean(volume,20),0.0001),20)",
+    "ts_mean(high-low,5)/max(ts_mean(high-low,40),0.0001)",
+])
+def test_check_formula_keeps_adjustment_free(formula):
+    assert rl.check_formula(formula).ok
+
+
+def test_warmup_rows_are_blank():
+    """预热期 (前 warmup_bars - 1 根) 置空: max(ts_mean(volume,20), 0.0001) 在预热期返回 0.0001,
+    新上市股票头几天的量比会成为 1e10 级垃圾值并天天排第一。"""
+    days = _days(80)
+    raw = _panel(["A", "B"], days)
+    raw = raw.filter(~((pl.col("symbol") == "B") & (pl.col("date") < days[40])))   # B 晚上市 40 天, 只有 40 根
+    panel = rl.prepare_panel(raw)
+    f = "volume/max(ts_mean(volume,20),0.0001)"
+    warm = rl.check_formula(f).warmup_bars - 1
+    fr = rl.factor_frame(panel, f, "high")
+    for s, n in (("A", 80), ("B", 40)):
+        vals = fr.filter(pl.col("symbol") == s).sort("date")["value"].to_list()
+        assert len(vals) == n
+        assert all(v is None for v in vals[:warm]), s
+        assert all(v is not None and 0 < v < 10 for v in vals[warm:]), s
+
+
+def test_coverage_floor_rejects_sparse_formula(tmp_path):
+    data_dir, _syms, _ = _write_pool(tmp_path)
+    pool = rl.load_pool(data_dir)
+    vals = rl.value_matrix(pool, rl.factor_frame(pool.panel, "ts_delta(close,5)/ts_delay(close,5)", "high"))
+    assert rl.check_values(pool, vals) > 0.9
+    sparse = vals.copy()
+    sparse[:, 3:] = np.nan                                 # 只剩 3 只有值
+    with pytest.raises(rl.RankFormulaError) as e:
+        rl.check_values(pool, sparse)
+    assert e.value.code == "R009"
+    with pytest.raises(rl.RankFormulaError) as e:
+        rl.check_values(pool, np.full_like(vals, np.nan))
+    assert e.value.code == "R006"
 
 
 # ── 导入 / 复核 / 移除 ───────────────────────────────────────────────

@@ -51,6 +51,7 @@ BASE_COLS = ("open", "high", "low", "close", "volume", "amount", "turnover_rate"
 RANK_PREFIX = "rank_"
 MIN_SEG_N = 30                              # 段内成交少于 30 笔不算过关
 RSI_MAX = 30                                # ts_rsi 窗口上限 (见 check_formula)
+MIN_COVERAGE = 0.8                          # 4h 门内格子里有值的比例下限 (见 check_values)
 _ID_RE = re.compile(r"^rank_[a-f0-9]{10}$")
 
 
@@ -160,11 +161,94 @@ def check_formula(formula: str):
             continue
         if n > RSI_MAX:
             raise RankFormulaError("R007", f"ts_rsi 的窗口不能超过 {RSI_MAX} (指数平滑记忆太长, 盘后扫描只有约 275 根日K, 与回放算不一致)")
+    bad = _adjustment_leak(text, compiled)
+    if bad:
+        raise RankFormulaError("R008", "公式值随复权基准变化 (价格列是导出日回溯的前复权价, volume 按拆股调整, "
+                               f"amount / raw_close 是当日原值): {bad}。价格与量只能用比值、收益率或与自身历史比较, "
+                               "不能跨股票比价格水平, 也不能把价格列与 amount / raw_close 混算")
     return compiled
 
 
+# ── 复权基准无关检验 (R008) ──────────────────────────────────────────────────
+# 回放面板的 open/high/low/close/prev_close = 当日原价 x 导出日之前全部拆股/分红的累计因子 (前复权),
+# volume = 原量 ÷ 拆股因子; amount、raw_close、turnover_rate 不复权。累计因子由信号日之后的公司行动决定,
+# 回放时公式若依赖它的水平, 就提前看到了未来的拆股 / 分红 (实测: close*volume/amount 样本内
+# p=0.002, 剔除复权因子后 p=0.23, 留出段 -0.10R)。检验: 每只股票把价格列乘一个常数、volume 乘另一个常数
+# (模拟不同的未来复权), 预热期之后公式值必须不变。
+
+_PIT_C = (0.1, 0.5, 2.0, 7.0, 13.0, 0.03)      # 每只的价格缩放 (分红 / 拆股)
+_PIT_V = (10.0, 0.2, 3.0, 0.5, 1 / 7, 40.0)     # 每只的成交量缩放 (拆股)
+_PIT_PANELS: list[pl.DataFrame] = []
+
+
+def _pit_panels() -> tuple[pl.DataFrame, pl.DataFrame]:
+    """确定性的探针面板 (6 只 x 320 天): 原样一份, 按 _PIT_C / _PIT_V 缩放一份。"""
+    if not _PIT_PANELS:
+        rng = np.random.default_rng(20261107)
+        start = date(2022, 1, 3)
+        days = [start + timedelta(days=i) for i in range(470) if (start + timedelta(days=i)).weekday() < 5][:320]
+        rows: list[list[dict]] = [[], []]
+        for i in range(len(_PIT_C)):
+            px, k = 40.0 + 25 * i, (1.0, 1.4, 0.8, 2.0, 1.1, 0.6)[i]
+            for d in days:
+                c = px * (1 + rng.normal(0.0005, 0.02))
+                o = px * (1 + rng.normal(0, 0.006))
+                h = max(o, c) * (1 + abs(rng.normal(0, 0.008)))
+                lo = min(o, c) * (1 - abs(rng.normal(0, 0.008)))
+                vol = float(np.exp(rng.normal(14, 0.5)))
+                base = {"symbol": f"P{i}", "date": d, "amount": (h + lo + c) / 3 * vol * k,
+                        "turnover_rate": float(rng.uniform(0.005, 0.05)), "raw_close": c * k}
+                for s, (cs, vs) in enumerate(((1.0, 1.0), (_PIT_C[i], _PIT_V[i]))):
+                    rows[s].append({**base, "open": o * cs, "high": h * cs, "low": lo * cs, "close": c * cs,
+                                    "volume": vol * vs})
+                px = c
+        _PIT_PANELS.extend(prepare_panel(pl.DataFrame(r)) for r in rows)
+    return _PIT_PANELS[0], _PIT_PANELS[1]
+
+
+_PIT_CACHE: dict[str, str] = {}
+
+
+def _adjustment_leak(text: str, compiled) -> str:
+    """'' = 与复权基准无关; 否则返回说明。只比较预热期之后的行 (预热期的空值兜底不算)。按公式文本缓存。"""
+    key = re.sub(r"\s+", "", text)
+    if key in _PIT_CACHE:
+        return _PIT_CACHE[key]
+    from app.factors.dsl import FACTOR_COLUMN
+    p0, p1 = _pit_panels()
+    try:
+        a = compiled.frame_transform(p0)
+        b = compiled.frame_transform(p1)
+    except Exception as e:                       # 运行期失败交给评估报错, 这里不判
+        logger.debug("rank lab pit probe skipped: %s", type(e).__name__)
+        return ""
+    if a is None or b is None:
+        return ""
+    # 只看预热期之后, 且比的是每天 6 只的截面名次 (机会板只用名次挑前 5): 嵌套滚动算子会把预热期的大数
+    # 带进 polars 的滚动累加器, 留下 1e-6 级的浮点残差, 按数值逐位比会误报 (实测 ts_corr(收益, 量比))。
+    keep = pl.int_range(pl.len()).over("symbol") >= compiled.warmup_bars + 1
+    v = pl.col(FACTOR_COLUMN).cast(pl.Float64)
+
+    def ranks(df: pl.DataFrame) -> pl.DataFrame:
+        return (df.select("symbol", "date", pl.when(v.is_finite()).then(v).otherwise(None).alias("v")).filter(keep)
+                .with_columns(pl.col("v").rank("average").over("date").alias("r")).sort(["date", "symbol"]))
+    ra, rb = ranks(a), ranks(b)
+    bad_rows = ra.select("date", (pl.col("r").ne_missing(rb["r"])).alias("bad")).filter(pl.col("bad"))
+    n_days = ra["date"].n_unique()
+    bad_days = bad_rows["date"].n_unique()
+    out = ""
+    if bad_days > max(2, int(0.01 * n_days)):
+        out = f"{bad_days}/{n_days} 天的截面名次改变"
+    if len(_PIT_CACHE) > 512:
+        _PIT_CACHE.clear()
+    _PIT_CACHE[key] = out
+    return out
+
+
 def factor_frame(panel: pl.DataFrame, formula: str, direction: str) -> pl.DataFrame:
-    """面板 → [symbol, date, value]; value 已按方向定向 (越大越该先挂)。非有限值保留为 null。"""
+    """面板 → [symbol, date, value]; value 已按方向定向 (越大越该先挂)。非有限值保留为 null。
+    0.55.0: 每只股票前 warmup_bars - 1 根 (公式还没攒够历史) 一律置空。DSL 的 max / min 会跳过空值,
+    预热期 max(ts_mean(volume,20), 0.0001) 返回 0.0001, 新上市股票头几天的量比就成了 1e10 级, 天天排第一。"""
     if direction not in ("high", "low"):
         raise RankFormulaError("R005", "方向只能是 high (值大优先) 或 low (值小优先)")
     from app.factors.dsl import FACTOR_COLUMN
@@ -174,7 +258,8 @@ def factor_frame(panel: pl.DataFrame, formula: str, direction: str) -> pl.DataFr
         raise RankFormulaError("E013", "面板缺少公式所需列")
     v = pl.col(FACTOR_COLUMN).cast(pl.Float64)
     v = v if direction == "high" else -v
-    return out.select("symbol", "date", pl.when(v.is_finite()).then(v).otherwise(None).alias("value"))
+    warm = pl.int_range(pl.len()).over("symbol") >= max(compiled.warmup_bars - 1, 0)
+    return out.select("symbol", "date", pl.when(warm & v.is_finite()).then(v).otherwise(None).alias("value"))
 
 
 def formula_sha(formula: str, direction: str) -> str:
@@ -379,9 +464,24 @@ def evaluate_formula(pool: Pool, formula: str, direction: str) -> dict:
     """公式 → 三段判定。公式问题抛 RankFormulaError。"""
     frame = factor_frame(pool.panel, formula, direction)
     vals = value_matrix(pool, frame)
+    check_values(pool, vals, _segments(pool)["mining"][1])
+    return evaluate_values(pool, vals)
+
+
+def check_values(pool: Pool, vals: np.ndarray, t_end: int | None = None) -> float:
+    """值矩阵的可用性: 全空 → R006; 4h 门内格子 (t < t_end) 有值比例 < MIN_COVERAGE → R009。返回覆盖率。
+    覆盖率低的公式 (如只有少数股票有 turnover_rate) 只在有数据的那几只里排, 等于换了一个候选池。
+    覆盖率只按挖掘段算 (evaluate_formula 与挖掘端同口径), 不看留出段。"""
     if not np.isfinite(vals).any():
         raise RankFormulaError("R006", "公式在候选池里没有有效数值")
-    return evaluate_values(pool, vals)
+    t_end = len(pool.gate_js) if t_end is None else t_end
+    finite = np.isfinite(vals)
+    cells = sum(len(js) for js in pool.gate_js[:t_end])
+    covered = sum(1 for t, js in enumerate(pool.gate_js[:t_end]) for j in js if finite[t, j])
+    cov = covered / cells if cells else 0.0
+    if cov < MIN_COVERAGE:
+        raise RankFormulaError("R009", f"4h 门内只有 {cov:.0%} 的格子有值 (下限 {MIN_COVERAGE:.0%}), 数据太稀疏")
+    return cov
 
 
 def daily_pick_sets(pool: Pool, formula: str, direction: str) -> dict[int, list[str]]:
@@ -396,14 +496,21 @@ def daily_pick_sets(pool: Pool, formula: str, direction: str) -> dict[int, list[
 
 def verdict(res: dict | None) -> dict:
     """ZenTrade 侧“候选”标记: 全窗 (2023 起) 周聚类区间下限 > 0 (与挖掘候选同口径), 且留出段 (2025 起,
-    挖掘端选公式时不看) 每笔也赢随机、笔数 ≥ 30。只看全窗会把“挖掘段挑出来的运气”一起算进去。"""
+    挖掘端选公式时不看) 自己的区间下限也 > 0、笔数 ≥ 30。
+    0.55.0 起留出段要区间下限 > 0, 不再只看点估计: 全窗一半样本是挑公式用的挖掘段, 挖掘段刚过多重检验时,
+    全窗下限 > 0 只要求留出段 z ≥ -0.2 左右, 留出段纯噪声的公式约一半会被判候选。"""
     if not isinstance(res, dict):
         return {"passed": False, "both_segments_positive": False}
     full, mine, hold = res.get("full") or {}, res.get("mining") or {}, res.get("holdout") or {}
 
     def pos(x: dict) -> bool:
         return isinstance(x.get("excess"), (int, float)) and x["excess"] > 0 and (x.get("n") or 0) >= MIN_SEG_N
-    return {"passed": bool(full.get("passed")) and pos(hold), "both_segments_positive": pos(mine) and pos(hold)}
+
+    def sig(x: dict) -> bool:
+        ci = x.get("excess_ci")
+        return (isinstance(ci, (list, tuple)) and len(ci) == 2 and isinstance(ci[0], (int, float))
+                and math.isfinite(ci[0]) and ci[0] > 0 and (x.get("n") or 0) >= MIN_SEG_N)
+    return {"passed": bool(full.get("passed")) and sig(hold), "both_segments_positive": pos(mine) and pos(hold)}
 
 
 # ── 候选池导出 (ZenTrade 侧, 要 30 分钟K / 4h 门 / 交易日历) ───────────────────────
