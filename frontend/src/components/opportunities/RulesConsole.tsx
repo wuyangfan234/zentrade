@@ -108,7 +108,7 @@ function PickList({ side, rows, picked, onToggle, src }: { side: 'long' | 'short
               <span data-swing-name className="line-clamp-2 min-w-0 flex-1 break-words leading-4" title={name}>{name}</span>
               {r.candidate?.passed && (
                 <span data-candidate={r.id} className="shrink-0 rounded border border-accent/40 px-1 text-[10px] leading-4 text-accent"
-                  title={`${r.kind === 'ranker' ? '排序因子 · 全窗赢过“4h 门内随便挑”且留出段（2025 起）也赢' : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'}: 每笔多 ${rr(r.candidate.excess)}（区间 ${r.candidate.excess_ci ? `${rr(r.candidate.excess_ci[0])} ~ ${rr(r.candidate.excess_ci[1])}` : '—'}），${r.candidate.n} 笔`}>候选</span>
+                  title={`${r.kind === 'ranker' ? '排序因子 · 全窗与留出段（2025 起）的 95% 区间下限都 > 0' : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'}: 每笔多 ${rr(r.candidate.excess)}（区间 ${r.candidate.excess_ci ? `${rr(r.candidate.excess_ci[0])} ~ ${rr(r.candidate.excess_ci[1])}` : '—'}），${r.candidate.n} 笔`}>候选</span>
               )}
               <span data-swing-hist={r.id} data-note={cell.note ? '' : undefined} title={cell.title}
                 className={`shrink-0 tabular-nums text-muted ${cell.note ? 'line-clamp-2 max-w-[9rem] text-right text-[11px] leading-4' : ''}`}>{cell.left}</span>
