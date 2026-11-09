@@ -2756,7 +2756,7 @@ export const api = {
     }),
 
   capabilities: () => request<CapabilitiesResponse>('/api/capabilities'),
-  version: () => request<{ version: string }>('/api/data/version'),
+  version: () => request<{ version: string; revision?: string }>('/api/data/version'),
 
   klineDaily: (symbol: string, days = 120, dateRange?: { start: string; end: string }, extColumns?: string) =>
     request<KlineDailyResponse>(
@@ -4015,7 +4015,9 @@ export interface UpdateCheckResult {
   latest?: string
   url?: string
   notes?: string
-  source?: 'release' | 'version_file'
+  source?: 'release' | 'version_file' | 'commit'
+  current_revision?: string
+  latest_revision?: string
   published_at?: string | null
   error?: string
   checked_at: number | null

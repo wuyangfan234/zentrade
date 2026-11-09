@@ -1,7 +1,7 @@
 # ZenTrade · 禅交易
 
 [![CI](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml/badge.svg)](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.54.1-2563eb)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.55.0-2563eb)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 
@@ -23,8 +23,8 @@ ZenTrade 把分散的研究流程放进同一条可审计链路：从市场数�
 
 | 模块 | 能力 |
 | --- | --- |
-| 机会工作台 | 盘前跳空、开盘放量、盘中强势、波段机会板与跨引擎共振；按美东时段组织信息 |
-| 盘面情报 | 核心指数、市场宽度、板块与跨资产热力、宏观和财报日历、自选新闻；只展示，不直接触发交易 |
+| 机会工作台（`/`） | 盘前判断、今日多空模型观察、3+3 策略机会板，以及只记录的盘面雷达（盘前跳空、开盘放量、盘中强势、引擎共振）；按美东时段组织信息，结构见下文 |
+| 盘面情报（`/intel`） | 侧栏「情报」页：核心指数、波动率与利率、市场宽度、板块与跨资产热力、宏观和财报日历、自选新闻；只展示，不直接触发交易。可在「设置 → 扩展页面」关闭菜单显示 |
 | 策略研究 | 内置与自定义策略、因子检验、策略挖掘、回测、参数优化和样本外验证 |
 | 纸面交易 | 风险预算、入场与退出、仓位管理、公司行动处理、只追加事件台账和净值重放 |
 | 数据与扩展 | 数据源能力路由、Python 插件、YAML 自定义 HTTP 数据源、Parquet + DuckDB 本地存储 |
@@ -50,6 +50,20 @@ ZenTrade 把分散的研究流程放进同一条可审计链路：从市场数�
 </details>
 
 截图中的账户数字均为纸面数据。
+
+## 机会页结构
+
+机会页自上而下：
+
+1. **状态栏**：美东 / 北京双时钟、当前时段与下一事件、持仓名额、各引擎状态。
+2. **盘前判断**：美东 08:35 生成的大盘三档判断（偏多 / 观望 / 偏空）与六项依据；与情报页同一份数据，只展示。
+3. **今日多空**：本地排名模型对自选给出看多 5 / 看空 5，只展示并做前向结算，不进入交易环、不写台账。
+4. **大盘状态条**：普涨 / 平常 / 普跌，决定盘面雷达三栏的顺序。
+5. **机会板**：用户可改的 3 个做多 + 3 个做空策略按命中条数打分，再经方向门同向过滤后出卡；一张卡是一张可挂的限价单（入场区、止损、目标、有效期）。开源默认方向门是日线 50 日均线门（`app/opportunity/direction_gate.py`），可通过插件替换。默认 3+3 见 `app/services/swing_desk.py`（`DEFAULT_LONG` / `DEFAULT_SHORT`），在机会页右上齿轮里修改，写入 `data/rules/swing.json`。
+6. **盘面雷达**：盘前跳空、开盘放量、盘中强势与引擎共振，只记录，不下单。
+7. **持仓表**。
+
+自选规则集按版本冻结：`data/rules/R{n}.json` 一版一文件，`data/rules/current.json` 指向当前版本，改勾选或参数会生成新版本。全新数据目录按 `app/services/watchlist_v4.py` 的 `DEFAULT_ENABLED` / `DEFAULT_PARAMS` 起步。规则与 3+3 都是运行数据，不进 Git。
 
 ## 默认交易纪律
 
@@ -205,6 +219,10 @@ ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥�
 - 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商用或作者原始声明；这些内容**不适用本项目的 MIT 授权**。
 - 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。
 - 需要只含 OSI 许可内容的版本时，用 `python scripts/export_core.py --out <目录>` 导出开源核心版（清单见 `scripts/core_manifest.toml`）。
+
+## 版本与构建
+
+应用版本统一固定为 `0.55.0`，后续不再人工升号。具体构建用 Git 提交号区分，见 [版本与构建标识](docs/versioning.md)。
 
 ## 赞助
 

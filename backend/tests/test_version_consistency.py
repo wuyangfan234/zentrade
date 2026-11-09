@@ -42,10 +42,11 @@ def test_frontend_package_version_matches() -> None:
     assert pkg["version"] == __version__
 
 
-def test_changelog_has_current_version_and_empty_unreleased() -> None:
+def test_changelog_retains_fixed_baseline_and_allows_unreleased() -> None:
     import re
     cl = _need(ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     assert re.search(rf"^## \[{re.escape(__version__)}\] - ", cl, re.M), "CHANGELOG 缺当前版本小节"
     m = re.search(r"^## \[未发布\]\n(.*?)(?=^## \[)", cl, re.M | re.S)
     assert m is not None
-    assert not re.search(r"^\s*[-*] ", m.group(1), re.M), "[未发布] 应已归档到版本小节"
+    # Rolling releases keep changes here; release identity comes from Git.
+    assert __version__ == "0.55.0"

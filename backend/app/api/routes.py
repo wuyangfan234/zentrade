@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Request
 
-from app import __version__
+from app import __version__, build_info
 
 router = APIRouter()
 
@@ -25,6 +25,7 @@ def health() -> dict:
     return {
         "status": "ok",
         "version": __version__,
+        "revision": build_info.revision(),
     }
 
 
