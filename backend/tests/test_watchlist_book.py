@@ -463,7 +463,7 @@ def test_contract_short_does_not_freeze_entries_when_a_quote_is_missing(tmp_path
     assert entry_guard.missing_valuation(lg, {"S": {"price": 99.0}, "X": {"price": 50.0}}) == ["L"]
 
 
-def test_contract_rounds_are_never_mirrored_to_broker(tmp_path):
+def test_contract_rounds_mirror_shares_and_backfill_does_not(tmp_path):
     from app.services import alpaca_mirror
     m = alpaca_mirror.AlpacaMirror(tmp_path, http=lambda *a, **k: {})
     m.start([{"seq": 0}])
@@ -474,7 +474,7 @@ def test_contract_rounds_are_never_mirrored_to_broker(tmp_path):
            {"kind": "fill", "seq": 3, "symbol": "PLTR", "side": "buy", "qty": 5, "price": 200.0, "backfill": True, "at": "x"},
            {"kind": "close", "seq": 4, "symbol": "PLTR", "qty": 5, "price": 201.0, "entry_seq": 3, "at": "x"},
            {"kind": "fill", "seq": 5, "symbol": "NVDA", "side": "buy", "qty": 2, "price": 100.0, "at": "x"}]
-    assert m.sync(evs) == 1 and [o["symbol"] for o in m._state["orders"].values()] == ["NVDA"]
+    assert m.sync(evs) == 3 and sorted(o["symbol"] for o in m._state["orders"].values()) == ["MU", "MU", "NVDA"]
 
 
 def test_opposite_short_signal_never_enters_book(tmp_path, monkeypatch, cal):

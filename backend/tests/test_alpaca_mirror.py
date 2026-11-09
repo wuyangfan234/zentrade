@@ -133,3 +133,73 @@ def test_summary_stats(mirror):
     m.poll()
     s = m.summary()
     assert s["filled"] == 1 and s["avg_deviation_bps"] == pytest.approx(20.0, abs=0.01) and s["enabled"] is True
+
+
+def test_backfill_round_is_not_mirrored(mirror):
+    m, fake = mirror
+    m.start([])
+    n = m.sync([ev(1, "fill", "PLTR", 5, 20.0, side="buy", backfill=True),
+                ev(2, "close", "PLTR", 5, 21.0, entry_seq=1)])
+    m.submit_pending()
+    assert n == 0 and fake.posts == [] and m.orders() == []
+
+
+def test_closed_stale_round_is_not_replayed(mirror):
+    m, fake = mirror
+    m.start([])
+    old = (NOW - timedelta(days=3)).isoformat()
+    events = [ev(1, "fill", "AAA", 100, 50.0, side="buy", accounting="contract", at=old),
+              ev(2, "close", "AAA", 100, 55.0, entry_seq=1, at=old)]
+    m.sync(events)
+    m.submit_pending()
+    assert fake.posts == [] and m.orders() == []
+    m.sync(events)
+    m.submit_pending()
+    assert fake.posts == [] and m.orders() == []
+
+
+def test_open_stale_position_catches_up_remaining_shares_once(mirror):
+    m, fake = mirror
+    m.start([])
+    old = (NOW - timedelta(days=2)).isoformat()
+    events = [ev(1, "fill", "AAPL", 100, 180.0, side="buy", accounting="contract", at=old),
+              ev(2, "partial_close", "AAPL", 33, 190.0, entry_seq=1, at=old)]
+    m.sync(events)
+    m.submit_pending()
+    assert fake.posts == [{"symbol": "AAPL", "qty": "67", "side": "buy", "type": "market", "time_in_force": "day",
+                           "client_order_id": "zt-1"}]
+    m.sync(events)
+    m.submit_pending()
+    assert len(fake.posts) == 1
+    fake.fill("zt-1", 200.0)
+    m.poll()
+    summary = m.summary()
+    assert summary["filled"] == 1 and summary["avg_deviation_bps"] is None
+    assert m.positions() == {"AAPL": 67.0}
+
+
+def test_catchup_waits_outside_session_and_then_submits(mirror, monkeypatch):
+    m, fake = mirror
+    m.start([])
+    old = (NOW - timedelta(days=1)).isoformat()
+    m.sync([ev(1, "fill", "MSFT", 10, 400.0, side="buy", accounting="contract", at=old)])
+    monkeypatch.setattr(us_clock, "in_session", lambda *a: False)
+    m.submit_pending()
+    assert fake.posts == [] and m.orders()[0]["status"] == "new"
+    monkeypatch.setattr(us_clock, "in_session", lambda *a: True)
+    m.submit_pending()
+    assert len(fake.posts) == 1 and fake.posts[0]["qty"] == "10"
+
+
+def test_exit_after_catchup_covers_the_broker_fill(mirror):
+    m, fake = mirror
+    m.start([])
+    old = (NOW - timedelta(days=1)).isoformat()
+    opening = [ev(1, "fill", "MU", 10, 100.0, side="short", accounting="contract", at=old)]
+    m.sync(opening)
+    m.submit_pending()
+    fake.fill("zt-1", 100.0)
+    m.poll()
+    m.sync([*opening, ev(2, "close", "MU", 10, 90.0, position_side="short", entry_seq=1)])
+    m.submit_pending()
+    assert fake.posts[-1]["side"] == "buy" and fake.posts[-1]["qty"] == "10"

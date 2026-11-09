@@ -1,5 +1,5 @@
 """做空接入决策台 / 来源 / 镜像 (2026-10-03)。"""
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -84,8 +84,11 @@ def test_phantom_signals_by_side_uses_short_trail():
 
 
 def test_mirror_maps_short_open_to_sell_and_cover_to_buy(tmp_path, monkeypatch):
+    from app.market_clock import us_clock
     m = alpaca_mirror.AlpacaMirror(tmp_path, http=lambda *a, **k: {})
     m._state["started_seq"] = 0
+    # 落在开仓 5 分钟窗口内, 否则仍持有的旧仓会被收成一笔补齐单。
+    monkeypatch.setattr(us_clock, "now", lambda: datetime(2026, 10, 5, 10, 1, tzinfo=us_clock.tz))
     events = [
         {"seq": 1, "kind": "fill", "symbol": "XYZ", "side": "short", "qty": 10, "price": 100.0, "at": "2026-10-05T10:00:00-04:00"},
         {"seq": 2, "kind": "partial_close", "symbol": "XYZ", "position_side": "short", "qty": 5, "price": 95.0, "at": "2026-10-05T11:00:00-04:00"},
