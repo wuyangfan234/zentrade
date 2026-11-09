@@ -1269,6 +1269,7 @@ export interface AlpacaMirrorOrder {
   cid: string; seq: number; symbol: string; side: 'buy' | 'sell'; status: string
   ledger_qty: number; ledger_price: number; ledger_kind: string; ledger_at?: string
   qty?: number; filled_qty?: number; filled_price?: number; deviation_bps?: number; error?: string
+  catchup?: boolean
 }
 export interface AlpacaMirrorPayload {
   summary: { enabled: boolean; started_seq: number | null; orders: number; filled: number; by_status: Record<string, number>

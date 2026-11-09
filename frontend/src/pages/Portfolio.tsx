@@ -711,7 +711,7 @@ function AlpacaMirrorPanel({ data }: { data?: AlpacaMirrorPayload }) {
               <span>{`${o.side === 'buy' ? '买' : '卖'} ${o.symbol} ${o.qty ?? o.ledger_qty} 股`}</span>
               <span>{`内部 $${fmt(o.ledger_price)} → Alpaca ${o.filled_price ? `$${fmt(o.filled_price)}` : '—'}`}</span>
               <span>{o.deviation_bps != null ? `${o.deviation_bps > 0 ? '+' : ''}${o.deviation_bps} 基点` : ''}</span>
-              <span className="text-muted">{MIRROR_STATUS[o.status] ?? o.status}</span>
+              <span className="text-muted">{`${o.catchup ? '补齐持仓 · ' : ''}${MIRROR_STATUS[o.status] ?? o.status}`}</span>
             </div>
           ))}
         </div>

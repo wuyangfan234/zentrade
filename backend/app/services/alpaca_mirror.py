@@ -6,6 +6,8 @@
 安全阀:
 - 只允许 paper-api.alpaca.markets (代码里硬拒绝实盘域名)
 - 镜像从开启那一刻起算 (账户为空仓起步): 开启前的内部持仓不镜像, 其卖出也不镜像 (不卖没买过的股票)
+- 合约式回合按股数镜像 (只对执行价, 不复刻保证金核算); 事后回补整轮不镜像
+- 已平掉、且开仓已过 5 分钟窗口的历史回合不补单; 仍持有的错过窗口仓位只补一笔剩余股数, 不计入平均偏差
 - 平仓数量不超过本回合及镜像账户的实际累计成交净仓 (含部分成交, 扣除未决平仓余量)
 - 幂等: client_order_id = zt-<台账 seq>; POST 前持久化提交标记, 结果不明只按 CID 对账、不重发
 - 每日最多 N 笔提交尝试 (默认 30); 一键停用 (kill switch), 每次开关写审计
@@ -117,14 +119,16 @@ class AlpacaMirror:
                 return 0
             added = 0
             skip_rounds: set[int] = set()
+            ignored = set(self._state.get("skipped_seqs") or [])
+            for existing in self._state["orders"].values():
+                ignored.update(existing.get("absorbed_seqs") or [])
             for e in events:
-                if e.get("kind") == "fill" and (e.get("accounting") == "contract" or e.get("backfill")):
+                # 事后回补整轮不镜像。合约式按股数镜像: 券商单只用来对执行价, 不复刻保证金现金。
+                if e.get("kind") == "fill" and e.get("backfill"):
                     skip_rounds.add(e["seq"])
-                if e["seq"] <= start or e.get("kind") not in ("fill", "partial_close", "close"):
+                if e["seq"] <= start or e["seq"] in ignored or e.get("kind") not in ("fill", "partial_close", "close"):
                     continue
-                if e.get("accounting") == "contract" or e.get("backfill") or e.get("entry_seq") in skip_rounds:
-                    # 合约式回合 (自选机会卡试用/前向档) 与事后回补回合整轮不镜像: 券商股票单表达不了合约式核算
-                    # (空单要借券、按全额名义占资金、每日 30 单上限), 镜像会与台账系统性分叉 (2026-10-10 审查)
+                if e.get("backfill") or e.get("entry_seq") in skip_rounds:
                     if e["kind"] == "fill":
                         skip_rounds.add(e["seq"])
                     continue
@@ -144,7 +148,9 @@ class AlpacaMirror:
                                               "ledger_kind": e["kind"], "ledger_at": e.get("at"), "status": "new"}
                 added += 1
             self._assign_rounds()
-            if added:
+            self._collapse_stale_rounds()
+            if added or self._state.get("_collapsed"):
+                self._state.pop("_collapsed", None)
                 self._save()
             return added
 
@@ -188,6 +194,69 @@ class AlpacaMirror:
                     current["qty"] -= o["ledger_qty"]
                     if o["ledger_kind"] == "close" or current["qty"] <= 1e-9:
                         active.pop(symbol, None)
+
+    def _ledger_time(self, o: dict) -> datetime | None:
+        try:
+            at = datetime.fromisoformat(str(o.get("ledger_at")))
+        except (TypeError, ValueError):
+            return None
+        if at.tzinfo is None:
+            at = at.replace(tzinfo=us_clock.tz)
+        return at
+
+    def _collapse_stale_rounds(self) -> None:
+        """Do not replay closed history. Catch up a still-open round with one order.
+
+        A round whose opening is already past the fresh-submit window and whose
+        ledger net is flat is dropped (and its seqs remembered so the next sync
+        cannot recreate it). A still-open round collapses to the earliest open
+        order, sized to the remaining shares, and later historical exits are
+        absorbed so they are not sent on top of that net quantity.
+        """
+        now = us_clock.now()
+        groups: dict = {}
+        for o in list(self._state["orders"].values()):
+            if o.get("round_seq") is None:
+                continue
+            groups.setdefault(o.get("round_seq"), []).append(o)
+        skipped = set(self._state.get("skipped_seqs") or [])
+        changed = False
+        for group in groups.values():
+            if any(self._attempted(o) for o in group):
+                continue
+            opens = [o for o in group if self._intent(o) in ("open_long", "open_short")]
+            exits = [o for o in group if self._intent(o) in ("close_long", "cover")]
+            if not opens:
+                continue
+            remain = sum(float(o["ledger_qty"]) for o in opens) - sum(float(o["ledger_qty"]) for o in exits)
+            oldest = min(opens, key=lambda o: o["seq"])
+            at = self._ledger_time(oldest)
+            if at is None or (now - at).total_seconds() <= SUBMIT_WINDOW_SECONDS:
+                continue
+            if remain <= 1e-9:
+                skipped.update(int(o["seq"]) for o in group)
+                for o in group:
+                    self._state["orders"].pop(o["cid"], None)
+                changed = True
+                continue
+            absorbed = set(oldest.get("absorbed_seqs") or [])
+            absorbed.update(int(o["seq"]) for o in group if o["cid"] != oldest["cid"])
+            absorbed_sorted = sorted(absorbed)
+            same = (float(oldest.get("ledger_qty") or 0) == remain and oldest.get("catchup") is True
+                    and list(oldest.get("absorbed_seqs") or []) == absorbed_sorted
+                    and all(o["cid"] == oldest["cid"] for o in group))
+            if same:
+                continue
+            for o in group:
+                if o["cid"] != oldest["cid"]:
+                    self._state["orders"].pop(o["cid"], None)
+            oldest["ledger_qty"] = remain
+            oldest["catchup"] = True
+            oldest["absorbed_seqs"] = absorbed_sorted
+            changed = True
+        if changed:
+            self._state["skipped_seqs"] = sorted(skipped)
+            self._state["_collapsed"] = True
 
     def _round_orders(self, o: dict) -> list[dict]:
         if o.get("round_seq") is None:
@@ -379,15 +448,22 @@ class AlpacaMirror:
                     if any(self._intent(other) in ("close_long", "cover") for other in self._round_orders(o)):
                         o["status"] = "skipped_internal_exit"
                         continue
-                    try:
-                        at = datetime.fromisoformat(str(o["ledger_at"]))
-                        if at.tzinfo is None:
-                            at = at.replace(tzinfo=us_clock.tz)
-                    except (TypeError, ValueError):
-                        at = now
-                    if not us_clock.in_session(now) or (now - at).total_seconds() > SUBMIT_WINDOW_SECONDS:
-                        o["status"] = "expired_out_of_session"
-                        continue
+                    if o.get("catchup"):
+                        # Remaining shares of a position the mirror missed. Wait for
+                        # the session; do not expire, or the open book stays flat forever.
+                        if not us_clock.in_session(now):
+                            o["wait_reason"] = "outside_session"
+                            continue
+                    else:
+                        try:
+                            at = datetime.fromisoformat(str(o["ledger_at"]))
+                            if at.tzinfo is None:
+                                at = at.replace(tzinfo=us_clock.tz)
+                        except (TypeError, ValueError):
+                            at = now
+                        if not us_clock.in_session(now) or (now - at).total_seconds() > SUBMIT_WINDOW_SECONDS:
+                            o["status"] = "expired_out_of_session"
+                            continue
                     previous = [other for other in self._orders_locked() if other["symbol"] == o["symbol"]
                                 and other["seq"] < o["seq"] and other.get("round_seq") != o["round_seq"]]
                     if any(self._working(other) for other in previous) or any(
@@ -459,8 +535,9 @@ class AlpacaMirror:
 
     def _summary_locked(self) -> dict:
         orders = self._orders_locked()
-        filled = [o for o in orders if o["status"] == "filled" and o.get("deviation_bps") is not None]
-        devs = [o["deviation_bps"] for o in filled]
+        filled = [o for o in orders if o["status"] == "filled"]
+        devs = [o["deviation_bps"] for o in filled
+                if o.get("deviation_bps") is not None and not o.get("catchup")]
         by_status: dict[str, int] = {}
         for o in orders:
             by_status[o["status"]] = by_status.get(o["status"], 0) + 1
@@ -469,7 +546,7 @@ class AlpacaMirror:
                 "avg_deviation_bps": round(sum(devs) / len(devs), 2) if devs else None,
                 "worst_deviation_bps": max(devs) if devs else None, "positions": self.positions(),
                 "last_error": self._state.get("last_error"), "max_orders_per_day": self.max_orders_per_day,
-                "rules": "只镜像开启之后的成交；市价单；常规时段提交、开仓限成交后 5 分钟；退出先撤未决开仓并对账，等待不丢弃；平仓限本回合累计净仓并扣未决余量；POST 结果不明只查询不重发；每天最多 30 次提交尝试；可一键停用"}
+                "rules": "只镜像开启之后的成交(含合约式股数, 事后回补不镜像); 市价单; 常规时段提交, 新开仓限成交后 5 分钟; 仍持有且已过窗口的仓位补一笔剩余股数, 不计入平均偏差; 已平历史不补; 退出先撤未决开仓并对账, 等待不丢弃; 平仓限本回合累计净仓并扣未决余量; POST 结果不明只查询不重发; 每天最多 30 次提交尝试; 可一键停用"}
 
     def tick(self, events: list[dict]) -> dict:
         """调度入口: 登记 → 先对账 → 提交 → 再对账。异常只记录不外抛。"""
