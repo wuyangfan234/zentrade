@@ -1,7 +1,7 @@
 # ZenTrade · 禅交易
 
 [![CI](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml/badge.svg)](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.54.1-2563eb)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.55.0-2563eb)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 
@@ -205,6 +205,10 @@ ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥�
 - 部分策略移植保留 GPL-3.0、MPL-2.0、CC BY-NC-SA 4.0、非商用或作者原始声明；这些内容**不适用本项目的 MIT 授权**。
 - 严格开源或商业使用前，必须逐项核对 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。含非商用限制的组件不应被理解为 OSI 意义上的全仓统一开源授权。
 - 需要只含 OSI 许可内容的版本时，用 `python scripts/export_core.py --out <目录>` 导出开源核心版（清单见 `scripts/core_manifest.toml`）。
+
+## 版本与构建
+
+应用版本统一固定为 `0.55.0`，后续不再人工升号。具体构建用 Git 提交号区分，见 [版本与构建标识](docs/versioning.md)。
 
 ## 赞助
 

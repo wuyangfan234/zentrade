@@ -1051,7 +1051,7 @@ export function Layout() {
                   <Settings className={cn('h-4 w-4 shrink-0 transition-colors', isActive ? 'text-accent' : 'text-foreground/60 group-hover:text-foreground/85')} />
                   {!railMode && <span>设置</span>}
                   {!railMode && version && (
-                    <span className="ml-auto font-mono text-[10px] text-muted select-none shrink-0">
+                    <span title={versionData?.revision} className="ml-auto font-mono text-[10px] text-muted select-none shrink-0">
                       {version}
                       {hasUpdate && update.info && (
                         <span

@@ -850,12 +850,12 @@ def get_version(request: Request) -> dict:
     优先读 app.__version__ (与 /health 接口同源, 唯一权威版本),
     回退到项目根 VERSION 文件, 最后兜底 v0.0.0。
     """
-    from app import __version__
+    from app import __version__, build_info
 
     # 1. 优先用 app.__version__ (唯一权威版本, 打包期由 PyInstaller 注入)
     if __version__:
         v = __version__.strip()
-        return {"version": v if v.startswith("v") else f"v{v}"}
+        return {"version": v if v.startswith("v") else f"v{v}", "revision": build_info.revision()}
 
     # 2. 回退到项目根 VERSION 文件
     from app.config import settings

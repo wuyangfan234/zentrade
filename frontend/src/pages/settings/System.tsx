@@ -368,6 +368,7 @@ export function SettingsSystemPanel() {
           </div>
           <span className="font-mono text-xs text-secondary shrink-0">
             {versionData?.version ?? '—'}
+            {versionData?.revision && <span className="ml-2 text-muted" title={versionData.revision}>{versionData.revision.slice(0, 7)}</span>}
           </span>
         </div>
 
@@ -377,7 +378,9 @@ export function SettingsSystemPanel() {
             <div className="text-sm text-foreground">检查更新</div>
             <div className="text-[11px] leading-4 text-muted">
               {updateState === 'found' && updateInfo
-                ? `发现新版本 ${updateInfo.latest} (当前 ${versionData?.version ?? '—'})`
+                ? (updateInfo.source === 'commit'
+                    ? `新构建 · ${updateInfo.latestRevision?.slice(0, 7) ?? '—'}`
+                    : `发现新版本 ${updateInfo.latest} (当前 ${versionData?.version ?? '—'})`)
                 : updateState === 'latest'
                   ? `已是最新版本 (${versionData?.version ?? '—'})`
                   : updateState === 'error'

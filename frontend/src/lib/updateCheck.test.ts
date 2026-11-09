@@ -10,7 +10,7 @@ vi.mock('@/lib/api', () => ({ api: mocks }))
 
 import { checkForUpdate, compareVersion, getUpdateState, resetUpdateState } from './updateCheck'
 
-const CACHE_KEY = 'update_check_cache_v2'
+const CACHE_KEY = 'update_check_cache_v3'
 const DAY = 24 * 60 * 60 * 1000
 
 const res = (over: Record<string, unknown> = {}) => ({
@@ -109,6 +109,17 @@ describe('checkForUpdate (经后端 /api/settings/update-check)', () => {
     mocks.updateCheck.mockResolvedValue({ enabled: false, repo: '', current: '0.3.2', status: 'disabled', checked_at: null })
     await checkForUpdate('0.3.2')
     expect(getUpdateState().status).toBe('disabled')
+  })
+
+  it('固定版本按服务端提交比较显示更新, 不再比较相同版本号', async () => {
+    mocks.updateCheck.mockResolvedValue(res({ current: '0.55.0', latest: 'v0.55.0', source: 'commit', current_revision: 'aaaaaaa', latest_revision: 'bbbbbbb' }))
+    await checkForUpdate('0.55.0', { revision: 'aaaaaaa' })
+    expect(getUpdateState().status).toBe('found')
+    resetUpdateState()
+    mocks.updateCheck.mockResolvedValue(res({ current: '0.55.0', latest: 'v0.55.0', source: 'commit', status: 'latest', current_revision: 'bbbbbbb' }))
+    await checkForUpdate('0.55.0', { revision: 'bbbbbbb' })
+    expect(mocks.updateCheck).toHaveBeenCalledTimes(2)
+    expect(getUpdateState().status).toBe('latest')
   })
 
   it('版本未知时空操作', async () => {

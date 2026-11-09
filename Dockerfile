@@ -125,6 +125,7 @@ ENV UV_NO_SYNC=1
 # and a few local-date defaults (e.g. backtest end date); override with -e TZ=... if needed.
 ENV TZ=Asia/Shanghai
 ARG ZENTRADE_COMMIT=dev
+ENV ZENTRADE_COMMIT=${ZENTRADE_COMMIT}
 LABEL org.opencontainers.image.revision=${ZENTRADE_COMMIT} \
       org.opencontainers.image.title="ZenTrade" \
       org.opencontainers.image.description="Self-hosted US swing-trading research, monitoring and paper-trading workspace" \

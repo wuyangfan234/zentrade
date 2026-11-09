@@ -1,8 +1,8 @@
 """新版本检查 (0.44.0) — 自托管部署发现上游仓库有更新时提醒。
 
 查法 (服务端出网, 不依赖浏览器 CORS / GitHub 未认证限额按访客 IP 计):
-  1. GitHub Releases latest (有 Release 时带更新说明与页面链接);
-  2. 没有 Release 时回退读默认分支的 VERSION 文件 (合并到 main 即算新版)。
+  0.55.0 起版本固定, 按默认分支提交的祖先关系判断是否有更新。
+  历史版本保留 Releases / VERSION 比较; 未知或无共同历史不宣称最新。
 结果在进程内缓存 6 小时; 手动检查 (force) 绕过缓存。失败不抛, 返回 status=error。
 
 配置 (.env):
@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 
-from app import __version__
+from app import __version__, build_info
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -88,6 +88,32 @@ def _fetch(repo: str) -> dict:
     raise LookupError(f"未取到版本信息 (HTTP {status})")
 
 
+def _fetch_revision(repo: str, current_revision: str) -> dict:
+    """Compare ancestry, not unequal hashes: private/diverged trees are unknown."""
+    if current_revision == "unknown":
+        raise LookupError("当前构建没有提交标识, 无法检查更新")
+    base = f"https://api.github.com/repos/{repo}"
+    status, commit = _get_json(f"{base}/commits/HEAD")
+    latest = commit.get("sha", "") if status == 200 and isinstance(commit, dict) else ""
+    if not isinstance(latest, str) or not re.fullmatch(r"[0-9a-f]{40}", latest):
+        raise LookupError(f"未取到最新提交 (HTTP {status})")
+    comparison = "identical"
+    if current_revision != latest:
+        status, compared = _get_json(f"{base}/compare/{current_revision}...{latest}")
+        comparison = compared.get("status") if status == 200 and isinstance(compared, dict) else None
+    if comparison not in {"ahead", "behind", "identical"}:
+        raise LookupError("当前构建与更新仓库的提交历史无法比较")
+    return {
+        "status": "update_available" if comparison == "ahead" else "latest",
+        "latest": f"v{__version__}",
+        "latest_revision": latest,
+        "source": "commit",
+        "url": f"https://github.com/{repo}/commit/{latest}",
+        "notes": "",
+        "published_at": None,
+    }
+
+
 def check(*, force: bool = False, now: float | None = None) -> dict:
     """返回 {enabled, repo, current, status, latest?, url?, notes?, source?, checked_at, error?}。
 
@@ -96,22 +122,27 @@ def check(*, force: bool = False, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     repo = (settings.update_check_repo or "").strip()
     current = __version__
-    base = {"enabled": bool(settings.update_check_enabled and repo), "repo": repo, "current": current}
+    revision = build_info.revision()
+    base = {"enabled": bool(settings.update_check_enabled and repo), "repo": repo, "current": current,
+            "current_revision": revision}
     if not settings.update_check_enabled or not repo:
         return {**base, "status": "disabled", "checked_at": None}
     if not _REPO_RE.match(repo):
         return {**base, "status": "error", "error": "UPDATE_CHECK_REPO 格式应为 owner/repo", "checked_at": None}
     with _lock:
         hit = _cache.get(repo)
-        if hit and not force and now - hit["checked_at"] < CACHE_TTL_S and hit.get("current") == current:
+        if hit and not force and now - hit["checked_at"] < CACHE_TTL_S and hit.get("current") == (current, revision):
             return {**base, **hit["result"], "checked_at": hit["checked_at"], "cached": True}
     try:
-        info = _fetch(repo)
-        status = "update_available" if is_newer(info["latest"], current) else "latest"
-        result = {"status": status, **info}
+        if parse_version(current) >= (0, 55, 0):
+            result = _fetch_revision(repo, revision)
+        else:
+            info = _fetch(repo)
+            status = "update_available" if is_newer(info["latest"], current) else "latest"
+            result = {"status": status, **info}
     except Exception as e:
         logger.info("update check failed for %s: %s", repo, type(e).__name__)
         result = {"status": "error", "error": str(e)[:200] if isinstance(e, LookupError) else "网络不可达或超时"}
     with _lock:
-        _cache[repo] = {"result": result, "checked_at": now, "current": current}
+        _cache[repo] = {"result": result, "checked_at": now, "current": (current, revision)}
     return {**base, **result, "checked_at": now, "cached": False}
