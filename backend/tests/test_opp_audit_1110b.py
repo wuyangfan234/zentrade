@@ -406,12 +406,19 @@ def test_live_line_marks_stale_replay_and_counts_cards(tmp_path, monkeypatch):
     p = ss.outcomes_path(tmp_path)
     p.parent.mkdir(parents=True)
     p.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
-    built = (ss.base_rates().get("rules") or {}).get("long") or []
-    line = ss.live_line(tmp_path, built, None)["long"]
+    base = {"rules": {"long": ["rule_a", "rule_b"], "short": []},
+            "long": {"mean_r": {"v": 0.3}, **{k: {"p": 0.6} for k in ("fill", "win", "target", "stop", "time")}}}
+    monkeypatch.setattr(ss, "base_rates", lambda: base)
+    line = ss.live_line(tmp_path, ["rule_b", "rule_a"], None)["long"]
     assert line["cards"] == 4 and line["n"] == 3 and line["fill"] == 0.75 and line["mean_r"] == -1.0   # void 不计
-    assert line["replay_stale"] is False and line["replay_mean_r"] == ss.base_rates()["long"]["mean_r"]["v"]
+    assert line["replay_stale"] is False and line["replay_mean_r"] == 0.3 and line["replay_fill"] == 0.6
     stale = ss.live_line(tmp_path, ["some_other_rule"], None)["long"]
     assert stale["replay_stale"] is True and stale["replay_mean_r"] is None and stale["replay_fill"] is None
+    # 没有回放统计表 (开源核心版不带): 实际数照给, 回放值留空, 不判背离
+    monkeypatch.setattr(ss, "base_rates", lambda: {})
+    bare = ss.live_line(tmp_path, ["rule_a"], None)["long"]
+    assert bare["n"] == 3 and bare["mean_r"] == -1.0 and bare["replay_stale"] is True
+    assert bare["replay_mean_r"] is None and bare["diverged"] is False
 
 
 def test_intraday_view_carries_live_vs_replay(tmp_path, monkeypatch, cal):

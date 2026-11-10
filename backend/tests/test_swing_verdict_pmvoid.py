@@ -297,6 +297,7 @@ def test_odds_table_covers_every_state():
     assert cells["long|1|birth"]["n"] > 2000
 
 
+@pytest.mark.full_edition
 def test_odds_and_base_tables_describe_themselves():
     """两份表都只对生成它的那套 3+3 成立: 文件自己写明规则 / 窗口 / 名单 / 结算口径 (重算后自动跟上, 不守具体笔数)。"""
     o, b = sv.odds_table(), ss.base_rates()
