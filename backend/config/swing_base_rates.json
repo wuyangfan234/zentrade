@@ -1,15 +1,15 @@
 {
  "contract": "swing-desk-tight-v1",
- "settle_contract": "swing-settle-v2",
+ "settle_contract": "swing-settle-v3",
  "window": [
   "2023-01-03",
-  "2026-09-18"
+  "2026-10-30"
  ],
  "rules": {
   "long": [
-   "volume_price_surge",
-   "tv_smc_structure",
-   "ibs_mean_reversion"
+   "ibs_mean_reversion",
+   "tv_zlsma_cross",
+   "trend_breakout"
   ],
   "short": [
    "tv_smc_structure",
@@ -17,128 +17,131 @@
    "tv_halftrend"
   ]
  },
- "universe": "watchlist 58 (2026-10-15)",
+ "universe": "watchlist 46 (2026-11-09)",
+ "data_end": "2026-11-09",
+ "tiebreak": "hash-v1",
+ "entry_window": "09:45 to 30 min before close (same as paper)",
  "r_unit": "per-share R vs plan risk (zone mid to stop), incl. 5bps slippage, no fees, no account limits",
  "alpha": 0.05,
- "source": "offline premarket replay calibration (2026-10)",
- "generated": "2026-10-19T17:18:27+08:00",
+ "source": "backend/scripts/rebuild_swing_odds.py (production compose_boards + replay_card)",
+ "generated": "2026-11-10T17:08:54+08:00",
  "long": {
-  "cards": 2302,
-  "filled": 1377,
+  "cards": 2594,
+  "filled": 1626,
   "fill": {
-   "p": 0.5982,
+   "p": 0.6268,
    "ci": [
-    0.5632,
-    0.6332
+    0.5937,
+    0.6599
    ],
-   "k": 1377,
-   "n": 2302
+   "k": 1626,
+   "n": 2594
   },
   "win": {
-   "p": 0.512,
+   "p": 0.5068,
    "ci": [
-    0.4677,
-    0.5562
+    0.4657,
+    0.5478
    ],
-   "k": 705,
-   "n": 1377
+   "k": 824,
+   "n": 1626
   },
   "target": {
-   "p": 0.2033,
+   "p": 0.2269,
    "ci": [
-    0.1591,
-    0.2476
+    0.1859,
+    0.268
    ],
-   "k": 280,
-   "n": 1377
+   "k": 369,
+   "n": 1626
   },
   "stop": {
-   "p": 0.3232,
+   "p": 0.3462,
    "ci": [
-    0.2789,
-    0.3674
+    0.3052,
+    0.3873
    ],
-   "k": 445,
-   "n": 1377
+   "k": 563,
+   "n": 1626
   },
   "time": {
-   "p": 0.4735,
+   "p": 0.4268,
    "ci": [
-    0.4292,
-    0.5178
+    0.3858,
+    0.4678
    ],
-   "k": 652,
-   "n": 1377
+   "k": 694,
+   "n": 1626
   },
   "mean_r": {
-   "v": 0.2706,
+   "v": 0.2951,
    "ci": [
-    -0.0187,
-    0.5125
+    0.0266,
+    0.5188
    ],
-   "n": 1377
+   "n": 1626
   }
  },
  "short": {
-  "cards": 384,
-  "filled": 265,
+  "cards": 357,
+  "filled": 240,
   "fill": {
-   "p": 0.6901,
+   "p": 0.6723,
    "ci": [
-    0.6104,
-    0.7698
+    0.5898,
+    0.7547
    ],
-   "k": 265,
-   "n": 384
+   "k": 240,
+   "n": 357
   },
   "win": {
-   "p": 0.5019,
+   "p": 0.4875,
    "ci": [
-    0.4071,
-    0.5966
+    0.3882,
+    0.5868
    ],
-   "k": 133,
-   "n": 265
+   "k": 117,
+   "n": 240
   },
   "target": {
-   "p": 0.2189,
+   "p": 0.2042,
    "ci": [
-    0.1241,
-    0.3136
+    0.1049,
+    0.3034
    ],
-   "k": 58,
-   "n": 265
+   "k": 49,
+   "n": 240
   },
   "stop": {
-   "p": 0.3358,
+   "p": 0.3958,
    "ci": [
-    0.2411,
-    0.4306
+    0.2966,
+    0.4951
    ],
-   "k": 89,
-   "n": 265
+   "k": 95,
+   "n": 240
   },
   "time": {
-   "p": 0.4453,
+   "p": 0.4,
    "ci": [
-    0.3505,
-    0.54
+    0.3007,
+    0.4993
    ],
-   "k": 118,
-   "n": 265
+   "k": 96,
+   "n": 240
   },
   "mean_r": {
-   "v": 0.1477,
+   "v": 0.1168,
    "ci": [
-    -0.4145,
-    0.7225
+    -0.4929,
+    0.6984
    ],
-   "n": 265
+   "n": 240
   }
  },
  "void_rule": "long day-1: last premarket 30m close (04:00-09:00 ET) < stop -> card void",
  "void_cards": {
-  "long": 24,
+  "long": 29,
   "short": 0
  }
 }

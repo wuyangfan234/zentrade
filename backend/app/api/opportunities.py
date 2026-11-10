@@ -399,6 +399,33 @@ class OppSettingsIn(BaseModel):
     radar_push: RadarPushIn | None = None
 
 
+_SWING_BAN = frozenset({"evo", "phantom_4h", "phantom_4h_short", "phantom_4h_pine"})   # save_strategies 本来就丢掉这几条
+
+
+def _swing_rule_errors(request: Request, long_ids: list[str], short_ids: list[str]) -> str | None:
+    """3+3 写入前核对规则 (2026-11-10 审计 #7: 旧写口不核对, 已删除 / 改名的策略名留在 3+3 里占一个位置,
+    那一条永远不出卡且页面没有提示)。做多 = 规则目录里有的策略或已导入的排序因子; 做空 = 能做空的规则
+    (与旧规则集写口 POST /rules 同一判断)。返回给用户看的原因; 没问题 = None。"""
+    from app.services import watchlist_table as wt
+    from app.services import watchlist_v4 as wv
+    engine = getattr(request.app.state, "strategy_engine", None)
+    known = {r["id"] for r in wt.rule_catalog(engine)}
+    # 策略目录读不到 (引擎没起来 / 列策略失败, 目录只剩 4 条固定项): 做多不核对, 不因目录故障拦住保存
+    check_long = engine is not None and len(known) > 4
+    try:
+        from app.services import rank_lab
+        known |= set(rank_lab.read_rankers(request.app.state.repo.store.data_dir))
+    except Exception:
+        pass
+    bad_long = sorted({x for x in long_ids if x not in _SWING_BAN and x not in known}) if check_long else []
+    if bad_long:
+        return f"未知规则 (已删除或改名, 先取消勾选): {', '.join(bad_long[:5])}"
+    bad_short = sorted({x for x in short_ids if x not in _SWING_BAN and not wv.short_capable(x)})
+    if bad_short:
+        return f"不能做空的规则 (先取消勾选): {', '.join(bad_short[:5])}"
+    return None
+
+
 @router.post("/settings")
 def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
     """0.29.0 规则齿轮唯一保存口: 3+3 + 单笔风险 (风险变了才建规则集新版本, 勾选原样沿用)。"""
@@ -414,6 +441,9 @@ def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
         if float(body.radar_push.min_rvol) not in open_radar.PUSH_LEVELS:
             raise HTTPException(422, f"radar_push.min_rvol must be one of {list(open_radar.PUSH_LEVELS)}")
         push = {"enabled": body.radar_push.enabled, "min_rvol": float(body.radar_push.min_rvol)}
+    bad = _swing_rule_errors(request, body.long, body.short)
+    if bad:
+        raise HTTPException(422, bad)
     return opp_page.save_settings(request.app.state.repo.store.data_dir, long_ids=body.long, short_ids=body.short,
                                   risk_pct=risk, note=body.note, radar_push=push)
 

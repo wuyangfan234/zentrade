@@ -31,6 +31,32 @@ export const PHASE_ZH: Record<string, string> = {
   closed: '休市', night: '盘前未开', premarket: '盘前', open_wait: '开盘观察', session: '盘中', after: '已收盘',
 }
 
+/** 机会板卡不下单的原因 (后端 verdict_reason 原因码) */
+export const SKIP_ZH: Record<string, string> = {
+  holding_other: '同票持仓', cooldown: '平仓冷却', earnings: '财报前一日', direction_conflict: '多空冲突',
+  paper_watch: '准入阻断', premarket_beyond_stop: '盘前越止损', entry_closed: '入场截止',
+}
+
+type VerdictCard = { verdict?: string | null; verdict_reason?: string | null; blocked?: string | null; paper_reason?: string | null
+  state?: string | null; dist_pct?: number | null }
+/** 一张机会板卡的结论: 下单 / 不下单 + 原因。以后端裁决 (verdict) 为准; 载荷里没有裁决时按 blocked 判 */
+export function cardVerdict(c: VerdictCard): { order: boolean; label: string; detail: string; title?: string } {
+  const code = c.verdict === 'skip' ? (c.verdict_reason ?? c.blocked ?? '') : c.verdict ? '' : (c.blocked ?? '')
+  if (code) {
+    let detail = SKIP_ZH[code] ?? code
+    let title: string | undefined
+    if (code === 'paper_watch' && c.paper_reason) {
+      const body = c.paper_reason.includes('：') ? c.paper_reason.split('：').slice(1).join('：') : c.paper_reason
+      const first = body.replace(/;/g, '；').split('；').map((x) => x.trim()).filter(Boolean)[0]
+      if (first) detail = first
+      title = c.paper_reason
+    }
+    return { order: false, label: '不下单', detail, title }
+  }
+  const detail = c.state === 'in_zone' ? '在区' : typeof c.dist_pct === 'number' && Number.isFinite(c.dist_pct) ? `距区 ${Math.abs(c.dist_pct).toFixed(1)}%` : '待触发'
+  return { order: true, label: '下单', detail }
+}
+
 export const p2 = (n?: number | null) => (typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2) : '—')
 export const usdS = (n?: number | null) => (typeof n === 'number' && Number.isFinite(n) ? `${n > 0 ? '+' : n < 0 ? '−' : ''}$${Math.abs(Math.round(n)).toLocaleString('en-US')}` : '—')
 export const rS = (n?: number | null) => (typeof n === 'number' && Number.isFinite(n) ? `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}R` : '—')

@@ -132,16 +132,18 @@ def _cells(data_dir: Path, repo, symbols: list[str], days: list[date], close: np
         bars = ss._m30_days(data_dir, repo, sym, days[0], days[-1])
         if not bars:
             continue
+        subs = ss._open15_days(data_dir, repo, sym, days[0], days[-1])     # 09:45 那根 (入场起点); 缺的天从 10:00 起判
         for t in ts:
             g = sd.geometry("long", float(close[t, j]), float(atr[t, j]))
             if g is None:
                 continue
-            seq = []
+            seq, sub = [], []
             for k in range(1, 8):
                 if t + k >= n_days or days[t + k] not in bars:
                     break
                 seq.append(bars[days[t + k]])
-            res = ss.replay_card("long", tuple(g["entry_zone"]), g["stop"], g["target"], seq)
+                sub.append(subs.get(days[t + k]))
+            res = ss.replay_card("long", tuple(g["entry_zone"]), g["stop"], g["target"], seq, open15=sub)
             if res["status"] == "no_fill":
                 out[(t, j)] = None
             elif res["status"] == "closed":

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, type SwingReconcileRow, type SwingSettleProp, type SwingSettleRow, type SwingSettleSide, type SwingSettlePayload } from '@/lib/api'
+import { api, type SwingReconcileRow, type SwingSettleProp, type SwingSettleRow, type SwingSettleSide, type SwingSettlePayload, type SwingShadowTable } from '@/lib/api'
 
 /**
  * 卡结局 (0.26.0, 10-18 产品决策“机会页折中方案”): 每张上过板的卡的自动结局 (实际) 与 30 分钟K 回放 (回放), 多空分开。
@@ -58,6 +58,48 @@ function Side({ name, s }: { name: string; s: SwingSettleSide }) {
   )
 }
 
+const SHADOW_ROWS: [string, string][] = [
+  ['cut:long', '被截掉 · 多'], ['cut:short', '被截掉 · 空'], ['gate_4h:long', '4h 门挡掉 · 多'], ['gate_4h:short', '4h 门挡掉 · 空'],
+]
+
+/** 影子对照 (2026-11-10): 没上板的同几何候选只结算不下单。每行 = 影子卡 vs 同一批信号日里上了板的卡。 */
+export function ShadowTable({ s }: { s: SwingShadowTable }) {
+  const cell = (x: { cards: number; filled: number; mean_r: { v: number | null } }) => `${x.filled}/${x.cards} · ${r2(x.mean_r.v)}`
+  return (
+    <section data-swing-shadow className="mt-4">
+      <div className="mb-1 flex items-baseline gap-2">
+        <h3 className="text-sm font-semibold">影子对照</h3>
+        <span className="text-muted" title="被每边前 5 张截掉、或 3+3 命中但 4h 门不同向的候选，按上板卡同一套价位只结算不下单">{`没上板的候选 · 已结算 ${s.n_total} 张 · 只记录`}</span>
+      </div>
+      <table className="w-full whitespace-nowrap">
+        <thead className="text-muted">
+          <tr className="border-b border-border">
+            {['', '信号日', '影子 成交/张 · 均 R', '区间', '同日上板 成交/张 · 均 R', '差'].map((h, i) => (
+              <th key={`${h}-${i}`} className={`py-1 pr-3 font-normal ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {SHADOW_ROWS.map(([k, label]) => {
+            const g = s.groups[k]
+            if (!g) return null
+            return (
+              <tr key={k} data-shadow-row={k} className="border-b border-border/50">
+                <td className="py-1 pr-3">{label}</td>
+                <td className="pr-3 text-right">{g.days}</td>
+                <td className="pr-3 text-right">{cell(g.shadow)}</td>
+                <td className="pr-3 text-right text-muted">{ci(g.ci, r2)}</td>
+                <td className="pr-3 text-right">{g.board.cards ? cell(g.board) : '—'}</td>
+                <td className="text-right">{r2(g.diff_mean_r)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
 const WHY: Record<string, string> = { target: '目标', stop: '止损', time: '到期', premarket_beyond_stop: '盘前越止损取消' }
 
 const ISSUE: Record<string, string> = {
@@ -100,6 +142,7 @@ export function SwingSettlement() {
         <Side name="long" s={d.sides.long} />
         <Side name="short" s={d.sides.short} />
       </div>
+      {d.shadow && <ShadowTable s={d.shadow} />}
       {d.recent.length > 0 && (
         <div className="mt-4 overflow-x-auto">
           <table className="w-full whitespace-nowrap">

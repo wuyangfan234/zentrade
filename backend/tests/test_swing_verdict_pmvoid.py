@@ -212,6 +212,10 @@ def _ledger_stub(monkeypatch, nav=100_000.0, positions=(), events=()):
 
 def _board(tmp_path, monkeypatch, now, prices):
     _ledger_stub(monkeypatch)
+    # 赔率表只对生成它的那套 3+3 给数字 (2026-11-10 审计 #1); 这些用例测的是查表与折美元, 让表认本用例的出卡规则
+    real = sv.odds_table()
+    lr, srules = sd.strategies_from_ruleset(tmp_path)
+    monkeypatch.setattr(sv, "odds_table", lambda: {**real, "rules": {"long": list(lr), "short": list(srules)}})
     monkeypatch.setattr(sd, "_live_prices", lambda repo, syms, today, now=None: prices)
     monkeypatch.setattr(sd, "_earnings_blocked", lambda *a: set())
     monkeypatch.setattr(us_clock, "now", lambda: now)
@@ -248,7 +252,7 @@ def test_board_premarket_beyond_stop_before_check_is_skip(tmp_path, monkeypatch,
     out = _board(tmp_path, monkeypatch, et(D1, 8, 30), {"LLY": (97.0, "premarket")})
     c = out["long"][0]
     assert c["verdict"] == "skip" and c["verdict_reason"] == "premarket_beyond_stop"
-    assert c["odds"]["bin"] == "beyond_stop" and c["odds"]["ev_r"] < 0
+    assert c["odds"]["bin"] == "beyond_stop" and c["odds"]["ev_r"] == sv.odds_table()["cells"]["long|1|pre|beyond_stop"]["ev"]
 
 
 @pytest.mark.full_edition
@@ -290,8 +294,21 @@ def test_odds_table_covers_every_state():
                     c = cells.get(f"{side}|{day}|{ph}|{b}")
                     assert c is not None, (side, day, ph, b)
                     assert 0 <= c["fill"] <= 1 and c["n"] >= 20 and isinstance(c["ev"], float)
-    assert cells["long|1|pre|beyond_stop"]["ci"][1] < 0                 # 唯一两段同号的负格
     assert cells["long|1|birth"]["n"] > 2000
+
+
+@pytest.mark.full_edition
+def test_odds_and_base_tables_describe_themselves():
+    """两份表都只对生成它的那套 3+3 成立: 文件自己写明规则 / 窗口 / 名单 / 结算口径 (重算后自动跟上, 不守具体笔数)。"""
+    o, b = sv.odds_table(), ss.base_rates()
+    for d in (o, b):
+        assert d["contract"] == "swing-desk-tight-v1" and d["settle_contract"] == ss.CONTRACT
+        assert d["window"][0] == "2023-01-03" and d["data_end"] >= d["window"][1]
+        assert d["universe"].startswith("watchlist ") and d["universe"].endswith(f"({d['data_end']})")
+        assert 1 <= len(d["rules"]["long"]) <= 3 and len(d["rules"]["short"]) <= 3
+        assert d["tiebreak"] == sd.TIEBREAK
+    assert o["rules"] == b["rules"] and o["window"] == b["window"]
+    assert sv.table_matches(o, "long", list(reversed(o["rules"]["long"]))) and not sv.table_matches(o, "long", ["nope"])
 
 
 def test_dist_bin_and_rounding():
@@ -342,7 +359,6 @@ def _flat(px, n=13):
 
 
 def test_settle_v2_void_from_record_and_from_m30_replay(tmp_path, monkeypatch, cal):
-    assert ss.CONTRACT == "swing-settle-v2"
     card = _book_card(tmp_path, monkeypatch)
     pmc.run(tmp_path, [card], et(D1, 9, 20), sip=lambda s, d: {"LLY": (97.0, "08:30")})
     monkeypatch.setattr(ss, "_m30_days", lambda *a, **k: {D1: _flat(99.2), D2: _flat(99.2)})
@@ -352,7 +368,7 @@ def test_settle_v2_void_from_record_and_from_m30_replay(tmp_path, monkeypatch, c
     # 没有生产记录 (上线前的卡) -> 用已存 30 分钟K 盘前最后一根重放
     t2 = tmp_path / "old"
     _book_card(t2, monkeypatch)
-    monkeypatch.setattr(pmc, "premarket_close_m30", lambda data_dir, repo, sym, day: 97.4)
+    monkeypatch.setattr(pmc, "premarket_close_m30", lambda data_dir, repo, sym, day, **kw: 97.4)
     ss.settle(t2, None, as_of_close=D1)
     assert ss.read_outcomes(t2)[0]["pm_source"] == "m30_replay"
 
@@ -365,8 +381,9 @@ def test_summarize_rows_excludes_void():
 @pytest.mark.full_edition
 def test_base_rates_rebuilt_with_void_rule():
     b = ss.base_rates()
-    assert b["settle_contract"] == "swing-settle-v2" and b["void_cards"]["long"] == 24 and b["void_cards"]["short"] == 0
-    assert b["long"]["cards"] == 2326 - 24
+    assert b["settle_contract"] == ss.CONTRACT and b["void_cards"]["long"] > 0 and b["void_cards"]["short"] == 0
+    # 基础率不计作废卡; 赔率表 birth 格 = 第 1 天全部卡 (含作废的)
+    assert b["long"]["cards"] == sv.odds_table()["cells"]["long|1|birth"]["n"] - b["void_cards"]["long"]
 
 
 def test_preopen_message_has_verdict_and_odds():

@@ -166,6 +166,90 @@ def ensure_history(data_dir: Path, repo, provider, symbols: list[str], today: da
     return {"missing": len(missing), "bars": written}
 
 
+# ── 09:45 那根 15 分钟K (机会板卡回放的入场起点, 2026-11-10) ────────────────────────────
+# 纸面 09:45 起可成交, 30 分钟K 的第一根 (09:30-10:00) 分不出 09:45 前后; 回放的 09:45-10:00 用这一根判。
+# 只存每票每天一根 (起点 09:45 ET, raw), 按月分区 data/kline_4h_src/m15_open/<YYYY-MM>.parquet, 列与 30 分钟K 相同。
+
+OPEN15_START = (9, 45)
+
+
+def open15_dir(data_dir: Path) -> Path:
+    return Path(data_dir) / "kline_4h_src" / "m15_open"
+
+
+def fetch_open15(provider, symbols: list[str], days: list[date], *, threads: int = 4) -> pl.DataFrame:
+    """拉指定交易日 09:45 那根 15 分钟K (raw, SIP)。provider = AlpacaProvider。"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.plugins.alpaca import provider as ap
+
+    def one(d: date):
+        rows = []
+        lo = datetime.combine(d, datetime.min.time()).replace(hour=OPEN15_START[0], minute=OPEN15_START[1])
+        hi = lo + timedelta(minutes=14)
+        for s, b in ap._iter_bars(provider.key, provider.secret, symbols, "15Min", lo, hi, "raw", "sip"):
+            rows.append((s, b["t"], float(b["o"]), float(b["h"]), float(b["l"]), float(b["c"]), float(b["v"]), d.isoformat()))
+        return rows
+
+    with ThreadPoolExecutor(threads) as ex:
+        parts = list(ex.map(one, days))
+    rows = [r for p in parts for r in p]
+    return pl.DataFrame(rows, schema=["symbol", "t", "open", "high", "low", "close", "volume", "day"], orient="row")
+
+
+def load_open15(data_dir: Path, symbols: list[str] | None, start: date, end: date) -> pl.DataFrame:
+    files = []
+    m = date(start.year, start.month, 1)
+    while m <= end:
+        p = open15_dir(data_dir) / f"{m.strftime('%Y-%m')}.parquet"
+        if p.exists():
+            files.append(p)
+        m = (m + timedelta(days=32)).replace(day=1)
+    if not files:
+        return pl.DataFrame(schema=SCHEMA)
+    parts = []
+    for f in files:
+        lf = pl.scan_parquet(str(f))
+        if symbols is not None:
+            lf = lf.filter(pl.col("symbol").is_in(symbols))
+        parts.append(_canon(lf.collect()))
+    return pl.concat(parts)
+
+
+def _merge_open15(data_dir: Path, fresh: pl.DataFrame) -> int:
+    from app.services.fs_utils import atomic_write_parquet
+    if fresh.is_empty():
+        return 0
+    written = 0
+    for part in fresh.with_columns(pl.col("day").str.slice(0, 7).alias("_m")).partition_by("_m"):
+        month = part["_m"][0]
+        new = part.drop(["_m", "day"])
+        p = open15_dir(data_dir) / f"{month}.parquet"
+        merged = pl.concat([_canon(pl.read_parquet(p)), _canon(new)]) if p.exists() else new
+        p.parent.mkdir(parents=True, exist_ok=True)
+        atomic_write_parquet(_canon(merged).unique(subset=["symbol", "t"], keep="last").sort(["symbol", "t"]), p)
+        written += new.height
+    return written
+
+
+def refresh_open15(data_dir: Path, repo, provider, symbols: list[str], today: date, *, days_back: int = 6,
+                   min_days: int = 130) -> dict:
+    """盘后增量 (幂等): 重拉最近 days_back 个交易日的 09:45 根; 本地不足 min_days 个交易日的票 (新进自选) 补最近 min_days 日。"""
+    if not symbols:
+        return {"symbols": 0}
+    with _lock:
+        hist = trading_days(repo, today - timedelta(days=min_days * 2), today)[-min_days:]
+        if not hist:
+            return {"skipped": "no trading days"}
+        written = _merge_open15(data_dir, fetch_open15(provider, symbols, hist[-days_back:]))
+        have = load_open15(data_dir, symbols, hist[0], hist[-1])
+        counts = dict(have.group_by("symbol").agg(pl.col("t").str.slice(0, 10).n_unique().alias("n")).iter_rows()) if have.height else {}
+        missing = [s for s in symbols if counts.get(s, 0) < int(min_days * 0.8)]
+        if missing:
+            written += _merge_open15(data_dir, fetch_open15(provider, missing, hist))
+        return {"days": len(hist[-days_back:]), "bars": written, "symbols": len(symbols), "backfilled": len(missing)}
+
+
 def trading_days(repo, start: date, end: date) -> list[date]:
     """本地日K里 SPY 有成交的日子 (us_clock 日历只缓存约一年, 历史区间用日K)。"""
     spy = repo.get_daily("SPY", start, end, columns=["date"])

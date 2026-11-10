@@ -8,7 +8,9 @@
 | `cleanup_halt_days.py` | 清理历史停牌脏数据（OHLC 填充前收盘价的停牌日），幂等，可 `--dry-run` | 数据目录内日 K 分区 |
 | `decision_desk_dryrun.py` | 按生产路径干跑一次决策台，打印结果 | 临时目录 |
 | `evaluate_strategies.py` | 统一口径评估全部策略，生成决策台证据文件；与应用内周度任务同一份代码 | `--data` 下 `decision_desk/` |
+| `backfill_open15.py` | 回补 09:45 那根 15 分钟K 的历史（机会板卡回放的入场起点；盘后任务只滚动维护最近 130 个交易日），幂等 | 数据目录内 `kline_4h_src/m15_open/` |
 | `rebuild_swing_history.py` | 用生产函数重算机会板内置规则的回放统计 | `config/swing_rule_history.json` |
+| `rebuild_swing_odds.py` | 按现行 3+3 重算机会板状态赔率表与基础率；改了 3+3 之后重跑（先跑 `rebuild_swing_history.py --dump`） | 指定输出目录下 `swing_state_odds.json`、`swing_base_rates.json` |
 | `repair_evaluation_v1_0392.py` | 一次性修复 0.39.x 之前被写入视图行的 v1 评估文件；默认 dry-run，`--apply` 前自动备份 | `--data-dir` 下 `decision_desk/evaluation.json` |
 | `replay_setups_realistic.py` | 机会引擎 S1/S2 形态的真实规则重放（时点复权、生产撮合） | `--out` 指定目录 |
 | `research_desk_v2.py` | 决策台名次与扎堆效应的只读研究 | `--out` 指定文件 |

@@ -7,6 +7,8 @@
     窗内「多头/空头条件齐备」或最后一根方向同向 (生产 tight-v1 门, 与 swing_candidates._gate_matrix 同式, 加空头)。
   - 卡几何 = swing_desk.geometry; ATR = 截至信号日 14 根 TR 均值 (decision_desk.atr 同式)。
   - 结局 = swing_settlement.replay_card (30 分钟K, 2 天入场窗, 5 天持有, 1R 保本 / 2R 锁 1R, 滑点 5bps)。
+    2026-11-10 (swing-settle-v3): 入场时窗与纸面对齐 = 09:45 起 (09:45-10:00 看那根 15 分钟K, kline_4h open15;
+    副本里没有那一根的日子从 10:00 起判)、当天最后一根 30 分钟K 不再入场。文件 settle_contract 字段写明口径。
   - 做空另需信号日 SPY 收盘 < 50 日均线。
 统计 (与 10-18 相同): 每条规则在「过门且该规则命中」的格子上
   n = 成交笔数, fill = 回区率, mean_r = 每笔 R, excess = 每笔 R - 同日同方向全部过门成交的平均 R,
@@ -179,6 +181,8 @@ for sid in ids:
 t0 = time.time()
 G_L = np.zeros((T, N), bool)
 G_S = np.zeros((T, N), bool)
+E_L = np.zeros((T, N), bool)      # 窗内出现「条件齐备」事件 (板上 gate = event; 其余过门的是 state)
+E_S = np.zeros((T, N), bool)
 bars4 = kline_4h.bars_4h(MIRROR, repo, [s for s in SYMS if COLS[SI[s]]], DAYS[0] - timedelta(days=30), DAYS[-1] + timedelta(days=1))
 cover = {}
 for s, df in bars4.items():
@@ -197,14 +201,17 @@ for s, df in bars4.items():
         if b == 0:
             continue
         w = act[a:b]
-        G_L[t, j] = bool((w == "多头条件齐备").any()) or str(dr[b - 1]) == "↑ 看多"
-        G_S[t, j] = bool((w == "空头条件齐备").any()) or str(dr[b - 1]) == "↓ 看空"
+        E_L[t, j] = bool((w == "多头条件齐备").any())
+        E_S[t, j] = bool((w == "空头条件齐备").any())
+        G_L[t, j] = E_L[t, j] or str(dr[b - 1]) == "↑ 看多"
+        G_S[t, j] = E_S[t, j] or str(dr[b - 1]) == "↓ 看空"
     cover[s] = str(df.index[0])[:10]
 print(f"4h gate built for {len(cover)} symbols in {time.time() - t0:.0f}s", flush=True)
 
-# ---- 卡结局 (生产 replay_card, 30 分钟K) ----
+# ---- 卡结局 (生产 replay_card, 30 分钟K + 09:45 那根 15 分钟K) ----
 t0 = time.time()
 cells, detail = {}, {}
+sub_days = sub_have = 0
 for j, s in enumerate(SYMS):
     if not COLS[j]:
         continue
@@ -212,6 +219,7 @@ for j, s in enumerate(SYMS):
     if not need:
         continue
     m30 = ss._m30_days(MIRROR, repo, s, DAYS[B0], DAYS[-1])
+    o15 = ss._open15_days(MIRROR, repo, s, DAYS[B0], DAYS[-1])
     for t in need:
         for side, ok in (("long", G_L[t, j]), ("short", G_S[t, j] and SPY_B50[t])):
             if not ok:
@@ -219,17 +227,23 @@ for j, s in enumerate(SYMS):
             g = sd.geometry(side, float(C[t, j]), float(ATR[t, j])) if np.isfinite(C[t, j]) and np.isfinite(ATR[t, j]) else None
             if g is None:
                 continue
-            seq = []
+            seq, sub = [], []
             for k in range(1, 8):
                 if t + k >= T or DAYS[t + k] not in m30:
                     break
                 seq.append(m30[DAYS[t + k]])
-            res = ss.replay_card(side, tuple(g["entry_zone"]), g["stop"], g["target"], seq)
+                sub.append(o15.get(DAYS[t + k]))
+            sub_days += min(len(sub), 2)
+            sub_have += sum(1 for x in sub[:2] if x is not None)
+            res = ss.replay_card(side, tuple(g["entry_zone"]), g["stop"], g["target"], seq, open15=sub)
             # 与 10-18 同: 数据缺口导致走不完 = 过门但未成交 (研究内核返回 None)
             cells[(side, t, j)] = float(res["r"]) if res["status"] == "closed" else None
             detail[(side, t, j)] = (res.get("status"), res.get("fill_day"), res.get("exit_day"), res.get("why"),
-                                    res.get("r"), tuple(g["entry_zone"]), g["stop"], g["target"], len(seq))
-print(f"cells {len(cells)} fills {sum(v is not None for v in cells.values())} in {time.time() - t0:.0f}s", flush=True)
+                                    res.get("r"), tuple(g["entry_zone"]), g["stop"], g["target"], len(seq),
+                                    res.get("fill_bar"))
+OPEN15_COVER = round(sub_have / sub_days, 4) if sub_days else 0.0
+print(f"cells {len(cells)} fills {sum(v is not None for v in cells.values())} in {time.time() - t0:.0f}s; "
+      f"open15 coverage of entry days {OPEN15_COVER}", flush=True)
 
 base = defaultdict(list)
 for (side, t, _j), v in cells.items():
@@ -283,7 +297,9 @@ out = {"contract": "swing-desk-tight-v1", "window": [DAYS[B0].isoformat(), DAYS[
        "r_unit": "per-share R vs plan risk (zone mid to stop), incl. 5bps slippage, no fees, no account limits",
        "baseline": "same-day same-side 4h-gated cells, same tight card",
        "source": "backend/scripts/rebuild_swing_history.py (production signal matrix, kline_4h + phantom_4h gate, "
-                 "swing_settlement.replay_card, 30m)",
+                 "swing_settlement.replay_card, 30m + 09:45 15m)",
+       "settle_contract": ss.CONTRACT, "entry_window": "09:45 to 30 min before close (same as paper)",
+       "open15_coverage": OPEN15_COVER,
        "generated": datetime.now().astimezone().isoformat(timespec="seconds"),
        "thin": "rules with < 5 fills: n = fills, signals = 4h-gated cards, raw = hits before the gate; no mean_r/excess",
        "rules": rules}
@@ -304,8 +320,9 @@ if "--dump" in sys.argv:
     with OUT.with_suffix(".cells.pkl").open("wb") as f:
         pickle.dump({"days": [d.isoformat() for d in DAYS], "syms": SYMS, "B0": B0, "A1": A1,
                      "detail": {(side[0], DAYS[t].isoformat(), SYMS[j]): v for (side, t, j), v in detail.items()},
-                     "C": C, "ATR": ATR, "H": H, "L": L, "G_L": G_L, "G_S": G_S, "SPY_B50": SPY_B50,
-                     "LH": LH, "SH": SH}, f)
+                     "C": C, "ATR": ATR, "H": H, "L": L, "G_L": G_L, "G_S": G_S, "E_L": E_L, "E_S": E_S,
+                     "SPY_B50": SPY_B50, "LH": LH, "SH": SH, "settle_contract": ss.CONTRACT, "data_end": DATA_END.isoformat(),
+                     "universe": f"watchlist {len(WL)} ({DATA_END.isoformat()})", "watchlist": WL}, f)
 print("rules", len(rules), "thin", sum(1 for v in rules.values() if v.get("thin")), "errors", len(errs),
       "written", OUT, f"total {time.time() - t_all:.0f}s", flush=True)
 print("4h coverage start (late):", sorted(((v, k) for k, v in cover.items() if v > "2022-12-01")), flush=True)

@@ -77,3 +77,42 @@ it('对账: 超过历史最长的连续 0 命中单独显示; 悬停逐条列信
   expect(t).toContain('板层：2026-10-16 的簿')
   expect(reconcileTitle({ day: '2026-10-19', ok: true, issues: [], signal_check: 'unavailable' })).toContain('信号层未核')
 })
+
+it('影子对照: 被截掉 / 被 4h 门挡掉的候选并排同日上板的卡 (只记录)', async () => {
+  const g = (shadow: Record<string, unknown>, board: Record<string, unknown>, o: Record<string, unknown> = {}) =>
+    ({ shadow: stats(shadow), board: stats(board), days: 4, ci: null, diff_mean_r: null, ...o })
+  mocks.swingSettlement.mockResolvedValue({
+    contract: 'swing-settle-v3', card_contract: 'swing-desk-tight-v1', alpha: 0.05, base_window: ['2023-01-03', '2026-10-30'],
+    sides: { long: { actual: stats(), replay, mismatch: [] }, short: { actual: stats(), replay: null, mismatch: [] } },
+    recent: [], n_total: 0, reconcile: [],
+    shadow: { contract: 'swing-shadow-v1', settle_contract: 'swing-settle-v3', n_total: 17, groups: {
+      'cut:long': g({}, {}, { days: 0 }),
+      'cut:short': g({ cards: 11, filled: 6, mean_r: { v: 1.927, ci: null, n: 6 } }, { cards: 20, filled: 8, mean_r: { v: 1.297, ci: null, n: 8 } },
+        { ci: [0.4, 2.6], diff_mean_r: 0.63 }),
+      'gate_4h:long': g({ cards: 6, filled: 3, mean_r: { v: -0.2, ci: null, n: 3 } }, {}, { days: 3 }),
+      'gate_4h:short': g({}, {}, { days: 0 }),
+    } },
+  })
+  await render()
+  const box = host.querySelector('[data-swing-shadow]')!
+  expect(box.textContent).toContain('已结算 17 张')
+  const cut = box.querySelector('[data-shadow-row="cut:short"]')!.textContent!
+  expect(cut).toContain('被截掉 · 空')
+  expect(cut).toContain('6/11 · +1.93')
+  expect(cut).toContain('8/20 · +1.30')
+  expect(cut).toContain('+0.40 ~ +2.60')
+  expect(cut).toContain('+0.63')
+  const gate = box.querySelector('[data-shadow-row="gate_4h:long"]')!.textContent!
+  expect(gate).toContain('3/6 · -0.20')
+  expect(gate).toContain('—')                                         // 那几天没有上板的做多卡
+})
+
+it('没有影子数据的旧载荷不渲染影子对照', async () => {
+  mocks.swingSettlement.mockResolvedValue({
+    contract: 'swing-settle-v3', card_contract: 'swing-desk-tight-v1', alpha: 0.05, base_window: null,
+    sides: { long: { actual: stats(), replay: null, mismatch: [] }, short: { actual: stats(), replay: null, mismatch: [] } },
+    recent: [], n_total: 0, reconcile: [],
+  })
+  await render()
+  expect(host.querySelector('[data-swing-shadow]')).toBeNull()
+})

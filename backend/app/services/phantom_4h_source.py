@@ -148,6 +148,11 @@ def run(repo, provider, as_of: date, frames: dict, *, picks: int = 10, include: 
             meta["refresh"] = kline_4h.refresh_recent(data_dir, repo, provider, data_syms, as_of)
             meta["history"] = kline_4h.ensure_history(data_dir, repo, provider, syms, as_of)
             meta["data_only"] = len(data_syms) - len(syms)
+            try:   # 机会板卡回放的 09:45 入场起点 (只给自选; 失败只影响回放结算, 不影响 4h 信号)
+                meta["open15"] = kline_4h.refresh_open15(data_dir, repo, provider, sorted(include or set()), as_of)
+            except Exception as e:
+                meta["open15_error"] = f"{type(e).__name__}: {str(e)[:160]}"
+                logger.warning("open15 refresh failed (回放 09:45 那一段退回 10:00 起): %s", meta["open15_error"])
     except Exception as e:  # noqa: BLE001
         meta["refresh_error"] = f"{type(e).__name__}: {str(e)[:160]}"
         logger.warning("phantom_4h refresh failed (使用已有 4h 数据): %s", meta["refresh_error"])
