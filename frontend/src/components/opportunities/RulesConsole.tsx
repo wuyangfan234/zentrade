@@ -8,7 +8,8 @@
  *  - 挖掘 / AI 策略 (source=custom|ai): research/swing_candidates.json, 发布后与周度挖掘后自动验收; 失败写原因。
  *  - 「重新回放」只重跑挖掘 / AI 策略: 收盘后立即跑, 交易时段排队到盘后管道之后; 只写回放结果, 不动 3+3 与交易。
  *  - 0.52.0 排序因子 (kind=ranker, 研究系统导入): 只进做多列表。不是“命中才出卡”的信号, 而是在 4h 门内按值挑前 5;
- *    右侧数字 = ZenTrade 用同一候选池 (research/rank_lab/) 自己复核的全窗成绩, 悬停看挖掘段 / 留出段。
+ *    右侧数字 = ZenTrade 用同一候选池 (research/rank_lab/) 自己复核的全窗成绩, 悬停看挖掘段 / 留出段
+ *    (月份读复核结果自带的起止日, 分段改了不用改这里)。
  *
  * 0.35.0: 面板底部「开盘放量推送」= 开关 + 门槛档位,
  *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道跟随全局推送设置。 */
@@ -43,6 +44,30 @@ export function histSource(meta: WatchlistRulesPayload['history_meta'] | undefin
 const CAND_SRC = '按机会板卡回放（2023-01 起，自选，含账户上限）'
 const RANK_SRC = '排序因子 · 4h 门内按值挑前 5，机会板卡回放（2023-01 起，自选，含账户上限）'
 
+type Seg = NonNullable<NonNullable<NonNullable<Candidate>['segments']>['mining']>
+const ym = (d?: string | null) => (typeof d === 'string' && d.length >= 7 ? d.slice(0, 7) : '')
+/** 排序因子分段的月份: 读复核结果自带的起止日 (后端分段改了自动跟上), 不写死年份; 旧载荷没有 window 时为空 */
+export function segSpan(k: 'mining' | 'holdout', x?: Seg | null): string {
+  const [a, b] = [ym(x?.window?.[0]), ym(x?.window?.[1])]
+  if (k === 'mining') return a && b ? `${a} ~ ${b}` : ''
+  return a ? `${a} 起` : ''
+}
+/** 段名 + 月份; 没有月份时只写段名 */
+export function segLabel(k: 'mining' | 'holdout', x?: Seg | null): string {
+  const span = segSpan(k, x)
+  return `${k === 'mining' ? '挖掘段' : '留出段'}${span ? ` ${span}` : ''}`
+}
+
+/** 「候选」角标的悬停: 排序因子写明留出段从哪个月起 (读复核结果, 不写死年份) */
+export function candidateBadgeTitle(kind: string | undefined, c: NonNullable<Candidate>): string {
+  const span = segSpan('holdout', c.segments?.holdout)
+  const why = kind === 'ranker'
+    ? `排序因子 · 全窗与留出段${span ? `（${span}）` : ''}的 95% 区间下限都 > 0`
+    : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'
+  const ci = c.excess_ci ? `${rr(c.excess_ci[0])} ~ ${rr(c.excess_ci[1])}` : '—'
+  return `${why}: 每笔多 ${rr(c.excess)}（区间 ${ci}），${c.n} 笔`
+}
+
 /** 挖掘 / AI 验收失败的原因 (后端 error 类名 + detail) 转短句; 全文放悬停 */
 export function candidateError(c: NonNullable<Candidate>): string {
   const d = c.detail ?? ''
@@ -64,12 +89,13 @@ export function historyCell(r: Row, src: string = HIST_SRC_FALLBACK): HistCell {
     const c = r.candidate
     if (c?.error) return { left: candidateError(c), title: c.detail || c.error || '', note: true }
     if (c && typeof c.n === 'number') {
-      const seg = (k: 'mining' | 'holdout', label: string) => {
+      const seg = (k: 'mining' | 'holdout') => {
         const x = c.segments?.[k]
+        const label = segLabel(k, x)
         return x && typeof x.n === 'number' ? `${label} ${x.n} 笔 · 每笔多 ${rr(x.excess)}` : `${label} —`
       }
       const title = r.kind === 'ranker'
-        ? `${RANK_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R。${seg('mining', '挖掘段 2023–2024')}；${seg('holdout', '留出段 2025 起')}${r.formula ? `。公式 ${r.formula}（${r.direction === 'low' ? '值小优先' : '值大优先'}）` : ''}`
+        ? `${RANK_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R。${seg('mining')}；${seg('holdout')}${r.formula ? `。公式 ${r.formula}（${r.direction === 'low' ? '值小优先' : '值大优先'}）` : ''}`
         : `${CAND_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R`
       if (c.n === 0) return { left: '0 笔', title, note: true }
       return { left: `${c.n} · ${rr(c.mean_r)}`, right: rr(c.excess), rightTone: tone(c.excess), title }
@@ -108,7 +134,7 @@ function PickList({ side, rows, picked, onToggle, src }: { side: 'long' | 'short
               <span data-swing-name className="line-clamp-2 min-w-0 flex-1 break-words leading-4" title={name}>{name}</span>
               {r.candidate?.passed && (
                 <span data-candidate={r.id} className="shrink-0 rounded border border-accent/40 px-1 text-[10px] leading-4 text-accent"
-                  title={`${r.kind === 'ranker' ? '排序因子 · 全窗与留出段（2025 起）的 95% 区间下限都 > 0' : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'}: 每笔多 ${rr(r.candidate.excess)}（区间 ${r.candidate.excess_ci ? `${rr(r.candidate.excess_ci[0])} ~ ${rr(r.candidate.excess_ci[1])}` : '—'}），${r.candidate.n} 笔`}>候选</span>
+                  title={candidateBadgeTitle(r.kind, r.candidate)}>候选</span>
               )}
               <span data-swing-hist={r.id} data-note={cell.note ? '' : undefined} title={cell.title}
                 className={`shrink-0 tabular-nums text-muted ${cell.note ? 'line-clamp-2 max-w-[9rem] text-right text-[11px] leading-4' : ''}`}>{cell.left}</span>

@@ -3,17 +3,22 @@
 一个排序因子 = 一条 DSL 公式 + 方向 (高好 / 低好)。它不另起一个选股器, 只回答机会板的一个问题:
 「今天 4h 门内的自选 (平均约 15 只) 里, 先挂哪 5 张卡?」
 
-验收合同 rank-lab-v1 (与 swing_candidates 同一套卡回放与账户约束, 只是入场集合换成“4h 门内全部”):
+验收合同 rank-lab-v2 (与 swing_candidates 同一套卡回放与账户约束, 只是入场集合换成“4h 门内全部”):
   候选池 = 每个信号日 4h 门 (多) 内、卡结局可判定的自选格子; 卡 = tight-v1 几何; 结局 = 30 分钟K 逐根回放 (R)。
   因子组 = 每天按因子值取前 5 (值非有限的不选; 同值按代码); 基线 = 同一池每天随机挑 5 (种子 1-5 取平均)。
   账户约束 = 每笔 0.5% (最多 12 仓, SPY<200 日线 6 仓, 每天新开 10 笔, 同板块 4 仓, 冷却 3 天)。
   判定 = 因子每笔 R 减同日随机基线每笔 R, 周聚类自助法 95% 区间 (swing_candidates.judge 原样)。
-  分段 = 挖掘段 2023-01-03 ~ 2024-12-31 / 留出段 2025-01-02 起 / 全窗 (齿轮显示全窗, 与挖掘候选同口径)。
+  分段 = 挖掘段 2023-01-03 ~ 2025-06-30 / 留出段 2025-07-01 起 / 全窗 (齿轮显示全窗, 与挖掘候选同口径)。
+
+v1 → v2 (2026-11-10) 只改了分段: v1 是挖掘段到 2024-12-31、留出段 2025-01-02 起。挖掘端选公式用的数据若
+延到 2025-06-30, ZenTrade 仍按 v1 复核, 2025-01 ~ 06 既用来选公式又用来“独立确认”, 确认就不独立了。
+候选池文件 (pool / panel) 与分段无关, v1 导出的池子可以直接按 v2 评估。分段不进 pool_sha (它只认数据),
+而是每份复核结果、meta、接口状态都带 split 字段 (见 split()); 对账先比 split, 分段不同的结果不可比、也不给“候选”。
 
 数据交接 (两个系统读同一份文件、跑同一份代码, 数字逐位一致):
   research/rank_lab/pool.parquet   候选池格子 (t, date, symbol, fill_t, exit_t, r; 未成交 r 为空)
   research/rank_lab/panel.parquet  自选日K (算因子用; 与池同一次导出)
-  research/rank_lab/meta.json      窗口 / 交易日 / 名单 / 大盘黄灯 / 板块 / 账户约束 / pool_sha
+  research/rank_lab/meta.json      窗口 / 交易日 / 名单 / 大盘黄灯 / 板块 / 账户约束 / 分段 / pool_sha
   research/rank_lab/rankers.json   已导入的排序因子;  results.json = ZenTrade 自己对它们的复核结果
 外部挖掘端 (研究系统) 只读挂载本目录与 backend 源码, 用本模块的纯函数打分; 导入走
 POST /api/factor-lab/rankers/import (研究投递密钥), ZenTrade 用同一份池重算后才在齿轮显示数字。
@@ -40,11 +45,12 @@ from app.services import swing_candidates as sc
 
 logger = logging.getLogger(__name__)
 
-CONTRACT = "rank-lab-v1"
+CONTRACT = "rank-lab-v2"
+POOL_CONTRACTS = ("rank-lab-v1", CONTRACT)  # 能读的候选池: v1 与 v2 的池文件格式相同, 只是分段不同 (分段在代码里)
 PER_SIDE = sc.PER_SIDE                      # 机会板每天最多 5 张做多卡
 SEEDS = sc.SEEDS
-MINING_END = date(2024, 12, 31)             # 挖掘段终点 (含); 之后 = 留出段
-HOLDOUT_START = date(2025, 1, 2)
+MINING_END = date(2025, 6, 30)              # 挖掘段终点 (含); 之后 = 留出段。改它 = 改合同, 必须与挖掘端同时改
+HOLDOUT_START = date(2025, 7, 1)
 MAX_WARMUP = 250                            # 公式预热上限 (盘后扫描的日K约 275 个交易日)
 PANEL_WARM_DAYS = 420                       # 面板比窗口多取的自然日 (≈ 290 交易日)
 BASE_COLS = ("open", "high", "low", "close", "volume", "amount", "turnover_rate", "raw_close")
@@ -61,6 +67,24 @@ def lab_dir(data_dir: Path) -> Path:
 
 def is_ranker(rule_id: Any) -> bool:
     return isinstance(rule_id, str) and rule_id.startswith(RANK_PREFIX)
+
+
+def split() -> dict[str, str]:
+    """现行分段。每份复核结果、meta、接口状态都带它: 两端 (或新旧两次) 分段不同时, 数字不可比, 一眼能看出来。"""
+    return {"mining_end": MINING_END.isoformat(), "holdout_start": HOLDOUT_START.isoformat()}
+
+
+def _norm_split(x: Any) -> dict[str, str] | None:
+    """挖掘端报的分段 → 与 split() 同形; 认 {mining_end, holdout_start} 或 [挖掘段终点, 留出段起点]。读不懂 → None。"""
+    if isinstance(x, dict):
+        x = [x.get("mining_end"), x.get("holdout_start")]
+    if isinstance(x, (list, tuple)) and len(x) == 2 and all(isinstance(v, str) for v in x):
+        try:
+            a, b = (date.fromisoformat(v[:10]).isoformat() for v in x)
+        except ValueError:
+            return None
+        return {"mining_end": a, "holdout_start": b}
+    return None
 
 
 def account_caps() -> dict[str, int]:
@@ -296,7 +320,7 @@ def load_pool(data_dir_or_lab: Path) -> Pool | None:
     if not (d / "meta.json").exists():
         d = lab_dir(d)
     meta = _read_json(d / "meta.json", {})
-    if meta.get("contract") != CONTRACT:
+    if meta.get("contract") not in POOL_CONTRACTS:
         return None
     try:
         pool = pl.read_parquet(d / "pool.parquet")
@@ -457,6 +481,7 @@ def evaluate_values(pool: Pool, vals: np.ndarray) -> dict:
     out["board_days"] = len({t for t, _ in chosen})
     out["pool_sha"] = pool.sha
     out["contract"] = CONTRACT
+    out["split"] = split()
     return out
 
 
@@ -495,12 +520,16 @@ def daily_pick_sets(pool: Pool, formula: str, direction: str) -> dict[int, list[
 
 
 def verdict(res: dict | None) -> dict:
-    """ZenTrade 侧“候选”标记: 全窗 (2023 起) 周聚类区间下限 > 0 (与挖掘候选同口径), 且留出段 (2025 起,
+    """ZenTrade 侧“候选”标记: 全窗 (2023 起) 周聚类区间下限 > 0 (与挖掘候选同口径), 且留出段 (HOLDOUT_START 起,
     挖掘端选公式时不看) 自己的区间下限也 > 0、笔数 ≥ 30。
     0.55.0 起留出段要区间下限 > 0, 不再只看点估计: 全窗一半样本是挑公式用的挖掘段, 挖掘段刚过多重检验时,
-    全窗下限 > 0 只要求留出段 z ≥ -0.2 左右, 留出段纯噪声的公式约一半会被判候选。"""
+    全窗下限 > 0 只要求留出段 z ≥ -0.2 左右, 留出段纯噪声的公式约一半会被判候选。
+    结果不是按现行分段算的 (旧结果没有 split, 或分段已改) → 不给候选 (stale_split): 它的“留出段”
+    不是现行留出段, 可能含挖掘端已经用来选公式的月份; 重导 / 重算后恢复。"""
     if not isinstance(res, dict):
         return {"passed": False, "both_segments_positive": False}
+    if res.get("split") != split():
+        return {"passed": False, "both_segments_positive": False, "stale_split": True}
     full, mine, hold = res.get("full") or {}, res.get("mining") or {}, res.get("holdout") or {}
 
     def pos(x: dict) -> bool:
@@ -566,6 +595,7 @@ def build_pool(data_dir: Path, repo, *, end: date, watchlist: set[str], out_dir:
         "contract": CONTRACT, "card_contract": "swing-desk-tight-v1", "baseline": "same pool random 5, seeds 1-5",
         "window": [days[0].isoformat(), days[-1].isoformat()], "data_end": end.isoformat(),
         "mining": [days[0].isoformat(), MINING_END.isoformat()], "holdout_start": HOLDOUT_START.isoformat(),
+        "split": split(),
         "days": [x.isoformat() for x in days], "symbols": syms, "watchlist_n": len(want),
         "yellow_t": sorted(t for t, v in yellow.items() if v), "sectors": {s: sectors[s] for s in syms if s in sectors},
         "per_side": PER_SIDE, "risk_pct": sc.RISK_PCT, "caps": account_caps(), "max_warmup": MAX_WARMUP,
@@ -605,8 +635,8 @@ def import_ranker(data_dir: Path, *, name: str, formula: str, direction: str, id
     rid = ranker_id(formula, direction)
     now = datetime.now().astimezone().isoformat(timespec="seconds")
     src = {k: v for k, v in (source or {}).items() if k in (
-        "system", "id", "run_id", "mining", "holdout", "full", "family_size", "fdr_pass", "pool_sha", "status",
-        "url", "rank")}
+        "system", "id", "run_id", "mining", "holdout", "full", "family_size", "fdr_pass", "pool_sha", "split",
+        "status", "url", "rank")}
     fid = "uf_rk_" + rid[len(RANK_PREFIX):]
     with _locked(data_dir):
         p = lab_dir(data_dir) / "rankers.json"
@@ -635,8 +665,10 @@ def import_ranker(data_dir: Path, *, name: str, formula: str, direction: str, id
 
 
 def parity(source: dict | None, mine: dict | None, pool_sha: str | None) -> dict:
-    """挖掘端报的成绩 vs ZenTrade 用同一份候选池重算的成绩。同一 pool_sha 下三段的笔数 / 每笔 R / 超额 / 区间必须逐位相同;
-    pool_sha 不同 (池子已重导) = 不可比, 以 ZenTrade 这边为准。"""
+    """挖掘端报的成绩 vs ZenTrade 用同一份候选池重算的成绩。同一 pool_sha、同一分段下三段的笔数 / 每笔 R / 超额 / 区间
+    必须逐位相同; pool_sha 不同 (池子已重导) 或分段不同 = 不可比, 以 ZenTrade 这边为准。
+    pool_sha 只认池文件, 不含分段: 挖掘端要另报 split (与 split() 同形, 或 [挖掘段终点, 留出段起点])。报了且与这边
+    不同 (或读不懂) → 不比数字 (否则会把口径差报成“数字对不上”); 没报 → 照旧比数字, 对不上时注明可能是分段不同。"""
     src = source or {}
     if not src.get("pool_sha"):
         return {"checked": False, "reason": "挖掘端没报 pool_sha"}
@@ -645,13 +677,27 @@ def parity(source: dict | None, mine: dict | None, pool_sha: str | None) -> dict
                 "zentrade_pool": pool_sha}
     if not isinstance(mine, dict) or mine.get("error"):
         return {"checked": False, "reason": "ZenTrade 复核失败"}
+    declared = src.get("split")
+    if declared is not None:
+        want = _norm_split(declared)
+        if want is None:
+            return {"checked": False, "reason": "挖掘端报的分段读不懂, 数字不可比, 以 ZenTrade 复核为准",
+                    "source_split": declared, "zentrade_split": mine.get("split")}
+        if want != mine.get("split"):
+            return {"checked": False, "reason": "分段口径不同, 数字不可比, 以 ZenTrade 复核为准", "source_split": declared,
+                    "zentrade_split": mine.get("split")}
     diff = []
     for seg in ("mining", "holdout", "full"):
         a, b = src.get(seg) or {}, mine.get(seg) or {}
         for k in ("n", "mean_r", "excess", "excess_ci"):
             if k in a and a.get(k) != b.get(k):
                 diff.append(f"{seg}.{k}: 挖掘 {a.get(k)} / ZenTrade {b.get(k)}")
-    return {"checked": True, "match": not diff, "diff": diff[:6]}
+    # split_checked: 分段是否显式核对过 (挖掘端报了且与这边相同)。没报时 match 只说明报来的数字一致;
+    # 只报全窗的话, 全窗与分段无关, 一致也不代表两边分段相同。
+    out = {"checked": True, "match": not diff, "diff": diff[:6], "split_checked": declared is not None}
+    if diff and declared is None:
+        out["note"] = "挖掘端没报分段 (split), 对不上可能是分段口径不同"
+    return out
 
 
 def _register_library_factor(data_dir: Path, fid: str, name: str, formula: str, direction: str, idea: str) -> bool:
@@ -713,7 +759,7 @@ def evaluate_and_store(data_dir: Path, ids: list[str] | None = None) -> dict:
         if ids is None:
             allres = {}
         allres.update(fresh)
-        out = {"contract": CONTRACT, "pool_sha": pool.sha if pool else None,
+        out = {"contract": CONTRACT, "split": split(), "pool_sha": pool.sha if pool else None,
                "data_end": pool.meta.get("data_end") if pool else None,
                "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"), "rankers": allres}
         _write_json(p, out)
@@ -730,7 +776,9 @@ def gear_view(res: dict | None) -> dict | None:
     return {"passed": bool(verdict(res)["passed"]), "excess": full.get("excess"), "excess_ci": full.get("excess_ci"),
             "n": full.get("n"), "mean_r": full.get("mean_r"), "r_per_year": full.get("r_per_year"),
             "base_r_per_year": full.get("base_r_per_year"), "first_passed": None,
-            "segments": {k: {kk: (res.get(k) or {}).get(kk) for kk in ("n", "mean_r", "excess", "excess_ci", "passed")}
+            # window = 这一段实际的起止日 (齿轮悬停的“挖掘段 / 留出段”月份读它, 不写死)
+            "segments": {k: {kk: (res.get(k) or {}).get(kk)
+                             for kk in ("n", "mean_r", "excess", "excess_ci", "passed", "window")}
                          for k in ("mining", "holdout")},
             "pool_sha": res.get("pool_sha")}
 
@@ -883,7 +931,8 @@ def run_nightly(data_dir: Path, repo) -> dict | None:
 def status(data_dir: Path) -> dict:
     meta = _read_json(lab_dir(data_dir) / "meta.json", {})
     res = read_results(data_dir)
-    return {"contract": CONTRACT, "pool_sha": meta.get("pool_sha"), "data_end": meta.get("data_end"),
+    # split = 现行分段; results_split = 已存复核结果所用的分段 (不同 = 结果是旧分段算的, 等重导 / 重算)
+    return {"contract": CONTRACT, "split": split(), "pool_sha": meta.get("pool_sha"), "data_end": meta.get("data_end"),
             "window": meta.get("window"), "generated_at": meta.get("generated_at"), "counts": meta.get("counts"),
             "symbols": len(meta.get("symbols") or []), "results_at": res.get("generated_at"),
-            "results_pool_sha": res.get("pool_sha"), "running": is_running()}
+            "results_pool_sha": res.get("pool_sha"), "results_split": res.get("split"), "running": is_running()}
