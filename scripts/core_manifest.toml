@@ -36,6 +36,7 @@ paths = [
   "backend/tests/test_short_desk.py",
   "backend/tests/test_review1004_false_positive_contracts.py",
   "backend/scripts/rebuild_swing_history.py",
+  "backend/scripts/rebuild_swing_odds.py",
   "backend/scripts/repair_evaluation_v1_0392.py",
   "backend/tests/test_audit1026_eval_v1_base.py",
   # 非 OSI 许可文本 (核心版不含对应组件)

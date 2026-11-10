@@ -457,9 +457,76 @@ it('0.52.2 A 方案: 模型观察 → 独立策略机会 → 盘面雷达, 机�
   const board = text('[data-strategy-board]')
   expect(board).toContain('3+3 策略命中')
   expect(board).toContain('4h 方向门')
-  expect(board).toContain('可下单')
+  expect(text('[data-board-orders]')).toMatch(/^下单 \d+$/)
   expect(text('[data-strategy-board] [data-board-row="BABA"]')).toContain('MACD 金叉放量')
   expect(text('[data-strategy-board] [data-board-row="TSLA"]')).toContain('41')
+})
+
+// ── 2026-11-10 审计修复: 每张卡一个结论 (下单 / 不下单 + 原因) + 目标价 + 4h 门类型 + 回放数字旁并排实际数 ──
+
+it('机会板逐卡结论: 后端裁决不下单的卡写原因, 页头分别计数; 表里有目标价与 4h 门类型', async () => {
+  const sw = page().swing!
+  mocks.oppPage.mockResolvedValue(page({ swing: { ...sw,
+    long: [card('BABA', { gate: 'state', target: 104 }),
+      card('TSLA', { verdict: 'skip', verdict_reason: 'premarket_beyond_stop', blocked: null, dist_pct: -4.62 }),
+      card('NVDA', { verdict: 'skip', verdict_reason: 'entry_closed', blocked: null }),
+      card('AMD', { verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：同板块同向已满；组合风险超限' }),
+      card('MU', { verdict: 'skip', verdict_reason: 'earnings', blocked: 'earnings' })],
+    short: [] } }))
+  await render()
+  expect(text('[data-board-orders]')).toBe('下单 1')
+  expect(text('[data-board-skips]')).toBe('不下单 4')
+  const heads = [...host.querySelectorAll('[data-strategy-board] thead th')].map((x) => x.textContent)
+  expect(heads).toEqual(['股票', '方向', '结论', '命中策略', '4h 门', '入场区', '止损', '目标', '股数', '回区', '现价'])   // 结论紧跟票和方向
+  const v = (s: string) => text(`[data-board-row="${s}"] [data-board-verdict]`)
+  expect(v('BABA')).toBe('下单距区 1.0%')
+  expect(v('TSLA')).toBe('不下单盘前越止损')                      // 以前和可下单行一样显示「距区 4.6%」
+  expect(v('NVDA')).toBe('不下单入场截止')
+  expect(v('AMD')).toBe('不下单同板块同向已满')
+  expect(host.querySelector('[data-board-row="AMD"] [data-board-verdict]')!.getAttribute('title')).toContain('组合风险超限')
+  expect(v('MU')).toBe('不下单财报前一日')
+  expect(host.querySelector('[data-board-row="TSLA"]')!.getAttribute('data-verdict')).toBe('skip')
+  expect(text('[data-board-row="BABA"] [data-board-target]')).toBe('104.00')
+  expect(text('[data-board-row="BABA"] [data-board-gate]')).toBe('同向')
+  expect(text('[data-board-row="TSLA"] [data-board-gate]')).toBe('齐备')
+})
+
+it('回放表不是这张卡的出卡规则: 回区显示 —, 计划股数照给', async () => {
+  const sw = page().swing!
+  mocks.oppPage.mockResolvedValue(page({ swing: { ...sw, short: [], long: [card('BABA', {
+    odds: { fill: null, ev_r: null, ci_r: null, sig: 0, n: null, level: null, stale: true, day: 1, phase: 'pre', bin: 'birth', dist_atr: 0.25,
+      qty: 56, risk_usd: 517, ev_usd: null, ci_usd: null } })] } }))
+  await render()
+  expect(text('[data-board-row="BABA"] [data-board-fill]')).toBe('—')
+  expect(text('[data-board-row="BABA"]')).toContain('56')
+})
+
+it('回放数字旁并排上线后的实际数: 机会板多空各一行, 盘中强势区间不含回放值标背离', async () => {
+  const p0 = page()
+  mocks.oppPage.mockResolvedValue(page({
+    swing: { ...p0.swing!, live: { contract: 'swing-settle-v3',
+      long: { n: 4, days: 4, mean_r: -1.68, ci: null, replay_mean_r: 0.27, diverged: false, cards: 11, fill: 0.364, replay_fill: 0.6, replay_stale: false },
+      short: { n: 13, days: 9, mean_r: 0.72, ci: [-0.1, 1.5], replay_mean_r: null, diverged: false, cards: 24, fill: 0.542, replay_fill: null, replay_stale: true } } },
+    intraday: { ...p0.intraday!, live: { n: 25, days: 10, mean_r: -0.709, ci: [-1.197, -0.169], replay_mean_r: 0.098, diverged: true } },
+  }))
+  await render()
+  const long = text('[data-board-live-side="long"]')
+  expect(long).toContain('实际回区 4/11')
+  expect(long).toContain('回放 60%')
+  expect(long).toContain('每笔 −1.68R')
+  expect(long).toContain('回放 +0.27R')
+  expect(host.querySelector('[data-board-live-side="long"] [data-diverged-badge]')).toBeNull()      // 出卡日不足, 不判背离
+  const short = text('[data-board-live-side="short"]')
+  expect(short).toContain('实际回区 13/24')
+  expect(short).toContain('−0.10R ~ +1.50R')
+  expect(short).toContain('回放 —')                                                                 // 回放基础率不是现行 3+3
+  const it = text('[data-engine-live="intraday"]')
+  expect(it).toContain('实际 25 笔')
+  expect(it).toContain('每笔 −0.71R')
+  expect(it).toContain('−1.20R ~ −0.17R')
+  expect(it).toContain('回放 +0.10R')
+  expect(text('[data-engine-live="intraday"] [data-diverged-badge]')).toBe('背离')
+  expect(text('[data-col="intraday"]')).not.toContain('已结算')                                       // 有并排行时不再重复写累计
 })
 
 it('系统文字只写结果: 页面无说明句与禁用词', async () => {

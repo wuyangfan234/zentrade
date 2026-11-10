@@ -240,8 +240,7 @@ def test_rerun_endpoint_queues_in_session_and_writes_only_research(tmp_path, mon
 def test_history_file_added_rules_share_the_window():
     """0.37.0: 追加的规则 (--only/--merge) 记在 added 里, 名单只数与文件头一致 (同口径才能和其它规则比)。"""
     h = json.loads(sd.RULE_HISTORY_PATH.read_text(encoding="utf-8"))
-    added = h.get("added") or {}
-    assert "momentum_rsi2_pullback" in added
+    added = h.get("added") or {}                  # 整份重算后 (2026-11-10) 没有追加项; 再有追加时仍须同口径
     n = h["universe"].split()[1]
     for rule, meta in added.items():
         assert rule in h["rules"], rule

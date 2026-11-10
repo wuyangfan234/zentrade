@@ -1,7 +1,9 @@
 """机会板卡自动结算 + 每日对账 (0.26.0 第③批, 10-18 产品决策“机会页折中方案”与 Q2“每日自动对账”)。
 
 一、每张上过板的卡都自动出结局 (成交和没成交都算), 结算规则与纸面账户同一套, 用系统已有的 30 分钟K:
-  - 入场: 信号日后 ENTRY_DAYS (2) 个交易日内, 09:45 起 (跳过 09:30 那根 30 分钟K) 价格碰到挂单区即成交,
+  - 入场: 信号日后 ENTRY_DAYS (2) 个交易日内, 与纸面同一个入场时窗 (us_clock.in_entry_window: 09:45 起, 收盘前
+    30 分钟止) 内价格碰到挂单区即成交: 09:45-10:00 看那根 15 分钟K (kline_4h open15; 缺 = 那天从 10:00 起判),
+    10:00 起逐根 30 分钟K, 当天最后一根 (15:30-16:00, 半日市 12:30-13:00) 不再入场。
     成交价 = 该根开盘价夹到区内, 滑点 5 bps (与 ledger Account.slippage_bps 同值)。没碰到 = no_fill。
   - 持有: 盘中碰到目标 -> 目标价离场 (开盘就越过目标 -> 开盘价); 收盘破止损 -> 次日开盘离场;
     浮盈 >= 1R 止损移到保本, >= 2R 锁 1R (与 trader._move_stop 同式); 第 HOLD_DAYS (5) 个持有日 15:30 离场。
@@ -10,6 +12,9 @@
     纸面目标是区间 (远端全平/近端减半), 本卡目标单一价位。实际 vs 回放区间不重叠 = 撮合模型要修 (失败判据)。
   结局行只追加, 唯一键 = (卡号, contract); 已写的行永不改写。口径变了升 CONTRACT 写新文件 (改版不清零)。
   v2 (0.27.0): 做多卡第 1 天 09:00 盘前价已低于止损 -> status=void (作废, 第 2 天也不挂), 与纸面同一条规则。
+  v3 (2026-11-10, 产品决策「回放改成 09:45-15:30」): 入场时窗与纸面对齐 (v2 是 10:00 起、含最后一根 30 分钟K:
+    一个运行实例的 21 笔纸面成交 12 笔在 10:00 前, 同卡纸面与回放平均绝对差 0.22R); 持有期K线换回信号日原始价口径
+    (拆股 / 分红后日K整体回溯, 卡上价位是信号日当晚的价: 不换算时除权后结算会让真实成交消失或算出 -19R)。
 
 二、随时有效的置信区间 (不设“攒够多少笔才算数”, 也不拦任何交易):
   比例 (回区率/赢/目标/止损/到期) = 伯努利 Robbins 正态混合置信序列; 平均 R = 把 R 截到 [-R_CAP, R_CAP] 后
@@ -36,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 # 结算口径 (改口径升版本号, 新旧两版并行写各自的文件)。v2 (0.27.0) = v1 + 做多卡第 1 天 09:00 盘前越过止损作废
 # (status=void, 不计入回区/赢/目标/止损/到期, 与纸面同一条规则, 见 swing_pm_check)。
-CONTRACT = "swing-settle-v2"
+CONTRACT = "swing-settle-v3"
 SLIP = 0.0005                         # 5 bps, 与 ledger Account.slippage_bps 同值
 ALPHA = 0.05                          # 置信序列 1 - alpha = 95%
 R_CAP = 3.0                           # 平均 R 的置信序列把单笔 R 截到 [-3, 3] (5 日卡几乎不超出)
@@ -66,10 +71,12 @@ def reconcile_path(data_dir: Path) -> Path:
 # ── 1. 纯函数回放 (一张卡) ────────────────────────────────────────────────
 
 def replay_card(side: str, zone: tuple[float, float], stop: float, target: float, days: list[list[tuple]],
-                *, entry_days: int = 2, hold_days: int = 5) -> dict:
+                *, entry_days: int = 2, hold_days: int = 5, open15: list[tuple | None] | None = None) -> dict:
     """days = 信号日之后的交易日 (按日期排序), 每天 = 常规时段 30 分钟K [(开, 高, 低, 收), ...] (09:30 起)。
+    open15 = 与 days 对齐的 09:45-10:00 那根 15 分钟K (开, 高, 低, 收); 没给 / 那天是 None -> 那天从 10:00 起判。
     返回 {"status": "no_fill" | "closed" | "pending" | "holding", ...}。
       pending = 入场窗还没走完 (数据不够判定); holding = 已成交但持有期还没走完。
+      fill_bar = 成交在当天第几根 30 分钟K (0 = 09:45-10:00 那一段)。
     规则见模块说明。纯函数, 不读文件。"""
     zlo, zhi = float(min(zone)), float(max(zone))
     sg = 1 if side == "long" else -1
@@ -81,7 +88,14 @@ def replay_card(side: str, zone: tuple[float, float], stop: float, target: float
         if w >= len(days):
             return {"status": "pending", "days_seen": len(days)}
         bars = days[w]
-        for b in range(1, len(bars)):                    # 09:45 起可成交 -> 跳过第一根 (09:30-10:00)
+        sub = open15[w] if open15 is not None and w < len(open15) else None
+        if sub is not None:                              # 09:45-10:00 (纸面 09:45 起可成交)
+            o, h, lo, _c = sub
+            if h >= zlo and lo <= zhi:
+                px = min(max(o, zlo), zhi)
+                fill_d, entry, b0 = w, px * (1 + sg * SLIP), 0
+                break
+        for b in range(1, len(bars) - 1):                # 10:00 起; 最后一根 (收盘前 30 分钟) 纸面已过入场截止
             o, h, lo, _c = bars[b]
             if h >= zlo and lo <= zhi:
                 px = min(max(o, zlo), zhi)
@@ -96,16 +110,16 @@ def replay_card(side: str, zone: tuple[float, float], stop: float, target: float
 
     def done(px: float, k: int, why: str) -> dict:
         xp = px * (1 - sg * SLIP)
-        return {"status": "closed", "fill_day": fill_d, "exit_day": fill_d + k, "entry": round(entry, 4),
+        return {"status": "closed", "fill_day": fill_d, "fill_bar": b0, "exit_day": fill_d + k, "entry": round(entry, 4),
                 "exit": round(xp, 4), "why": why, "r": round(sg * (xp - entry) / rc, 4)}
 
     for k in range(hold_days):
         t = fill_d + k
         if t >= len(days):
-            return {"status": "holding", "fill_day": fill_d, "entry": round(entry, 4)}
+            return {"status": "holding", "fill_day": fill_d, "fill_bar": b0, "entry": round(entry, 4)}
         bars = days[t]
         if not bars:
-            return {"status": "holding", "fill_day": fill_d, "entry": round(entry, 4)}
+            return {"status": "holding", "fill_day": fill_d, "fill_bar": b0, "entry": round(entry, 4)}
         if pending_exit:
             return done(bars[0][0], k, "stop")
         last = len(bars) - 1
@@ -128,7 +142,7 @@ def replay_card(side: str, zone: tuple[float, float], stop: float, target: float
             return done(bars[-2][3] if len(bars) > 1 else bars[-1][3], k, "time")   # 15:30 离场 = 倒数第二根收盘
         if sg * (bars[-1][3] - stop_now) < 0:
             pending_exit = True
-    return {"status": "holding", "fill_day": fill_d, "entry": round(entry, 4)}
+    return {"status": "holding", "fill_day": fill_d, "fill_bar": b0, "entry": round(entry, 4)}
 
 
 # ── 2. 随时有效置信区间 ─────────────────────────────────────────────────
@@ -192,8 +206,72 @@ def overlap(a: list | tuple | None, b: list | tuple | None) -> bool | None:
 
 # ── 3. 生产结算 (每天收盘后, 只写 research/swing_settle/) ────────────────────
 
-def _m30_days(data_dir: Path, repo, symbol: str, start: date, end: date) -> dict[date, list[tuple]]:
-    """一只票 [start, end] 的常规时段 30 分钟K (复权到系统日K口径, 与 4h 数据层同式), 按日分组。"""
+SPLIT_MIN = 0.15      # 日K复权系数相对信号日变了 15% 以上才当作拆股 (5:4 拆股 = 25%); 普通分红不换算
+
+
+def _basis_factors(data_dir: Path, repo, symbol: str, start: date, end: date, basis_day: date | None):
+    """-> f(日期): 那天的原始价 x f = 目标口径的价。
+    basis_day=None: 系统日K现行复权口径 (f = 当日 close/raw_close; 研究回放的卡价位也按现行日K算, 两边同口径)。
+    basis_day = 信号日: 信号日原始价口径 (生产结算: 卡上价位冻结在信号日当晚; 之后拆股, 日K整体回溯, 30 分钟K是拆后原始价)。
+      先按公司行动里 (信号日, 那天] 的拆股比例换算 (不依赖日K有没有回溯完); 公司行动里没有、但日K复权系数相对信号日
+      变了 SPLIT_MIN 以上 (缓存缺这条拆股) -> 用日K系数之比。普通现金分红不换算: 纸面成交看的也是原始报价。"""
+    import polars as pl
+
+    from app.services import kline_4h
+    lo = min(start, basis_day) if basis_day is not None else start
+    adj = kline_4h._adj_factors(repo, [symbol], lo, end)
+    by: dict[date, float] = {}
+    if adj.height:
+        for d, a in adj.filter(pl.col("symbol") == symbol).select(["date", "adj"]).iter_rows():
+            if isinstance(a, (int, float)) and math.isfinite(a) and a > 0:
+                by[d] = float(a)
+    if basis_day is None:
+        return lambda d: by.get(d, 1.0)
+    try:
+        from app.services.corporate_actions import CorporateActionService, split_factor
+        actions = CorporateActionService(data_dir).actions()
+    except Exception as e:
+        logger.warning("swing settle: corporate actions unavailable: %s", type(e).__name__)
+        actions, split_factor = [], None
+    ab = by.get(basis_day)
+    cache: dict[date, float] = {}
+
+    def f(d: date) -> float:
+        if d not in cache:
+            k = split_factor(actions, symbol, basis_day, d) if split_factor is not None else 1.0
+            if k == 1.0 and ab and by.get(d) and abs(by[d] / ab - 1.0) >= SPLIT_MIN:
+                k = by[d] / ab
+            cache[d] = k
+        return cache[d]
+    return f
+
+
+def _open15_days(data_dir: Path, repo, symbol: str, start: date, end: date, *,
+                 basis_day: date | None = None) -> dict[date, tuple]:
+    """一只票 [start, end] 每天 09:45 那根 15 分钟K (开, 高, 低, 收), 口径与 _m30_days 相同。没有数据 = 空。"""
+    import polars as pl
+
+    from app.services import kline_4h
+    raw = kline_4h.load_open15(data_dir, [symbol], start, end)
+    if raw.is_empty():
+        return {}
+    raw = raw.with_columns(pl.col("t").str.to_datetime(time_zone="UTC").dt.convert_time_zone("America/New_York").alias("ts"))
+    raw = raw.with_columns(pl.col("ts").dt.date().alias("date"),
+                           (pl.col("ts").dt.hour().cast(pl.Int32) * 60 + pl.col("ts").dt.minute().cast(pl.Int32)).alias("mm"))
+    raw = raw.filter((pl.col("mm") == kline_4h.OPEN15_START[0] * 60 + kline_4h.OPEN15_START[1])
+                     & (pl.col("date") >= start) & (pl.col("date") <= end)).sort("ts")
+    fac = _basis_factors(data_dir, repo, symbol, start, end, basis_day)
+    out: dict[date, tuple] = {}
+    for d, o, h, lo, c in raw.select(["date", "open", "high", "low", "close"]).iter_rows():
+        a = fac(d)
+        out[d] = (o * a, h * a, lo * a, c * a)
+    return out
+
+
+def _m30_days(data_dir: Path, repo, symbol: str, start: date, end: date, *,
+              basis_day: date | None = None) -> dict[date, list[tuple]]:
+    """一只票 [start, end] 的常规时段 30 分钟K (复权到系统日K口径, 与 4h 数据层同式), 按日分组。
+    basis_day 给了 -> 换成那一天 (信号日) 的原始价口径 (见 _basis_factors)。"""
     import polars as pl
 
     from app.services import kline_4h
@@ -211,15 +289,30 @@ def _m30_days(data_dir: Path, repo, symbol: str, start: date, end: date) -> dict
     raw = raw.filter((pl.col("mm") >= 570) & (pl.col("mm") < close_mm)).sort("ts")
     if raw.is_empty():
         return {}
-    adj = kline_4h._adj_factors(repo, [symbol], start, end)
-    if adj.height:
-        raw = raw.join(adj.select(["date", "adj"]), on="date", how="left").with_columns(pl.col("adj").fill_null(1.0))
-    else:
-        raw = raw.with_columns(pl.lit(1.0).alias("adj"))
+    fac = _basis_factors(data_dir, repo, symbol, start, end, basis_day)
     out: dict[date, list[tuple]] = {}
-    for d, o, h, lo, c, a in raw.select(["date", "open", "high", "low", "close", "adj"]).iter_rows():
+    for d, o, h, lo, c in raw.select(["date", "open", "high", "low", "close"]).iter_rows():
+        a = fac(d)
         out.setdefault(d, []).append((o * a, h * a, lo * a, c * a))
     return out
+
+
+def card_days(data_dir: Path, repo, symbol: str, after: list[date], *,
+              basis_day: date | None = None) -> tuple[list[list[tuple]], list[tuple | None]]:
+    """一张卡信号日之后的交易日 after -> (逐日 30 分钟K, 对齐的 09:45 那根)。某天缺 30 分钟K: 只用缺口之前的天
+    (不把缺数据当没碰到)。replay_card(..., days, open15=open15) 直接用。"""
+    if not after:
+        return [], []
+    bars = _m30_days(data_dir, repo, symbol, after[0], after[-1], basis_day=basis_day)
+    subs = _open15_days(data_dir, repo, symbol, after[0], after[-1], basis_day=basis_day)
+    days: list[list[tuple]] = []
+    open15: list[tuple | None] = []
+    for x in after:
+        if x not in bars:
+            break
+        days.append(bars[x])
+        open15.append(subs.get(x))
+    return days, open15
 
 
 def _board_cards(data_dir: Path, day: date) -> list[dict]:
@@ -267,7 +360,7 @@ def read_outcomes(data_dir: Path, contract: str | None = None) -> list[dict]:
     return out
 
 
-def _pm_void(data_dir: Path, repo, c: dict, first_day: date) -> dict | None:
+def _pm_void(data_dir: Path, repo, c: dict, first_day: date, *, basis_day: date | None = None) -> dict | None:
     """v2 作废规则 (与纸面同一条): 做多卡第 1 天 09:00 盘前价已低于止损 -> {"price", "source"}; 否则 None。
     先读生产检查记录 (swing_pm_check, 0.27.0 起每张卡都有); 没有记录 (上线前的卡) -> 用已存 30 分钟K 的盘前最后一根重放;
     30 分钟K 也缺 -> 不作废 (与生产取不到价时相同)。"""
@@ -278,13 +371,48 @@ def _pm_void(data_dir: Path, repo, c: dict, first_day: date) -> dict | None:
     if rec is not None:
         return {"price": rec.get("price"), "source": rec.get("source")} if rec.get("void") is True else None
     try:
-        px = pmc.premarket_close_m30(data_dir, repo, c["symbol"], first_day)
+        px = pmc.premarket_close_m30(data_dir, repo, c["symbol"], first_day, basis_day=basis_day)
     except Exception as e:
         logger.warning("swing settle: premarket replay %s unavailable: %s", c["symbol"], type(e).__name__)
         return None
     if px is not None and px < float(c["stop"]):
         return {"price": round(px, 4), "source": "m30_replay"}
     return None
+
+
+def _settle_one(data_dir: Path, repo, c: dict, after: list[date], as_of_close: date) -> tuple[dict | None, bool]:
+    """一张卡 (板卡或影子卡) -> (结局行 | None = 现在还定不了, 是否缺 30 分钟K)。after = 信号日之后到 as_of_close 的交易日。"""
+    try:
+        sday = date.fromisoformat(str(c["signal_day"])[:10])
+    except ValueError:
+        sday = None
+    head = {"card_id": c["card_id"], "contract": CONTRACT, "symbol": c["symbol"], "side": c["side"],
+            "signal_day": c["signal_day"], "rules": c["rules"], "zone": c["zone"], "stop": c["stop"],
+            "target": c["target"], "settled_on": as_of_close.isoformat()}
+    void = _pm_void(data_dir, repo, c, after[0], basis_day=sday)
+    if void is not None:
+        return {**head, "status": "void", "why": "premarket_beyond_stop", "pm_price": void["price"],
+                "pm_source": void["source"], "void_date": after[0].isoformat()}, False
+    days, open15 = card_days(data_dir, repo, c["symbol"], after, basis_day=sday)
+    missing = len(days) < len(after)
+    res = replay_card(c["side"], c["zone"], c["stop"], c["target"], days, open15=open15)
+    if res["status"] in ("pending", "holding", "invalid"):
+        return None, missing
+    row = {**head, **res}
+    for key in ("fill_day", "exit_day"):
+        if isinstance(row.get(key), int):
+            row[key.replace("_day", "_date")] = after[row[key]].isoformat()
+            row.pop(key)
+    return row, missing
+
+
+def _append_rows(p: Path, rows: list[dict]) -> None:
+    if not rows:
+        return
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as f:
+        for r in rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
 def settle(data_dir: Path, repo, *, as_of_close: date, lookback_days: int = 40) -> dict:
@@ -303,44 +431,199 @@ def settle(data_dir: Path, repo, *, as_of_close: date, lookback_days: int = 40) 
             if not after:
                 pending += 1
                 continue
-            void = _pm_void(data_dir, repo, c, after[0])
-            if void is not None:
-                row = {"card_id": c["card_id"], "contract": CONTRACT, "symbol": c["symbol"], "side": c["side"],
-                       "signal_day": c["signal_day"], "rules": c["rules"], "zone": c["zone"], "stop": c["stop"],
-                       "target": c["target"], "settled_on": as_of_close.isoformat(), "status": "void",
-                       "why": "premarket_beyond_stop", "pm_price": void["price"], "pm_source": void["source"],
-                       "void_date": after[0].isoformat()}
-                written.append(row)
-                done.add(c["card_id"])
-                continue
-            bars = _m30_days(data_dir, repo, c["symbol"], after[0], after[-1])
-            days = []
-            for x in after:
-                if x not in bars:
-                    break                                # 某天缺 30 分钟K: 只用缺口之前的天, 不把缺数据当没碰到
-                days.append(bars[x])
-            if len(days) < len(after):
-                missing += 1
-            res = replay_card(c["side"], c["zone"], c["stop"], c["target"], days)
-            if res["status"] in ("pending", "holding", "invalid"):
+            row, miss = _settle_one(data_dir, repo, c, after, as_of_close)
+            missing += 1 if miss else 0
+            if row is None:
                 pending += 1
                 continue
-            row = {"card_id": c["card_id"], "contract": CONTRACT, "symbol": c["symbol"], "side": c["side"],
-                   "signal_day": c["signal_day"], "rules": c["rules"], "zone": c["zone"], "stop": c["stop"],
-                   "target": c["target"], "settled_on": as_of_close.isoformat(), **res}
-            for key in ("fill_day", "exit_day"):
-                if isinstance(row.get(key), int):
-                    row[key.replace("_day", "_date")] = after[row[key]].isoformat()
-                    row.pop(key)
             written.append(row)
             done.add(c["card_id"])
-    if written:
-        p = outcomes_path(data_dir)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as f:
-            for r in written:
-                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    _append_rows(outcomes_path(data_dir), written)
     return {"written": len(written), "pending": pending, "missing": missing}
+
+
+# ── 3b. 影子记录 (2026-11-10): 没上板的同几何候选只结算、不下单 ─────────────────────────────
+# 被每边前 5 张截掉的 (cut) 和 3+3 命中但 4h 门不同向的 (gate_4h) 候选, 按上板卡同一套价位记一份, 走同一个回放。
+# 用来回答“被砍的卡是不是更差”“4h 门挡掉的值不值”。只写 opportunities/shadow/ 与 research/swing_settle/shadow.*.jsonl;
+# 不进下单簿、台账、交易环、推送, 页面也不把它们当卡显示。
+
+SHADOW_CONTRACT = "swing-shadow-v1"
+SHADOW_REASONS = ("cut", "gate_4h")
+
+
+def shadow_dir(data_dir: Path) -> Path:
+    return Path(data_dir) / "opportunities" / "shadow"
+
+
+def shadow_path(data_dir: Path, day: date) -> Path:
+    return shadow_dir(data_dir) / f"{day.isoformat()}.json"
+
+
+def shadow_outcomes_path(data_dir: Path, contract: str | None = None) -> Path:
+    return settle_dir(data_dir) / f"shadow.{contract or CONTRACT}.jsonl"
+
+
+def shadow_card_id(day: date, symbol: str, side: str) -> str:
+    return f"shadow-{day.isoformat()}-{symbol}-{side}"
+
+
+def record_shadow(data_dir: Path, repo, day: date, *, now: datetime | None = None) -> dict | None:
+    """信号日 day 的影子名单。已记过不改写; 簿还没落盘 (那天的 3+3 与同分口径还没冻结) / 没有信号表 / 大盘门读不到 -> 不记
+    (下次再试)。返回写入的记录, 没写 = None。"""
+    from app.market_clock import us_clock
+    from app.services import swing_desk as sd
+    from app.services import watchlist_book as wb
+    from app.services.fs_utils import atomic_write_text
+    p = shadow_path(data_dir, day)
+    if p.exists():
+        return None
+    book = wb.load_day(data_dir, day)
+    if not (isinstance(book, dict) and isinstance(book.get("swing_rules"), dict) and book["swing_rules"].get("long")):
+        return None
+    board = sd.board_for_day(data_dir, day, repo, shadow=True)
+    if board is None:
+        return None
+    if board["meta"].get("short_gate") is None and board["meta"].get("raw_short_hits"):
+        return None
+    now = us_clock.market_datetime(now or us_clock.now())
+    cards = []
+    for c in board.get("shadow") or []:
+        cards.append({"card_id": shadow_card_id(day, c["symbol"], c["side"]), "symbol": c["symbol"], "side": c["side"],
+                      "signal_day": day.isoformat(), "reason": c["shadow"], "zone": list(c["entry_zone"]),
+                      "stop": c["stop"], "target": c["target"], "risk": c["risk"], "atr": c["atr"], "close": c["close"],
+                      "score": c["score"], "gate": c["gate"], "rules": [s["id"] for s in c["strategies"]]})
+    rec = {"contract": SHADOW_CONTRACT, "card_contract": sd.CONTRACT, "day": day.isoformat(),
+           "rules": {"long": board["long_rules"], "short": board["short_rules"]}, "tiebreak": board.get("tiebreak"),
+           "per_side": sd.MAX_PER_SIDE, "short_gate": board["meta"].get("short_gate"),
+           "board": [{"symbol": c["symbol"], "side": c["side"]} for c in board["long"] + board["short"]],
+           "cards": cards, "built_at": now.isoformat(timespec="seconds"),
+           # late = 入场窗第 1 天过后才补记的 (上线前的信号日按当时的信号表与冻结规则重算)
+           "late": us_clock.next_trading_day(day) < now.date()}
+    p.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(p, json.dumps(rec, ensure_ascii=False, indent=1))
+    return rec
+
+
+def load_shadow(data_dir: Path, day: date) -> dict | None:
+    try:
+        d = json.loads(shadow_path(data_dir, day).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return d if isinstance(d, dict) and isinstance(d.get("cards"), list) else None
+
+
+def read_shadow_outcomes(data_dir: Path, contract: str | None = None) -> list[dict]:
+    p = shadow_outcomes_path(data_dir, contract)
+    if not p.exists():
+        return []
+    out = []
+    for line in p.read_text(encoding="utf-8").splitlines():
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
+def settle_shadow(data_dir: Path, repo, *, as_of_close: date, lookback_days: int = 40) -> dict:
+    """补记窗口内各信号日的影子名单, 再结算能定结局的影子卡 (与板卡同一个回放与作废规则), 只追加新行。"""
+    from app.market_clock import us_clock
+    from app.services import watchlist_book as wb
+    done = {r.get("card_id") for r in read_shadow_outcomes(data_dir)}
+    written, pending, recorded = [], 0, 0
+    for d in wb.book_days(data_dir):
+        if d > as_of_close or d < as_of_close - timedelta(days=lookback_days):
+            continue
+        try:
+            recorded += 1 if record_shadow(data_dir, repo, d) is not None else 0
+        except Exception as e:
+            logger.warning("swing shadow record %s failed: %s", d, type(e).__name__)
+        rec = load_shadow(data_dir, d)
+        if rec is None:
+            continue
+        after = us_clock.trading_days_between(d + timedelta(days=1), as_of_close)
+        for c in rec["cards"]:
+            if c.get("card_id") in done or c.get("reason") not in SHADOW_REASONS:
+                continue
+            if not after:
+                pending += 1
+                continue
+            row, _miss = _settle_one(data_dir, repo, c, after, as_of_close)
+            if row is None:
+                pending += 1
+                continue
+            written.append({**row, "reason": c["reason"], "score": c.get("score"), "gate": c.get("gate")})
+            done.add(c["card_id"])
+    _append_rows(shadow_outcomes_path(data_dir), written)
+    return {"recorded": recorded, "written": len(written), "pending": pending}
+
+
+def cluster_ci(groups: dict, *, n_boot: int = 2000, seed: int = 7, min_clusters: int = 8) -> list[float] | None:
+    """均值的聚类自助法 95% 区间: 整组重抽 (组 = 出卡日, 同一天的卡彼此相关)。有数的组不足 min_clusters -> None (不给区间)。"""
+    import numpy as np
+    ks = [k for k, v in groups.items() if v]
+    if len(ks) < min_clusters:
+        return None
+    sums = np.array([float(sum(groups[k])) for k in ks])
+    cnts = np.array([len(groups[k]) for k in ks])
+    pick = np.random.default_rng(seed).integers(0, len(ks), (n_boot, len(ks)))
+    m = sums[pick].sum(1) / np.maximum(cnts[pick].sum(1), 1)
+    return [round(float(np.percentile(m, 2.5)), 3), round(float(np.percentile(m, 97.5)), 3)]
+
+
+def live_vs_replay(groups: dict, replay_mean) -> dict:
+    """上线后的实际成绩 vs 回放值 (只展示, 不拦任何交易): 笔数 / 出卡日数 / 每笔 R / 区间 (出卡日聚类自助法 95%)。
+    diverged = 区间不含回放值 (回放数字与实际背离); 出卡日不足 8 个不给区间, 也不判背离。"""
+    rs = [float(x) for v in groups.values() for x in v]
+    rm = float(replay_mean) if isinstance(replay_mean, (int, float)) and not isinstance(replay_mean, bool) else None
+    ci = cluster_ci(groups)
+    return {"n": len(rs), "days": sum(1 for v in groups.values() if v),
+            "mean_r": round(sum(rs) / len(rs), 3) if rs else None, "ci": ci, "replay_mean_r": rm,
+            "diverged": bool(ci is not None and rm is not None and not (ci[0] <= rm <= ci[1]))}
+
+
+def _by_day(rows: list[dict]) -> dict[str, list[float]]:
+    out: dict[str, list[float]] = {}
+    for r in rows:
+        if r.get("status") == "closed" and isinstance(r.get("r"), (int, float)):
+            out.setdefault(str(r.get("signal_day")), []).append(float(r["r"]))
+    return out
+
+
+def live_line(data_dir: Path, long_rules=None, short_rules=None) -> dict:
+    """机会板页头那一行: 多空各一份 上线后实际 (已结算的板卡: 张数 / 回区率 / 每笔 R / 区间) 并排 回放值。
+    replay_stale = 回放基础率不是现行 3+3 那一套 (不拿来判背离)。"""
+    rows = read_outcomes(data_dir)
+    base = base_rates()
+    out = {}
+    for side, cur in (("long", long_rules), ("short", short_rules)):
+        xs = [r for r in rows if r.get("side") == side and r.get("status") in ("no_fill", "closed")]
+        ref = base.get(side) or {}
+        line = card_line(side, cur)
+        stale = bool(line and line.get("stale")) or not ref
+        v = live_vs_replay(_by_day(xs), None if stale else (ref.get("mean_r") or {}).get("v"))
+        out[side] = {**v, "cards": len(xs), "fill": round(v["n"] / len(xs), 3) if xs else None,
+                     "replay_fill": None if stale else (ref.get("fill") or {}).get("p"), "replay_stale": stale}
+    return {"contract": CONTRACT, **out}
+
+
+def shadow_table(data_dir: Path) -> dict:
+    """影子对照 (只读): 每类 (被砍 / 被 4h 门挡) x 方向 = 影子卡的成绩, 并排同一批信号日里上了板的卡。"""
+    rows = read_shadow_outcomes(data_dir)
+    board = read_outcomes(data_dir)
+    groups = {}
+    for reason in SHADOW_REASONS:
+        for side in ("long", "short"):
+            xs = [r for r in rows if r.get("reason") == reason and r.get("side") == side]
+            days = {r.get("signal_day") for r in xs}
+            ref = [r for r in board if r.get("side") == side and r.get("signal_day") in days]
+            diff = None
+            a, b = summarize_rows(xs), summarize_rows(ref)
+            if a["mean_r"]["v"] is not None and b["mean_r"]["v"] is not None:
+                diff = round(a["mean_r"]["v"] - b["mean_r"]["v"], 4)
+            groups[f"{reason}:{side}"] = {"shadow": a, "board": b, "days": len(days), "ci": cluster_ci(_by_day(xs)),
+                                          "diff_mean_r": diff}
+    return {"contract": SHADOW_CONTRACT, "settle_contract": CONTRACT, "groups": groups, "n_total": len(rows)}
 
 
 # ── 4. 读数 (卡面一行 + 回测页卡结局) ────────────────────────────────────
@@ -350,7 +633,7 @@ _BASE: dict = {}
 
 
 def base_rates() -> dict:
-    """回放基础率 (config/swing_base_rates.json, 2023-01~2026-09 自选 58 只 30 分钟K 回放, 同一结算规则)。"""
+    """回放基础率 (config/swing_base_rates.json, backend/scripts/rebuild_swing_odds.py 生成; 窗口 / 名单 / 规则写在文件里)。"""
     if "v" not in _BASE:
         try:
             d = json.loads(BASE_RATES_PATH.read_text(encoding="utf-8"))
@@ -398,6 +681,11 @@ def table(data_dir: Path) -> dict:
     out["n_total"] = len(rows)
     rec = read_reconcile(data_dir, limit=10)
     out["reconcile"] = rec
+    try:
+        out["shadow"] = shadow_table(data_dir)
+    except Exception as e:
+        logger.warning("swing settle: shadow table failed: %s", type(e).__name__)
+        out["shadow"] = None
     return out
 
 
@@ -680,6 +968,11 @@ def run_daily(data_dir: Path, repo, *, day: date) -> dict:
     except Exception as e:
         logger.warning("swing settle failed (soft): %s", type(e).__name__)
         res["settle_error"] = type(e).__name__
+    try:
+        res["shadow"] = settle_shadow(data_dir, repo, as_of_close=day)
+    except Exception as e:
+        logger.warning("swing shadow settle failed (soft): %s", type(e).__name__)
+        res["shadow_error"] = type(e).__name__
     try:
         from app.services.fs_utils import atomic_write_text
         t = table(data_dir)

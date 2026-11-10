@@ -150,6 +150,7 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
         out["skipped"].append({"reason": "no_signal_file"})
         return out
     out["swing_rules"] = {"long": board["long_rules"], "short": board["short_rules"]}   # 冻结本日 3+3 (板读这份)
+    out["tiebreak"] = board.get("tiebreak")       # 冻结同分卡的先后口径 (swing_desk.tiebreak_for_day 读这份)
     if board["meta"].get("short_gate") is None and board["meta"].get("raw_short_hits"):
         # SPY 数据缺: 空头未判 → 多空冲突也未知, 整天不落盘 (save_day 认这个原因), 下次重试
         out["incomplete"] = True

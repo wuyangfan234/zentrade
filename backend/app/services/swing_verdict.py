@@ -4,8 +4,9 @@
   回区 = 从当前状态起, 历史上同类卡最终回到挂单区 (成交) 的比例;
   期望 = 从当前状态起继续挂单, 每张卡最终拿到的平均盈亏 (没成交记 0), 按本卡计划股数折成美元。
 状态 = 方向 x 入场窗第几天 x 时段 (盘前 / 开盘 / 上午 / 下午) x 现价离挂单区几个 ATR (7 档)。
-数字查 config/swing_state_odds.json: 2023-01 ~ 2026-09 自选 58 只 30 分钟K 回放, 与卡结局同一结算规则,
-已含“做多第 1 天盘前越过止损作废”; 样本 < 20 的格子在生成时已退到 (方向, 第几天, 距离), 再退到 (方向, 距离)。
+数字查 config/swing_state_odds.json (backend/scripts/rebuild_swing_odds.py 生成; 窗口 / 名单 / 规则 / 结算口径写在文件里):
+自选 30 分钟K 回放, 与卡结局同一结算规则, 已含“做多第 1 天盘前越过止损作废”; 样本 < 20 的格子在生成时已退到
+(方向, 第几天, 距离), 再退到 (方向, 距离)。表只对生成它的那套 3+3 成立: 卡那天的出卡规则不是同一套就不给数字。
 期望只在 95% 区间 (按周聚类自助法) 不跨 0 时着色 (sig = +1 / -1); 跨 0 = 历史上分不出好坏 (sig = 0)。
 
 裁决 (verdict) 只看纸面交易员此刻会不会挂这张单, 数字不参与裁决 (回放: 用期望表直接决定挂不挂, 留出段更差):
@@ -33,6 +34,13 @@ _ODDS: dict = {}
 OPEN_AT, AM_AT, PM_AT = dtime(9, 30), dtime(10, 30), dtime(12, 30)
 BINS = ((1.0, "gt1"), (0.5, "0.5-1"), (0.25, "0.25-0.5"), (0.0, "0-0.25"))
 NOTIONAL_CAP = 0.25          # 单票名义 <= 权益 25% (trader.sizing.size_position 同式)
+
+
+def _zone_mid(card: dict) -> float | None:
+    try:
+        return (float(card["entry_zone"][0]) + float(card["entry_zone"][1])) / 2
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
 
 
 def odds_table() -> dict:
@@ -113,8 +121,19 @@ def plan_qty(equity, risk_pct, rps, mid) -> int | None:
     return max(min(int(e * r / s), int(e * NOTIONAL_CAP / m)), 0)
 
 
-def odds_for(card: dict, now_et: datetime, *, equity=None, risk_pct=None, table: dict | None = None) -> dict | None:
-    """一张卡此刻的赔率 (只读)。key 算不出 (入场窗已过) -> {"closed": True}; 表里没有该格 -> None。"""
+def table_matches(table: dict, side: str, rules) -> bool:
+    """赔率表是不是按这套规则回放出来的 (该方向的规则集合相同, 不看顺序)。rules=None -> 不核对 (当作相符)。"""
+    if rules is None:
+        return True
+    built = ((table or {}).get("rules") or {}).get(side)
+    return isinstance(built, list) and sorted(str(x) for x in built) == sorted(str(x) for x in rules)
+
+
+def odds_for(card: dict, now_et: datetime, *, equity=None, risk_pct=None, table: dict | None = None,
+             rules=None) -> dict | None:
+    """一张卡此刻的赔率 (只读)。key 算不出 (入场窗已过) -> {"closed": True}; 表里没有该格 -> None。
+    rules = 这张卡那个信号日该方向的出卡规则。给了且与赔率表生成时的规则不同 (2026-11-10 审计 #1: 齿轮改了 3+3,
+    表还是旧规则的回放, 不同规则的卡显示同一组数) -> 回区率 / 期望一律不给 (stale=True), 计划股数照给。"""
     side = card.get("side") or "long"
     try:
         sday = date.fromisoformat(str(card.get("signal_day") or card.get("as_of"))[:10])
@@ -124,14 +143,22 @@ def odds_for(card: dict, now_et: datetime, *, equity=None, risk_pct=None, table:
     if key is None:
         return {"closed": True}
     d = dist_atr(side, card.get("price"), card.get("entry_zone") or (), card.get("atr"))
-    cells = (table if table is not None else odds_table()).get("cells") or {}
+    tab = table if table is not None else odds_table()
+    stale = not table_matches(tab, side, rules)
+    cells = {} if stale else (tab.get("cells") or {})
     if key["birth"]:
         cell_key, bin_ = f"{side}|1|birth", "birth"
     else:
-        if d is None:
+        if d is None and not stale:
             return None
-        bin_ = dist_bin(d)
+        bin_ = dist_bin(d) if d is not None else None
         cell_key = f"{side}|{key['day']}|{key['phase']}|{bin_}"
+    if stale:
+        q = plan_qty(equity, risk_pct, _num(card.get("risk")), _zone_mid(card))
+        rps = _num(card.get("risk"))
+        return {"fill": None, "ev_r": None, "ci_r": None, "sig": 0, "n": None, "level": None, "stale": True,
+                "day": key["day"], "phase": key["phase"], "bin": bin_, "dist_atr": d, "qty": q,
+                "risk_usd": round(q * rps) if q and rps else None, "ev_usd": None, "ci_usd": None}
     cell = cells.get(cell_key)
     ev, fill = _num((cell or {}).get("ev")), _num((cell or {}).get("fill"))
     if cell is None or ev is None or fill is None:
@@ -145,11 +172,7 @@ def odds_for(card: dict, now_et: datetime, *, equity=None, risk_pct=None, table:
     elif lo_ci is not None and hi_ci is not None and hi_ci < 0:
         sig = -1
     rps = _num(card.get("risk"))
-    try:
-        mid = (float(card["entry_zone"][0]) + float(card["entry_zone"][1])) / 2
-    except (KeyError, IndexError, TypeError, ValueError):
-        mid = None
-    qty = plan_qty(equity, risk_pct, rps, mid)
+    qty = plan_qty(equity, risk_pct, rps, _zone_mid(card))
     out = {"fill": fill, "ev_r": ev, "ci_r": ci, "sig": sig, "n": cell.get("n"), "level": cell.get("level"),
            "day": key["day"], "phase": key["phase"], "bin": bin_, "dist_atr": d, "qty": qty,
            "risk_usd": None, "ev_usd": None, "ci_usd": None}
@@ -184,13 +207,18 @@ def verdict(card: dict, odds: dict | None, *, pm_record: dict | None, now_et: da
     return "order", None
 
 
-def annotate(cards: list[dict], now_et: datetime, *, equity=None, risk_pct=None, pm_records: dict | None = None) -> None:
-    """就地写入每张卡的 verdict / verdict_reason / odds。任何一张出错只是该卡不带数字, 裁决按交易环口径照常。"""
+def annotate(cards: list[dict], now_et: datetime, *, equity=None, risk_pct=None, pm_records: dict | None = None,
+             rules_by_day: dict | None = None) -> None:
+    """就地写入每张卡的 verdict / verdict_reason / odds。任何一张出错只是该卡不带数字, 裁决按交易环口径照常。
+    rules_by_day = {信号日: {"long": [...], "short": [...]}} (那天板用的出卡规则); 给了就核对赔率表是不是同一套规则。"""
     table = odds_table()
     pm_records = pm_records or {}
+    rules_by_day = rules_by_day or {}
     for c in cards:
         try:
-            o = None if c.get("state") == "holding" else odds_for(c, now_et, equity=equity, risk_pct=risk_pct, table=table)
+            day_rules = rules_by_day.get(str(c.get("signal_day") or c.get("as_of"))[:10]) or {}
+            o = None if c.get("state") == "holding" else odds_for(
+                c, now_et, equity=equity, risk_pct=risk_pct, table=table, rules=day_rules.get(c.get("side") or "long"))
         except Exception as e:
             logger.warning("swing verdict odds %s failed: %s", c.get("symbol"), type(e).__name__)
             o = None

@@ -344,17 +344,6 @@ def test_fetch_window_reaches_three_weeks_past_ff_week_any_weekday():
         assert (to - timedelta(days=1)) - src.week_end(now.date()) == timedelta(days=src.TV_DAYS)
 
 
-def test_opp_context_cache_not_reused_across_close(tmp_path, monkeypatch):
-    from app.services import opp_page
-    monkeypatch.setattr(opp_page, "card_context", lambda d, syms, prices, today: ({"NVDA": {"iv": 0.4 if us_clock.in_session() else None}}, {}))
-    opp_page._CTX_CACHE.clear()
-    monkeypatch.setattr(us_clock, "now", lambda: MON_1000.replace(hour=15, minute=59))
-    assert opp_page._cached_context(tmp_path, ["NVDA"], {}, MON_1000.date())[0]["NVDA"]["iv"] == 0.4
-    monkeypatch.setattr(us_clock, "now", lambda: MON_1000.replace(hour=16, minute=1))
-    assert opp_page._cached_context(tmp_path, ["NVDA"], {}, MON_1000.date())[0]["NVDA"]["iv"] is None   # 收盘后不复用盘中 IV
-    opp_page._CTX_CACHE.clear()
-
-
 def test_preopen_refetch_failure_backs_off(tmp_path):
     day = MON_1000.date()
     cut = datetime(2026, 11, 2, 9, 30, tzinfo=ET)

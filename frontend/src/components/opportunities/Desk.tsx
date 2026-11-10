@@ -3,9 +3,9 @@
  * 共振只进影子账本。只展示: 交易环 / 准入 / 下单簿 / 台账不变。
  * 文案只写结果 (名词 + 数字), 不写说明句。 */
 import type { ReactNode } from 'react'
-import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, OpenRadarPayload, OppDesk, OppRadarView,
+import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, LiveVsReplay, OpenRadarPayload, OppDesk, OppRadarView,
   RadarBlip, SwingBoardsPayload } from '@/lib/api'
-import { p2, rS, SIDE_ZH, usdS } from '@/components/opportunities/terms'
+import { cardVerdict, p2, rS, SIDE_ZH, usdS } from '@/components/opportunities/terms'
 
 const sgn = (v?: number | null) => (typeof v !== 'number' || !Number.isFinite(v) || v === 0 ? 'text-foreground' : v > 0 ? 'text-bull' : 'text-bear')
 const pc = (v?: number | null, d = 2) => (typeof v === 'number' && Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d)}%` : '—')
@@ -51,6 +51,26 @@ function Row({ symbol, onOpen, mark, main, sub, right, rightCls, dim, ...rest }:
       </span>
       <span className={`whitespace-nowrap text-right text-[13px] font-semibold ${rightCls ?? 'text-foreground'}`}>{right}</span>
     </div>
+  )
+}
+
+/** 上线后实际成绩并排回放值: 「笔数 · 每笔 R · 区间」并排「回放 R」; 区间不含回放值标「背离」。只展示。
+ * lead = 开头那一项 (默认「实际 n 笔」); leadRef = 它旁边的回放对照 (如回区率)。 */
+export function LiveLine({ label, live, lead, leadRef, stale, ...rest }: { label?: string; live?: LiveVsReplay | null; lead?: string; leadRef?: string
+  stale?: boolean } & Record<`data-${string}`, string | undefined>) {
+  if (!live) return null
+  const ciTxt = live.ci ? `${rS(live.ci[0])} ~ ${rS(live.ci[1])}` : ''
+  const title = live.ci ? '区间 = 出卡日聚类 95%' : '出卡日不足 8 个，不给区间'
+  return (
+    <span {...rest} data-diverged={live.diverged ? '' : undefined} title={title} className="inline-flex flex-wrap items-baseline gap-x-1.5 whitespace-nowrap">
+      {label && <b className="font-semibold text-foreground">{label}</b>}
+      <span className="text-secondary">{lead ?? `实际 ${live.n} 笔`}</span>
+      {leadRef && <span className="text-muted">{leadRef}</span>}
+      {live.n > 0 && <span className="text-secondary">{'每笔 '}<b className={`font-semibold ${sgn(live.mean_r)}`}>{rS(live.mean_r)}</b></span>}
+      {ciTxt && <span className="text-muted">{ciTxt}</span>}
+      <span className="text-muted">{`回放 ${stale ? '—' : rS(live.replay_mean_r)}`}</span>
+      {live.diverged && <span data-diverged-badge className="rounded-[4px] border border-warning/60 px-1 text-[11px] leading-4 text-warning">背离</span>}
+    </span>
   )
 }
 
@@ -115,7 +135,7 @@ function GapCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
       main={<>{'跳空 '}<b className={sgn(r.gap_pct)}>{pc(r.gap_pct, 1)}</b>{r.role ? ` · ${r.role}` : ''}</>}
       right={pc(d.chg[r.symbol])} rightCls={sgn(d.chg[r.symbol])} />
   ))
-  return { count: rows.length, meta: g ? `${etHm(g.at)} ET${g.live ? ' 实时' : ''}` : '', body }
+  return { count: rows.length, meta: g ? `${etHm(g.at)} ET${g.live ? ' 实时' : ''}` : '', body, top: null as ReactNode }
 }
 
 function OpenCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
@@ -136,7 +156,7 @@ function OpenCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
       ))}
     </>
   )
-  return { count: picks.length, meta: live ? `${etHm(r!.at)} ET` : '', body }
+  return { count: picks.length, meta: live ? `${etHm(r!.at)} ET` : '', body, top: null as ReactNode }
 }
 
 function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
@@ -159,14 +179,26 @@ function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void })
       ))}
     </>
   )
-  const meta = [it?.next_check ? `下次 ${it.next_check}` : '', st ? `已结算 ${st.n} · ${rS(st.sum_r)}` : ''].filter(Boolean).join(' · ')
-  return { count: active.length, meta, body }
+  const meta = [it?.next_check ? `下次 ${it.next_check}` : '', st && !it?.live ? `已结算 ${st.n} · ${rS(st.sum_r)}` : ''].filter(Boolean).join(' · ')
+  const top = it?.live && it.live.n > 0
+    ? <div data-engine-live="intraday" className="border-b border-border/70 px-3 py-1.5 text-[12px] tabular-nums"><LiveLine live={it.live} /></div> : null
+  return { count: active.length, meta, body, top }
 }
 
 // ── 策略机会: 唯一进入现行纸面下单链的卡片来源 ──
+const GATE_ZH: Record<string, string> = { event: '齐备', state: '同向' }
+const GATE_TITLE: Record<string, string> = { event: '4h 窗口内条件齐备', state: '4h 方向同向' }
+const pct0 = (v?: number | null) => (typeof v === 'number' && Number.isFinite(v) ? `${Math.round(v * 100)}%` : '—')
+
+/** 每张卡一个结论: 下单 / 不下单 + 原因 (后端裁决), 紧跟在票和方向后面 (手机宽度不用横滑就能看到);
+ * 页头只写这两类各几张, 再并排上线后实际成绩与回放值。 */
 export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoardsPayload | null; error?: string; res: Set<string>; onOpen: (s: string) => void }) {
   const cards = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
   const meta = swing ? [`信号日 ${md(swing.as_of)}`, swing.refresh?.last_at ? `刷新 ${etHm(swing.refresh.last_at)}` : ''].filter(Boolean).join(' · ') : ''
+  const verdicts = cards.map((c) => cardVerdict(c))
+  const nOrder = verdicts.filter((v) => v.order).length
+  const nSkip = verdicts.length - nOrder
+  const live = swing?.live
   return (
     <Panel data-strategy-board data-source="strategy" className="mb-3 overflow-hidden border-accent/60">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5">
@@ -174,31 +206,45 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
         <h2 className="shrink-0 text-[15px] font-semibold text-foreground">机会板</h2>
         <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">3+3 策略命中</span>
         <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">4h 方向门</span>
-        <span className="shrink-0 rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-5 text-white dark:bg-blue-700">可下单</span>
+        <span data-board-orders className="shrink-0 rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-5 text-white dark:bg-blue-700">{`下单 ${nOrder}`}</span>
+        {nSkip > 0 && <span data-board-skips className="shrink-0 rounded-[4px] border border-warning/60 px-1.5 text-[11px] font-semibold leading-5 text-warning">{`不下单 ${nSkip}`}</span>}
         <span className="ml-auto whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>
       </div>
+      {live && (
+        <div data-board-live className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-border/70 px-3 py-1.5 text-[12px] tabular-nums">
+          {(['long', 'short'] as const).map((k) => (
+            <LiveLine key={k} data-board-live-side={k} label={SIDE_ZH[k]} live={live[k]} stale={live[k].replay_stale}
+              lead={`实际回区 ${live[k].n}/${live[k].cards}`} leadRef={live[k].replay_stale ? undefined : `回放 ${pct0(live[k].replay_fill)}`} />
+          ))}
+        </div>
+      )}
       {error ? <Err name="机会板" /> : !swing ? <Empty t="—" /> : cards.length === 0 ? <Empty t="无" /> : (
         <div className="overflow-x-auto border-t border-border/70">
-          <table className="w-full min-w-[1060px] text-[12.5px] tabular-nums">
+          <table className="w-full min-w-[1120px] text-[12.5px] tabular-nums">
             <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
-              {['股票', '方向', '命中策略', '4h 门', '入场区', '止损', '股数', '回区', '状态', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 ? 'text-left' : 'text-right'}`}>{h}</th>)}
+              {['股票', '方向', '结论', '命中策略', '4h 门', '入场区', '止损', '目标', '股数', '回区', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 || i === 3 ? 'text-left' : 'text-right'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {cards.map((c) => {
-                const state = c.blocked ? '受限' : c.state === 'in_zone' ? '在区' : typeof c.dist_pct === 'number' ? `距区 ${Math.abs(c.dist_pct).toFixed(1)}%` : '待触发'
+              {cards.map((c, i) => {
+                const v = verdicts[i]
+                const stale = !!c.odds?.stale
                 return (
-                  <tr key={c.card_id ?? `${c.symbol}${c.side}`} role="button" tabIndex={0} data-board-row={c.symbol}
+                  <tr key={c.card_id ?? `${c.symbol}${c.side}`} role="button" tabIndex={0} data-board-row={c.symbol} data-verdict={v.order ? 'order' : 'skip'}
                     onClick={() => onOpen(c.symbol)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(c.symbol) } }}
                     className="h-11 cursor-pointer border-t border-border/70 first:border-t-0 hover:bg-elevated">
-                    <td className="px-3 text-left text-[14px] font-bold text-foreground">{c.symbol}{res.has(c.symbol) && <i data-res-mark className="ml-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent" />}</td>
+                    <td className={`px-3 text-left text-[14px] font-bold ${v.order ? 'text-foreground' : 'text-muted'}`}>{c.symbol}{res.has(c.symbol) && <i data-res-mark className="ml-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent" />}</td>
                     <td className={`px-3 text-right font-semibold ${c.side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[c.side]}</td>
+                    <td data-board-verdict className="whitespace-nowrap px-3 text-left" title={v.title}>
+                      <span className={`rounded-[4px] border px-1.5 text-[11px] font-semibold leading-5 ${v.order ? 'border-accent/50 text-accent' : 'border-warning/60 text-warning'}`}>{v.label}</span>
+                      <span className={`ml-1.5 text-[12px] ${v.order ? 'text-secondary' : 'text-warning'}`}>{v.detail}</span>
+                    </td>
                     <td className="max-w-[220px] truncate px-3 text-left text-secondary" title={c.strategies.map((s) => s.name).join(' · ')}>{c.strategies.map((s) => s.name).join(' · ') || '—'}</td>
-                    <td className="px-3 text-right text-accent">通过</td>
+                    <td data-board-gate className="px-3 text-right text-secondary" title={GATE_TITLE[c.gate ?? '']}>{GATE_ZH[c.gate ?? ''] ?? '—'}</td>
                     <td className="whitespace-nowrap px-3 text-right text-foreground">{`${p2(c.entry_zone[0])}–${p2(c.entry_zone[1])}`}</td>
                     <td className="px-3 text-right text-foreground">{p2(c.stop)}</td>
+                    <td data-board-target className="px-3 text-right text-foreground">{p2(c.target)}</td>
                     <td className="px-3 text-right text-foreground">{c.odds?.qty ?? c.qty ?? '—'}</td>
-                    <td className="px-3 text-right text-secondary">{typeof c.odds?.fill === 'number' ? `${(c.odds.fill * 100).toFixed(0)}%` : '—'}</td>
-                    <td className="whitespace-nowrap px-3 text-right"><span className={`rounded-[4px] border px-1.5 text-[11px] leading-5 ${c.blocked ? 'border-warning/50 text-warning' : c.state === 'in_zone' ? 'border-accent/50 text-accent' : 'border-border text-secondary'}`}>{state}</span></td>
+                    <td data-board-fill className="px-3 text-right text-secondary" title={stale ? '回放表不是这张卡的出卡规则' : undefined}>{typeof c.odds?.fill === 'number' ? `${(c.odds.fill * 100).toFixed(0)}%` : '—'}</td>
                     <td className="px-3 text-right text-secondary">{p2(c.price)}</td>
                   </tr>
                 )
@@ -212,7 +258,7 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
 }
 
 type RadarEngine = Exclude<DeskEngine, 'board'>
-const COLS: Record<RadarEngine, (p: { d: ColData; onOpen: (s: string) => void }) => { count: number; meta: string; body: ReactNode }> = {
+const COLS: Record<RadarEngine, (p: { d: ColData; onOpen: (s: string) => void }) => { count: number; meta: string; body: ReactNode; top: ReactNode }> = {
   gap: GapCol, open: OpenCol, intraday: IntradayCol,
 }
 
@@ -235,6 +281,7 @@ export function EngineCols({ order, d, desk, onOpen }: { order: DeskEngine[]; d:
           return (
             <Panel key={k} data-col={k} className="flex flex-col">
               <Head title={ENGINE_ZH[k]} count={c.count} meta={c.meta} />
+              {c.top}
               <div data-col-body className={COL_BODY}>{c.body}</div>
             </Panel>
           )

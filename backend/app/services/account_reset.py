@@ -18,6 +18,7 @@ ARCHIVE_ITEMS = ("ledger", "opportunities/cards", "opportunities/book", "opportu
                  "decision_desk/weights.json", "opportunities/radar_frames")
 # 0.39.0 雷达帧记录的是旧台账的持仓 / 名额状态: 随台账一起归档
 # 0.28.0 盘中强势卡 (opportunities/intraday) 不归档: 它不下单、不占资金, 是独立的出卡战绩, 重置纸面账户不该清掉
+# 机会板影子名单 (opportunities/shadow, 2026-11-10) 同理不归档: 只结算不下单, 不进卡册, 重置后不会变成可开仓的卡
 
 
 class BrokerFlattenError(RuntimeError):

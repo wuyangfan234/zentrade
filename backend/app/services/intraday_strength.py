@@ -856,6 +856,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, now: datetime | None = N
     now = us_clock.market_datetime(now or us_clock.now())
     today = now.date()
     active, history, closed = [], [], []
+    by_day: dict[str, list[float]] = {}
     for d in sorted(record_days(data_dir), reverse=True)[:60]:
         for c in load_day(data_dir, d)["cards"]:
             if c.get("status") == "open":
@@ -864,6 +865,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, now: datetime | None = N
                 history.append(dict(c))
                 if not c.get("backfill") and isinstance(c.get("r"), (int, float)):
                     closed.append(float(c["r"]))
+                    by_day.setdefault(d.isoformat(), []).append(float(c["r"]))
     # 现价 + 当前 R (热报价 <= 2 分钟; 否则最近收盘)
     syms = {c["symbol"] for c in active}
     px: dict[str, tuple[float, str]] = {}
@@ -905,8 +907,15 @@ def build_live(data_dir: Path, *, repo=None, loop=None, now: datetime | None = N
                  "mean_r": round(sum(closed) / len(closed), 3), "sum_r": round(sum(closed), 2)}
     nxt = next((c.strftime("%H:%M") for c in CHECKS
                 if datetime.combine(today, c, tzinfo=us_clock.tz) > now and us_clock.is_trading_day(today)), None)
+    # 上线后自然出卡的成绩并排回放值 (只展示): 区间不含回放值 = 回放数字与实际背离
+    live = None
+    try:
+        from app.services import swing_settlement as ss
+        live = ss.live_vs_replay(by_day, ODDS["mean_r"])
+    except Exception as e:
+        logger.warning("intraday strength: live stats unavailable: %s", type(e).__name__)
     return {"contract": CONTRACT, "today": today.isoformat(), "now": now.isoformat(timespec="seconds"),
-            "active": active, "history": history[:HISTORY_MAX], "stats": stats, "replay": ODDS,
+            "active": active, "history": history[:HISTORY_MAX], "stats": stats, "replay": ODDS, "live": live,
             "checks_today": rec["checks"][-12:], "next_check": nxt,
             "rule": {"min_chg": MIN_CHG, "min_rvol": MIN_RVOL, "min_er": MIN_ER, "min_above": MIN_ABOVE,
                      "max_pull": MAX_PULL, "hold_days": HOLD_DAYS, "target_r": TARGET_R}}

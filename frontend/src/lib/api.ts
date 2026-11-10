@@ -823,10 +823,16 @@ export type SwingBoardCard = {
 }
 /** 0.27.0 状态赔率 (config/swing_state_odds.json 查表): sig = 期望 95% 区间整体在 0 上 (+1) / 0 下 (-1) / 跨 0 (0) */
 export type SwingOdds = {
-  fill: number; ev_r: number; ci_r: number[] | null; sig: -1 | 0 | 1; n: number; level: string
-  day: number; phase: 'pre' | 'open' | 'am' | 'pm'; bin: string; dist_atr: number | null
+  fill: number | null; ev_r: number | null; ci_r: number[] | null; sig: -1 | 0 | 1; n: number | null; level: string | null
+  day: number; phase: 'pre' | 'open' | 'am' | 'pm'; bin: string | null; dist_atr: number | null
   qty: number | null; risk_usd: number | null; ev_usd: number | null; ci_usd: number[] | null
+  /** 赔率表不是这张卡那套出卡规则回放出来的: 回区率 / 期望不给 (只剩计划股数) */
+  stale?: boolean
 }
+/** 上线后实际成绩 vs 回放值 (只展示): ci = 出卡日聚类自助法 95% 区间, 出卡日不足 8 个 = null; diverged = 区间不含回放值 */
+export type LiveVsReplay = { n: number; days: number; mean_r: number | null; ci: number[] | null; replay_mean_r: number | null; diverged: boolean }
+/** 机会板一个方向: 已结算板卡 cards 张, 成交 n 笔; replay_stale = 回放基础率不是现行 3+3 那一套 */
+export type SwingLiveSide = LiveVsReplay & { cards: number; fill: number | null; replay_fill: number | null; replay_stale: boolean }
 export type SwingHistoryCard = Omit<SwingBoardCard, 'state'> & { state: 'expired' | 'closed' | 'void' | 'paper_expired' }
 /** 0.26.0 卡面那一行: 同类卡的回放基础率 (比例 0~1) */
 export type SwingBaseLine = { fill: number; win: number; target: number; stop: number; time: number; contract: string; rules?: string[]; stale?: boolean }
@@ -842,11 +848,15 @@ export type SwingSettleRow = {
   card_id: string; symbol: string; side: 'long' | 'short'; signal_day: string; zone: number[]; stop: number; target: number
   status: 'no_fill' | 'closed' | 'void'; why?: 'target' | 'stop' | 'time' | 'premarket_beyond_stop'; r?: number; fill_date?: string; exit_date?: string
 }
+/** 影子对照: 没上板的同几何候选 (cut 被每边前 5 截掉 / gate_4h 被 4h 门挡掉) 只结算不下单; board = 同一批信号日里上了板的卡 */
+export type SwingShadowGroup = { shadow: SwingSettleStats; board: SwingSettleStats; days: number; ci: number[] | null; diff_mean_r: number | null }
+export type SwingShadowTable = { contract: string; settle_contract: string; groups: Record<string, SwingShadowGroup>; n_total: number }
 export type SwingSettlePayload = {
   contract: string; card_contract: string; alpha: number; base_window: string[] | null
   sides: { long: SwingSettleSide; short: SwingSettleSide }
   recent: SwingSettleRow[]; n_total: number
   reconcile: SwingReconcileRow[]
+  shadow?: SwingShadowTable | null
 }
 /** 0.26.0 每日对账一行: 信号层 (生产 vs 回放逐票) + 板层 (已落盘的簿 vs 重算板) + 超过历史最长的连续 0 命中 */
 export type SwingReconcileRow = {
@@ -1021,6 +1031,8 @@ export type SwingBoardsPayload = {
   history?: SwingHistoryCard[]
   refresh?: SwingRefreshInfo
   base_rates?: { long: SwingBaseLine | null; short: SwingBaseLine | null }
+  /** 上线后已结算板卡的成绩并排回放值 (多空各一份) */
+  live?: { contract: string; long: SwingLiveSide; short: SwingLiveSide } | null
   today?: string
   entry_day?: string
   now?: string
@@ -1046,6 +1058,8 @@ export type IntradayPayload = {
   active: IntradayCard[]; history: IntradayCard[]
   stats: { n: number; win: number; mean_r: number; sum_r: number } | null
   replay: IntradayOdds
+  /** 上线后自然出卡的成绩并排回放值 */
+  live?: LiveVsReplay | null
   checks_today: { at: string; check: string; symbols: number; candidates: number; fired: string[]; heat?: IntradayHeatRow[]; near?: IntradayNearRow[]; late?: boolean }[]
   next_check: string | null
   rule: { min_chg: number; min_rvol: number; min_er: number; min_above: number; max_pull: number; hold_days: number; target_r: number }

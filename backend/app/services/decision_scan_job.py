@@ -209,6 +209,11 @@ def _refresh_m30(repo, as_of: date, symbols: set[str] | None, meta: dict) -> Non
         data_dir = Path(repo.store.data_dir)
         meta["m30"] = {"refresh": kline_4h.refresh_recent(data_dir, repo, provider, syms, as_of),
                        "history": kline_4h.ensure_history(data_dir, repo, provider, syms, as_of)}
+        try:   # 机会板卡回放的 09:45 入场起点 (失败只影响回放结算: 那一段退回 10:00 起)
+            meta["m30"]["open15"] = kline_4h.refresh_open15(data_dir, repo, provider, syms, as_of)
+        except Exception as e:
+            meta["m30"]["open15_error"] = f"{type(e).__name__}: {str(e)[:160]}"
+            logger.warning("open15 refresh failed: %s", meta["m30"]["open15_error"])
     except Exception as e:
         meta["m30"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
         logger.warning("m30 refresh failed: %s", meta["m30"]["error"])

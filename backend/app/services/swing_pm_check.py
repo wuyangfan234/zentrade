@@ -280,9 +280,10 @@ def void_ids(data_dir: Path, day: date) -> set[str]:
     return {k for k, v in load(data_dir, day).items() if v.get("void") is True}
 
 
-def premarket_close_m30(data_dir: Path, repo, symbol: str, day: date) -> float | None:
+def premarket_close_m30(data_dir: Path, repo, symbol: str, day: date, *, basis_day: date | None = None) -> float | None:
     """回放/结算用: 系统已存的 30 分钟K (kline_4h 数据层, 04:00-20:00) 里 day 当天 04:00-09:00 最后一根收盘,
-    复权到系统日K口径 (与 swing_settlement._m30_days 同式)。缺数据 -> None (不作废, 与生产 source=none 相同)。"""
+    复权到系统日K口径 (与 swing_settlement._m30_days 同式)。缺数据 -> None (不作废, 与生产 source=none 相同)。
+    basis_day 给了 -> 换成那一天 (信号日) 的原始价口径, 与卡上冻结的止损同口径 (swing_settlement._basis_factors)。"""
     import polars as pl
 
     from app.services import kline_4h
@@ -298,10 +299,5 @@ def premarket_close_m30(data_dir: Path, repo, symbol: str, day: date) -> float |
     c = raw["close"][-1]
     if not isinstance(c, (int, float)) or not math.isfinite(c) or c <= 0:
         return None
-    adj = kline_4h._adj_factors(repo, [symbol], day, day)
-    a = 1.0
-    if adj.height:
-        v = adj.filter(pl.col("date") == day)["adj"]
-        if len(v) and isinstance(v[0], (int, float)) and math.isfinite(v[0]) and v[0] > 0:
-            a = float(v[0])
-    return float(c) * a
+    from app.services import swing_settlement as ss
+    return float(c) * ss._basis_factors(data_dir, repo, symbol, day, day, basis_day)(day)

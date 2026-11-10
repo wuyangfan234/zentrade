@@ -27,7 +27,6 @@ _REAL_WARM = opp_page._warm_options                                     # 模块
 def _env(monkeypatch):
     monkeypatch.setattr(us_clock, "_calendar_provider", None)
     monkeypatch.setattr(us_clock, "now", lambda: NOW)
-    opp_page._CTX_CACHE.clear()
     opp_page._WARM_TRIED.clear()
     wv._PM_CACHE.clear()
     warmed = []
@@ -101,23 +100,35 @@ def test_page_aggregates_sections_and_context_without_touching_cards(tmp_path, m
     assert d["contract"] == opp_page.CONTRACT and d["errors"] == {}
     assert d["phase"]["phase"] == "session"
     assert d["intraday"]["active"][0]["symbol"] == "AXTI" and d["mood"]["judgment"]["day"] == "x"
-    assert d["swing"] == swing                                          # 标注不改板卡任何字段 (不进裁决)
-    nv, amd = d["ctx"]["NVDA"], d["ctx"]["AMD"]
+    assert d["swing"] == swing                                          # 聚合不改板卡任何字段
+    assert d["ctx"] == {}                                               # 2026-11-10: 页面不显示标注, /page 不再计算
+    ctx, errs = opp_page.card_context(tmp_path, ["AMD", "NVDA"], {"NVDA": 100.0, "AMD": 150.0}, TODAY)
+    assert errs == {}
+    nv, amd = ctx["NVDA"], ctx["AMD"]                                   # card_context 本身照旧 (开盘放量推送在用)
     assert nv["premarket_pct"] == 1.234 and nv["news"]["tone"]["bearish"] == 1
     assert nv["pcr"] == 0.5 and "earnings" not in nv                    # 近月 put 300 / call 600
     assert amd["earnings"] == {"date": "2026-10-23", "timing": "amc"}
     assert "pcr" not in amd and "premarket_pct" not in amd               # 没缓存 / 没盘前 -> 不给键
 
 
-def test_page_is_read_only_except_options_warm(tmp_path, monkeypatch, _env):
+def test_page_is_read_only_and_never_warms_options(tmp_path, monkeypatch, _env):
+    """2026-11-10 审计 #8: 标注页面不显示, /page 不再读新闻库 / 财报日历 / 期权缓存, 也不在后台预热期权链。"""
     _stub_sections(monkeypatch, _swing(_card("NVDA"), _card("MU")))
     _free_cache(tmp_path, "NVDA")
+    from app.services import earnings_calendar, news_store
+
+    def boom(*a, **k):
+        raise AssertionError("page must not compute card context")
+    monkeypatch.setattr(news_store, "batch_summary", boom)
+    monkeypatch.setattr(earnings_calendar.EarningsCalendar, "event_for", boom)
+    monkeypatch.setattr(opp_page, "card_context", boom)
     before = _tree_hash(tmp_path)
     for _ in range(2):
-        _client(tmp_path).get("/api/opportunities/page")
+        d = _client(tmp_path).get("/api/opportunities/page").json()
+        assert d["ctx"] == {} and d["errors"] == {}
     assert _tree_hash(tmp_path) == before
     assert not (tmp_path / "qveris").exists()                           # 不像 qveris_gate.cache_get 那样顺手建目录
-    assert _env == ["MU"]                                               # 只给缺当天缓存的票预热; 2 分钟内复用标注不重复预热
+    assert _env == []                                                   # 没有任何期权链预热
 
 
 def test_one_section_failure_only_blanks_that_section(tmp_path, monkeypatch):
@@ -129,30 +140,11 @@ def test_one_section_failure_only_blanks_that_section(tmp_path, monkeypatch):
     monkeypatch.setattr(intraday_strength, "build_live", boom)
     monkeypatch.setattr(news_store, "batch_summary", boom)
     d = _client(tmp_path).get("/api/opportunities/page").json()
-    assert d["intraday"] is None and d["errors"] == {"intraday": "RuntimeError", "ctx_news": "RuntimeError"}
-    assert d["swing"]["long"][0]["symbol"] == "NVDA" and "NVDA" in d["ctx"]
-    opp_page._CTX_CACHE.clear()
+    assert d["intraday"] is None and d["errors"] == {"intraday": "RuntimeError"}
+    assert d["swing"]["long"][0]["symbol"] == "NVDA" and d["ctx"] == {}
     monkeypatch.setattr(sd, "build_live", boom)
     d = _client(tmp_path).get("/api/opportunities/page").json()
     assert d["swing"] is None and d["ctx"] == {} and "swing" in d["errors"]
-
-
-def test_context_failure_is_not_cached(tmp_path, monkeypatch):
-    _stub_sections(monkeypatch, _swing(_card("NVDA")))
-    from app.services import news_store
-    calls = []
-
-    def flaky(data_dir, syms):
-        calls.append(1)
-        if len(calls) == 1:
-            raise RuntimeError("x")
-        return {"NVDA": {"count_24h": 1, "tone": None}}
-    monkeypatch.setattr(news_store, "batch_summary", flaky)
-    assert _client(tmp_path).get("/api/opportunities/page").json()["errors"] == {"ctx_news": "RuntimeError"}
-    d = _client(tmp_path).get("/api/opportunities/page").json()
-    assert d["errors"] == {} and d["ctx"]["NVDA"]["news"]["count_24h"] == 1
-    _client(tmp_path).get("/api/opportunities/page")
-    assert len(calls) == 2                                              # 成功那次缓存住了
 
 
 def test_options_order_paid_today_then_free_today_then_old_paid(tmp_path, _env):
@@ -280,7 +272,7 @@ def test_page_glue_failure_still_returns_sections(tmp_path, monkeypatch):
     r = _client(tmp_path).get("/api/opportunities/page")
     assert r.status_code == 200
     d = r.json()
-    assert d["swing"]["long"][0]["symbol"] == "NVDA" and d["ctx"] == {} and "ctx" in d["errors"]
+    assert d["swing"]["long"][0]["symbol"] == "NVDA" and d["ctx"] == {}
 
 
 # ---------- 0.34.0 按时段换主角 ----------
@@ -301,29 +293,24 @@ def test_stage_half_day_close(monkeypatch):
     assert opp_page.stage_of(datetime(2026, 11, 27, 13, 5, tzinfo=us_clock.tz))["key"] in ("board",)
 
 
-def test_page_has_stage_radar_gaps_and_side_context(tmp_path, monkeypatch):
+def test_page_has_stage_radar_and_gaps(tmp_path, monkeypatch):
     swing = _swing(_card("NVDA"))
     _stub_sections(monkeypatch, swing, intraday={"active": [], "history": [], "checks_today": [
         {"check": "10:00", "heat": [{"symbol": "AXTI", "rvol": 3.0}], "near": [{"symbol": "SMCI", "why": "below_vwap"}]}]})
-    from app.services import earnings_calendar, news_store, open_radar
+    from app.services import open_radar
     monkeypatch.setattr(open_radar, "view", lambda data_dir, repo=None, now=None: {
         "picks": [{"symbol": "SPCX", "rvol": 2.8}], "others": [], "is_today": True})
     (tmp_path / "premarket_gap").mkdir()
     (tmp_path / "premarket_gap" / f"{TODAY}.json").write_text(json.dumps(
         {"day": TODAY.isoformat(), "at": "2026-10-20T09:00:01-04:00", "gaps": {"DELL": 6.9, "NVDA": -3.1, "MU": 1.0},
          "mids": {"DELL": 493.4, "NVDA": 180.0, "MU": 900.0}}))
-    monkeypatch.setattr(earnings_calendar.EarningsCalendar, "event_for", lambda self, s: None)
-    seen = []
-    monkeypatch.setattr(news_store, "batch_summary", lambda data_dir, syms: seen.extend(syms) or {})
     d = _client(tmp_path).get("/api/opportunities/page").json()
     assert d["errors"] == {} and d["stage"] == {"key": "open", "label": "开盘"}          # NOW = 10:05 ET
     assert d["radar"]["picks"][0]["symbol"] == "SPCX"
     g = d["gaps"]
     assert g["live"] is False and g["threshold_pct"] == 3.0 and g["checked"] == 3
     assert [(r["symbol"], r.get("role")) for r in g["rows"]] == [("DELL", None), ("NVDA", "挂单")]   # |跳空| >= 3%, 按幅度
-    # 榜上的票也给新闻标注 (但不预热期权链)
-    assert set(seen) >= {"NVDA", "SPCX", "AXTI", "SMCI", "DELL"}
-    assert d["swing"] == swing
+    assert d["swing"] == swing and d["ctx"] == {}
 
 
 def test_gap_board_live_only_in_premarket_and_frozen_after_0900(tmp_path, monkeypatch):

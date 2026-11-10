@@ -1,9 +1,9 @@
-"""机会页聚合 (0.29.0): 一次请求给出整页 = 机会板 + 盘中强势 + 大盘条 + 板卡标注 (新闻 / 财报 / 盘前 / 期权)。
+"""机会页聚合 (0.29.0): 一次请求给出整页 = 机会板 + 盘中强势 + 大盘条 + 雷达 / 共振 / 今日多空。
 
 - 各区块互相隔离: 某一块算失败, 该块给 null 并在 errors 里写原因, 其余照常返回 (页面分块显示读取失败)。
-- 只读: 不写台账、簿、规则文件。唯一的例外是期权链缓存 (options_free/<票>/<美东日>.json): 当天缓存缺的票
-  在后台单飞预热 (不阻塞请求, 同票 10 分钟内不重试), 与此前前端逐票请求 /api/qveris/options 写的是同一份缓存。
-- 标注只展示, 不进打分、裁决、下单 (与 0.23.0 起卡面上下文 chips 同一口径)。
+- 只读: 不写台账、簿、规则文件。
+- 板卡标注 (新闻 / 财报 / 盘前 / 期权, card_context) 页面已不显示, /page 不再计算 (ctx 恒为空);
+  card_context 只剩开盘放量推送在用 (不取期权, 不预热期权链)。
 """
 from __future__ import annotations
 
@@ -19,13 +19,10 @@ logger = logging.getLogger(__name__)
 
 CONTRACT = "opp-page-v1"
 EARNINGS_DAYS = 7               # 财报角标: 今天起 7 个自然日内 (与旧自选表同一窗口)
-CTX_TTL_S = 120                 # 标注 (新闻/财报/盘前/期权) 不需要逐分钟新鲜: 同一批票 2 分钟内复用
 WARM_RETRY_S = 600
 _WARM_LOCK = threading.Lock()
 _WARM_INFLIGHT: set[str] = set()
 _WARM_TRIED: dict[tuple[str, str], float] = {}
-_CTX_LOCK = threading.Lock()
-_CTX_CACHE: dict[str, tuple[tuple, float, dict, dict]] = {}
 
 
 def _section(name: str, fn, errors: dict) -> Any:
@@ -39,19 +36,6 @@ def _section(name: str, fn, errors: dict) -> Any:
 
 def _board_cards(swing: dict | None) -> list[dict]:
     return [*((swing or {}).get("long") or []), *((swing or {}).get("short") or [])]
-
-
-def _board_symbols(swing: dict | None) -> list[str]:
-    return sorted({c["symbol"] for c in _board_cards(swing) if isinstance(c.get("symbol"), str)})
-
-
-def _board_prices(swing: dict | None) -> dict[str, float]:
-    out: dict[str, float] = {}
-    for c in _board_cards(swing):
-        p = c.get("price") if isinstance(c.get("price"), (int, float)) else c.get("close")
-        if isinstance(c.get("symbol"), str) and isinstance(p, (int, float)) and p > 0:
-            out[c["symbol"]] = float(p)
-    return out
 
 
 def _earnings_dates(data_dir: Path, syms: list[str]) -> dict[str, tuple[date, Any]]:
@@ -217,21 +201,6 @@ def card_context(data_dir: Path, syms: list[str], prices: dict[str, float], toda
     return out, errors
 
 
-def _cached_context(data_dir: Path, syms: list[str], prices: dict[str, float], today: date) -> tuple[dict, dict]:
-    from app.market_clock import us_clock
-    key = (tuple(syms), today.isoformat(), us_clock.in_session())   # 跨开收盘不复用 (IV 盘中才给)
-    now = time.monotonic()
-    with _CTX_LOCK:
-        hit = _CTX_CACHE.get(str(data_dir))
-        if hit and hit[0] == key and now - hit[1] < CTX_TTL_S:
-            return hit[2], hit[3]
-    ctx, errs = card_context(data_dir, syms, prices, today)
-    if not errs:                              # 有块失败就不缓存, 下次请求重试
-        with _CTX_LOCK:
-            _CTX_CACHE[str(data_dir)] = (key, now, ctx, errs)
-    return ctx, errs
-
-
 def _settings(data_dir: Path) -> dict:
     """齿轮现值: 当前 swing.json 的 3+3 (不是板上冻结的那套) + 规则集单笔风险。"""
     from app.services import swing_desk as sd
@@ -264,13 +233,9 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
     settings = _section("settings", lambda: _settings(data_dir), errors)
     radar = _section("radar", lambda: open_radar.view(data_dir, repo=repo, now=now), errors)
     gaps = _section("gaps", lambda: gap_board(data_dir, repo, now, swing, (stage or {}).get("key")), errors)
-    # 粘合层也隔离 (审查 #3): 板卡列表里有坏元素时只丢标注, 不让整页 500
-    picked = _section("ctx", lambda: (sorted(set(_board_symbols(swing)) | _side_symbols(radar, intraday, gaps)),
-                                      _board_prices(swing)), errors)
+    # 板卡标注 (新闻条数 / 财报 / 盘前涨跌 / 期权 PCR 与 IV) 页面自 0.50.2 起没有地方显示 (2026-11-10 审计 #8):
+    # 不再每次请求去读新闻库、财报日历、期权缓存并在后台预热期权链。ctx 键保留为空 (契约不变); card_context 仍可单独调用。
     ctx: dict = {}
-    if picked is not None:
-        ctx, ctx_err = _cached_context(data_dir, picked[0], picked[1], now.date())
-        errors.update(ctx_err)
     # 0.39.0 雷达投影 (只读; 0.41.0 起只供状态栏 + 持仓): 机会板失败时不给 (不能把“读不到”画成“没挂单”)
     from app.services import opp_desk, opp_radar
     radar_view = _section("radar_view", lambda: opp_radar.collect(
@@ -314,20 +279,6 @@ def stage_of(now: datetime) -> dict:
     else:
         key = "board"
     return {"key": key, "label": STAGE_LABEL[key]}
-
-
-def _side_symbols(radar: dict | None, intraday: dict | None, gaps: dict | None) -> set[str]:
-    """开盘榜 / 放量前 5 / 差一步 / 跳空榜上的票: 也给新闻与财报标注 (不取期权)。"""
-    out: set[str] = set()
-    for r in [*((radar or {}).get("picks") or []), *((radar or {}).get("others") or []), *((gaps or {}).get("rows") or [])]:
-        if isinstance(r, dict) and isinstance(r.get("symbol"), str):
-            out.add(r["symbol"])
-    chk = [c for c in (intraday or {}).get("checks_today") or [] if isinstance(c, dict)]
-    for c in chk[-1:]:
-        out |= {h["symbol"] for h in c.get("heat") or [] if isinstance(h, dict) and isinstance(h.get("symbol"), str)}
-    for c in chk:
-        out |= {h["symbol"] for h in c.get("near") or [] if isinstance(h, dict) and isinstance(h.get("symbol"), str)}
-    return out
 
 
 _PC_CACHE: dict[tuple, dict[str, float]] = {}

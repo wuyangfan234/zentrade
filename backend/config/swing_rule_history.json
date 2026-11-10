@@ -2,338 +2,334 @@
  "contract": "swing-desk-tight-v1",
  "window": [
   "2023-01-03",
-  "2026-10-12"
+  "2026-10-30"
  ],
- "universe": "watchlist 45 (2026-10-20)",
- "data_end": "2026-10-20",
+ "universe": "watchlist 46 (2026-11-09)",
+ "data_end": "2026-11-09",
  "universe_note": "universe = watchlist at data_end; rules with < 5 fills keep counts only",
  "r_unit": "per-share R vs plan risk (zone mid to stop), incl. 5bps slippage, no fees, no account limits",
  "baseline": "same-day same-side 4h-gated cells, same tight card",
- "source": "backend/scripts/rebuild_swing_history.py (production signal matrix, kline_4h + phantom_4h gate, swing_settlement.replay_card, 30m)",
- "generated": "2026-10-21T12:19:53+08:00",
+ "source": "backend/scripts/rebuild_swing_history.py (production signal matrix, kline_4h + phantom_4h gate, swing_settlement.replay_card, 30m + 09:45 15m)",
+ "settle_contract": "swing-settle-v3",
+ "entry_window": "09:45 to 30 min before close (same as paper)",
+ "open15_coverage": 0.9998,
+ "generated": "2026-11-10T17:08:35+08:00",
  "thin": "rules with < 5 fills: n = fills, signals = 4h-gated cards, raw = hits before the gate; no mean_r/excess",
  "rules": {
   "boll_breakout": {
-   "n": 456,
-   "fill": 0.597,
-   "mean_r": 0.2498,
-   "excess": 0.0517,
-   "p": 0.268
+   "n": 503,
+   "fill": 0.624,
+   "mean_r": 0.2043,
+   "excess": 0.0087,
+   "p": 0.46
   },
   "breakout_new_high_60d": {
-   "n": 557,
-   "fill": 0.607,
-   "mean_r": 0.2976,
-   "excess": 0.0466,
-   "p": 0.271
+   "n": 617,
+   "fill": 0.645,
+   "mean_r": 0.2521,
+   "excess": 0.0003,
+   "p": 0.502
   },
   "bullish_alignment": {
-   "n": 3566,
-   "fill": 0.614,
-   "mean_r": 0.2571,
-   "excess": 0.0342,
+   "n": 3879,
+   "fill": 0.635,
+   "mean_r": 0.2333,
+   "excess": 0.0326,
    "p": 0.064
   },
   "connors_rsi2": {
-   "n": 9,
-   "fill": 0.5,
-   "mean_r": 0.0047,
-   "excess": -0.3787,
-   "p": 0.809
+   "n": 11,
+   "fill": 0.55,
+   "mean_r": -0.0697,
+   "excess": -0.483,
+   "p": 0.882
   },
   "five_day_low_overnight": {
-   "n": 8,
-   "fill": 0.571,
-   "mean_r": -0.5776,
-   "excess": -0.5301,
-   "p": 0.915
+   "n": 9,
+   "fill": 0.562,
+   "mean_r": -0.5903,
+   "excess": -0.5567,
+   "p": 0.912
   },
   "ibs_mean_reversion": {
-   "n": 1205,
-   "fill": 0.589,
-   "mean_r": 0.355,
-   "excess": 0.0799,
-   "p": 0.007
+   "n": 1323,
+   "fill": 0.613,
+   "mean_r": 0.3094,
+   "excess": 0.0607,
+   "p": 0.035
   },
   "long_lower_shadow_reversal": {
-   "n": 1,
-   "signals": 2,
-   "raw": 173,
+   "n": 2,
+   "signals": 3,
+   "raw": 201,
    "thin": true
   },
   "low_volatility_leader": {
-   "n": 1205,
-   "fill": 0.591,
-   "mean_r": 0.2371,
-   "excess": -0.0043,
-   "p": 0.529
+   "n": 1334,
+   "fill": 0.607,
+   "mean_r": 0.2024,
+   "excess": -0.0053,
+   "p": 0.547
   },
   "ma_convergence_breakout": {
-   "n": 167,
-   "fill": 0.574,
-   "mean_r": -0.1292,
-   "excess": -0.2382,
-   "p": 0.964
+   "n": 177,
+   "fill": 0.598,
+   "mean_r": -0.1026,
+   "excess": -0.2413,
+   "p": 0.963
   },
   "ma_golden_cross": {
-   "n": 113,
-   "fill": 0.571,
-   "mean_r": 0.2574,
-   "excess": 0.1896,
-   "p": 0.085
+   "n": 132,
+   "fill": 0.623,
+   "mean_r": 0.2827,
+   "excess": 0.1573,
+   "p": 0.119
   },
   "macd_below_zero_revival": {
-   "n": 0,
-   "signals": 0,
-   "raw": 279,
+   "n": 1,
+   "signals": 1,
+   "raw": 335,
    "thin": true
   },
   "macd_golden": {
-   "n": 148,
-   "fill": 0.558,
-   "mean_r": 0.1637,
-   "excess": -0.0281,
-   "p": 0.598
+   "n": 160,
+   "fill": 0.58,
+   "mean_r": 0.051,
+   "excess": -0.1122,
+   "p": 0.826
   },
   "mdd_multi_down_days": {
-   "n": 46,
-   "fill": 0.605,
-   "mean_r": 0.1682,
-   "excess": -0.1995,
-   "p": 0.854
+   "n": 48,
+   "fill": 0.615,
+   "mean_r": 0.1251,
+   "excess": -0.2084,
+   "p": 0.872
+  },
+  "momentum_rsi2_pullback": {
+   "n": 2,
+   "signals": 2,
+   "raw": 577,
+   "thin": true
   },
   "n_day_low_reversal": {
    "n": 0,
    "signals": 0,
-   "raw": 42,
+   "raw": 52,
    "thin": true
   },
   "oversold_bounce": {
    "n": 0,
    "signals": 0,
-   "raw": 58,
+   "raw": 67,
    "thin": true
   },
   "oversold_reversal": {
    "n": 0,
    "signals": 0,
-   "raw": 15,
+   "raw": 17,
    "thin": true
   },
   "platform_consolidation_breakout": {
-   "n": 123,
-   "fill": 0.58,
-   "mean_r": -0.2938,
-   "excess": -0.4679,
+   "n": 133,
+   "fill": 0.616,
+   "mean_r": -0.3294,
+   "excess": -0.5236,
    "p": 1.0
   },
   "pullback_ma20_bounce": {
-   "n": 67,
-   "fill": 0.54,
-   "mean_r": 0.1003,
-   "excess": -0.1812,
-   "p": 0.832
+   "n": 75,
+   "fill": 0.551,
+   "mean_r": -0.0558,
+   "excess": -0.2755,
+   "p": 0.943
   },
   "pullback_to_support": {
-   "n": 101,
-   "fill": 0.555,
-   "mean_r": 0.3622,
-   "excess": 0.0917,
-   "p": 0.253
+   "n": 104,
+   "fill": 0.547,
+   "mean_r": 0.3432,
+   "excess": 0.0652,
+   "p": 0.317
   },
   "rsi_midline_pullback": {
-   "n": 128,
-   "fill": 0.561,
-   "mean_r": 0.2006,
-   "excess": -0.1231,
-   "p": 0.866
+   "n": 138,
+   "fill": 0.582,
+   "mean_r": 0.1943,
+   "excess": -0.103,
+   "p": 0.832
   },
   "strong_open": {
-   "n": 481,
-   "fill": 0.617,
-   "mean_r": 0.122,
-   "excess": -0.0193,
-   "p": 0.615
+   "n": 504,
+   "fill": 0.645,
+   "mean_r": 0.1042,
+   "excess": -0.0749,
+   "p": 0.857
   },
   "three_down_days_overnight": {
-   "n": 74,
-   "fill": 0.632,
-   "mean_r": 0.2351,
-   "excess": -0.0903,
-   "p": 0.67
+   "n": 80,
+   "fill": 0.656,
+   "mean_r": 0.2043,
+   "excess": -0.0421,
+   "p": 0.596
   },
   "trend_breakout": {
-   "n": 189,
-   "fill": 0.548,
-   "mean_r": 0.4163,
-   "excess": 0.1092,
-   "p": 0.234
+   "n": 210,
+   "fill": 0.583,
+   "mean_r": 0.2938,
+   "excess": -0.0056,
+   "p": 0.531
   },
   "tv_chandelier_exit": {
-   "n": 307,
-   "fill": 0.577,
-   "mean_r": 0.2084,
-   "excess": 0.0522,
-   "p": 0.242
+   "n": 345,
+   "fill": 0.614,
+   "mean_r": 0.1995,
+   "excess": 0.0082,
+   "p": 0.46
   },
   "tv_halftrend": {
-   "n": 484,
-   "fill": 0.597,
-   "mean_r": 0.0585,
-   "excess": -0.0958,
-   "p": 0.955
+   "n": 539,
+   "fill": 0.624,
+   "mean_r": 0.0403,
+   "excess": -0.1034,
+   "p": 0.972
   },
   "tv_phantom_shift": {
-   "n": 232,
-   "fill": 0.564,
-   "mean_r": 0.271,
-   "excess": 0.0927,
-   "p": 0.125
+   "n": 257,
+   "fill": 0.598,
+   "mean_r": 0.2785,
+   "excess": 0.0626,
+   "p": 0.229
   },
   "tv_phantom_trail": {
-   "n": 440,
-   "fill": 0.609,
-   "mean_r": 0.1089,
-   "excess": -0.0123,
-   "p": 0.574
+   "n": 486,
+   "fill": 0.636,
+   "mean_r": 0.1485,
+   "excess": -0.0252,
+   "p": 0.676
   },
   "tv_smc_structure": {
-   "n": 30,
-   "fill": 0.556,
-   "mean_r": 0.2025,
-   "excess": -0.1512,
-   "p": 0.73
+   "n": 36,
+   "fill": 0.632,
+   "mean_r": 0.2625,
+   "excess": -0.1481,
+   "p": 0.779
   },
   "tv_squeeze_momentum": {
-   "n": 159,
-   "fill": 0.596,
-   "mean_r": -0.0365,
-   "excess": -0.0712,
-   "p": 0.678
+   "n": 179,
+   "fill": 0.624,
+   "mean_r": 0.057,
+   "excess": -0.0278,
+   "p": 0.58
   },
   "tv_supertrend": {
-   "n": 245,
-   "fill": 0.559,
-   "mean_r": 0.1428,
-   "excess": 0.0386,
-   "p": 0.325
+   "n": 272,
+   "fill": 0.595,
+   "mean_r": 0.1616,
+   "excess": -0.0296,
+   "p": 0.621
   },
   "tv_ut_bot": {
-   "n": 544,
-   "fill": 0.579,
-   "mean_r": 0.0942,
-   "excess": -0.0458,
-   "p": 0.799
+   "n": 606,
+   "fill": 0.601,
+   "mean_r": 0.0925,
+   "excess": -0.0306,
+   "p": 0.731
   },
   "tv_wavetrend": {
-   "n": 6,
-   "fill": 0.6,
-   "mean_r": 0.0746,
-   "excess": 0.2454,
-   "p": 0.291
+   "n": 5,
+   "fill": 0.556,
+   "mean_r": 0.0286,
+   "excess": 0.5218,
+   "p": 0.312
   },
   "tv_zlsma_cross": {
-   "n": 552,
-   "fill": 0.6,
-   "mean_r": 0.3894,
-   "excess": 0.1338,
-   "p": 0.02
+   "n": 601,
+   "fill": 0.625,
+   "mean_r": 0.3654,
+   "excess": 0.1267,
+   "p": 0.024
   },
   "volume_price_surge": {
-   "n": 71,
-   "fill": 0.568,
-   "mean_r": 0.1458,
-   "excess": -0.0689,
-   "p": 0.671
+   "n": 78,
+   "fill": 0.605,
+   "mean_r": 0.0524,
+   "excess": -0.2032,
+   "p": 0.913
   },
   "williams_r2_reversion": {
-   "n": 358,
-   "fill": 0.576,
-   "mean_r": 0.3682,
-   "excess": 0.0369,
-   "p": 0.294
+   "n": 394,
+   "fill": 0.601,
+   "mean_r": 0.3073,
+   "excess": 0.0008,
+   "p": 0.507
   },
   "tv_chandelier_exit:short": {
-   "n": 108,
-   "fill": 0.659,
-   "mean_r": -0.1721,
-   "excess": 0.0451,
-   "p": 0.352
+   "n": 123,
+   "fill": 0.683,
+   "mean_r": -0.1545,
+   "excess": 0.036,
+   "p": 0.371
   },
   "tv_halftrend:short": {
-   "n": 151,
-   "fill": 0.657,
-   "mean_r": 0.2137,
-   "excess": 0.2544,
-   "p": 0.001
+   "n": 164,
+   "fill": 0.648,
+   "mean_r": 0.2482,
+   "excess": 0.2494,
+   "p": 0.0
   },
   "tv_phantom_shift:short": {
-   "n": 94,
-   "fill": 0.696,
-   "mean_r": -0.2932,
-   "excess": -0.068,
-   "p": 0.754
+   "n": 104,
+   "fill": 0.698,
+   "mean_r": -0.3195,
+   "excess": -0.1231,
+   "p": 0.926
   },
   "tv_phantom_trail:short": {
-   "n": 114,
-   "fill": 0.62,
-   "mean_r": -0.0722,
-   "excess": 0.05,
-   "p": 0.352
+   "n": 132,
+   "fill": 0.644,
+   "mean_r": -0.1173,
+   "excess": 0.0269,
+   "p": 0.408
   },
   "tv_smc_structure:short": {
-   "n": 22,
-   "fill": 0.71,
-   "mean_r": 0.073,
-   "excess": 0.3311,
-   "p": 0.187
+   "n": 29,
+   "fill": 0.725,
+   "mean_r": -0.0254,
+   "excess": 0.293,
+   "p": 0.123
   },
   "tv_squeeze_momentum:short": {
-   "n": 1777,
-   "fill": 0.689,
-   "mean_r": -0.1957,
-   "excess": -0.0025,
-   "p": 0.584
+   "n": 2066,
+   "fill": 0.712,
+   "mean_r": -0.16,
+   "excess": 0.0031,
+   "p": 0.398
   },
   "tv_supertrend:short": {
-   "n": 105,
-   "fill": 0.745,
-   "mean_r": -0.1888,
-   "excess": -0.0025,
-   "p": 0.537
+   "n": 115,
+   "fill": 0.742,
+   "mean_r": -0.1851,
+   "excess": -0.0291,
+   "p": 0.65
   },
   "tv_ut_bot:short": {
-   "n": 121,
-   "fill": 0.593,
-   "mean_r": -0.1651,
-   "excess": 0.0741,
-   "p": 0.223
+   "n": 146,
+   "fill": 0.619,
+   "mean_r": -0.0142,
+   "excess": 0.124,
+   "p": 0.116
   },
   "tv_wavetrend:short": {
    "n": 0,
-   "signals": 1,
-   "raw": 549,
+   "signals": 2,
+   "raw": 583,
    "thin": true
   },
   "tv_zlsma_cross:short": {
-   "n": 146,
-   "fill": 0.624,
-   "mean_r": -0.2124,
-   "excess": -0.0231,
-   "p": 0.58
-  },
-  "momentum_rsi2_pullback": {
-   "n": 2,
-   "signals": 2,
-   "raw": 541,
-   "thin": true
-  }
- },
- "added": {
-  "momentum_rsi2_pullback": {
-   "generated": "2026-10-23T17:20:49+08:00",
-   "data_end": "2026-10-22",
-   "universe": "watchlist 45"
+   "n": 164,
+   "fill": 0.646,
+   "mean_r": -0.1686,
+   "excess": -0.0128,
+   "p": 0.558
   }
  }
 }

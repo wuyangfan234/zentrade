@@ -151,7 +151,7 @@ def test_settle_writes_once_and_never_rewrites(tmp_path, monkeypatch, cal):
     tgt = card["target_zone"][0]
     d2 = [(hi, tgt + 0.5, hi, tgt), *_flat(tgt, 12)]
     bars = {date(2026, 10, 9): d1, date(2026, 10, 12): d2}
-    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e: {k: v for k, v in bars.items() if s <= k <= e})
+    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e, **kw: {k: v for k, v in bars.items() if s <= k <= e})
     r1 = ss.settle(tmp_path, None, as_of_close=date(2026, 10, 12))
     assert r1["written"] == 1
     rows = ss.read_outcomes(tmp_path)
@@ -165,7 +165,7 @@ def test_settle_writes_once_and_never_rewrites(tmp_path, monkeypatch, cal):
 def test_settle_no_fill_after_two_days(tmp_path, monkeypatch, cal):
     _book_with_card(tmp_path, monkeypatch)
     bars = {date(2026, 10, 9): _flat(110.0), date(2026, 10, 12): _flat(111.0)}
-    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e: {k: v for k, v in bars.items() if s <= k <= e})
+    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e, **kw: {k: v for k, v in bars.items() if s <= k <= e})
     assert ss.settle(tmp_path, None, as_of_close=date(2026, 10, 9))["pending"] == 1      # 第 1 天: 入场窗还没走完
     assert ss.settle(tmp_path, None, as_of_close=date(2026, 10, 12))["written"] == 1
     assert ss.read_outcomes(tmp_path)[0]["status"] == "no_fill"
@@ -182,7 +182,7 @@ def test_contract_bump_keeps_old_outcomes(tmp_path, monkeypatch, cal):
     """改版不清零: 新 contract 写新文件, 旧文件原样保留。"""
     _book_with_card(tmp_path, monkeypatch)
     bars = {date(2026, 10, 9): _flat(110.0), date(2026, 10, 12): _flat(111.0)}
-    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e: {k: v for k, v in bars.items() if s <= k <= e})
+    monkeypatch.setattr(ss, "_m30_days", lambda data_dir, repo, symbol, s, e, **kw: {k: v for k, v in bars.items() if s <= k <= e})
     ss.settle(tmp_path, None, as_of_close=date(2026, 10, 12))
     cur = ss.CONTRACT
     old = ss.outcomes_path(tmp_path).read_text()

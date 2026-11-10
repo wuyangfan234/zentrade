@@ -47,6 +47,12 @@ EXCESS_WEIGHT = {
 HOLD_DAYS = 5
 MAX_PER_SIDE = 5
 CONTRACT = "swing-desk-tight-v1"
+# 同分卡的先后 (2026-11-10 产品决策「同分卡改成固定散列排序」): 分数 / 命中条数 / 排序因子名次 / 4h 门类型都相同时,
+# 按 sha256("<信号日>:<代码>") 排。同一天同一批候选结果固定可复现, 不再让代码字母靠后的票长期被砍
+# (审计: 一个运行实例上 4 次截断全部按字母砍, 被砍的卡回放并不更差)。已落盘的旧簿没有 tiebreak 字段 = "symbol" (当时的字母序),
+# 重算那些信号日的板时沿用, 板与簿始终是同一批卡。
+TIEBREAK = "hash-v1"
+TIEBREAK_LEGACY = "symbol"
 # 0.26.0: 规则面板“回测 N 笔”= 现在这张卡 (tight-v1) 的历史, 由 30 分钟K 回放算出 (见文件 source 字段);
 # 旧宽卡历史 watchlist_rule_history.json 只留给旧规则表。只展示, 不进打分/排序 (排序权重仍是上面的 EXCESS_WEIGHT)。
 RULE_HISTORY_PATH = Path(__file__).parents[2] / "config" / "swing_rule_history.json"
@@ -288,6 +294,14 @@ def geometry(side: str, close: float, atr: float) -> dict | None:
             "target_pct": round((target / mid - 1) * 100, 2)}
 
 
+def tie_key(as_of: date, symbol: str, mode: str = TIEBREAK) -> str:
+    """同分卡的排序键。"symbol" = 旧口径 (代码字母序); 其余 = sha256("<信号日>:<代码>") 十六进制串。"""
+    if mode == TIEBREAK_LEGACY:
+        return symbol
+    import hashlib
+    return hashlib.sha256(f"{as_of.isoformat()}:{symbol}".encode()).hexdigest()
+
+
 def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...], close: float | None,
           atr: float | None, gate: str, as_of: date) -> dict[str, Any] | None:
     seen = {h.get("rule") for h in hits}
@@ -331,8 +345,13 @@ def compose_boards(
     h4_state: dict[str, str] | None = None,
     short_ok: bool | None = True,
     rank_values: dict | None = None,
+    tiebreak: str = TIEBREAK,
+    shadow: bool = False,
 ) -> dict[str, Any]:
     """纯函数: 信号快照 → LONG/SHORT 板。
+
+    tiebreak: 同分卡的先后 (见 TIEBREAK)。shadow=True 时另给 "shadow" = 没上板的同几何候选 (只供影子结算, 不下单):
+    reason "cut" = 过了 4h 门但被每边前 N 张截掉; "gate_4h" = 3+3 命中但 4h 门不同向 (做空一侧只在大盘门放行时记)。
 
     4h 门: 同向"条件齐备"事件 或 h4_state 同向。打分: 同向 3 策略命中数 ≥ 1。
     0.52.0 排序因子 (多头 3 条里的 rank_*): 在 4h 门同向、能出紧几何卡的自选里按当天值取前 5 当作命中
@@ -352,6 +371,7 @@ def compose_boards(
     hits_l = _hits_by_symbol(list(signals) + rank_rows, long_rules, "long")
     hits_s = _hits_by_symbol(signals, short_rules, "short")
     skipped: list[dict] = []
+    gate_blocked: list[dict] = []
 
     def side_cards(side: str, hits_by: dict, events: dict, rules: tuple[str, ...]) -> list[dict]:
         out = []
@@ -361,6 +381,11 @@ def compose_boards(
             elif h4_state.get(sym) == side:
                 gate = "state"
             else:
+                if shadow:
+                    b = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
+                              atr=atr.get(sym), gate="none", as_of=as_of)
+                    if b is not None:
+                        gate_blocked.append({**b, "shadow": "gate_4h"})
                 continue
             c = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
                       atr=atr.get(sym), gate=gate, as_of=as_of)
@@ -369,7 +394,8 @@ def compose_boards(
                 skipped.append({"symbol": sym, "side": side, "reason": reason})
                 continue
             out.append(c)
-        out.sort(key=lambda c: (-c["score"], -c["hit_count"], c.get("rank_pos") or 99, c["gate"] != "event", c["symbol"]))
+        out.sort(key=lambda c: (-c["score"], -c["hit_count"], c.get("rank_pos") or 99, c["gate"] != "event",
+                                tie_key(as_of, c["symbol"], tiebreak)))
         return out
 
     long_all = side_cards("long", hits_l, ph_l, long_rules)
@@ -378,13 +404,20 @@ def compose_boards(
     both = {c["symbol"] for c in long_all} & {c["symbol"] for c in short_all}
     if both:
         skipped += [{"symbol": s, "reason": "direction_conflict"} for s in sorted(both)]
-    long_cards = [c for c in long_all if c["symbol"] not in both][:max_per_side]
-    short_cards = [c for c in short_all if c["symbol"] not in both][:max_per_side]
+    long_ok = [c for c in long_all if c["symbol"] not in both]
+    short_ok_cards = [c for c in short_all if c["symbol"] not in both]
+    long_cards, short_cards = long_ok[:max_per_side], short_ok_cards[:max_per_side]
+    extra: dict[str, Any] = {}
+    if shadow:
+        extra["shadow"] = ([{**c, "shadow": "cut"} for c in long_ok[max_per_side:] + short_ok_cards[max_per_side:]]
+                           + sorted(gate_blocked, key=lambda c: (c["side"], c["symbol"])))
     return {
         "contract": CONTRACT,
         "as_of": as_of.isoformat(),
         "long_rules": list(long_rules),
         "short_rules": list(short_rules),
+        "tiebreak": tiebreak,
+        **extra,
         "long": long_cards,
         "short": short_cards,
         "meta": {
@@ -419,8 +452,23 @@ def rules_for_day(data_dir: Path, day: date) -> tuple[tuple[str, ...], tuple[str
     return strategies_from_ruleset(data_dir)
 
 
-def board_for_day(data_dir: Path, day: date, repo=None) -> dict[str, Any] | None:
-    """某个信号日的板 (纯计算, 不写文件)。没有该日信号表 → None。repo=None → 空头门按数据缺处理 (不出空)。"""
+def tiebreak_for_day(data_dir: Path, day: date) -> str:
+    """该信号日同分卡用哪种先后: 簿已落盘 → 簿里冻结的那种 (旧簿没有这个字段 = 字母序); 还没落簿 → 现行散列。"""
+    from app.services import watchlist_book as wb
+    try:
+        raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
+        fr = raw.get("swing_rules") if isinstance(raw, dict) else None
+        if isinstance(fr, dict) and fr.get("long"):
+            tb = raw.get("tiebreak")
+            return tb if isinstance(tb, str) and tb else TIEBREAK_LEGACY
+    except (OSError, ValueError):
+        pass
+    return TIEBREAK
+
+
+def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False) -> dict[str, Any] | None:
+    """某个信号日的板 (纯计算, 不写文件)。没有该日信号表 → None。repo=None → 空头门按数据缺处理 (不出空)。
+    shadow=True: 另给没上板的同几何候选 (compose_boards 的 shadow)。"""
     snap = load_watchlist_snapshot(data_dir, day)
     if snap is None:
         return None
@@ -440,7 +488,7 @@ def board_for_day(data_dir: Path, day: date, repo=None) -> dict[str, Any] | None
     rv = snap.get("rank_values") if isinstance(snap.get("rank_values"), dict) else None
     boards = compose_boards(signals=list(snap.get("signals") or []), closes=closes, as_of=day,
                             long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok,
-                            rank_values=rv)
+                            rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow)
     if gate_info is not None:
         boards["meta"]["spy"] = {"close": gate_info.get("close"), "ma50": gate_info.get("ma50")}
     if not atr:
@@ -893,7 +941,9 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     try:
         from app.services import swing_verdict as sv
         eq, rk = _equity_and_risk(data_dir, lg_ref)
-        sv.annotate(cards, now, equity=eq, risk_pct=rk, pm_records=pm_seen)
+        sv.annotate(cards, now, equity=eq, risk_pct=rk, pm_records=pm_seen,
+                    rules_by_day={d.isoformat(): {"long": b.get("long_rules"), "short": b.get("short_rules")}
+                                  for d, b in boards.items()})
         base["risk_pct"] = rk
         base["equity"] = None if eq is None else round(eq, 2)
     except Exception as e:
@@ -926,6 +976,14 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     except Exception as e:
         logger.warning("swing_desk: base rates unavailable: %s", type(e).__name__)
         base["base_rates"] = {"long": None, "short": None}
+    # 上线后已结算的板卡成绩并排回放值 (只展示): 回放数字还作不作数, 一眼能看出来
+    try:
+        from app.services import swing_settlement as ss
+        cur_l, cur_s = strategies_from_ruleset(data_dir)
+        base["live"] = ss.live_line(data_dir, cur_l, cur_s)
+    except Exception as e:
+        logger.warning("swing_desk: live line unavailable: %s", type(e).__name__)
+        base["live"] = None
     base["now"] = now.isoformat(timespec="seconds")
     return base
 
