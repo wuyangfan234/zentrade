@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -197,17 +198,24 @@ def tick(data_dir: Path, loop=None, repo=None, *, now: datetime | None = None, f
 
 
 def notify_holdings(data_dir: Path, held: set[str], *, now: datetime | None = None) -> int:
-    """持仓 + 重要度高 + 利空 + 主角 + 48 小时内 → 入队飞书 (按事件 id 去重)。
+    """持仓 + 重要度高 + 利空 + 主角 + 48 小时内 → 入队飞书 (按事件 id 去重)。返回本轮真正新入队的条数。
 
     2026-10-02 产品决策「开启：仅持仓 + 重要度高时推送」。只推利空 (方案: 持仓重大利空);
     只推模型/规则打过标的 (未打标的兜底译文不推, 避免无判读的噪音)。
+
+    同一持仓 12 小时内最多推一次。选哪一条 (2026-11-10 审计 #4, 产品决策「冷却过后推最新的未推事件」):
+    - 这只票还没推过: 最早一条 (事件首发; 同批其它报道计入「同类报道共 N 条」)。
+    - 推过: 只看上次推送之后才发布、且还没入过队的, 取最新一条; 没有就不推, 也不刷新冷却。
+      上次推送之前就已发布的同批报道不补推 (多家媒体报道同一事件, 标题不同聚不成簇)。
+    旧实现冷却一过总是取窗口内最早一条 —— 它已经推过, 入队被发件箱静默忽略, 却照样计数并把冷却再刷 12 小时,
+    窗口内更新的不同事件要等第一条滑出 48 小时才轮得到。
     """
     if not held:
         return 0
     import json as _json
     from app.services import news_store
     from app.services.fs_utils import atomic_write_text
-    from app.services.notify_opportunity import enqueue_news_alert
+    from app.services.notify_opportunity import enqueue_news_alert, news_alert_enqueued
     now = now or datetime.now(timezone.utc)
     state_p = Path(data_dir) / "news" / "push_state.json"
     try:
@@ -218,18 +226,27 @@ def notify_holdings(data_dir: Path, held: set[str], *, now: datetime | None = No
     n = 0
     for sym in sorted(held):
         last = state.get(sym)
-        try:
-            if last and (now - datetime.fromisoformat(last.replace("Z", "+00:00"))).total_seconds() < PUSH_COOLDOWN_H * 3600:
-                continue  # 同一持仓 12 小时内最多推一次 (多家媒体报道同一事件, 标题不同聚不成簇)
-        except ValueError:
-            pass
+        last_dt = None
+        with contextlib.suppress(ValueError, AttributeError):
+            last_dt = datetime.fromisoformat(last.replace("Z", "+00:00")) if last else None
+        if last_dt and (now - last_dt).total_seconds() < PUSH_COOLDOWN_H * 3600:
+            continue  # 同一持仓 12 小时内最多推一次 (多家媒体报道同一事件, 标题不同聚不成簇)
         hits = [v for v in news_store.for_symbol(data_dir, sym, rows=rows, now=now, limit=200)
                 if v["tagged"] and v["importance"] == "high" and v["direction"] == "bearish" and v["relevance"] == "primary"
-                and not v["rehash"] and (v["age_hours"] or 1e9) <= 48]
+                and not v["rehash"] and news_store.within_hours(v, 48)]
         if not hits:
             continue
-        first = min(hits, key=lambda v: v["published_at"] or "")  # 最早一条 = 事件首发
-        if enqueue_news_alert(data_dir, {**first, "related_count": len(hits)}):
+        fresh = [v for v in hits if not news_alert_enqueued(data_dir, v)]
+        if last_dt:
+            # 推过: 只认上次推送之后才发布的, 取最新一条
+            since = last_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+            fresh = [v for v in fresh if (v["published_at"] or "") > since]
+            pick = max(fresh, key=lambda v: v["published_at"] or "") if fresh else None
+        else:
+            pick = min(fresh, key=lambda v: v["published_at"] or "") if fresh else None   # 没推过: 最早一条 = 事件首发
+        if pick is None:
+            continue  # 没有新事件: 不推, 也不刷新冷却
+        if enqueue_news_alert(data_dir, {**pick, "related_count": len(hits)}):
             n += 1
             state[sym] = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     if n:

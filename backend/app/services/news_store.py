@@ -165,19 +165,27 @@ def tone(views: list[dict]) -> dict:
     return out
 
 
+def within_hours(view: dict, hours: float) -> bool:
+    """发布距今不超过 hours 小时。age_hours 取整到 0.1, 刚发布的是 0.0 —— 不能用 `age or 大数` 判
+    (2026-11-10 审计 #9: 0.0 被当成没有时间, 发布头 3 分钟不进角标与持仓推送)。"""
+    age = view.get("age_hours")
+    return age is not None and age <= hours
+
+
 def summarize(views: list[dict]) -> dict:
     """角标/机会卡用的摘要: 24h 主角新闻数、是否有高重要度利空、最重要的 1-2 条、48h 利空/利多条数 (tone)。"""
     recent = [v for v in views if v["age_hours"] is not None and v["age_hours"] <= 24 and is_main(v)]
     tagged_main = [v for v in views if is_main(v) and v["tagged"]]
     ranked = sorted(tagged_main, key=lambda v: (_IMP_RANK.get(v["importance"] or "low", 3),
-                                                _REL_RANK.get(v["relevance"] or "passing", 3), v["age_hours"] or 1e9))
-    top = [v for v in ranked if v["importance"] in ("high", "medium") and (v["age_hours"] or 1e9) <= 48][:2]
+                                                _REL_RANK.get(v["relevance"] or "passing", 3),
+                                                v["age_hours"] if v["age_hours"] is not None else 1e9))
+    top = [v for v in ranked if v["importance"] in ("high", "medium") and within_hours(v, 48)][:2]
     return {
         "count_24h": len(recent),
         "high_bearish_48h": any(v["importance"] == "high" and v["direction"] == "bearish"
-                                and (v["age_hours"] or 1e9) <= 48 for v in tagged_main),
+                                and within_hours(v, 48) for v in tagged_main),
         "high_bullish_48h": any(v["importance"] == "high" and v["direction"] == "bullish"
-                                and (v["age_hours"] or 1e9) <= 48 for v in tagged_main),
+                                and within_hours(v, 48) for v in tagged_main),
         "top": top,
         "tone": tone(views),
     }

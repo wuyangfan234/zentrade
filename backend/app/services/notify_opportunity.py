@@ -339,6 +339,20 @@ def _et_label(iso_utc) -> str:
         return str(iso_utc or "")[:16]
 
 
+def news_alert_key(item: dict) -> str:
+    return f"news:{item.get('id')}:{item.get('symbol', '')}"
+
+
+def news_alert_enqueued(data_dir: Path, item: dict) -> bool:
+    """这条 (事件, 股票) 是否已经入过队 (含已发送)。发件箱对重复键是静默忽略, 调用方要自己先问
+    (2026-11-10 审计 #4)。读不了 = 按已入队 (宁可少推, 不重复推)。"""
+    try:
+        return _queue(data_dir).status(news_alert_key(item)).get("status") != "not_found"
+    except Exception as exc:
+        logger.warning("新闻提醒入队状态读取失败，本轮不推: %s", type(exc).__name__)
+        return True
+
+
 def enqueue_news_alert(data_dir: Path, item: dict) -> bool:
     """持仓重大利空新闻 (2026-10-02 产品决策「仅持仓 + 重要度高时推送」) — 按事件 id + 股票去重, 一事一推。
 
@@ -355,7 +369,7 @@ def enqueue_news_alert(data_dir: Path, item: dict) -> bool:
     if (item.get("related_count") or 0) > 1:
         lines.append(f"> 48 小时内同类报道共 {item['related_count']} 条，详见个股「新闻」页")
     lines.append("> 方向与重要度为 AI 判读，未经验证；持仓按原计划管理，是否处理由你决定")
-    return _enqueue(data_dir, f"news:{item.get('id')}:{sym}", {
+    return _enqueue(data_dir, news_alert_key(item), {
         "title": "ZenTrade · 持仓新闻提醒", "subtitle": when[:10], "body": "\n".join(lines)})
 
 
