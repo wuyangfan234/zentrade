@@ -126,30 +126,183 @@ def test_evaluate_segments_and_verdict(tmp_path):
     data_dir, _, _ = _write_pool(tmp_path)
     pool = rl.load_pool(data_dir)
     r = rl.evaluate_formula(pool, "ts_delta(close,5)/ts_delay(close,5)", "high")
-    assert r["mining"]["window"][1] <= "2024-12-31" < r["holdout"]["window"][0]
+    # rank-lab-v2: 挖掘段到 2025-06-30, 留出段 2025-07-01 起 (与挖掘端选公式用的数据不重叠)
+    assert r["mining"]["window"][1] == "2025-06-30" and r["holdout"]["window"][0] == "2025-07-01"
     assert r["mining"]["n"] + r["holdout"]["n"] == r["full"]["n"]
     assert set(r["by_year"]) == {"2023", "2024", "2025"}
-    assert r["pool_sha"] == "p1" and r["contract"] == rl.CONTRACT
+    assert r["pool_sha"] == "p1" and r["contract"] == rl.CONTRACT == "rank-lab-v2"
+    assert r["split"] == rl.split() == {"mining_end": "2025-06-30", "holdout_start": "2025-07-01"}
     # 同一份池子重算逐位相同 (挖掘端与 ZenTrade 两边复核的前提)
     assert rl.evaluate_formula(rl.load_pool(data_dir), "ts_delta(close,5)/ts_delay(close,5)", "high") == r
 
 
 def test_verdict_requires_holdout_ci_above_zero():
     """0.55.0: 留出段要自己的区间下限 > 0; 点估计为正但区间跨 0 (如 [-0.026, 0.197]) 不算候选。"""
+    cur = {"split": rl.split()}
     ok_full = {"passed": True, "excess": 0.1, "n": 500}
     hold = {"excess": 0.0846, "excess_ci": [-0.0262, 0.1966], "n": 604}
-    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": hold})["passed"]
-    assert rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300},
+    assert not rl.verdict({**cur, "full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": hold})["passed"]
+    assert rl.verdict({**cur, "full": ok_full, "mining": {"excess": 0.2, "n": 300},
                        "holdout": {**hold, "excess_ci": [0.004, 0.19]}})["passed"]
-    assert not rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300},
+    assert not rl.verdict({**cur, "full": ok_full, "mining": {"excess": 0.2, "n": 300},
                            "holdout": {"excess": 0.3, "excess_ci": [0.1, 0.5], "n": 12}})["passed"]   # 笔数不足
-    assert not rl.verdict({"full": {**ok_full, "passed": False}, "mining": {"excess": 0.2, "n": 300},
+    assert not rl.verdict({**cur, "full": {**ok_full, "passed": False}, "mining": {"excess": 0.2, "n": 300},
                            "holdout": {**hold, "excess_ci": [0.004, 0.19]}})["passed"]
     for bad in (None, [], [float("nan"), 1.0], ["0.1", 0.2], [0.1]):
-        assert not rl.verdict({"full": ok_full, "holdout": {**hold, "excess_ci": bad}})["passed"]
+        assert not rl.verdict({**cur, "full": ok_full, "holdout": {**hold, "excess_ci": bad}})["passed"]
     assert not rl.verdict(None)["passed"]
     # both_segments_positive 仍是点估计口径 (只作标注)
-    assert rl.verdict({"full": ok_full, "mining": {"excess": 0.2, "n": 300}, "holdout": hold})["both_segments_positive"]
+    assert rl.verdict({**cur, "full": ok_full, "mining": {"excess": 0.2, "n": 300},
+                       "holdout": hold})["both_segments_positive"]
+
+
+# ── 分段 (rank-lab-v2, 2026-11-10): 与挖掘端同一条切线, 结果自带分段, 对账先比分段 ──────────
+
+F5 = "ts_delta(close,5)/ts_delay(close,5)"
+V1_SPLIT = {"mining_end": "2024-12-31", "holdout_start": "2025-01-02"}
+
+
+def _src_segments(mine: dict) -> dict:
+    return {k: {kk: mine[k][kk] for kk in ("n", "mean_r", "excess", "excess_ci")} for k in ("mining", "holdout", "full")}
+
+
+def test_split_only_moves_first_half_2025_between_segments(tmp_path, monkeypatch):
+    """同一份池子只换分段: 全窗逐位不变、pool_sha 不变, 2025-01 ~ 06 的成交从留出段移进挖掘段 (v1 → v2 的全部差别)。
+    所以 pool_sha 相同不代表口径相同, 结果必须自带 split。"""
+    data_dir, _, _ = _write_pool(tmp_path)
+    new = rl.evaluate_formula(rl.load_pool(data_dir), F5, "high")
+    monkeypatch.setattr(rl, "MINING_END", date(2024, 12, 31))
+    monkeypatch.setattr(rl, "HOLDOUT_START", date(2025, 1, 2))
+    old = rl.evaluate_formula(rl.load_pool(data_dir), F5, "high")
+    assert old["split"] == V1_SPLIT != new["split"]
+    assert old["pool_sha"] == new["pool_sha"] and old["picks_sha"] == new["picks_sha"]
+    assert old["full"] == new["full"]
+    assert old["mining"]["window"][1] == "2024-12-31"
+    assert new["mining"]["n"] > old["mining"]["n"] and new["holdout"]["n"] < old["holdout"]["n"]
+    assert new["mining"]["n"] - old["mining"]["n"] == old["holdout"]["n"] - new["holdout"]["n"]
+
+
+def test_verdict_refuses_results_from_another_split():
+    """结果不是按现行分段算的 (上线前的旧结果没有 split, 或分段又改了) → 不给候选: 它的“留出段”可能含
+    挖掘端已经用来选公式的月份。重算后恢复。"""
+    ok = {"full": {"passed": True, "excess": 0.1, "n": 500}, "mining": {"excess": 0.2, "n": 300},
+          "holdout": {"excess": 0.09, "excess_ci": [0.004, 0.19], "n": 400}}
+    assert rl.verdict({**ok, "split": rl.split()}) == {"passed": True, "both_segments_positive": True}
+    for stale in ({}, {"split": None}, {"split": V1_SPLIT}, {"split": "2025-07-01"}):
+        assert rl.verdict({**ok, **stale}) == {"passed": False, "both_segments_positive": False, "stale_split": True}
+    assert rl.gear_view({**ok, "split": V1_SPLIT})["passed"] is False
+    assert rl.gear_view({**ok, "split": rl.split()})["passed"] is True
+
+
+def test_parity_compares_split_before_numbers(tmp_path):
+    data_dir, _, _ = _write_pool(tmp_path)
+    mine = rl.evaluate_formula(rl.load_pool(data_dir), F5, "high")
+    seg = _src_segments(mine)
+    # 同池同分段: 逐位比
+    assert rl.parity({"pool_sha": "p1", "split": rl.split(), **seg}, mine, "p1") == {
+        "checked": True, "match": True, "diff": [], "split_checked": True}
+    # 同池, 挖掘端报的是另一套分段: 不比数字 (否则口径差会被报成“数字对不上”)
+    p = rl.parity({"pool_sha": "p1", "split": V1_SPLIT, **seg}, mine, "p1")
+    assert p["checked"] is False and "分段" in p["reason"]
+    assert p["source_split"] == V1_SPLIT and p["zentrade_split"] == rl.split()
+    # 没报分段且数字对不上: 照旧报不一致, 并注明可能是分段不同
+    bad = {"pool_sha": "p1", **seg, "mining": {**seg["mining"], "n": seg["mining"]["n"] + 1}}
+    p = rl.parity(bad, mine, "p1")
+    assert p["checked"] is True and p["match"] is False and "分段" in p["note"]
+    # 报了同一分段而数字对不上: 是真的不一致, 不加这句注
+    p = rl.parity({**bad, "split": rl.split()}, mine, "p1")
+    assert p["match"] is False and "note" not in p
+    # 没报分段但数字一致: 照旧算一致, 但写明分段没有显式核对过
+    assert rl.parity({"pool_sha": "p1", **seg}, mine, "p1") == {
+        "checked": True, "match": True, "diff": [], "split_checked": False}
+    # 只报全窗 (与分段无关) 也会“一致”: split_checked=False 就是提醒这一点
+    assert rl.parity({"pool_sha": "p1", "full": seg["full"]}, mine, "p1") == {
+        "checked": True, "match": True, "diff": [], "split_checked": False}
+    # 分段也可以报成 [挖掘段终点, 留出段起点]; 多余的键不影响; 读不懂的一律当作不可比 (不抛)
+    cur = rl.split()
+    for same in ([cur["mining_end"], cur["holdout_start"]], {**cur, "note": "x"}, [cur["mining_end"] + "T00:00:00", cur["holdout_start"]]):
+        assert rl.parity({"pool_sha": "p1", "split": same, **seg}, mine, "p1")["checked"] is True, same
+    for junk in ("2025-07-01", ["2025-06-30"], [1, 2], {"mining_end": "2025-06-30"}, ["x", "y"], True, 0, {}):
+        p = rl.parity({"pool_sha": "p1", "split": junk, **seg}, mine, "p1")
+        assert p["checked"] is False and "读不懂" in p["reason"], junk
+    # 池子不同 / 没报池子: 先于分段判 (原有行为)
+    assert rl.parity({"pool_sha": "p0", "split": V1_SPLIT, **seg}, mine, "p1")["reason"].startswith("候选池已更新")
+    assert rl.parity({"split": rl.split(), **seg}, mine, "p1")["reason"] == "挖掘端没报 pool_sha"
+
+
+def test_import_keeps_declared_split_and_everything_stored_carries_split(tmp_path, monkeypatch):
+    data_dir, _, _ = _write_pool(tmp_path)
+    from app.factors import registry
+    monkeypatch.setattr(registry, "_REGISTRY", dict(registry._REGISTRY))
+    out = rl.import_ranker(data_dir, name="m", formula=F5, direction="high",
+                           source={"system": "external-miner", "pool_sha": "p1", "split": V1_SPLIT, "junk": 1})
+    rid = out["ranker"]["id"]
+    src = rl.read_rankers(data_dir)[rid]["source"]
+    assert src["split"] == V1_SPLIT and "junk" not in src
+    assert out["parity"]["checked"] is False and out["parity"]["source_split"] == V1_SPLIT
+    assert rl.read_rankers(data_dir)[rid]["parity"] == out["parity"]
+    res = rl.read_results(data_dir)
+    assert res["contract"] == "rank-lab-v2" and res["split"] == rl.split()
+    assert res["rankers"][rid]["split"] == rl.split()
+    st = rl.status(data_dir)
+    assert st["contract"] == "rank-lab-v2" and st["split"] == rl.split() == st["results_split"]
+    # 齿轮悬停的月份读每段自带的起止日
+    g = rl.gear_view(res["rankers"][rid])
+    assert g["segments"]["mining"]["window"] == res["rankers"][rid]["mining"]["window"]
+    assert g["segments"]["mining"]["window"][1] == "2025-06-30" and g["segments"]["holdout"]["window"][0] == "2025-07-01"
+
+
+def test_status_exposes_stale_results_split(tmp_path):
+    """上线前写下的 results.json 没有 split: 状态里 results_split 为空, 与现行 split 不同 = 一眼看出还没重算。"""
+    lab = rl.lab_dir(tmp_path)
+    lab.mkdir(parents=True)
+    (lab / "results.json").write_text(json.dumps({"contract": "rank-lab-v1", "pool_sha": "p1", "rankers": {}}), encoding="utf-8")
+    st = rl.status(tmp_path)
+    assert st["results_split"] is None and st["split"] == rl.split()
+
+
+def test_load_pool_reads_v1_pool_but_not_unknown_contract(tmp_path):
+    """v1 导出的池文件与 v2 同格式 (分段在代码里, 不在池里): 上线后、下一次重导前照常复核, 且按现行分段切,
+    不看 meta 里写的旧分段; 不认识的合同仍拒读。"""
+    data_dir, _, _ = _write_pool(tmp_path)
+    meta_p = rl.lab_dir(data_dir) / "meta.json"
+    meta = json.loads(meta_p.read_text(encoding="utf-8"))
+    meta_p.write_text(json.dumps({**meta, "contract": "rank-lab-v1", "mining": ["2023-01-03", "2024-12-31"],
+                                  "holdout_start": "2025-01-02"}), encoding="utf-8")
+    pool = rl.load_pool(data_dir)
+    assert pool is not None
+    r = rl.evaluate_formula(pool, F5, "high")
+    assert r["split"] == rl.split() and r["holdout"]["window"][0] == "2025-07-01"
+    meta_p.write_text(json.dumps({**meta, "contract": "rank-lab-v9"}), encoding="utf-8")
+    assert rl.load_pool(data_dir) is None
+
+
+def test_build_pool_meta_declares_split_and_pool_sha_ignores_it(tmp_path, monkeypatch):
+    """导出的 meta 写明合同与分段; pool_sha 只认池文件 (换分段不换 sha, 挖掘端按 pool_sha 的缓存不被无谓作废)。"""
+    from app.services import kline_4h
+    syms = ["A", "B", "C"]
+    days = _days(700)
+    win = [d for d in days if d >= sc.WINDOW_START]
+    raw = _panel(syms, days)
+
+    class Repo:
+        def get_daily_batch(self, symbols, start, end, columns=None):
+            return raw
+
+    monkeypatch.setattr(kline_4h, "trading_days", lambda repo, start, end: list(win))
+    monkeypatch.setattr(sc, "_gate_matrix", lambda *a, **k: None)
+    monkeypatch.setattr(sc, "_cells", lambda *a, **k: {(t, t % 3): (t + 1, t + 2, 0.1 * (t % 5 - 2)) for t in range(len(win) - 8)})
+    monkeypatch.setattr(sc, "_spy_below_ma200", lambda *a, **k: {})
+    monkeypatch.setattr(sc, "_sectors", lambda *a, **k: {})
+    meta = rl.build_pool(tmp_path, Repo(), end=win[-1], watchlist=set(syms), out_dir=tmp_path / "v2")
+    assert meta["contract"] == "rank-lab-v2" and meta["split"] == rl.split()
+    assert meta["mining"] == [win[0].isoformat(), "2025-06-30"] and meta["holdout_start"] == "2025-07-01"
+    assert json.loads((tmp_path / "v2" / "meta.json").read_text(encoding="utf-8"))["split"] == rl.split()
+    assert rl.load_pool(tmp_path / "v2") is not None
+    monkeypatch.setattr(rl, "MINING_END", date(2024, 12, 31))
+    monkeypatch.setattr(rl, "HOLDOUT_START", date(2025, 1, 2))
+    meta_v1 = rl.build_pool(tmp_path, Repo(), end=win[-1], watchlist=set(syms), out_dir=tmp_path / "v1")
+    assert meta_v1["split"] == V1_SPLIT and meta_v1["pool_sha"] == meta["pool_sha"]
 
 
 # ── 复权基准无关 (R008) 与覆盖率 (R009) ──────────────────────────────
@@ -230,7 +383,7 @@ def test_import_idempotent_registers_factor_and_parity(tmp_path, monkeypatch):
                            source=src)
     rid = out["ranker"]["id"]
     assert out["created"] and out["factor_id"] == "uf_rk_" + rid[5:]
-    assert out["parity"] == {"checked": True, "match": True, "diff": []}
+    assert out["parity"] == {"checked": True, "match": True, "diff": [], "split_checked": False}
     assert (data_dir / "user_data" / "custom_factors" / f"{out['factor_id']}.json").exists()
     again = rl.import_ranker(data_dir, name="改名", formula=" ts_delta(close, 5)/ts_delay(close,5)", direction="high")
     assert again["ranker"]["id"] == rid and not again["created"]

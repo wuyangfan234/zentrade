@@ -746,8 +746,8 @@ export interface WatchlistRuleCatalogItem {
     passed: boolean; excess?: number | null; excess_ci?: number[] | null; n?: number; mean_r?: number | null
     r_per_year?: number | null; base_r_per_year?: number | null; first_passed?: string | null
     error?: string; detail?: string
-    /** 0.52.0 排序因子: 挖掘段 (2023-2024) / 留出段 (2025 起) 分开的成绩 */
-    segments?: Record<'mining' | 'holdout', { n?: number | null; mean_r?: number | null; excess?: number | null; excess_ci?: number[] | null; passed?: boolean } | null> | null
+    /** 0.52.0 排序因子: 挖掘段 / 留出段分开的成绩; window = 该段实际起止日 (分段以后端为准, 现行留出段 2025-07 起) */
+    segments?: Record<'mining' | 'holdout', { n?: number | null; mean_r?: number | null; excess?: number | null; excess_ci?: number[] | null; passed?: boolean; window?: string[] | null } | null> | null
   } | null
   /** 0.52.0 排序因子 (kind=ranker): DSL 公式 + 方向 (high = 值大优先) */
   formula?: string | null
