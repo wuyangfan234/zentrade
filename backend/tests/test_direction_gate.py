@@ -57,7 +57,9 @@ def test_daily_ma50_falls_back_to_repo_for_symbols_outside_frames():
     assert calls and calls[0][0] == ("WL",) and calls[0][1] == D
 
 
-def test_daily_ma50_matrix_uses_previous_close_only():
+def test_daily_ma50_matrix_uses_signal_day_close():
+    """回放矩阵与盘后扫描同一口径 (2026-11-10 审计 #7): 信号日当天收盘站上 MA50 就放行 —— 卡在信号日收盘后生成、
+    次日起入场, 用当天收盘没有前视。旧断言锁的是「只看前一日收盘」, 回放比扫描晚一天。"""
     days_all = [date(2026, 1, 1) + timedelta(days=i) for i in range(80)]
     closes = [100.0] * 60 + [200.0] * 20                      # 第 60 天起上穿
     batch = pl.DataFrame({"symbol": ["A"] * 80, "date": days_all, "close": closes})
@@ -67,8 +69,8 @@ def test_daily_ma50_matrix_uses_previous_close_only():
     assert m.shape == (15, 1)
     first_up = days_all.index(days_all[60])
     for t, d in enumerate(days):
-        # 只看严格早于 d 的收盘: d=第 60 天时前一日仍是 100 → 不放行; 第 61 天起放行
-        assert bool(m[t, 0]) == (days_all.index(d) > first_up), d
+        # 看截至 d (含) 的收盘: 第 60 天当天收盘 200 已在均线上方 → 当天起放行; 此前不放行 (不看未来)
+        assert bool(m[t, 0]) == (days_all.index(d) >= first_up), d
 
 
 def test_registry_selection_order(tmp_path, monkeypatch):
