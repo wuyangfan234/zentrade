@@ -169,7 +169,9 @@ def _states_from_repo(repo, symbols: list[str], as_of: date) -> dict[str, str]:
 
 
 def _daily_ma50_matrix(data_dir: Path, repo, symbols: list[str], days: list[date]) -> np.ndarray:
-    """研究回放用 (T, N): 前一交易日收盘 > MA50 才放行做多 (信号日开盘前可知, 无前视)。"""
+    """研究回放用 (T, N): 信号日收盘 > MA50 才放行做多 —— 与盘后扫描 (_daily_ma50_states) 同一口径。
+    卡在信号日收盘后生成、次日起才入场 (swing_candidates._cells 的几何也取信号日收盘), 用当天收盘没有前视。
+    2026-11-10 审计 #7: 旧实现取前一交易日收盘, 回放比实际扫描晚一天。"""
     from datetime import timedelta
     n_days, n_syms = len(days), len(symbols)
     gate = np.zeros((n_days, n_syms), bool)
@@ -193,8 +195,8 @@ def _daily_ma50_matrix(data_dir: Path, repo, symbols: list[str], days: list[date
         ma = np.convolve(c, np.ones(MA_WINDOW) / MA_WINDOW, mode="valid")
         above = np.zeros(c.size, bool)
         above[MA_WINDOW - 1:] = c[MA_WINDOW - 1:] > ma
-        # 每个信号日用「严格早于该日」的最后一个收盘判断
-        pos = np.searchsorted(dts, day_idx, side="left") - 1
+        # 每个信号日用「截至该日 (含)」的最后一个收盘判断
+        pos = np.searchsorted(dts, day_idx, side="right") - 1
         ok = pos >= MA_WINDOW - 1
         gate[ok, j] = above[pos[ok]]
     return gate

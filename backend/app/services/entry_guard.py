@@ -88,6 +88,12 @@ def exploration_claims(ledger, cards, now):
     return claims
 
 
+# 撮合层 (trader.try_fill_entry) 按容量拦单的原因; 准入层的拦截 (方向冲突 / 来源不可交易…) 不在此列
+CAPACITY_BLOCKS = frozenset({'zero_size', 'max_positions', 'cash', 'portfolio_risk'})
+# 会释放容量的台账事件: 平仓 / 减仓 (名额、现金、风险) 与移动止损 (组合风险)
+CAPACITY_RELEASE_KINDS = frozenset({'close', 'partial_close', 'stop_move'})
+
+
 class IntentIndex:
     """一轮生命周期内的入场意向索引: 台账只读一次 (旧实现每张卡读一遍全台账, 1100+ 张观察卡 ≈ 5.4 秒/轮,
     撮合一轮 15 秒 > 调度间隔, 每隔一帧被跳过)。cancel_pending 追加事件后同步更新索引。"""
@@ -95,7 +101,10 @@ class IntentIndex:
     def __init__(self, ledger):
         self.filled: set[str] = set()
         self.latest: dict[str, dict] = {}
+        self.released_seq = 0          # 最近一次释放容量的事件 (平仓 / 减仓 / 移动止损) 的 seq
         for e in ledger.read_events() if ledger is not None else ():
+            if e.get('kind') in CAPACITY_RELEASE_KINDS:
+                self.released_seq = max(self.released_seq, int(e.get('seq') or 0))
             cid = e.get('card_id')
             if not cid:
                 continue
@@ -103,6 +112,12 @@ class IntentIndex:
                 self.filled.add(cid)
             elif e['kind'] == 'entry_intent':
                 self.latest[cid] = e
+
+    def capacity_blocked(self, card_id: str, day) -> bool:
+        """这张卡今天 (day) 被撮合层按容量拦下, 且之后还没有任何释放容量的事件。换了交易日不算 (重新按容量检查)。"""
+        e = self.latest.get(card_id)
+        return bool(e and e.get('status') == 'blocked' and e.get('reason') in CAPACITY_BLOCKS
+                    and e.get('trade_date') == day.isoformat() and self.released_seq < int(e.get('seq') or 0))
 
 
 def cancel_pending(ledger, card, now, reason, index: IntentIndex | None = None):

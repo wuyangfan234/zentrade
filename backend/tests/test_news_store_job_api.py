@@ -140,9 +140,10 @@ def test_notify_holdings_cools_down_per_symbol_and_pushes_earliest_of_duplicates
     assert news_job.notify_holdings(tmp_path, {"SSL"}, now=NOW) == 1
     assert sent[0][0] == "news:alpaca:2:SSL"                      # 最早一条
     assert "同类报道共 3 条" in sent[0][1]["body"]
-    # 12 小时内不再推; 过了冷却期才可再推
+    # 12 小时内不再推; 过了冷却期, 没有比上次推送更新的事件也不推 (同批报道已计入「同类报道共 3 条」, 2026-11-10 审计 #4)
     assert news_job.notify_holdings(tmp_path, {"SSL"}, now=NOW + timedelta(hours=11)) == 0
-    assert news_job.notify_holdings(tmp_path, {"SSL"}, now=NOW + timedelta(hours=13)) == 1
+    assert news_job.notify_holdings(tmp_path, {"SSL"}, now=NOW + timedelta(hours=13)) == 0
+    assert len(sent) == 1
 
 
 def test_tick_runs_stages_independently_and_writes_state(tmp_path, monkeypatch):

@@ -4,16 +4,23 @@ from __future__ import annotations
 import json
 import math
 import logging
+import re
 import threading
 from datetime import date, datetime, timedelta
 from pathlib import Path
 import polars as pl
 from app.market_clock import us_clock
 from app.services import entry_guard
-from app.opportunity.card import CardState, OpportunityCard
+from app.opportunity.card import TERMINAL_STATES, CardState, OpportunityCard
 from app.opportunity.engine import ScanResult, load_params, scan, universe_filter
 
 logger = logging.getLogger(__name__)
+
+# 卡 id = opp-<生成日>-<票>-...: 持仓所属的卡按生成日找回它的卡文件 (见 loop_cards)
+_CARD_DAY = re.compile(r'^opp-(\d{4}-\d{2}-\d{2})-')
+_TERMINAL = frozenset(str(s) for s in TERMINAL_STATES)
+# 旧卡文件里每张卡的 (id, 落盘状态), 按文件签名缓存: 判断「这个文件的卡是否已全部了结」不必每次重新解析文件
+_CARD_FILE_IDS: dict[str, tuple[tuple[int, int, int], tuple[tuple[str, str], ...]]] = {}
 
 
 class OpportunityService:
@@ -90,11 +97,12 @@ class OpportunityService:
                 transitions[cid] = ('closed', ev.get('reason','纸面平仓'))
         return transitions
 
-    def load_cards(self, day: date, *, as_of: date | None = None) -> dict | None:
+    def load_cards(self, day: date, *, as_of: date | None = None, transitions: dict | None = None) -> dict | None:
         payload = self._raw_cards(day)
         if payload is None:
             return None
-        transitions = self._transitions(as_of)
+        if transitions is None:
+            transitions = self._transitions(as_of)
         cards, watch = [], []
         seen = set()
         for c in payload.get('cards', []) + payload.get('watch', []):
@@ -110,7 +118,7 @@ class OpportunityService:
         payload['watch'] = [c for c in watch if c['symbol'] not in live_symbols]
         return payload
 
-    def book_cards(self, as_of: date | None = None) -> list[OpportunityCard]:
+    def book_cards(self, as_of: date | None = None, *, transitions: dict | None = None) -> list[OpportunityCard]:
         """自选机会卡下单簿 (watchlist_book, v4 纸面试用档) 的卡, 叠加台账状态。读失败的日子跳过。"""
         from app.services import watchlist_book
         data_dir = Path(self.repo.store.data_dir)
@@ -119,7 +127,8 @@ class OpportunityService:
                 if d <= ref and (ref - d).days <= watchlist_book.LIVE_DAYS]
         if not days:
             return []
-        transitions = self._transitions(as_of)
+        if transitions is None:
+            transitions = self._transitions(as_of)
         out = []
         for d in days:
             payload = watchlist_book.load_day(data_dir, d) or {}
@@ -142,16 +151,69 @@ class OpportunityService:
     def list_card_days(self) -> list[str]:
         return sorted(p.stem for p in (self.store_dir / 'cards').glob('*.json'))
 
+    def _held_card_days(self) -> set[date] | None:
+        """当前持仓所属卡的生成日 (卡 id 里带)。有持仓的卡 id 认不出生成日 → None (调用方不收窄, 照旧全读)。"""
+        days: set[date] = set()
+        if self.ledger is None:
+            return days
+        for p in self.ledger.open_positions:
+            if not p.card_id:
+                continue
+            m = _CARD_DAY.match(str(p.card_id))
+            try:
+                days.add(date.fromisoformat(m.group(1)))
+            except (AttributeError, ValueError):
+                return None
+        return days
+
+    def _long_dead(self, day: date, ref: date, transitions: dict) -> bool:
+        """这一天的卡文件是否可以不读: 生成日距 ref 超过 LIVE_DAYS 个自然日, 且里面每张卡都已了结 (平仓 / 到期 / 否决)。
+        还有没了结的卡 (含仍在持有的) → False, 照旧读, 行为与以前完全相同。"""
+        from app.services import watchlist_book
+        if (ref - day).days <= watchlist_book.LIVE_DAYS:
+            return False
+        p = self._cards_path(day)
+        try:
+            st = p.stat()
+        except OSError:
+            return False
+        sig = (st.st_ino, st.st_mtime_ns, st.st_size)       # 原子替换 = 新 inode
+        hit = _CARD_FILE_IDS.get(str(p))
+        if hit is None or hit[0] != sig:
+            payload = self._raw_cards(day) or {}
+            ids = tuple((c['id'], str(c.get('state'))) for c in payload.get('cards', []) + payload.get('watch', []))
+            _CARD_FILE_IDS[str(p)] = hit = (sig, ids)
+        return all(transitions.get(cid, (raw,))[0] in _TERMINAL for cid, raw in hit[1])
+
     def all_cards(self, as_of: date | None = None) -> list[OpportunityCard]:
+        """全部仍可能有用的卡: 决策台卡 (opportunities/cards) + 下单簿卡, 叠加台账状态。
+
+        2026-11-10 审计 #1: 交易环每轮取卡 5-6 次, 旧实现每次把每一天的卡文件都读一遍、每读一个文件再把整份台账
+        解析一遍 (文件数与台账行数都按天涨 → 单轮耗时按运行天数平方增长, 生产 25 天时已有 16% 的轮次超过 10 秒)。
+        现在: 台账状态一次调用只算一次; 生成日距今超过 LIVE_DAYS 个自然日、且里面的卡已全部了结的卡文件不读
+        (调用方都只看未了结的卡; 这类文件每个进程只解析一次用来记下卡 id)。还有未了结卡的文件照旧读。
+        卡文件与台账本身一个字节不动。"""
+        return self._collect_cards(as_of, held_desk_only=False)
+
+    def _collect_cards(self, as_of: date | None, *, held_desk_only: bool) -> list[OpportunityCard]:
+        """held_desk_only: 决策台卡文件只读「当前持仓所属卡的生成日」那几天 (loop_cards 的 book_only 用)。"""
+        ref = as_of or us_clock.today()
+        held_days = self._held_card_days() if held_desk_only else None
+        transitions = self._transitions(as_of)
         out = {}
         for day in self.list_card_days():
             d = date.fromisoformat(day)
             if as_of and d > as_of:
                 continue
-            payload = self.load_cards(d, as_of=as_of) or {}
+            if held_desk_only:
+                if held_days is not None and d not in held_days:
+                    continue
+            elif self._long_dead(d, ref, transitions):
+                continue
+            payload = self.load_cards(d, as_of=as_of, transitions=transitions) or {}
             for c in payload.get('cards', []) + payload.get('watch', []):
                 out[c['id']] = OpportunityCard.from_dict(c)
-        for c in self.book_cards(as_of):
+        for c in self.book_cards(as_of, transitions=transitions):
             out.setdefault(c.id, c)
         return list(out.values())
 
@@ -197,9 +259,11 @@ class OpportunityService:
         """交易环要处理的卡。book_only (0.35.2, v4 = 只交易下单簿): 只留下单簿卡 + 有持仓的卡。
         v4 下其余旧决策台卡在准入里恒被 v4_book_only 拦下, 永不开仓 (每晚 200-300 张观察卡, 10-22 盘中 1291 张);
         它们的到期仍由收盘后 advance_lifecycle (不带 book_only) 处理, 新闻覆盖等读 all_cards 的地方不受影响。"""
-        cards = self.all_cards(as_of)
         if not book_only:
-            return cards
+            return self.all_cards(as_of)
+        # 下面只留下单簿卡 + 有持仓的卡, 其余决策台卡读进来也是丢掉 —— 所以决策台卡文件只读持仓卡生成日那几天
+        # (2026-11-10 审计 #1: 生产 25 个文件 14 MB, 交易环每轮读 6 遍, 6233 张卡里只留 164 张)。结果与先全读再筛相同。
+        cards = self._collect_cards(as_of, held_desk_only=True)
         held = {p.card_id for p in self.ledger.open_positions if p.card_id} if self.ledger is not None else set()
         return [c for c in cards if entry_guard.is_book(c) or c.id in held]
 
@@ -332,6 +396,11 @@ class OpportunityService:
                     if c.symbol in active or c.symbol in cooldown or sector_full:
                         continue
                     if len(self.ledger.open_positions) >= entry_guard.position_cap(account, admission, cap_risk, self.ledger):
+                        continue
+                    # 2026-11-10 审计 #5: 今天已被撮合层按容量拦下 (持仓数 / 组合风险 / 现金 / 股数为 0) 的卡, 要等到
+                    # 之后真有释放容量的事件 (平仓 / 减仓 / 移动止损) 才重新激活。上面两条只看持仓数与组合风险,
+                    # 不看现金与股数; 不加这条, 这类卡转回观察后下一帧又被激活、再被拦, 事件比不转还多。
+                    if intents.capacity_blocked(c.id, now.date()):
                         continue
                     equity=self.ledger.nav({s:q['price'] for s,q in quotes.items() if q.get('price')})
                     if equity <= 0 or self.ledger.open_risk()+equity*admission.risk_pct > equity*account.max_portfolio_risk_pct:

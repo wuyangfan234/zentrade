@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, time as dt_time, timedelta
 from typing import Callable, Iterable
@@ -24,6 +25,10 @@ US_PRE_CLOSE_OPEN = US_HOLDING_EXIT  # 事件减仓与时间止损共用收盘�
 _TRADING_DAY_SEARCH_SPAN = 14  # 自然日；覆盖最长休市连段
 US_TOTAL_MINUTES = 390
 US_TZ = ZoneInfo("America/New_York")
+# 日历拉取失败后的退避 (2026-11-10 审计 #8): 这段时间内不重试, 直接按失败处理 (调用方 fail-open 按工作日放行)。
+# 旧实现每次判断交易日都重试并打一条告警 —— 没配行情密钥的新装实例日志被刷屏, 断网且无磁盘缓存时每次调用还要等 30 秒超时。
+CALENDAR_FAIL_BACKOFF_S = 60.0
+CALENDAR_FAIL_LOG_EVERY_S = 600.0   # 持续失败时告警最多 10 分钟一条
 
 # 日历提供者协议: 返回 [start, end] 闭区间内的交易日集合
 CalendarProvider = Callable[[date, date], Iterable[date]]
@@ -61,6 +66,9 @@ class MarketClock:
         self._ttl = calendar_ttl_s
         self._lock = threading.Lock()
         self._cal_cache: dict[tuple[date, date], tuple[float, frozenset[date]]] = {}
+        self._cal_failed_at: float | None = None        # 最近一次拉取失败的时刻 (monotonic)
+        self._cal_failed_provider = None                # 失败的是哪个日历来源 (换了来源不沿用退避)
+        self._cal_fail_logged_at: float | None = None   # 最近一次为失败打告警的时刻
 
     # ── 时间基 ──────────────────────────────────────────────
     def now(self) -> datetime:
@@ -105,20 +113,35 @@ class MarketClock:
 
     def _calendar_days(self, start: date, end: date) -> frozenset[date] | None:
         """拉日历带 TTL 缓存; 失败返回 None (fail-open 由调用方决定)。"""
-        assert self._calendar_provider is not None
+        provider = self._calendar_provider
+        assert provider is not None
         key = (start, end)
-        import time
         with self._lock:
+            now = time.monotonic()
             hit = self._cal_cache.get(key)
-            if hit and (time.monotonic() - hit[0]) < self._ttl:
+            if hit and (now - hit[0]) < self._ttl:
                 return hit[1]
+            if (self._cal_failed_at is not None and self._cal_failed_provider is provider
+                    and (now - self._cal_failed_at) < CALENDAR_FAIL_BACKOFF_S):
+                return None  # 这个来源刚失败过: 退避期内不重试、不再告警
         try:
-            days = frozenset(self._calendar_provider(start, end))
+            days = frozenset(provider(start, end))
         except Exception as e:  # noqa: BLE001
-            logger.warning("market calendar fetch failed (%s~%s): %s (fail-open)", start, end, e)
+            with self._lock:
+                now = time.monotonic()
+                if self._cal_failed_provider is not provider:
+                    self._cal_fail_logged_at = None     # 换了来源: 第一次失败照常告警
+                self._cal_failed_at, self._cal_failed_provider = now, provider
+                log = self._cal_fail_logged_at is None or (now - self._cal_fail_logged_at) >= CALENDAR_FAIL_LOG_EVERY_S
+                if log:
+                    self._cal_fail_logged_at = now
+            if log:
+                logger.warning("market calendar fetch failed (%s~%s): %s (fail-open; next retry in %.0fs)",
+                               start, end, e, CALENDAR_FAIL_BACKOFF_S)
             return None
         with self._lock:
             self._cal_cache[key] = (time.monotonic(), days)
+            self._cal_failed_at = self._cal_failed_provider = self._cal_fail_logged_at = None
         return days
 
     # ── 时段 ──────────────────────────────────────────────

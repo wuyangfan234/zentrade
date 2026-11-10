@@ -30,9 +30,15 @@ MAX_QUOTE_AGE_SECONDS = 120
 EXECUTION_FEEDS = ('tickflow', 'iex', 'sip')
 CROSS_CHECK_MAX_BPS = 50.0      # TickFlow 与新鲜 IEX 价差超过 50 bps → 拒用该报价
 CROSS_CHECK_IEX_MAX_AGE = 30.0  # 只拿 30 秒内的 IEX 成交做核对 (冷门股 IEX 成交稀疏, 旧价不能否决)
+# IEX 交叉核对从发起算最多等这么久, 超时按「核对不可用」放行主源报价 (2026-11-10 审计 #2)。
+# 生产 5 个交易日慢轮里 IEX 耗时中位 1.2 秒、95 分位 5 秒、99 分位 9 秒, 但有 7 轮等了 25-50 秒 (含开盘与收盘前各一轮),
+# 期间主源报价早已到手, 持仓管理却被拖住。
+CROSS_CHECK_BUDGET_S = 8.0
 
 
 class TradingLoop:
+    _iex_inflight = None   # 上一次发出的 IEX 请求 (单线程池): 还没回来就不再排队
+
     def __init__(self, repo, account: Account):
         self.repo, self.account = repo, account
         self.ledger = Ledger(data_dir=repo.store.data_dir / 'ledger')
@@ -204,12 +210,14 @@ class TradingLoop:
         from app.data_providers.custom import get_provider
         return get_provider('alpaca')
 
-    def _timed_iex(self, symbols):
+    def _timed_iex(self, symbols, timing=None):
+        # timing = 发起这次请求的那一轮的计时表: 请求超时后才回来时, 不把耗时记到后面某一轮头上
+        timing = self.execution_source['timing'] if timing is None else timing
         t0 = time.monotonic()
         try:
             return list(self._iex_provider().get_execution_quotes(symbols))
         finally:
-            self.execution_source['timing']['iex_s'] = round(time.monotonic() - t0, 2)
+            timing['iex_s'] = round(time.monotonic() - t0, 2)
 
     def _execution_quotes(self, provider, symbols):
         """主源报价 (TickFlow) + IEX 交叉核对; 主源失败回退 IEX。返回 (报价列表, 被拒报价)。"""
@@ -222,7 +230,10 @@ class TradingLoop:
         # 交叉核对与主源并发 (10-09 实测: TickFlow 3.3-4.1s + IEX 3.0-3.2s 串行, 加复验 > 15 秒间隔)
         iex_future = None
         if name not in ('alpaca', 'iex'):
-            iex_future = _IEX_POOL.submit(self._timed_iex, symbols)
+            prev = self._iex_inflight
+            if prev is None or prev.done():
+                iex_future = self._iex_inflight = _IEX_POOL.submit(self._timed_iex, symbols, st['timing'])
+            # else: 上一轮的 IEX 请求还卡着 → 本轮不排队 (排了也只是在单线程池里等), 交叉核对按不可用处理
         t0 = time.monotonic()
         try:
             quotes = list(getter(symbols))
@@ -241,14 +252,24 @@ class TradingLoop:
                 return list(iex_future.result()), []
             return list(self._iex_provider().get_execution_quotes(symbols)), []
         self.trader.quote_feed = quotes[0].get('feed') if quotes else name
-        if name in ('alpaca', 'iex') or st['active'] in ('iex', 'sip') or not quotes:
+        if name in ('alpaca', 'iex') or st['active'] in ('iex', 'sip'):
             return quotes, []
         try:
-            rows = iex_future.result() if iex_future is not None else self._timed_iex(symbols)
-            iex_rows = {r['symbol']: r for r in rows}
+            if iex_future is None:
+                raise TimeoutError('previous IEX request still in flight')
+            rows = list(iex_future.result(timeout=max(0.0, CROSS_CHECK_BUDGET_S - (time.monotonic() - t0))))
         except Exception as e:  # noqa: BLE001
             logger.info('IEX cross-check unavailable: %s', type(e).__name__)
             return quotes, []
+        if not quotes:
+            # 2026-11-10 审计 #3: 主源正常返回但一条可用报价都没有 (报价全部过期被滤掉) —— 与主源抛错同等处理,
+            # 用已并发取回的 IEX。旧实现直接返回空, 持仓管理 / 到期强平 / 开盘离场整轮停摆且不报错。
+            if rows:
+                logger.warning('execution primary %s returned no usable quotes, falling back to IEX', name)
+                st['active'] = 'iex_fallback'
+                self.trader.quote_feed = 'iex'
+            return rows, []
+        iex_rows = {r['symbol']: r for r in rows}
         now = us_clock.now()
         kept, rejected = [], []
         for q in quotes:
@@ -519,6 +540,13 @@ class TradingLoop:
                             at=now.isoformat(), quote_ts=q['timestamp'], marks={s: row['price'] for s, row in quotes.items()})
                         if event:
                             generated.append(event)
+                        elif self.trader.last_entry_block:
+                            # 2026-11-10 审计 #5: 撮合层按容量拦下 (持仓数 / 组合风险 / 现金 / 股数为 0) → 卡转回观察,
+                            # 等容量恢复且价再入区由生命周期重新激活。不转的话卡一直 ACTIVE、价在区内,
+                            # 每两帧往台账写一对 待成交 / 已拦截 意向 (每条带整张卡, 一只票一天约 1380 条)。
+                            blocked = self.trader.last_entry_block
+                            self.entry_blockers.append({'symbol': card.symbol, 'reason': blocked, 'card_id': card.id})
+                            self.opp_svc._transition(card, CardState.WATCH, '准入阻断：' + blocked, now)  # noqa: RUF001
                 finally:
                     self.trader.account = self.account
         try:  # 准入漏斗: 拦截原因按 (日, 标的, 原因) 去重落盘; 只记录, 失败不影响撮合

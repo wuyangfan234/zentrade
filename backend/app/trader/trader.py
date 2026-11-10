@@ -40,6 +40,9 @@ class SwingTrader:
         self.account = account
         self._cards: dict[str, OpportunityCard] = {}
         self.quote_feed: str | None = None  # 当前撮合报价来源 (tickflow / iex), 写入成交事件供审计
+        # 最近一次 try_fill_entry 被撮合层按容量拦下的原因 (zero_size / max_positions / cash / portfolio_risk); 没拦 = None。
+        # 卡生命周期由调用方管: 交易环据此把卡转回观察 (2026-11-10 审计 #5)
+        self.last_entry_block: str | None = None
 
     # ── 入场 ─────────────────────────────────────────────
 
@@ -59,6 +62,7 @@ class SwingTrader:
         回放以 at 兼容；真实 Loop 必须显式传源 timestamp，并在上游拒绝陈旧报价。
         intent/拒单水位均落账，重启不把同一源帧当成下一帧。卡生命周期由调用方管。
         """
+        self.last_entry_block = None
         if card.state != CardState.ACTIVE:
             return None
         timing = self._quote_times(price, trade_date, at, quote_ts)
@@ -164,6 +168,7 @@ class SwingTrader:
                     "quote_ts": quoted.isoformat(), "trade_date": trade_date.isoformat(),
                     "proposal": intent["proposal"], "status": "blocked", "reason": reason,
                 }, at=at)
+                self.last_entry_block = reason
                 return None
             return self.ledger.append("fill", {
                 "symbol": card.symbol, "side": "short" if short else "buy", "qty": qty, "price": fill_price,

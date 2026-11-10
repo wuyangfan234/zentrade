@@ -410,8 +410,10 @@ def rules_for_day(data_dir: Path, day: date) -> tuple[tuple[str, ...], tuple[str
     try:
         raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
         fr = raw.get("swing_rules") if isinstance(raw, dict) else None
-        if isinstance(fr, dict) and fr.get("long") and fr.get("short"):
-            return tuple(fr["long"]), tuple(fr["short"])
+        # 做多一侧落簿时总有值 (缺省会补默认); 做空可以为空 —— 开源核心版没有翻空策略, 做空默认就是空。
+        # 旧判断要求两侧都非空, 核心版落簿后改 3+3 会让板与纸面簿不再是同一批卡 (2026-11-10 审计 #6)
+        if isinstance(fr, dict) and fr.get("long"):
+            return tuple(fr["long"]), tuple(fr.get("short") or ())
     except (OSError, ValueError):
         pass
     return strategies_from_ruleset(data_dir)
