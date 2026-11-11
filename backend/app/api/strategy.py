@@ -339,6 +339,67 @@ def list_strategies(
     return {"strategies": result, "load_errors": engine.load_errors()}
 
 
+# ── 策略页面板 / 策略池 (固定路径, 必须注册在 /{strategy_id} 之前) ─────
+
+
+def _public_strategy_ids(engine: StrategyEngine) -> list[str]:
+    """策略页列出的策略: 与 list_strategies 默认口径一致 (不含草稿与历史保留项)。"""
+    return [m["id"] for m in engine.list_strategies()
+            if not m.get("research_only") and m["id"] != "high_turnover_surge"]
+
+
+@router.get("/panel")
+def strategy_panel(request: Request, day: str | None = None):
+    """策略页面板 (只读): 每个策略的入选状态、回放、自选命中、机会板现状与模拟成绩。
+
+    day = 自选命中看哪个信号日 (YYYY-MM-DD, 不传取最新)。只读现成数据, 不参与下单、许可、排序。
+    """
+    from app.services import desk_overview as ov
+    from app.services import strategy_panel as sp
+
+    engine = _get_engine(request)
+    target = None
+    if day:
+        try:
+            target = date.fromisoformat(day)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="策略面板读取失败 · 日期格式无效") from exc
+    return ov.to_json_safe(sp.build(
+        _data_dir(request), strategy_ids=_public_strategy_ids(engine), repo=request.app.state.repo,
+        loop=getattr(request.app.state, "trading_loop", None), day=target,
+    ))
+
+
+class StrategyPoolIn(BaseModel):
+    pool: list[str] = Field(default_factory=list, max_length=200)
+
+
+@router.get("/pool")
+def strategy_pool_get(request: Request):
+    """策略池 (服务器保存, 各设备一致)。从未保存过时给出最近扫描过的策略作为初始建议 (saved=false, 不落盘)。"""
+    from app.services import preferences, strategy_cache
+
+    saved = preferences.get_strategy_pool()
+    if saved is not None:
+        return {"pool": saved, "saved": True}
+    suggested: list[str] = []
+    try:
+        known = set(_public_strategy_ids(_get_engine(request)))
+        cached = strategy_cache.read_cache(_data_dir(request)) or {}
+        suggested = [sid for sid in (cached.get("results") or {}) if sid in known]
+    except Exception as exc:  # 建议只是锦上添花, 读不到就给空
+        logger.warning("strategy pool suggestion skipped: %s", type(exc).__name__)
+    return {"pool": suggested, "saved": False}
+
+
+@router.put("/pool")
+def strategy_pool_put(body: StrategyPoolIn):
+    """保存策略池 (整份覆盖)。只影响策略页扫描哪些策略, 不影响机会页生成机会。"""
+    from app.services import preferences
+
+    return {"pool": preferences.set_strategy_pool(body.pool), "saved": True}
+
+
 @router.get("/{strategy_id}")
 def get_strategy(strategy_id: str, request: Request):
     engine = _get_engine(request)

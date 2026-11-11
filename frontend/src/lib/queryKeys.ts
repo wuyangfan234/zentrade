@@ -42,6 +42,8 @@ export const QK = {
   screener:             ['screener'] as const,
   screenerStrategies:   (assetType: string = 'stock', timeframe: '1d' | '1m' | 'all' = '1d') => ['screener-strategies', assetType, timeframe] as const,
   screenerCachedSummary: ['screener-cached', 'summary'] as const,
+  strategyPanel:        (day?: string) => ['strategy-panel', day ?? ''] as const,
+  strategyPool:         ['strategy-pool'] as const,
   screenerCachedResult: (strategyId: string, asOf?: string, ext?: string) => ['screener-cached', 'strategy', strategyId, asOf ?? '', ext ?? ''] as const,
   screenerCached:       (asOf?: string, ext?: string) => ['screener-cached', 'all', asOf ?? '', ext ?? ''] as const,
   screenerKlineBatch:   (symbols: string) => ['screener-kline-batch', symbols] as const,

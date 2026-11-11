@@ -49,7 +49,10 @@ export function Opportunities() {
   const q = useOppPage()
   const d = q.data
   const [open, setOpen] = useState<string | null>(null)
-  const [consoleOpen, setConsoleOpen] = useState(false)
+  // 地址带 ?rules=1 时直接打开规则设置 (策略页「入选策略」按钮跳过来)
+  const [consoleOpen, setConsoleOpen] = useState(
+    () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('rules') === '1',
+  )
   const errs = d?.errors ?? {}
   const view = d?.radar_view ?? null
   const desk = d?.desk ?? null

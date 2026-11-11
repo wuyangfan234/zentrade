@@ -459,6 +459,94 @@ export interface StrategyDetail {
 
 export type ScoringDirection = 'high' | 'low'
 
+// ===== 策略页面板 (只读聚合) =====
+
+/** 机会板同一张卡的历史回放; thin = 成交不足 5 笔, 只有笔数 */
+export interface StrategyPanelReplay {
+  n: number
+  fill?: number
+  mean_r?: number
+  excess?: number
+  p?: number
+  thin?: boolean
+  signals?: number
+  raw?: number
+}
+
+export interface StrategyPanelBoardCard {
+  symbol: string
+  /** holding 已成交 / in_zone 现价在入场区内 / pending 挂单 */
+  state: string | null
+  /** 今天不会开 (被拦或裁决不下单) */
+  skip: boolean
+  signal_day: string | null
+  r_now: number | null
+  card_id: string | null
+}
+
+export interface StrategyPanelTrade {
+  symbol: string
+  signal_day: string | null
+  fill_date: string | null
+  exit_date: string | null
+  why: string | null
+  r: number
+}
+
+/** 模拟成绩: 已结算的机会板卡按卡上的入选策略归因 (多策略卡各计一次) */
+export interface StrategyPanelPaper {
+  cards: number
+  fills: number
+  /** 有成交的生成机会日数; 不足 8 个不给区间 */
+  days: number
+  fill_rate: number | null
+  sum_r: number
+  mean_r: number | null
+  win: number
+  loss: number
+  ci: [number, number] | null
+  diverged: boolean
+  replay_mean_r: number | null
+  replay_fill: number | null
+  trades: StrategyPanelTrade[]
+}
+
+export interface StrategyPanelSide {
+  /** 是否为入选策略 (机会页规则设置里的 3 多 3 空) */
+  selected: boolean
+  replay: StrategyPanelReplay | null
+  /** 所选信号日在自选上命中的代码 */
+  hits: string[]
+  /** 近 20 个信号日的自选命中次数, 与 signals.days 对齐 */
+  hist: number[]
+  board: StrategyPanelBoardCard[]
+  paper: StrategyPanelPaper | null
+}
+
+export interface StrategyPanelEntry {
+  short_capable: boolean
+  name_short: string | null
+  sides: { long: StrategyPanelSide; short?: StrategyPanelSide }
+}
+
+export interface StrategyPanelPayload {
+  contract: string
+  generated_at: string
+  selected: { long: string[]; short: string[] }
+  replay_meta: { window: string[] | null; universe: string | null; data_end: string | null; generated: string | null }
+  signals: { day: string | null; requested: string | null; days: string[]; universe: number | null }
+  paper_since: string | null
+  strategies: Record<string, StrategyPanelEntry>
+  /** 读失败的分段 (selected / replay / signals / board / paper) */
+  errors: Record<string, string>
+}
+
+export interface StrategyPoolPayload {
+  pool: string[]
+  /** false = 服务器从未保存过, pool 只是按最近扫描给出的建议 */
+  saved: boolean
+}
+
 export interface StrategyBuildResult {
   code: string
   meta: Record<string, any>
@@ -3533,6 +3621,15 @@ export const api = {
 
   strategyReload: () =>
     request<{ ok: boolean; count: number }>('/api/strategies/reload', { method: 'POST' }),
+
+  /** 策略页面板 (只读): 入选 / 回放 / 自选命中 / 机会板现状 / 模拟成绩; day = 自选命中看哪个信号日 */
+  strategyPanel: (day?: string) =>
+    request<StrategyPanelPayload>(`/api/strategies/panel${day ? `?day=${encodeURIComponent(day)}` : ''}`),
+
+  /** 策略池 (服务器保存, 各设备一致) */
+  strategyPoolGet: () => request<StrategyPoolPayload>('/api/strategies/pool'),
+  strategyPoolSave: (pool: string[]) =>
+    request<StrategyPoolPayload>('/api/strategies/pool', { method: 'PUT', body: JSON.stringify({ pool }) }),
 
   // ===== Custom Signals (自定义信号) =====
   customSignalsList: () =>
