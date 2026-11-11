@@ -49,4 +49,4 @@ def test_changelog_retains_fixed_baseline_and_allows_unreleased() -> None:
     m = re.search(r"^## \[未发布\]\n(.*?)(?=^## \[)", cl, re.M | re.S)
     assert m is not None
     # Rolling releases keep changes here; release identity comes from Git.
-    assert __version__ == "0.55.0"
+    assert __version__ == "0.56.0"

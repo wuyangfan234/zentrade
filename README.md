@@ -1,7 +1,7 @@
 # ZenTrade · 禅交易
 
 [![CI](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml/badge.svg)](https://github.com/wuyangfan234/zentrade/actions/workflows/ci.yml)
-[![Version](https://img.shields.io/badge/version-0.55.0-2563eb)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-0.56.0-2563eb)](CHANGELOG.md)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB)](backend/pyproject.toml)
 [![Core license](https://img.shields.io/badge/core%20license-MIT-green)](LICENSE)
 
@@ -222,7 +222,7 @@ ZenTrade 是单用户、自托管应用，不是多租户服务。登录后拥�
 
 ## 版本与构建
 
-应用版本统一固定为 `0.55.0`，后续不再人工升号。具体构建用 Git 提交号区分，见 [版本与构建标识](docs/versioning.md)。
+应用版本统一固定为 `0.56.0`，后续不再人工升号。具体构建用 Git 提交号区分，见 [版本与构建标识](docs/versioning.md)。
 
 ## 赞助
 
