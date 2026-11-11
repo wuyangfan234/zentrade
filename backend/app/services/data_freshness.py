@@ -54,7 +54,7 @@ def summary(r: dict) -> tuple[str, str]:
     n, st, nl = r.get("symbols", 0), r.get("stale") or [], r.get("new_listing") or []
     if not n:
         return "idle", "自选为空"
-    note = ("；上市不足 130 日不出卡：" + "、".join(f"{x['symbol']}({x['daily_bars']}日)" for x in nl)) if nl else ""
+    note = ("；上市不足 130 日不生成机会：" + "、".join(f"{x['symbol']}({x['daily_bars']}日)" for x in nl)) if nl else ""
     if not st:
         return "ok", f"自选 {n} 只日K/30m/4h 均到 {r.get('expected')}" + note
     lst = "、".join(f"{x['symbol']}(日K {x['daily'] or '无'} · 30m/4h {x['m30'] or '无'})" for x in st[:12])

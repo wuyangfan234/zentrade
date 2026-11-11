@@ -113,7 +113,7 @@ function fmtPctText(pct: number): string {
  *   price/market/其他: "[名称] [message条件摘要] [涨跌幅]"
  */
 function buildSingleText(a: AlertEvent): string {
-  const name = a.name || '标的'
+  const name = a.name || '个股'
   const pctText = a.change_pct != null ? fmtPctText(a.change_pct) : ''
 
   // 板块消息已包含名称、触发条件和当前涨跌幅，避免重复播报。
@@ -209,7 +209,7 @@ export function stopVoice() {
 }
 
 /** 试听 (设置页点"试听"用) */
-export function previewVoice(text = '语音播报已开启, 这是试听效果') {
+export function previewVoice(text = '语音播报已开启') {
   try {
     if (!isVoiceSupported()) return
     activateVoice()

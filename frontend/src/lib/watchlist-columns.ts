@@ -35,8 +35,8 @@ export const BUILTIN_COLUMNS: ColumnConfig[] = [
   { id: 'builtin:low', source: { type: 'builtin', key: 'low' }, label: '最低', visible: false, align: 'center' },
   { id: 'builtin:prev_close', source: { type: 'builtin', key: 'prev_close' }, label: '昨收', visible: false, align: 'center' },
   // 成交
-  { id: 'builtin:volume', source: { type: 'builtin', key: 'volume' }, label: '成交量 (股)', visible: false, align: 'center' },
-  { id: 'builtin:amount', source: { type: 'builtin', key: 'amount' }, label: '成交额 (USD)', visible: false, align: 'center' },
+  { id: 'builtin:volume', source: { type: 'builtin', key: 'volume' }, label: '成交量（股）', visible: false, align: 'center' },
+  { id: 'builtin:amount', source: { type: 'builtin', key: 'amount' }, label: '成交额（USD）', visible: false, align: 'center' },
   { id: 'builtin:vol_ratio', source: { type: 'builtin', key: 'vol_ratio' }, label: '量比', visible: true, align: 'center' },
   { id: 'builtin:annual_vol', source: { type: 'builtin', key: 'annual_vol' }, label: '年化波动', visible: false, align: 'center' },
   // 均线
@@ -48,9 +48,9 @@ export const BUILTIN_COLUMNS: ColumnConfig[] = [
   { id: 'builtin:high_60d', source: { type: 'builtin', key: 'high_60d' }, label: '60日高', visible: false, align: 'center' },
   { id: 'builtin:low_60d', source: { type: 'builtin', key: 'low_60d' }, label: '60日低', visible: false, align: 'center' },
   // 技术指标
-  { id: 'builtin:rsi6', source: { type: 'builtin', key: 'rsi6' }, label: 'RSI6', visible: false, align: 'center' },
-  { id: 'builtin:rsi14', source: { type: 'builtin', key: 'rsi14' }, label: 'RSI14', visible: true, align: 'center' },
-  { id: 'builtin:rsi24', source: { type: 'builtin', key: 'rsi24' }, label: 'RSI24', visible: false, align: 'center' },
+  { id: 'builtin:rsi6', source: { type: 'builtin', key: 'rsi6' }, label: 'RSI(6)', visible: false, align: 'center' },
+  { id: 'builtin:rsi14', source: { type: 'builtin', key: 'rsi14' }, label: 'RSI(14)', visible: true, align: 'center' },
+  { id: 'builtin:rsi24', source: { type: 'builtin', key: 'rsi24' }, label: 'RSI(24)', visible: false, align: 'center' },
   { id: 'builtin:macd_dif', source: { type: 'builtin', key: 'macd_dif' }, label: 'MACD-DIF', visible: false, align: 'center' },
   { id: 'builtin:macd_dea', source: { type: 'builtin', key: 'macd_dea' }, label: 'MACD-DEA', visible: false, align: 'center' },
   { id: 'builtin:macd_hist', source: { type: 'builtin', key: 'macd_hist' }, label: 'MACD柱', visible: false, align: 'center' },
@@ -63,10 +63,10 @@ export const BUILTIN_COLUMNS: ColumnConfig[] = [
   { id: 'builtin:vol_ma5', source: { type: 'builtin', key: 'vol_ma5' }, label: '量MA5', visible: false, align: 'center' },
   { id: 'builtin:vol_ma10', source: { type: 'builtin', key: 'vol_ma10' }, label: '量MA10', visible: false, align: 'center' },
   // 动量
-  { id: 'builtin:momentum_5d', source: { type: 'builtin', key: 'momentum_5d' }, label: '5D 动量', visible: false, align: 'center' },
-  { id: 'builtin:momentum_10d', source: { type: 'builtin', key: 'momentum_10d' }, label: '10D 动量', visible: false, align: 'center' },
-  { id: 'builtin:momentum_20d', source: { type: 'builtin', key: 'momentum_20d' }, label: '20D 动量', visible: false, align: 'center' },
-  { id: 'builtin:momentum_30d', source: { type: 'builtin', key: 'momentum_30d' }, label: '30D 动量', visible: false, align: 'center' },
+  { id: 'builtin:momentum_5d', source: { type: 'builtin', key: 'momentum_5d' }, label: '5 日动量', visible: false, align: 'center' },
+  { id: 'builtin:momentum_10d', source: { type: 'builtin', key: 'momentum_10d' }, label: '10 日动量', visible: false, align: 'center' },
+  { id: 'builtin:momentum_20d', source: { type: 'builtin', key: 'momentum_20d' }, label: '20 日动量', visible: false, align: 'center' },
+  { id: 'builtin:momentum_30d', source: { type: 'builtin', key: 'momentum_30d' }, label: '30 日动量', visible: false, align: 'center' },
   { id: 'builtin:momentum_60d', source: { type: 'builtin', key: 'momentum_60d' }, label: '60日动量', visible: true, align: 'center' },
   // 信号 & 图表
   { id: 'builtin:signals', source: { type: 'builtin', key: 'signals' }, label: '信号', visible: true, align: 'center' },
@@ -78,14 +78,14 @@ export const BUILTIN_COLUMNS: ColumnConfig[] = [
 ]
 
 export const COLUMN_GROUPS: ColumnGroup[] = [
-  { id: 'price', label: '价格', icon: '💰', keys: ['price', 'pct', 'change_amount', 'amplitude', 'open', 'high', 'low', 'prev_close'] },
+  { id: 'price', label: '价格', keys: ['price', 'pct', 'change_amount', 'amplitude', 'open', 'high', 'low', 'prev_close'] },
   { id: 'added', label: '自选', icon: '⭐', keys: ['added_at', 'pct_since_added'] },
-  { id: 'volume', label: '成交', icon: '📊', keys: ['volume', 'amount', 'vol_ratio', 'annual_vol'] },
-  { id: 'ma', label: '均线', icon: '📈', keys: ['ma5', 'ma10', 'ma20', 'ma60'] },
-  { id: 'range', label: '区间', icon: '📏', keys: ['high_60d', 'low_60d'] },
-  { id: 'tech', label: '技术指标', icon: '🔬', keys: ['rsi6', 'rsi14', 'rsi24', 'macd_dif', 'macd_dea', 'macd_hist', 'kdj_k', 'kdj_d', 'kdj_j', 'boll_upper', 'boll_lower', 'atr14', 'vol_ma5', 'vol_ma10'] },
-  { id: 'momentum', label: '动量', icon: '🚀', keys: ['momentum_5d', 'momentum_10d', 'momentum_20d', 'momentum_30d', 'momentum_60d'] },
-  { id: 'signal', label: '信号', icon: '📡', keys: ['signals', 'candle', 'intraday'] },
+  { id: 'volume', label: '成交', keys: ['volume', 'amount', 'vol_ratio', 'annual_vol'] },
+  { id: 'ma', label: '均线', keys: ['ma5', 'ma10', 'ma20', 'ma60'] },
+  { id: 'range', label: '区间', keys: ['high_60d', 'low_60d'] },
+  { id: 'tech', label: '技术指标', keys: ['rsi6', 'rsi14', 'rsi24', 'macd_dif', 'macd_dea', 'macd_hist', 'kdj_k', 'kdj_d', 'kdj_j', 'boll_upper', 'boll_lower', 'atr14', 'vol_ma5', 'vol_ma10'] },
+  { id: 'momentum', label: '动量', keys: ['momentum_5d', 'momentum_10d', 'momentum_20d', 'momentum_30d', 'momentum_60d'] },
+  { id: 'signal', label: '信号', keys: ['signals', 'candle', 'intraday'] },
 ]
 
 // 操作列（始终显示，不参与自定义）

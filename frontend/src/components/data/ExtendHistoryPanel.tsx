@@ -36,7 +36,7 @@ export function ExtendHistoryPanel({ hasCap, isRunning, earliestDate, onStart }:
 
   return (
     <div className="px-4 pb-4 pt-3 border-t border-accent/20 space-y-3">
-      <div className="text-[10px] text-secondary">向前扩展历史数据</div>
+      <div className="text-[11px] text-secondary">向前扩展历史数据</div>
 
       <div className="flex items-center gap-2">
         <div className="flex items-center">
@@ -45,7 +45,7 @@ export function ExtendHistoryPanel({ hasCap, isRunning, earliestDate, onStart }:
             disabled={!hasBatchCap || isRunning}
             className="h-6 w-6 flex items-center justify-center rounded-l-btn bg-elevated border border-border text-secondary hover:bg-border/50 disabled:opacity-30 transition-colors text-xs"
           >−</button>
-          <div className="h-6 w-8 flex items-center justify-center border-y border-border text-[11px] font-mono tabular-nums text-foreground bg-base">
+          <div className="h-6 w-8 flex items-center justify-center border-y border-border text-[11px] tabular-nums text-foreground bg-base">
             {value}
           </div>
           <button
@@ -60,8 +60,8 @@ export function ExtendHistoryPanel({ hasCap, isRunning, earliestDate, onStart }:
             <button
               key={u}
               onClick={() => { setUnit(u); if (u === 'year' && value > 10) setValue(1); if (u === 'month' && value > 36) setValue(6) }}
-              className={`px-2 py-0.5 text-[10px] font-medium transition-colors ${
-                unit === u ? 'bg-accent/15 text-accent' : 'text-secondary hover:bg-elevated'
+              className={`px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                unit === u ? 'bg-accent/15 text-accent dark:text-blue-400' : 'text-secondary hover:bg-elevated'
               }`}
             >{u === 'month' ? '月' : '年'}</button>
           ))}
@@ -69,9 +69,9 @@ export function ExtendHistoryPanel({ hasCap, isRunning, earliestDate, onStart }:
       </div>
 
       {estimate && (
-        <div className="text-[10px] text-muted">
-          预计扩展至 <span className="font-mono text-secondary">{estimate}</span>
-          {earliestDate && <span> (当前最早: <span className="font-mono text-secondary">{earliestDate}</span>)</span>}
+        <div className="text-[11px] text-muted">
+          预计扩展至 <span className="tabular-nums text-secondary">{estimate}</span>
+          {earliestDate && <span> (当前最早: <span className="tabular-nums text-secondary">{earliestDate}</span>)</span>}
         </div>
       )}
 

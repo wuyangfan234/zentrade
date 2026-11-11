@@ -4,7 +4,7 @@ import { useSearchParams } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Trash2, RefreshCw, Star, X, Search, LayoutGrid, List, Rows3, BarChart3, Settings2, Plus, Check, Filter, Eye, EyeOff, Minus, ChevronsUp, Clock, RotateCcw, FileUp, FolderOpen, FolderMinus, FolderPlus } from 'lucide-react'
+import { Trash2, RefreshCw, Star, X, Search, LayoutGrid, List, Rows3, BarChart3, Settings2, Plus, Check, Filter, Eye, EyeOff, Minus, ChevronsUp, Clock, RotateCcw, FileUp, FolderOpen, FolderMinus, FolderPlus, MoreHorizontal } from 'lucide-react'
 import { api, type KlineRow, type MinuteKlineRow, type WatchlistGroup, type WatchlistGroupColor } from '@/lib/api'
 import { fetchMinuteBatchIncremental } from '@/lib/minuteBatchIncremental'
 import { QK } from '@/lib/queryKeys'
@@ -124,19 +124,19 @@ function renderExtValue(
           key={i}
           type="button"
           onClick={event => { event.stopPropagation(); onTagClick(tag) }}
-          className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10 hover:brightness-95"
+          className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10 hover:brightness-95"
         >
           {tag}
         </button>
       ) : (
-        <span key={i} className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10">
+        <span key={i} className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10">
           {tag}
         </span>
       ))}
       {!showAll && hiddenCount > 0 && (
         <button
           onClick={onToggle}
-          className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+          className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20 transition-colors"
         >
           +{hiddenCount}
         </button>
@@ -144,7 +144,7 @@ function renderExtValue(
       {showAll && maxTags > 0 && tags.length > maxTags && (
         <button
           onClick={onToggle}
-          className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-muted hover:text-foreground transition-colors"
+          className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-muted hover:text-foreground transition-colors"
         >
           收起
         </button>
@@ -307,7 +307,7 @@ function StockSearchBox({
                 <div
                   key={r.symbol}
                   className={`flex items-center gap-2.5 px-3 py-2 text-xs transition-colors duration-100 ${
-                    i === activeIdx ? 'bg-accent/10 text-accent' : 'hover:bg-elevated text-foreground'
+                    i === activeIdx ? 'bg-accent/10 text-accent dark:text-blue-400' : 'hover:bg-elevated text-foreground'
                   }`}
                 >
                   <button
@@ -315,20 +315,20 @@ function StockSearchBox({
                     onClick={() => handleSelect(r)}
                     className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
                   >
-                    <span className="font-mono shrink-0 w-[80px]">{r.symbol}</span>
+                    <span className="tabular-nums shrink-0 w-[80px]">{r.symbol}</span>
                     {/* 名称+标签组: 标签紧贴名称文字, 而不是被 flex-1 推到行尾 */}
                     <span className="flex min-w-0 flex-1 items-center gap-1">
                       <span className="truncate text-secondary">{r.name}</span>
                       {r.asset_type === 'etf' && (
-                        <span className="shrink-0 px-1 py-0.5 rounded text-[10px] leading-none bg-accent/10 text-accent">ETF</span>
+                        <span className="shrink-0 px-1 py-0.5 rounded text-[11px] leading-none bg-accent/10 text-accent dark:text-blue-400">ETF</span>
                       )}
                       {r.asset_type === 'index' && (
-                        <span className="shrink-0 px-1 py-0.5 rounded text-[10px] leading-none bg-sky-500/10 text-sky-700 dark:text-sky-400">指数</span>
+                        <span className="shrink-0 px-1 py-0.5 rounded text-[11px] leading-none bg-sky-500/10 text-sky-700 dark:text-sky-400">指数</span>
                       )}
                       {(() => {
                         const b = boardTag(r.symbol)
                         return b && (
-                          <span className={`shrink-0 px-1 py-0.5 rounded text-[10px] leading-none border ${b.color}`}>{b.label}</span>
+                          <span className={`shrink-0 px-1 py-0.5 rounded text-[11px] leading-none border ${b.color}`}>{b.label}</span>
                         )
                       })()}
                     </span>
@@ -364,7 +364,7 @@ function StockSearchBox({
                         title={
                           preferredGroupId
                             ? `加入自选 · 当前分组「${groups.find(g => g.id === preferredGroupId)?.name ?? ''}」`
-                            : '加入自选 (未分组)'
+                            : '加入自选（未分组）'
                         }
                         aria-label={`快速加入自选 ${r.symbol}`}
                       >
@@ -512,7 +512,7 @@ const StockCard = React.memo(function StockCard({
           <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
             <button
               onClick={() => onConfirmRemove(r.symbol)}
-              className="px-1.5 py-0.5 rounded text-[10px] text-danger bg-danger/10 hover:bg-danger/20 transition-colors"
+              className="px-1.5 py-0.5 rounded text-[11px] text-danger bg-danger/10 hover:bg-danger/20 transition-colors"
             >
               确认
             </button>
@@ -546,7 +546,7 @@ const StockCard = React.memo(function StockCard({
         <div className="flex items-center gap-2 min-w-0 mb-2 pr-8">
           <StockLogo symbol={r.symbol} version={logoVersion} size="lg" />
           <span className="flex min-w-0 flex-col leading-tight">
-            <span className="font-mono text-foreground text-[13px] font-semibold tracking-wide">
+            <span className="tabular-nums text-foreground text-[13px] font-semibold tracking-wide">
               {r.symbol}
             </span>
             {name && (
@@ -554,7 +554,7 @@ const StockCard = React.memo(function StockCard({
             )}
           </span>
           {board && (
-            <span className={`shrink-0 inline-flex items-center justify-center px-1 h-[16px] rounded text-[9px] font-bold leading-none ${board.color}`}>
+            <span className={`shrink-0 inline-flex items-center justify-center px-1 h-[16px] rounded text-[11px] font-bold leading-none ${board.color}`}>
               {board.label}
             </span>
           )}
@@ -574,10 +574,10 @@ const StockCard = React.memo(function StockCard({
         </div>
 
         {/* 第三行: 指标 */}
-        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[10px] text-muted leading-relaxed">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-muted leading-relaxed">
 
-          <span title="量比">量比<span className="font-mono ml-0.5">{fmtPrice(r.vol_ratio_5d)}</span></span>
-          <span title="RSI14">RSI<span className="font-mono ml-0.5">{r.rsi_14 != null ? r.rsi_14.toFixed(1) : '—'}</span></span>
+          <span title="量比">量比<span className="tabular-nums ml-0.5">{fmtPrice(r.vol_ratio_5d)}</span></span>
+          <span title="RSI14">RSI<span className="tabular-nums ml-0.5">{r.rsi_14 != null ? r.rsi_14.toFixed(1) : '—'}</span></span>
           {/* 扩展数据列展示在卡片中 */}
           {extCols.map(col => {
             if (col.source.type !== 'ext') return null
@@ -593,7 +593,7 @@ const StockCard = React.memo(function StockCard({
             return (
               <span key={col.id} title={col.label}>
                 <span className="text-secondary">{col.label}</span>
-                <span className="font-mono ml-0.5">
+                <span className="tabular-nums ml-0.5">
                   {renderExtValue(
                     val,
                     col,
@@ -613,12 +613,12 @@ const StockCard = React.memo(function StockCard({
       {signals.length > 0 && (
         <div className="pl-4 pr-2.5 pt-1.5 pb-2 flex flex-wrap gap-1">
           {signals.slice(0, 3).map(s => (
-            <span key={s.label} className={`inline-block px-1.5 py-[1px] rounded text-[9px] font-medium leading-tight ${signalCls(s.type)}`}>
+            <span key={s.label} className={`inline-block px-1.5 py-[1px] rounded text-[11px] font-medium leading-tight ${signalCls(s.type)}`}>
               {s.label}
             </span>
           ))}
           {signals.length > 3 && (
-            <span className="inline-block px-1 py-[1px] rounded text-[9px] text-muted bg-elevated leading-tight">
+            <span className="inline-block px-1 py-[1px] rounded text-[11px] text-muted bg-elevated leading-tight">
               +{signals.length - 3}
             </span>
           )}
@@ -657,6 +657,16 @@ export function Watchlist() {
   const [columns, setColumns] = useState<ColumnConfig[]>([...BUILTIN_COLUMNS])
   const [customizerOpen, setCustomizerOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const moreRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!moreOpen) return
+    const close = (e: MouseEvent) => { if (!moreRef.current?.contains(e.target as Node)) setMoreOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setMoreOpen(false) }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', esc) }
+  }, [moreOpen])
   const [searchParams] = useSearchParams()
   const initialGroup = (searchParams.get('group') as WatchlistGroupFilter | null) ?? 'all'
   const [selectedGroup, setSelectedGroup] = useState<WatchlistGroupFilter>(initialGroup)
@@ -1290,21 +1300,21 @@ export function Watchlist() {
   return (
     <div className="flex flex-col h-full">
       <PageHeader
-        title="自选股"
+        title="自选"
         titleExtra={
           <span className="inline-flex items-center gap-1.5">
             {/* 计数胶囊: 显示数/总数, mono 字体突出数字 */}
             <span className="inline-flex items-baseline gap-0.5 px-2 py-0.5 rounded-md bg-elevated/70 text-[11px]">
-              <span className="font-mono font-semibold text-secondary tabular-nums">{sortedRows.length}</span>
+              <span className="tabular-nums font-semibold text-secondary">{sortedRows.length}</span>
               <span className="text-muted">/</span>
-              <span className="font-mono text-muted tabular-nums">{rowsInSelectedGroup.length}</span>
+              <span className="tabular-nums text-muted">{rowsInSelectedGroup.length}</span>
               <span className="text-muted ml-0.5">只</span>
             </span>
             {/* 数据未就绪提示: 自选了但 enriched 缓存未覆盖 (新股/冷门/新用户未同步), 指标全为 null */}
             {pendingCount > 0 && (
               <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-muted/15 text-muted border border-border/50 whitespace-nowrap"
-                title={`当前有 ${pendingCount} 只指标暂未就绪 (新股/冷门股或数据尚未同步), 等待每日数据更新后自动补全`}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-muted/15 text-muted border border-border/50 whitespace-nowrap"
+                title={`${pendingCount} 只指标待更新`}
               >
                 <Clock className="h-2.5 w-2.5" />
                 待数据 {pendingCount}
@@ -1313,8 +1323,8 @@ export function Watchlist() {
             {/* 过滤提示: 仅在有筛选隐藏时出现, 柔和橙色融入整体 */}
             {hiddenCount > 0 && (
               <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-warning/12 text-warning border border-warning/25 whitespace-nowrap"
-                title={`当前有 ${hiddenCount} 只被筛选条件隐藏，清除筛选可查看全部`}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[11px] font-medium bg-warning/12 text-warning border border-warning/25 whitespace-nowrap"
+                title={`${hiddenCount} 只被筛选隐藏`}
               >
                 <Filter className="h-2.5 w-2.5" />
                 已过滤 {hiddenCount}
@@ -1329,7 +1339,7 @@ export function Watchlist() {
               onClick={() => setFilterOpen(v => !v)}
               className={`inline-flex items-center justify-center h-8 w-8 rounded-btn transition-colors duration-150 ease-smooth ${
                 filterOpen || hasActiveFilters
-                  ? 'bg-accent/15 text-accent hover:bg-accent/25'
+                  ? 'bg-accent/15 text-accent dark:text-blue-400 hover:bg-accent/25'
                   : 'bg-elevated text-secondary hover:bg-elevated/80'
               }`}
               title={`筛选${activeFilterCount > 0 ? ` (${activeFilterCount})` : ''}`}
@@ -1359,82 +1369,73 @@ export function Watchlist() {
             />
             <button
               onClick={() => setImportOpen(true)}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-elevated hover:bg-elevated/80 text-secondary hover:text-foreground transition-colors duration-150 ease-smooth"
+              className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-elevated px-2.5 text-xs text-secondary transition-colors duration-150 ease-smooth hover:bg-elevated/80 hover:text-foreground"
               title="批量导入自选（CSV / 粘贴代码）"
               aria-label="批量导入自选"
             >
-              <FileUp className="h-4 w-4" />
+              <FileUp className="h-4 w-4" /><span className="max-lg:hidden">导入</span>
             </button>
             <div className="w-px h-5 bg-border" />
             {/* 视图 */}
             <button
               onClick={toggleView}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-elevated hover:bg-elevated/80 text-secondary hover:text-foreground transition-colors duration-150 ease-smooth"
+              className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-elevated px-2.5 text-xs text-secondary transition-colors duration-150 ease-smooth hover:bg-elevated/80 hover:text-foreground"
               title={viewMode === 'table' ? '卡片视图' : '列表视图'}
               aria-label={viewMode === 'table' ? '卡片视图' : '列表视图'}
             >
               {viewMode === 'table' ? <LayoutGrid className="h-4 w-4" /> : <List className="h-4 w-4" />}
+              <span className="max-lg:hidden">{viewMode === 'table' ? '卡片' : '列表'}</span>
             </button>
-            {/* 分组卡片视图 */}
-            <button
-              onClick={toggleGroupView}
-              aria-pressed={groupCardsOpen}
-              className={`inline-flex items-center justify-center h-8 w-8 rounded-btn transition-colors duration-150 ease-smooth ${
-                groupCardsOpen
-                  ? 'bg-accent/15 text-accent hover:bg-accent/25'
-                  : 'bg-elevated text-secondary hover:bg-elevated/80 hover:text-foreground'
-              }`}
-              title={groupCardsOpen ? '退出分组卡片' : '分组卡片视图'}
-              aria-label={groupCardsOpen ? '退出分组卡片' : '分组卡片视图'}
-            >
-              <Rows3 className="h-4 w-4" />
-            </button>
-            {/* 分组统计条 */}
-            <button
-              onClick={toggleGroupStats}
-              aria-pressed={groupStatsOpen}
-              className={`inline-flex items-center justify-center h-8 w-8 rounded-btn transition-colors duration-150 ease-smooth ${
-                groupStatsOpen
-                  ? 'bg-accent/15 text-accent hover:bg-accent/25'
-                  : 'bg-elevated text-secondary hover:bg-elevated/80 hover:text-foreground'
-              }`}
-              title={groupStatsOpen ? '收起分组统计' : '分组统计'}
-              aria-label={groupStatsOpen ? '收起分组统计' : '分组统计'}
-            >
-              <BarChart3 className="h-4 w-4" />
-            </button>
-            <div className="w-px h-5 bg-border" />
-            {/* 自定义列 / 刷新 */}
             <button
               onClick={() => setCustomizerOpen(true)}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-elevated hover:bg-elevated/80 text-secondary hover:text-foreground transition-colors duration-150 ease-smooth"
+              className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-elevated px-2.5 text-xs text-secondary transition-colors duration-150 ease-smooth hover:bg-elevated/80 hover:text-foreground"
               title="自定义列"
               aria-label="自定义列"
             >
-              <Settings2 className="h-4 w-4" />
+              <Settings2 className="h-4 w-4" /><span className="max-lg:hidden">列</span>
             </button>
-            <button
-              onClick={() => enriched.refetch()}
-              disabled={enriched.isFetching}
-              className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-elevated hover:bg-elevated/80 text-secondary hover:text-foreground transition-colors duration-150 ease-smooth disabled:opacity-50"
-              title="刷新"
-              aria-label="刷新"
-            >
-              <RefreshCw className={`h-4 w-4 ${enriched.isFetching ? 'animate-spin' : ''}`} />
-            </button>
-            {allSymbols.length > 0 && (
-              <>
-                <div className="w-px h-5 bg-border" />
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  className="inline-flex items-center justify-center h-8 w-8 rounded-btn bg-danger/10 text-danger hover:bg-danger/20 transition-colors duration-150 ease-smooth"
-                  title="清空自选"
-                  aria-label="清空自选"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </>
-            )}
+            {/* 更多: 分组卡片 / 分组统计 / 刷新 / 清空 (清空不再常驻在工具栏最右) */}
+            <div ref={moreRef} className="relative">
+              <button
+                onClick={() => setMoreOpen(v => !v)}
+                aria-haspopup="menu"
+                aria-expanded={moreOpen}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-btn bg-elevated px-2.5 text-xs text-secondary transition-colors duration-150 ease-smooth hover:bg-elevated/80 hover:text-foreground ${groupCardsOpen || groupStatsOpen ? '!bg-accent/15 !text-accent dark:!text-blue-400' : ''}`}
+                title="更多"
+                aria-label="更多"
+              >
+                <MoreHorizontal className="h-4 w-4" /><span className="max-lg:hidden">更多</span>
+              </button>
+              {moreOpen && (
+                <div role="menu" data-wl-more className="absolute right-0 top-full z-30 mt-1 w-44 overflow-hidden rounded-card border border-border bg-surface py-1 shadow-xl">
+                  <button role="menuitemcheckbox" aria-checked={groupCardsOpen} aria-label={groupCardsOpen ? '退出分组卡片' : '分组卡片视图'}
+                    onClick={() => { toggleGroupView(); setMoreOpen(false) }}
+                    className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-foreground hover:bg-elevated">
+                    <Rows3 className="h-4 w-4 text-secondary" /><span className="flex-1">分组卡片</span>{groupCardsOpen && <span className="text-accent dark:text-blue-400">✓</span>}
+                  </button>
+                  <button role="menuitemcheckbox" aria-checked={groupStatsOpen} aria-label={groupStatsOpen ? '收起分组统计' : '分组统计'}
+                    onClick={() => { toggleGroupStats(); setMoreOpen(false) }}
+                    className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-foreground hover:bg-elevated">
+                    <BarChart3 className="h-4 w-4 text-secondary" /><span className="flex-1">分组统计</span>{groupStatsOpen && <span className="text-accent dark:text-blue-400">✓</span>}
+                  </button>
+                  <button role="menuitem" aria-label="刷新" disabled={enriched.isFetching}
+                    onClick={() => { void enriched.refetch(); setMoreOpen(false) }}
+                    className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-foreground hover:bg-elevated disabled:opacity-50">
+                    <RefreshCw className={`h-4 w-4 text-secondary ${enriched.isFetching ? 'animate-spin' : ''}`} /><span>刷新</span>
+                  </button>
+                  {allSymbols.length > 0 && (
+                    <>
+                      <div className="my-1 border-t border-border" />
+                      <button role="menuitem" aria-label="清空自选"
+                        onClick={() => { setConfirmClear(true); setMoreOpen(false) }}
+                        className="flex h-9 w-full items-center gap-2 px-3 text-left text-xs text-danger hover:bg-danger/10">
+                        <Trash2 className="h-4 w-4" /><span>清空自选</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
             {/* 扩展插槽: 自选页工具栏二开区 (无注册时不渲染) */}
             <ExtensionSlot
               name="watchlist.toolbar"
@@ -1483,7 +1484,7 @@ export function Watchlist() {
             if (!items?.length) return null
             return (
               <div key={cat.label} className="mb-1.5 last:mb-0">
-                <div className="text-[10px] text-muted uppercase tracking-wider mb-0.5">{cat.label}</div>
+                <div className="text-[11px] text-muted uppercase tracking-wider mb-0.5">{cat.label}</div>
                 <div className="flex flex-wrap gap-x-2 gap-y-1">
                   {items.map(item => {
                     const f = filters[item.id] || {}
@@ -1496,7 +1497,7 @@ export function Watchlist() {
                           value={f.min ?? ''}
                           onChange={e => updateFilter(item.id, { min: e.target.value })}
                           placeholder="min"
-                          className={`w-12 h-5 rounded border text-[10px] px-1 placeholder:text-muted focus:outline-none ${
+                          className={`w-12 h-5 rounded border text-[11px] px-1 placeholder:text-muted focus:outline-none ${
                             hasFilter ? 'border-accent/30 bg-accent/5' : 'border-border bg-elevated'
                           } text-foreground focus:border-accent/50`}
                         />
@@ -1506,7 +1507,7 @@ export function Watchlist() {
                           value={f.max ?? ''}
                           onChange={e => updateFilter(item.id, { max: e.target.value })}
                           placeholder="max"
-                          className={`w-12 h-5 rounded border text-[10px] px-1 placeholder:text-muted focus:outline-none ${
+                          className={`w-12 h-5 rounded border text-[11px] px-1 placeholder:text-muted focus:outline-none ${
                             hasFilter ? 'border-accent/30 bg-accent/5' : 'border-border bg-elevated'
                           } text-foreground focus:border-accent/50`}
                         />
@@ -1518,7 +1519,7 @@ export function Watchlist() {
             )
           })}
           {hasActiveFilters && (
-            <button onClick={resetAllFilters} className="mt-1 text-[10px] text-danger hover:text-danger/80 transition-colors">
+            <button onClick={resetAllFilters} className="mt-1 text-[11px] text-danger hover:text-danger/80 transition-colors">
               重置全部筛选
             </button>
           )}
@@ -1538,14 +1539,15 @@ export function Watchlist() {
           ) : allSymbols.length === 0 ? (
             <EmptyState
               icon={Star}
-              title="自选股为空"
-              hint="点击右上角搜索添加标的，或用导入按钮从券商自选 CSV 批量导入、粘贴代码。"
+              title="暂无自选"
+              hint="可搜索添加，或导入 CSV / 粘贴代码"
+              action={{ label: '导入', onClick: () => setImportOpen(true) }}
             />
           ) : rowsInSelectedGroup.length === 0 ? (
             <EmptyState
               icon={FolderOpen}
-              title="该分组暂无标的"
-              hint="使用右上角搜索添加、通过股票旁的分组按钮移入，或用导入弹窗把整批标的并入本组。"
+              title="该分组暂无个股"
+              hint="搜索添加，或从其他分组移入、批量导入"
             />
           ) : groupCardsOpen ? (
             <WatchlistGroupCards
@@ -1580,7 +1582,7 @@ export function Watchlist() {
                         onClick={(event) => { event.stopPropagation(); toggleDailyKChart() }}
                         className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${
                           dailyKChartVisible
-                            ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                            ? 'text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20'
                             : 'text-muted hover:text-foreground hover:bg-elevated'
                         }`}
                         title={dailyKChartVisible ? '隐藏日k蜡烛' : '显示日k蜡烛'}
@@ -1601,7 +1603,7 @@ export function Watchlist() {
                         onClick={(event) => { event.stopPropagation(); toggleIntradayChart() }}
                         className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${
                           intradayChartVisible
-                            ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                            ? 'text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20'
                             : 'text-muted hover:text-foreground hover:bg-elevated'
                         }`}
                         title={intradayChartVisible ? '隐藏分时图' : '显示分时图'}
@@ -1653,16 +1655,16 @@ export function Watchlist() {
                           className="flex items-center gap-1.5 text-left min-w-0"
                         >
                           <StockLogo symbol={r.symbol} version={logoMap[r.symbol]} size="md" />
-                          <span className="min-w-[2.75rem] shrink-0 font-mono text-foreground text-xs font-semibold group-hover:text-accent transition-colors duration-150">
+                          <span className="min-w-[2.75rem] shrink-0 tabular-nums text-foreground text-xs font-semibold group-hover:text-accent transition-colors duration-150">
                             {r.symbol}
                           </span>
                           {name && (
-                            <span title={fullName ?? undefined} className="text-xs text-secondary truncate group-hover:text-foreground transition-colors duration-150">
+                            <span title={fullName ?? undefined} className="text-xs text-secondary truncate max-md:max-w-[4rem] group-hover:text-foreground transition-colors duration-150">
                               {name}
                             </span>
                           )}
                           {board ? (
-                            <span className={`shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[9px] font-bold leading-none border ${board.color}`}>
+                            <span className={`shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold leading-none border ${board.color}`}>
                               {board.label}
                             </span>
                           ) : null}
@@ -1677,7 +1679,7 @@ export function Watchlist() {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => { remove.mutate(r.symbol); setConfirmRemove(null) }}
-                                className="px-1.5 py-0.5 rounded text-[10px] text-danger bg-danger/10 hover:bg-danger/20 transition-colors"
+                                className="px-1.5 py-0.5 rounded text-[11px] text-danger bg-danger/10 hover:bg-danger/20 transition-colors"
                               >
                                 确认
                               </button>
@@ -1752,12 +1754,12 @@ export function Watchlist() {
                       {signals.length > 0 && (
                         <div className="flex flex-wrap gap-0.5">
                           {signals.slice(0, 3).map((s) => (
-                            <span key={s.label} className={`inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight ${signalCls(s.type)}`}>
+                            <span key={s.label} className={`inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight ${signalCls(s.type)}`}>
                               {s.label}
                             </span>
                           ))}
                           {signals.length > 3 && (
-                            <span className="text-[10px] text-muted">+{signals.length - 3}</span>
+                            <span className="text-[11px] text-muted">+{signals.length - 3}</span>
                           )}
                         </div>
                       )}
@@ -1784,7 +1786,7 @@ export function Watchlist() {
                     return (
                       <td className="pl-3 pr-2 py-1.5 border-l border-border/30" style={{ width: iw + 4, minWidth: iw + 4, maxWidth: iw + 4, height: ih }}>
                         <div className="flex items-center justify-center">
-                          <span className="text-[10px] text-muted">—</span>
+                          <span className="text-[11px] text-muted">—</span>
                         </div>
                       </td>
                     )
@@ -1798,7 +1800,7 @@ export function Watchlist() {
                       <div className="flex items-center justify-center">
                         {intradayChartVisible
                           ? <MiniIntraday rows={rows} prevClose={r.prev_close} changePct={r.change_pct} width={iw - 4} height={ih} />
-                          : <span className="text-[10px] text-muted">分时</span>}
+                          : <span className="text-[11px] text-muted">分时</span>}
                       </div>
                     </td>
                   )
@@ -1859,7 +1861,7 @@ export function Watchlist() {
             >
               <h3 className="text-sm font-medium text-foreground mb-2">确认清空自选</h3>
               <p className="text-xs text-secondary mb-5">
-                将移除全部 {allSymbols.length} 只自选股，此操作不可恢复。
+                清空全部 {allSymbols.length} 只自选 · 不可恢复
               </p>
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -1873,7 +1875,7 @@ export function Watchlist() {
                   disabled={clearAll.isPending}
                   className="px-3 py-1.5 rounded-btn bg-danger/15 text-danger hover:bg-danger/25 text-sm font-medium transition-colors disabled:opacity-50"
                 >
-                  {clearAll.isPending ? '清除中...' : '确认清空'}
+                  {clearAll.isPending ? '清空中' : '确认清空'}
                 </button>
               </div>
             </motion.div>

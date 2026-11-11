@@ -7,8 +7,8 @@ import type { PipelineJob } from '@/lib/api'
 
 export const STAGE_LABELS: Record<string, string> = {
   init: '初始化',
-  resolve_universe: '解析标的池',
-  sync_instruments: '同步个股维表',
+  resolve_universe: '确定同步范围',
+  sync_instruments: '同步标的列表',
   sync_daily: '同步日 K',
   sync_adj: '同步除权因子',
   compute_enriched: '计算技术指标',
@@ -45,7 +45,7 @@ function LogViewer({ log }: { log: PipelineJob['log'] }) {
   }, [displayLog])
 
   return (
-    <div ref={containerRef} className="rounded-btn bg-base/60 border border-border max-h-48 overflow-y-auto px-3 py-2 font-mono text-[11px] space-y-0.5">
+    <div ref={containerRef} className="rounded-btn bg-base/60 border border-border max-h-48 overflow-y-auto px-3 py-2 tabular-nums text-[11px] space-y-0.5">
       {displayLog.map((line, i) => (
         <div key={`${line.ts}-${i}`} className="flex gap-2 text-secondary">
           <span className="text-muted shrink-0">{formatLogTime(line.ts)}</span>
@@ -81,13 +81,13 @@ export function ActiveJobCard({ job }: { job: PipelineJob }) {
             </div>
             <div className="text-xs text-secondary mt-0.5">
               {job.duration_s != null ? `用时 ${formatDuration(job.duration_s)}` : '进行中'}
-              <span data-job-id title="任务编号（排查用）" className="ml-2 font-mono text-[10px] text-muted">{`#${job.id}`}</span>
+              <span data-job-id title="任务编号（排查用）" className="ml-2 tabular-nums text-[11px] text-muted">{`#${job.id}`}</span>
             </div>
           </div>
         </div>
         {!isDone && (
-          <div className="font-mono text-2xl font-bold tracking-tight">
-            {job.progress}<span className="text-[16px] leading-6 text-muted">%</span>
+          <div className="tabular-nums text-[20px] leading-7 font-bold tracking-tight">
+            {job.progress}<span className="text-[14px] leading-6 text-muted">%</span>
           </div>
         )}
       </div>
@@ -103,8 +103,8 @@ export function ActiveJobCard({ job }: { job: PipelineJob }) {
           </div>
           {job.stage_pct > 0 && (
             <div className="flex items-center justify-between mt-1">
-              <span className="text-[10px] text-muted">当前阶段</span>
-              <span className="text-[10px] font-mono text-secondary">{job.stage_pct}%</span>
+              <span className="text-[11px] text-muted">当前阶段</span>
+              <span className="text-[11px] tabular-nums text-secondary">{job.stage_pct}%</span>
             </div>
           )}
         </div>
@@ -130,9 +130,9 @@ export function ActiveJobCard({ job }: { job: PipelineJob }) {
         <div className="mt-3 rounded-btn border border-danger/40 bg-danger/5 px-3 py-2 text-xs text-danger">
           {job.error}
           {job.error.includes('超时自动取消') && (
-            <div className="mt-1 text-[10px] text-muted">
-              判定依据是「无进度」而非总时长，任务只要仍在推进就不会被中断;
-              若网络环境较慢可在 设置 → 网络设置 中调大停滞阈值。
+            <div className="mt-1 text-[11px] text-muted">
+              按「无进度时长」判定，仍在推进的任务不会中断 ·
+              网络较慢时可在「设置 › 网络设置」调大阈值
             </div>
           )}
         </div>

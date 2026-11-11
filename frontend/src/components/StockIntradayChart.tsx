@@ -34,14 +34,14 @@ export function intradayNotice(data?: {
   realtime_tail?: { source: string } | null
   data_delay_minutes?: number
 }): string {
-  if (!data) return '美东时间'
+  if (!data) return 'ET'
   const src = data.realtime_tail?.source ?? data.realtime_source
-  if (src) return `实时 · ${SOURCE_LABEL[src] ?? src} · 美东时间`
+  if (src) return `实时 · ${SOURCE_LABEL[src] ?? src} · ET`
   const delay = data.data_delay_minutes
   if (data.in_session && delay != null && delay > 0) {
-    return `实时源暂不可用，最近约${delay}分钟待补 · 美东时间`
+    return `实时源不可用 · 最近约 ${delay} 分钟待补 · ET`
   }
-  return '美东时间'
+  return 'ET'
 }
 
 export function StockIntradayChart({
@@ -148,7 +148,7 @@ export function StockIntradayChart({
       )}
       {minuteRows.length > 0 && (
         <>
-          <div className="h-5 px-2 text-[10px] leading-5 text-muted truncate" title={minuteNotice}>{minuteNotice}</div>
+          <div className="h-5 px-2 text-[11px] leading-5 text-muted truncate" title={minuteNotice}>{minuteNotice}</div>
           <EChartsIntraday
             data={minuteRows}
             height={height - 20}

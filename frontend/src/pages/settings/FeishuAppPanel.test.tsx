@@ -49,7 +49,7 @@ afterEach(() => {
 
 it('without server credentials it says so and never asks the browser for a secret', async () => {
   await render(false, '')
-  expect(host.textContent).toContain('服务端未配置飞书应用凭据')
+  expect(host.textContent).toContain('未配置飞书应用凭据')
   expect(host.querySelector('input[type="password"]')).toBeNull()
   expect(mocks.feishuAppChats).not.toHaveBeenCalled()
 })

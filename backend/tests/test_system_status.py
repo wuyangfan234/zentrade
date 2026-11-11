@@ -30,7 +30,11 @@ def test_system_status_lists_all_components(tmp_path, monkeypatch):
                  "alpaca_mirror", "premarket_gap", "notifications", "earnings", "corporate_actions", "daily_pipeline", "data_freshness"):
         assert want in names, want
     ex = next(c for c in body["components"] if c["id"] == "execution_quotes")
-    assert ex["state"] == "ok" and "tickflow" in ex["summary"]
+    assert ex["state"] == "ok" and "TickFlow" in ex["summary"]
+    # 摘要是给人看的: 来源码、任务名、管道阶段码不直接上屏
+    for c in body["components"]:
+        for raw in ("tickflow", "zen_trade", "stage="):
+            assert raw not in c["summary"], (c["id"], c["summary"])
     assert {j["id"] for j in body["jobs"]} == {"zen_paper_tick", "zen_hot_quotes"}
     assert all({"id", "label", "state", "summary"} <= set(c) for c in body["components"])
 
@@ -73,8 +77,8 @@ def test_evidence_row_in_v4_shows_current_ruleset_and_forward_not_dashes(tmp_pat
                                                             "params": {}, "created_at": "2026-10-08T18:15:59+08:00"}))
     row = _component(_status_app(tmp_path).get("/api/trading/system-status").json(), "evidence")
     assert "窗口 —" not in row["summary"] and "生成于 —" not in row["summary"]
-    assert "v4" in row["summary"] and "规则集 R2" in row["summary"] and "2026-10-08 06:15 ET" in row["summary"]
-    assert "勾选 2 条" in row["summary"] and "前向确认" in row["summary"]
+    assert "规则集 R2" in row["summary"] and "2026-10-08 06:15 ET" in row["summary"]
+    assert "勾选 2 条" in row["summary"] and "前向验证样本 0" in row["summary"]
     assert "evaluation.json" not in row["source"] and "rules/R2.json" in row["source"]
 
 
@@ -199,14 +203,14 @@ def test_open_radar_row_shows_push_switch_and_today_push(tmp_path, monkeypatch):
     monkeypatch.setattr(us_clock, "_calendar_provider", None)
     monkeypatch.setattr(us_clock, "today", lambda: d0)
     row = _component(_status_app(tmp_path).get("/api/trading/system-status").json(), "open_radar")
-    assert row["summary"].endswith("\uff1b外部推送开 \u00b7 相对量 \u22653x\uff09")   # external push on, rvol >= 3x
+    assert row["summary"].endswith("\uff1b推送开 \u00b7 相对量 \u22653x\uff09")   # external push on, rvol >= 3x
     open_radar.root(tmp_path).mkdir(parents=True)
     open_radar.day_path(tmp_path, d0).write_text(json.dumps({"day": d0.isoformat(), "at": "2026-10-19T09:51:00-04:00", "rows": [
         {"symbol": "NVDA", "rvol": 4.0, "pick": True}], "push": {"symbols": ["NVDA"]}}))
     open_radar.save_push_settings(tmp_path, enabled=False, min_rvol=5)
     row = _component(_status_app(tmp_path).get("/api/trading/system-status").json(), "open_radar")
     assert "NVDA\uff1b\u63a8\u9001 NVDA" in row["summary"]                                  # 点名 NVDA; 推送 NVDA
-    assert row["summary"].endswith("外部推送关\uff09")                       # external push off
+    assert row["summary"].endswith("\uff1b推送关\uff09")                       # external push off
 
 
 def test_qveris_row_survives_unreconciled_billing_and_whole_page_still_loads(tmp_path, monkeypatch):

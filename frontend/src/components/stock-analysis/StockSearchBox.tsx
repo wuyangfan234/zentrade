@@ -92,7 +92,7 @@ export function StockSearchBox({ onSelect, assetTypes = 'stock' }: Props) {
               搜索中…
             </div>
           ) : results.length === 0 ? (
-            <div className="px-4 py-6 text-center text-xs text-muted">未找到匹配的股票</div>
+            <div className="px-4 py-6 text-center text-xs text-muted">无匹配结果</div>
           ) : (
             results.map((r, i) => (
               <button
@@ -100,13 +100,13 @@ export function StockSearchBox({ onSelect, assetTypes = 'stock' }: Props) {
                 type="button"
                 onClick={() => handleSelect(r)}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100 ${
-                  i === activeIdx ? 'bg-accent/10 text-accent' : 'hover:bg-elevated text-foreground'
+                  i === activeIdx ? 'bg-accent/10 text-accent dark:text-blue-400' : 'hover:bg-elevated text-foreground'
                 }`}
               >
-                <span className="font-mono shrink-0 text-xs w-[64px]">{r.symbol}</span>
+                <span className="tabular-nums shrink-0 text-xs w-[64px]">{r.symbol}</span>
                 <span className="truncate text-sm flex-1">{r.name}</span>
                 {r.asset_type === 'etf' && (
-                  <span className="shrink-0 px-1 py-0.5 rounded text-[10px] leading-none bg-accent/10 text-accent">ETF</span>
+                  <span className="shrink-0 px-1 py-0.5 rounded text-[11px] leading-none bg-accent/10 text-accent dark:text-blue-400">ETF</span>
                 )}
               </button>
             ))

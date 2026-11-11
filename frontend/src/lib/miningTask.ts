@@ -324,9 +324,9 @@ export async function startAutoMining(payload: Parameters<typeof api.miningAutoS
     update({
       isPending: false,
       progress: null,
-      error: `${screening?.n_total ?? 0} 个因子里 0 个达标，未启动挖掘。`
+      error: `${screening?.n_total ?? 0} 个因子中 0 个达标，未开始挖掘。`
         + (topReasons ? `主要失败原因：${topReasons}。` : '')
-        + '可改选「探索」档（门槛更低）或拉长日期区间后重试。',
+        + '可改用「探索」档或延长日期区间后重试。',
     })
     return 'no_result'
   } catch (error) {

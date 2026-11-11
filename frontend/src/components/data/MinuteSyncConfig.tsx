@@ -104,7 +104,7 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
               disabled={!hasMinuteCap || !enabled || localDays <= 1}
               className="h-6 w-6 flex items-center justify-center rounded-l-btn bg-elevated border border-border text-secondary hover:bg-border/50 disabled:opacity-30 transition-colors text-xs"
             >−</button>
-            <div className={`h-6 w-8 flex items-center justify-center border-y border-border text-[11px] font-mono tabular-nums ${enabled ? 'text-foreground bg-base' : 'text-muted bg-elevated/50'}`}>
+            <div className={`h-6 w-8 flex items-center justify-center border-y border-border text-[11px] tabular-nums ${enabled ? 'text-foreground bg-base' : 'text-muted bg-elevated/50'}`}>
               {localDays}
             </div>
             <button
@@ -113,7 +113,7 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
               className="h-6 w-6 flex items-center justify-center rounded-r-btn bg-elevated border border-border text-secondary hover:bg-border/50 disabled:opacity-30 transition-colors text-xs"
             >+</button>
           </div>
-          <span className="text-[10px] text-muted">天</span>
+          <span className="text-[11px] text-muted">天</span>
           {!hasMinuteCap && (
             <MissingCapChip capKey="kline.minute.batch" />
           )}
@@ -125,7 +125,7 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <span className="text-xs text-foreground font-medium">分段大小</span>
-          <span className="text-[10px] text-muted px-1 py-px rounded bg-warning/8 text-warning">内存优化</span>
+          <span className="text-[11px] text-muted px-1 py-px rounded bg-warning/8 text-warning">内存优化</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center">
@@ -134,7 +134,7 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
               disabled={!hasMinuteCap || localSegment <= 5}
               className="h-6 w-6 flex items-center justify-center rounded-l-btn bg-elevated border border-border text-secondary hover:bg-border/50 disabled:opacity-30 transition-colors text-xs"
             >−</button>
-            <div className="h-6 w-8 flex items-center justify-center border-y border-border text-[11px] font-mono tabular-nums bg-base text-foreground">
+            <div className="h-6 w-8 flex items-center justify-center border-y border-border text-[11px] tabular-nums bg-base text-foreground">
               {localSegment}
             </div>
             <button
@@ -143,11 +143,11 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
               className="h-6 w-6 flex items-center justify-center rounded-r-btn bg-elevated border border-border text-secondary hover:bg-border/50 disabled:opacity-30 transition-colors text-xs"
             >+</button>
           </div>
-          <span className="text-[10px] text-muted">交易日/段</span>
+          <span className="text-[11px] text-muted">交易日/段</span>
         </div>
       </div>
-      <div className="text-[10px] text-muted leading-relaxed -mt-1">
-        每段拉完即写盘，避免内存堆积。越小越省内存但越慢，默认 20 平衡。
+      <div className="text-[11px] text-muted leading-relaxed -mt-1">
+        分段同步 · 越小越省内存、越慢 · 默认 20
       </div>
       </div>
 
@@ -156,7 +156,7 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
         <div className="flex items-center gap-1.5">
           <Download className="h-3 w-3 text-secondary" />
           <span className="text-[11px] text-secondary font-medium">手动获取</span>
-          <span className="text-[10px] text-muted">不受自动同步开关影响</span>
+          <span className="text-[11px] text-muted">不受自动同步开关影响</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
         <button
@@ -178,13 +178,13 @@ export function MinuteSyncConfig({ hasCap, onJobStart }: { hasCap: boolean; onJo
           {fetchingMode === '1y' ? (
             <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>分段获取中…</span></>
           ) : (
-            <><Calendar className="h-3.5 w-3.5" /><span>获取最近 1 年</span><span className="text-[9px] opacity-70">分段拉取</span></>
+            <><Calendar className="h-3.5 w-3.5" /><span>获取最近 1 年</span><span className="text-[11px] opacity-70">分段拉取</span></>
           )}
         </button>
         </div>
-        <div className="text-[10px] text-muted leading-relaxed">
+        <div className="text-[11px] text-muted leading-relaxed">
           美股标的 · 前复权价格 · 从本地最早数据向前叠加 ·{' '}
-          均按上方「分段大小」分段拉取、每段即落盘
+          按上方「分段大小」分段同步
         </div>
       </div>
 

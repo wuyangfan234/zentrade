@@ -86,16 +86,16 @@ const SEVERITY_BAR: Record<string, string> = {
 }
 const SOURCE_BADGE: Record<string, { label: string; cls: string }> = {
   strategy:  { label: '策略',   cls: 'bg-amber-400/15 text-amber-700 dark:text-amber-400' },
-  signal:    { label: '信号',   cls: 'bg-accent/15 text-accent' },
+  signal:    { label: '信号',   cls: 'bg-accent/15 text-accent dark:text-blue-400' },
   price:     { label: '价格',   cls: 'bg-emerald-400/15 text-emerald-700 dark:text-emerald-400' },
   market:    { label: '异动',   cls: 'bg-purple-500/15 text-purple-700 dark:text-purple-400' },
   pool_entry: { label: '进入', cls: 'bg-danger/15 text-danger' },
-  pool_exit:   { label: '移出', cls: 'bg-bear/15 text-bear' },
+  pool_exit:   { label: '移出', cls: 'bg-bear/15 text-emerald-800 dark:text-bear' },
   buy_signal: { label: '买入', cls: 'bg-danger/15 text-danger' },
-  sell_signal: { label: '卖出', cls: 'bg-bear/15 text-bear' },
+  sell_signal: { label: '卖出', cls: 'bg-bear/15 text-emerald-800 dark:text-bear' },
   new_entry: { label: '进入', cls: 'bg-danger/15 text-danger' },
-  dropped:   { label: '移出', cls: 'bg-bear/15 text-bear' },
-  paper:     { label: '模拟盘', cls: 'bg-sky-400/15 text-sky-700 dark:text-sky-300' },
+  dropped:   { label: '移出', cls: 'bg-bear/15 text-emerald-800 dark:text-bear' },
+  paper:     { label: '模拟账户', cls: 'bg-sky-400/15 text-sky-700 dark:text-sky-300' },
 }
 
 // ===== 容器 — 挂在 Layout =====
@@ -162,13 +162,13 @@ export function AlertToastContainer() {
 
               {/* 顶行: 分类标签 + 代码/名称 + 涨跌幅 + 关闭 */}
               <div className="flex items-center gap-2">
-                <span className={cn('shrink-0 rounded px-1 py-px text-[9px] font-medium', badge.cls)}>
+                <span className={cn('shrink-0 rounded px-1 py-px text-[11px] font-medium', badge.cls)}>
                   {badge.label}
                 </span>
-                {ev.symbol && <span className="font-mono text-xs font-medium text-foreground shrink-0">{ev.symbol}</span>}
+                {ev.symbol && <span className="tabular-nums text-xs font-medium text-foreground shrink-0">{ev.symbol}</span>}
                 {ev.name && <span className="text-xs text-secondary truncate flex-1">{ev.name}</span>}
                 {ev.change_pct != null && (
-                  <span className={cn('inline-flex items-center gap-0.5 text-[10px] font-mono font-medium shrink-0', pct >= 0 ? 'text-danger' : 'text-bear')}>
+                  <span className={cn('inline-flex items-center gap-0.5 text-[11px] tabular-nums font-medium shrink-0', pct >= 0 ? 'text-danger' : 'text-bear')}>
                     {pct >= 0 ? <TrendingUp className="h-2.5 w-2.5" /> : <TrendingDown className="h-2.5 w-2.5" />}
                     {fmtPct(pct)}
                   </span>
@@ -189,9 +189,9 @@ export function AlertToastContainer() {
                       </span>
                       {sname
                         ? <span className="truncate text-[11px] font-medium text-amber-700 dark:text-amber-400">「{sname}」</span>
-                        : ev.message && <span className="truncate text-[10px] text-muted">{ev.message}</span>}
+                        : ev.message && <span className="truncate text-[11px] text-muted">{ev.message}</span>}
                       <span className="flex-1" />
-                      {ev.price != null && <span className="text-[10px] font-mono text-muted shrink-0">{fmtPrice(ev.price)}</span>}
+                      {ev.price != null && <span className="text-[11px] tabular-nums text-muted shrink-0">{fmtPrice(ev.price)}</span>}
                     </div>
                   ) : (
                     <div className="mt-1 flex min-w-0 items-center gap-1.5 pl-0.5">
@@ -202,7 +202,7 @@ export function AlertToastContainer() {
                   {ev.signals && ev.signals.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1 pl-0.5">
                       {ev.signals.map(signal => (
-                        <span key={signal} className="rounded bg-accent/8 px-1 py-px text-[9px] text-accent">{cnSignal(signal, customNames)}</span>
+                        <span key={signal} className="rounded bg-accent/8 px-1 py-px text-[11px] text-accent">{cnSignal(signal, customNames)}</span>
                       ))}
                     </div>
                   )}
@@ -236,7 +236,7 @@ export function AlertToastContainer() {
                 return (
                   <div className="mt-1 flex flex-wrap items-center gap-1 pl-0.5">
                     {tags.map((t, i) => (
-                      <span key={i} className={cn('rounded px-1 py-px text-[9px] leading-tight', t.cls)}>{t.text}</span>
+                      <span key={i} className={cn('rounded px-1 py-px text-[11px] leading-tight', t.cls)}>{t.text}</span>
                     ))}
                   </div>
                 )

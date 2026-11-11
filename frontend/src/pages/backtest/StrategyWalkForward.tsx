@@ -32,7 +32,7 @@ function Stat({ label, value, hint, color }: { label: string; value: string; hin
     <div className="rounded-input border border-border bg-elevated/40 p-2.5">
       <div className="text-[11px] text-secondary">{label}</div>
       <div className="mt-0.5 text-sm font-semibold" style={color ? { color } : undefined}>{value}</div>
-      {hint && <div className="mt-0.5 text-[10px] text-secondary">{hint}</div>}
+      {hint && <div className="mt-0.5 text-[11px] text-secondary">{hint}</div>}
     </div>
   )
 }
@@ -59,12 +59,12 @@ function OosEquityChart({ curve }: { curve: { fold: number; date: string; value:
   const up = last >= 1
   return (
     <div>
-      <div className="mb-1 text-xs font-medium text-secondary">OOS 拼接净值 (逐折复利)</div>
+      <div className="mb-1 text-xs font-medium text-secondary">样本外拼接净值（逐折复利）</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" preserveAspectRatio="none" style={{ height: 120 }}>
         <line x1={pad} y1={y(1)} x2={W - pad} y2={y(1)} stroke="currentColor" strokeWidth="0.5" className="text-border" strokeDasharray="3 3" />
         <path d={d} fill="none" stroke={up ? '#34d399' : '#f87171'} strokeWidth="1.5" />
       </svg>
-      <div className="mt-0.5 text-[10px] text-secondary">终值 {last.toFixed(4)} · {curve.length} 折</div>
+      <div className="mt-0.5 text-[11px] text-secondary">终值 {last.toFixed(4)} · {curve.length} 折</div>
     </div>
   )
 }
@@ -158,15 +158,15 @@ export function StrategyWalkForward() {
         {/* 滚动窗口 */}
         <div className="grid grid-cols-3 gap-1.5">
           <div>
-            <label className="mb-1 block text-[11px] text-secondary">训练(天)</label>
+            <label className="mb-1 block text-[11px] text-secondary">训练（天）</label>
             <input type="number" min={1} value={trainDays} onChange={e => setTrainDays(e.target.value)} className={INPUT_CLS} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-secondary">测试(天)</label>
+            <label className="mb-1 block text-[11px] text-secondary">测试（天）</label>
             <input type="number" min={1} value={testDays} onChange={e => setTestDays(e.target.value)} className={INPUT_CLS} />
           </div>
           <div>
-            <label className="mb-1 block text-[11px] text-secondary">步进(天)</label>
+            <label className="mb-1 block text-[11px] text-secondary">步进（天）</label>
             <input type="number" min={1} value={stepDays} onChange={e => setStepDays(e.target.value)} className={INPUT_CLS} />
           </div>
         </div>
@@ -188,7 +188,7 @@ export function StrategyWalkForward() {
             <Square className="h-3.5 w-3.5" /> 停止
           </button>
         ) : (
-          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
             <Play className="h-3.5 w-3.5" /> 开始步进优化
           </button>
         )}
@@ -214,13 +214,13 @@ export function StrategyWalkForward() {
         {!result && !task?.isPending && (
           <EmptyState
             title="步进优化"
-            hint="每折在训练区间网格优化选最优参数，再在紧邻的测试区间做样本外(OOS)验证。样本内漂亮、样本外崩溃即过拟合。"
+            hint="每折在训练区间选最优参数，再在紧邻的测试区间做样本外验证 · 样本内好、样本外差即过拟合"
           />
         )}
 
         {result && result.n_folds === 0 && (
           <EmptyState title="未产生有效折"
-            hint={`计划 ${result.n_planned_folds} 折，但 ${result.n_skipped} 折因训练区间未优化出参数或 OOS 回测失败被跳过。请检查数据范围或放宽参数网格。`} />
+            hint={`计划 ${result.n_planned_folds} 折，但 ${result.n_skipped} 折因训练区间无可用参数或样本外回测失败被跳过 · 请检查数据范围或放宽参数范围`} />
         )}
 
         {result && summary && result.n_folds > 0 && (
@@ -287,7 +287,7 @@ export function StrategyWalkForward() {
             {degradation != null && degradation > 0 && (
               <div className="flex items-center gap-1.5 rounded-input border border-red-500/30 bg-red-500/5 px-3 py-2 text-[11px] text-red-700 dark:text-red-400">
                 <TrendingDown className="h-3.5 w-3.5" />
-                样本外目标较样本内退化 {degradation.toFixed(3)}，提示参数可能过拟合训练区间。
+                样本外目标较样本内退化 {degradation.toFixed(3)} · 参数可能过拟合
               </div>
             )}
           </div>

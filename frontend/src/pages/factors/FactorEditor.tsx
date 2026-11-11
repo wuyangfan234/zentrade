@@ -8,7 +8,7 @@ import { QK } from '@/lib/queryKeys'
 import { RETIRED_MARKET_FIELDS } from '@/lib/retired-market-fields'
 
 const INPUT_CLS = 'w-full rounded-input border border-border bg-surface px-2.5 py-1.5 text-xs focus:border-accent focus:outline-none'
-const CHIP_CLS = 'shrink-0 rounded-btn border border-border bg-base/60 px-1.5 py-0.5 font-mono text-[10px] text-secondary transition-colors hover:border-accent/40 hover:text-accent cursor-pointer'
+const CHIP_CLS = 'shrink-0 rounded-btn border border-border bg-base/60 px-1.5 py-0.5 font-mono text-[11px] text-secondary transition-colors hover:border-accent/40 hover:text-accent cursor-pointer'
 
 const DEFAULT_FORMULA = 'rank(-ts_sum(change_pct, 5))'
 const DEFAULT_GROUP = '自定义'
@@ -296,7 +296,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
           <FlaskConical className="h-4 w-4 shrink-0 text-accent" />
           <span className="shrink-0 text-sm font-medium text-foreground">因子编辑器</span>
           {editing && (
-            <span className="inline-flex shrink-0 items-center gap-1 rounded-btn border border-accent/40 bg-accent/5 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+            <span className="inline-flex shrink-0 items-center gap-1 rounded-btn border border-accent/40 bg-accent/5 px-1.5 py-0.5 text-[11px] font-medium text-accent dark:text-blue-400">
               <PenLine className="h-3 w-3" />
               编辑 {editing.id} · v{editing.version}
             </span>
@@ -308,7 +308,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                 if (!event.target.value) { resetForNew(); return }
                 loadForEdit(event.target.value)
               }}
-              className="ml-auto h-7 max-w-[14rem] shrink-0 rounded-input border border-border bg-surface px-1.5 text-[10px] text-secondary"
+              className="ml-auto h-7 max-w-[14rem] shrink-0 rounded-input border border-border bg-surface px-1.5 text-[11px] text-secondary"
               aria-label="编辑已有自定义因子"
             >
               <option value="">新建因子</option>
@@ -323,7 +323,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <label className="shrink-0 text-xs font-medium text-secondary">公式 (DSL)</label>
             <select
-              className="h-7 shrink-0 rounded-input border border-border bg-surface px-1.5 text-[10px] text-secondary"
+              className="h-7 shrink-0 rounded-input border border-border bg-surface px-1.5 text-[11px] text-secondary"
               onChange={event => {
                 const value = event.target.value
                 if (!value) return
@@ -365,7 +365,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
         <div className="space-y-1.5">
           <details
             open
-            className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[10px]"
+            className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[11px]"
           >
             <summary className="flex cursor-pointer select-none items-center gap-1 font-medium text-foreground transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 shrink-0 text-accent transition-transform group-open:rotate-90" />
@@ -394,7 +394,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             </div>
             <div className="mt-1.5 text-muted">四则运算 <code className="font-mono text-accent">+ - * /</code> · 除零 = 空值</div>
           </details>
-          <details className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[10px]">
+          <details className="group rounded-btn border border-border/60 bg-base/40 px-2.5 py-1.5 text-[11px]">
             <summary className="flex cursor-pointer select-none items-center gap-1 font-medium text-foreground transition-colors hover:text-accent [&::-webkit-details-marker]:hidden">
               <ChevronRight className="h-3 w-3 shrink-0 text-accent transition-transform group-open:rotate-90" />
               字段 {columns.data?.columns.length ?? 0}
@@ -402,7 +402,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             <div className="mt-1.5 max-h-64 space-y-1.5 overflow-y-auto">
               {fieldGroups.map(([group, cols]) => (
                 <div key={group}>
-                  <div className="mb-0.5 text-[10px] font-medium text-secondary">{group}</div>
+                  <div className="mb-0.5 text-[11px] font-medium text-secondary">{group}</div>
                   <div className="flex flex-wrap gap-1">
                     {cols.map(col => (
                       <button
@@ -443,7 +443,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             type="button"
             onClick={() => runTrial.mutate(formula)}
             disabled={!canTrial}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
             title={validationOk ? '最近 40 个交易日 · IC' : '需先校验'}
           >
             <Play className="h-3.5 w-3.5" />
@@ -479,7 +479,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
         {validation && (
           <div className="space-y-2">
             {validation.ok ? (
-              <div className="flex items-center gap-2 rounded-btn border border-bull/30 bg-bull/10 px-3 py-2 text-xs text-bull">
+              <div className="flex items-center gap-2 rounded-btn border border-bull/30 bg-bull/10 px-3 py-2 text-xs text-bull dark:text-red-400">
                 <CircleCheck className="h-4 w-4 shrink-0" />
                 有效 · 预热 {validation.warmup_bars} 日{validation.cross_sectional && ' · 含截面算子'}
               </div>
@@ -493,7 +493,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                     key={index}
                     type="button"
                     onClick={() => locateError(error.position?.offset)}
-                    className="block w-full text-left font-mono text-[10px] leading-relaxed text-danger transition-colors hover:text-danger/80"
+                    className="block w-full text-left font-mono text-[11px] leading-relaxed text-danger transition-colors hover:text-danger/80"
                     title={error.position != null ? `第 ${error.position.offset} 个字符` : undefined}
                   >
                     {dslErrorText(error)}
@@ -502,7 +502,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
               </div>
             )}
             {validation.ok && (
-              <div className="grid grid-cols-1 gap-2 text-[10px] sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
                 <div className="rounded-btn border border-border bg-base/40 px-2.5 py-1.5">
                   <div className="mb-0.5 text-muted">依赖列</div>
                   <code className="break-all font-mono text-secondary">{validation.dependencies.join(', ') || '—'}</code>
@@ -545,13 +545,13 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                     ['空值率', trial.null_ratio != null ? `${(trial.null_ratio * 100).toFixed(0)}%` : '—'],
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} className="rounded-btn border border-border bg-base/40 px-1 py-1.5" title={label === 't 值 (NW)' ? 'Newey-West t 值 · 滞后 1 · |t| ≥ 2 显著 · 40 日样本仅供参考' : undefined}>
-                      <div className="whitespace-nowrap text-[10px] text-muted">{label}</div>
+                      <div className="whitespace-nowrap text-[11px] text-muted">{label}</div>
                       <div className="font-mono text-sm text-foreground">{value}</div>
                     </div>
                   ))}
                 </div>
                 <div className="rounded-btn border border-border bg-base/40 px-3 py-2">
-                  <div className="mb-1.5 text-[10px] text-muted">IC 走势 · 最近 {trial.ic_series.length} 日</div>
+                  <div className="mb-1.5 text-[11px] text-muted">IC 走势 · 最近 {trial.ic_series.length} 日</div>
                   <div className="flex h-16 items-center gap-px">
                     {trial.ic_series.map(point => {
                       const height = Math.min(Math.abs(point.ic) * 160, 100)
@@ -564,7 +564,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                     })}
                   </div>
                 </div>
-                <div className="text-[10px] leading-relaxed text-muted">
+                <div className="text-[11px] leading-relaxed text-muted">
                   快照 · 无成本 / 分层
                 </div>
               </>
@@ -632,7 +632,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                 type="button"
                 onClick={() => save.mutate()}
                 disabled={!saveLabel.trim() || save.isPending}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-3.5 w-3.5" />
                 {saveButtonText}
@@ -648,7 +648,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
               )}
             </div>
             {savedId && savedVersion != null && (
-              <div className="mt-1 text-[10px] text-bull">已保存 · {savedId} v{savedVersion}</div>
+              <div className="mt-1 text-[11px] text-bull">已保存 · {savedId} v{savedVersion}</div>
             )}
           </div>
         )}

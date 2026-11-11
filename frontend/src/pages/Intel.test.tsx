@@ -39,7 +39,7 @@ it('renders all sections from the production payload', async () => {
   await render(P)
   for (const k of ['tape', 'calendar', 'news', 'earnings', 'sources']) expect(host.querySelector(`[data-intel="${k}"]`)).not.toBeNull()
   expect(host.querySelectorAll('[data-heat]').length).toBe(18)                 // 12 板块 + 6 跨资产
-  expect(host.querySelector('[data-intel-cell="QQQ"]')?.textContent).toContain('非今日')   // 周一盘前: 指数是上周五收盘
+  expect(host.querySelector('[data-intel-cell="QQQ"]')?.textContent).toContain('非当日')   // 周一盘前: 指数是上周五收盘
   expect(host.querySelector('[data-intel-cell="pcr"]')?.textContent).toContain('0.67')
   expect(host.querySelector('[data-intel-breadth]')?.textContent).toContain('3100 只')
   expect(host.querySelectorAll('[data-earn]').length).toBe(6)
@@ -59,7 +59,7 @@ it('calendar shows actual, pending and unmapped states', async () => {
   expect(surpriseLabel(ev({ actual: '3.5%', surprise: 'above' }))).toBe('高于预期')
   expect(surpriseLabel(ev({ actual: '0.3%', surprise: 'inline' }))).toBe('符合预期')
   expect(surpriseLabel(ev({ actual_status: 'pending' }))).toBe('实际待同步')
-  expect(surpriseLabel(ev({ actual_status: 'unmapped' }))).toBe('已公布 · 无实际值源')
+  expect(surpriseLabel(ev({ actual_status: 'unmapped' }))).toBe('已公布')
   expect(surpriseLabel(ev({ actual_status: 'mismatch' }))).toBe('已公布 · 推算口径未对齐，不显示')
   expect(surpriseLabel(ev({ actual: '0.4%', surprise: 'near' }))).toBe('接近预期')
   const day = P.calendar!.today
@@ -73,7 +73,7 @@ it('calendar shows actual, pending and unmapped states', async () => {
   const rows = host.querySelectorAll('[data-cal-event="macro"]')
   expect(rows[0].querySelector('[data-actual]')?.textContent).toBe('实际 3.5%')
   expect(rows[0].textContent).toContain('GDP 季环比年化 (初值)')
-  expect(rows[1].querySelector('[data-surprise]')?.textContent).toBe('已公布 · 无实际值源')
+  expect(rows[1].querySelector('[data-surprise]')?.textContent).toBe('已公布')
 })
 
 it('impact level radio posts the setting', async () => {
@@ -139,7 +139,7 @@ it('index cell shows price and live session label', async () => {
   expect(spy.querySelector('[data-price]')?.textContent).toBe('767.47')
   expect(spy.textContent).toContain('+0.27%')
   expect(spy.textContent).toContain('盘前 08:04 · 对官方前收')
-  expect(spy.textContent).not.toContain('非今日')
+  expect(spy.textContent).not.toContain('非当日')
   expect(host.querySelector('[data-intel-cell="QQQ"] [data-price]')?.textContent).toBe('721.25')
   expect(quoteSub({ symbol: 'X', name: 'X', live: true, session: 'post', time_et: '16:22' }, '2026-10-27')).toBe('盘后 16:22 · 对官方前收')
   expect(quoteSub({ symbol: 'X', name: 'X', live: true }, '2026-10-27')).toBe('对官方前收')

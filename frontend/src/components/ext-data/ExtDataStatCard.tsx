@@ -76,7 +76,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <h3 className="text-sm font-medium text-foreground">{config.label}</h3>
         <div className="flex items-center gap-1.5">
-          <span className={`text-[10px] px-1.5 py-px rounded font-medium ${
+          <span className={`text-[11px] px-1.5 py-px rounded font-medium ${
             config.mode === 'snapshot'
               ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400'
               : 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
@@ -92,8 +92,8 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
         </div>
       </div>
 
-      <div className="px-4 pb-1.5 text-[10px] text-muted leading-relaxed line-clamp-2">
-        {config.description || `扩展数据 · ${config.mode === 'snapshot' ? '与标的 JOIN' : '与日K JOIN'}`}
+      <div className="px-4 pb-1.5 text-[11px] text-muted leading-relaxed line-clamp-2">
+        {config.description || `扩展数据 · ${config.mode === 'snapshot' ? '按代码关联' : '按日 K 关联'}`}
       </div>
 
       <div className="flex-1 min-h-[81px] px-4 pb-2">
@@ -105,7 +105,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
             {config.fields
               .filter(f => f.name !== 'symbol' && f.name !== 'code')
               .map((f) => (
-                <span key={f.name} className="inline-flex items-center gap-1 text-[10px] bg-elevated rounded px-1.5 py-0.5">
+                <span key={f.name} className="inline-flex items-center gap-1 text-[11px] bg-elevated rounded px-1.5 py-0.5">
                   <Tag className="h-2.5 w-2.5 text-muted" />
                   <span className="text-secondary">{f.label || f.name}</span>
                 </span>
@@ -123,7 +123,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
           {fieldsExpanded && fieldsOverflow && (
             <button
               onClick={() => setFieldsExpanded(false)}
-              className="w-full flex items-center justify-center pt-1 text-[10px] text-muted hover:text-secondary transition-colors"
+              className="w-full flex items-center justify-center pt-1 text-[11px] text-muted hover:text-secondary transition-colors"
             >
               <ChevronUp className="h-3 w-3" />
             </button>
@@ -134,7 +134,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
       <div className="mt-auto px-4 pb-4 pt-2 border-t border-border/50">
         <div className="flex justify-between text-[11px]">
           <span className="text-muted">标识</span>
-          <span className="font-mono text-secondary">{config.id}</span>
+          <span className="tabular-nums text-secondary">{config.id}</span>
         </div>
         <div className="flex justify-between text-[11px] mt-1">
           <span className="text-muted">最新</span>
@@ -173,7 +173,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
               <div className="flex gap-1 rounded-lg bg-elevated/60 p-0.5">
                 <button
                   onClick={() => setIngestTab('pull')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
                     ingestTab === 'pull' ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-secondary'
                   }`}
                 >
@@ -181,7 +181,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
                 </button>
                 <button
                   onClick={() => setIngestTab('api')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
                     ingestTab === 'api' ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-secondary'
                   }`}
                 >
@@ -189,7 +189,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
                 </button>
                 <button
                   onClick={() => setIngestTab('file')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[10px] font-medium transition-colors ${
+                  className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-md text-[11px] font-medium transition-colors ${
                     ingestTab === 'file' ? 'bg-surface text-foreground shadow-sm' : 'text-muted hover:text-secondary'
                   }`}
                 >
@@ -234,7 +234,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
                         <span className={`text-[11px] ${dragOver ? 'text-accent' : 'text-secondary'}`}>
                           拖拽文件到此处上传
                         </span>
-                        <span className="text-[10px] text-muted">支持 CSV / Excel，需包含 symbol 列</span>
+                        <span className="text-[11px] text-muted">支持 CSV / Excel，需包含 symbol 列</span>
                       </>
                     )}
                   </div>
@@ -248,7 +248,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
               )}
               <button
                 onClick={() => setShowDelete(true)}
-                className="w-full text-center text-[10px] text-danger hover:text-danger transition-colors"
+                className="w-full text-center text-[11px] text-danger hover:text-danger transition-colors"
               >
                 删除此扩展
               </button>
@@ -286,7 +286,7 @@ export function ExtDataStatCard({ config, onDelete, deleting, onEdit }: {
                     将<span className="text-danger font-medium">永久删除</span>该扩展数据配置及其全部数据，包括字段、已上传/拉取的所有记录。
                   </p>
                   <p className="mt-2 text-[11px] text-danger">
-                    操作不可恢复。
+                    不可恢复
                   </p>
                 </div>
               </div>

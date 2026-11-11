@@ -227,7 +227,7 @@ export function DatePicker({
                         setShowYearPicker(false)
                       }}
                       className={`h-8 text-xs rounded-btn transition-colors duration-100
-                        ${isSelected ? 'bg-accent text-white font-bold' : ''}
+                        ${isSelected ? 'bg-accent dark:bg-blue-700 text-white font-bold' : ''}
                         ${isThisYear && !isSelected ? 'border border-accent/40' : ''}
                         ${!isSelected ? 'hover:bg-elevated cursor-pointer text-foreground' : ''}
                       `}
@@ -240,7 +240,7 @@ export function DatePicker({
             ) : (
               <>
                 {/* 星期头 */}
-                <div className="grid grid-cols-7 text-center text-[10px] text-muted mb-1">
+                <div className="grid grid-cols-7 text-center text-[11px] text-muted mb-1">
                   {WEEKDAYS.map((w) => (
                     <div key={w}>{w}</div>
                   ))}
@@ -265,7 +265,7 @@ export function DatePicker({
                     className={`
                       h-7 w-full text-xs rounded-btn transition-colors duration-100
                       ${c.cur ? 'text-foreground' : 'text-muted'}
-                      ${isSelected ? 'bg-accent text-white font-bold' : ''}
+                      ${isSelected ? 'bg-accent dark:bg-blue-700 text-white font-bold' : ''}
                       ${isToday && !isSelected ? 'border border-accent/40' : ''}
                       ${!isSelected && !c.disabled ? 'hover:bg-elevated' : ''}
                       ${c.disabled ? 'opacity-20 cursor-not-allowed' : 'cursor-pointer'}

@@ -71,14 +71,14 @@ function renderExtInline(
   return (
     <span className="inline-flex flex-wrap items-center gap-0.5">
       {shown.map((tag, i) => (
-        <span key={i} className="inline-block px-1 rounded text-[10px] leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10">
+        <span key={i} className="inline-block px-1 rounded text-[11px] leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10">
           {tag}
         </span>
       ))}
       {!showAll && overflow > 0 && (
         <button
           onClick={onToggle}
-          className="inline-block px-1 rounded text-[10px] leading-tight text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+          className="inline-block px-1 rounded text-[11px] leading-tight text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20 transition-colors"
         >
           +{overflow}
         </button>
@@ -86,7 +86,7 @@ function renderExtInline(
       {showAll && maxTags > 0 && tags.length > maxTags && (
         <button
           onClick={onToggle}
-          className="inline-block px-1 rounded text-[10px] leading-tight text-muted hover:text-foreground transition-colors"
+          className="inline-block px-1 rounded text-[11px] leading-tight text-muted hover:text-foreground transition-colors"
         >
           收起
         </button>
@@ -134,7 +134,7 @@ export function StockInfoBar({
   if (rows.length === 0) {
     const reserveLines = (inlineFields.length > 0 ? 1 : 0) + standaloneFields.length
     return (
-      <div className="px-2 pb-3 font-mono text-[12px] select-none space-y-1">
+      <div className="px-2 pb-3 tabular-nums text-[12px] select-none space-y-1">
         {/* 首行 min-h-7 对齐完整态的 text-lg 价格行高, 加载中不整体变矮 */}
         <div className="flex min-h-7 items-baseline gap-x-3 flex-wrap">
           <span className="text-foreground font-bold text-sm tracking-wide">{symbol}</span>
@@ -210,7 +210,7 @@ export function StockInfoBar({
   const extUrl = buildStockExternalUrl(loadStockExternalTemplate(), symbol)
 
   return (
-    <div className="px-2 pb-3 font-mono text-[12px] select-none space-y-1">
+    <div className="px-2 pb-3 tabular-nums text-[12px] select-none space-y-1">
       {/* Row 1: code, name, price, change, change% */}
       <div className="flex items-baseline gap-x-3 flex-wrap">
         <span className="text-foreground font-bold text-sm tracking-wide">{symbol}</span>
@@ -271,8 +271,8 @@ export function StockInfoBar({
               区间判断，也覆盖「区间外」与「周末加入」两种情况 */}
           {addedDate && (
             <span
-              className="shrink-0 font-mono text-[10px] text-muted"
-              title="加入自选日 (北京时间); 该日无K线时不画竖线"
+              className="shrink-0 tabular-nums text-[11px] text-muted"
+              title="加入自选日（北京时间）"
             >
               自选于 {addedDate}
             </span>

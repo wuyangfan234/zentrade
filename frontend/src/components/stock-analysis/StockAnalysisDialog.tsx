@@ -114,9 +114,9 @@ export function StockAnalysisDialog({ task, mode, minimized }: Props) {
                     {isHistory ? '历史分析报告' : 'AI 个股分析'}
                   </span>
                   {task && <span className="text-xs text-secondary truncate">{task.name}</span>}
-                  {task && <span className="text-[10px] font-mono text-muted shrink-0">{task.symbol}</span>}
+                  {task && <span className="text-[11px] tabular-nums text-muted shrink-0">{task.symbol}</span>}
                 </div>
-                <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted">
+                <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted">
                   {meta?.summary ? (
                     <span className="flex items-center gap-1 truncate">
                       <Sparkles className="h-2.5 w-2.5 shrink-0" />
@@ -167,7 +167,7 @@ export function StockAnalysisDialog({ task, mode, minimized }: Props) {
                   <Loader2 className="absolute -inset-1 h-12 w-12 text-sky-700/40 dark:text-sky-400/40 animate-spin" style={{ animationDuration: '3s' }} />
                 </div>
                 <div className="text-xs text-secondary">AI 正在分析行情与关键价位…</div>
-                <div className="text-[10px] text-muted">读取日 K / 技术指标 / 压力支撑 / 财务（SEC EDGAR），生成四维分析</div>
+                <div className="text-[11px] text-muted">读取日 K / 技术指标 / 压力支撑 / 财务（SEC EDGAR），生成四维分析</div>
               </div>
             )}
 
@@ -204,7 +204,7 @@ export function StockAnalysisDialog({ task, mode, minimized }: Props) {
           {/* 底部:关注点输入 */}
           <div className="border-t border-border/50 bg-surface/60 px-5 py-3">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 text-[10px] text-muted shrink-0">
+              <div className="flex items-center gap-1.5 text-[11px] text-muted shrink-0">
                 <Wand2 className="h-3 w-3" />
                 <span className="hidden sm:inline">关注重点</span>
               </div>
@@ -216,7 +216,7 @@ export function StockAnalysisDialog({ task, mode, minimized }: Props) {
                 disabled={isWorking}
                 placeholder={isHistory ? '修改关注重点，回车重新生成' : (phase === 'done' ? '如:重点看能否突破压力位…回车重新分析' : '可留空，留空则全面分析')}
                 className={cn(
-                  'flex-1 h-8 px-3 rounded-lg bg-base ring-1 ring-border/30 text-xs text-foreground placeholder:text-muted/40',
+                  'flex-1 h-8 px-3 rounded-lg bg-base ring-1 ring-border/30 text-xs text-foreground placeholder:text-muted',
                   'focus:outline-none focus:ring-2 focus:ring-sky-400/30 transition-shadow disabled:opacity-50',
                 )}
               />
@@ -240,10 +240,10 @@ export function StockAnalysisDialog({ task, mode, minimized }: Props) {
                 </button>
               )}
             </div>
-            <p className="mt-1.5 text-[10px] text-muted leading-relaxed">
+            <p className="mt-1.5 text-[11px] text-muted leading-relaxed">
               {isHistory
-                ? '历史报告为静态记录；修改关注重点后将作为新任务重新生成。报告仅供参考，不构成投资建议。'
-                : '报告由项目已配置的 AI 模型基于本地行情与 SEC EDGAR 财务同步生成（未覆盖的标的财务维度标注暂无）；消息面维度暂依据价量异动推断。报告仅供参考，不构成投资建议。'}
+                ? '历史报告不会更新 · 修改关注重点后将重新生成。报告仅供参考，不构成投资建议。'
+                : '报告由 AI 模型基于本地行情与 SEC EDGAR 财务数据生成，消息面依据价量异动推断。报告仅供参考，不构成投资建议。'}
             </p>
           </div>
         </motion.div>

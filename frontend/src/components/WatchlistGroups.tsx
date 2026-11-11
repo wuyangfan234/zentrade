@@ -136,7 +136,7 @@ export function WatchlistGroupBar({
                   active
                     ? color
                       ? `${color.text} ${color.border} ${color.background}`
-                      : 'border-accent/40 bg-accent/10 text-accent'
+                      : 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400'
                     : color
                       ? `border-transparent ${color.text} hover:bg-elevated`
                       : 'border-transparent text-secondary hover:bg-elevated hover:text-foreground'
@@ -150,7 +150,7 @@ export function WatchlistGroupBar({
                 )}
                 {color && <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${color.dot}`} />}
                 <span>{tab.name}</span>
-                <span className={`font-mono text-[10px] tabular-nums ${active && !color ? 'text-accent' : 'text-muted'}`}>
+                <span className={`tabular-nums text-[11px] ${active && !color ? 'text-accent' : 'text-muted'}`}>
                   {tab.count}
                 </span>
                 {pcts && (() => {
@@ -158,7 +158,7 @@ export function WatchlistGroupBar({
                   if (!info || info.pct == null || info.sampled === 0) return null
                   return (
                     <span
-                      className={`font-mono text-[10px] tabular-nums ${groupPctColor(info.pct)}`}
+                      className={`tabular-nums text-[11px] ${groupPctColor(info.pct)}`}
                       title={groupPctTitle(info)}
                     >
                       {fmtPct(info.pct)}
@@ -202,7 +202,7 @@ export function WatchlistGroupBar({
           <div className="relative w-[90vw] max-w-[380px] rounded-card border border-border bg-base shadow-2xl p-6">
             <h3 className="text-sm font-medium text-foreground mb-2">清空分组</h3>
             <p className="text-xs text-secondary mb-5">
-              确认清空「{tabs.find(t => t.id === selected)?.name}」分组? 分组内所有股票将转为未分组(不从自选中删除)。
+              清空「{tabs.find(t => t.id === selected)?.name}」分组 · 组内个股转为未分组，不从自选删除
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -371,7 +371,7 @@ function GroupManagerDialog({
       <div className="flex items-center justify-between border-b border-border px-4 py-3">
         <div>
           <h2 id="watchlist-groups-title" className="text-sm font-semibold text-foreground">管理自选分组</h2>
-          <p className="mt-0.5 text-[11px] text-muted">删除分组不会删除其中的股票</p>
+          <p className="mt-0.5 text-[11px] text-muted">删除分组不删除其中个股</p>
         </div>
         <button type="button" onClick={onClose} className="h-8 w-8 inline-flex items-center justify-center text-muted hover:text-foreground" aria-label="关闭">
           <X className="h-4 w-4" />
@@ -382,7 +382,7 @@ function GroupManagerDialog({
       <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
         <div className="min-w-0">
           <div className="text-xs font-medium text-foreground">显示在侧边栏</div>
-          <div className="mt-0.5 text-[10px] text-muted">开启后可在左侧菜单展开分组子菜单</div>
+          <div className="mt-0.5 text-[11px] text-muted">在左侧菜单显示分组</div>
         </div>
         <button
           type="button"
@@ -391,7 +391,7 @@ function GroupManagerDialog({
           className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 disabled:opacity-50 ${
             groupsInNav ? 'bg-accent' : 'bg-elevated'
           }`}
-          title={groupsInNav ? '已开启 — 点击关闭' : '已关闭 — 点击开启'}
+          title={groupsInNav ? '已开启' : '已关闭'}
         >
           <span className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
             groupsInNav ? 'translate-x-[18px]' : 'translate-x-0.5'
@@ -414,7 +414,7 @@ function GroupManagerDialog({
             type="button"
             onClick={() => void create()}
             disabled={pending}
-            className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs text-white disabled:opacity-50"
+            className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 text-xs text-white disabled:opacity-50"
           >
             <Plus className="h-3.5 w-3.5" />
             新建
@@ -460,7 +460,7 @@ function GroupManagerDialog({
             ) : deletingId === group.id ? (
               <>
                 <span className="min-w-0 flex-1 text-xs text-secondary">
-                  删除“{group.name}”？{(counts[group.id] ?? 0) > 0 ? ` ${counts[group.id]} 只股票将回到未分组。` : ''}
+                  删除“{group.name}”？{(counts[group.id] ?? 0) > 0 ? ` ${counts[group.id]} 只个股将转为未分组` : ''}
                 </span>
                 <button
                   type="button"
@@ -477,7 +477,7 @@ function GroupManagerDialog({
             ) : (
               <>
                 <span className={`min-w-0 flex-1 truncate text-xs ${color.text}`}>{group.name}</span>
-                <span className="font-mono text-[10px] text-muted tabular-nums">{counts[group.id] ?? 0} 只</span>
+                <span className="tabular-nums text-[11px] text-muted">{counts[group.id] ?? 0} 只</span>
                 {onReorder && groups.length > 1 && (
                   <>
                     <button
@@ -602,7 +602,7 @@ export function WatchlistGroupPicker({ groups, groupIds, symbol, disabled, onTog
             ? 'hover:border-accent/30'
             : 'text-muted hover:border-accent/30 hover:text-accent'
         } ${disabled ? 'opacity-40' : ''}`}
-        title={memberGroups.length === 0 ? '未分组 — 点击设置分组' : `分组：${titleNames}`}
+        title={memberGroups.length === 0 ? '未分组 · 设置分组' : `分组：${titleNames}`}
         aria-label={`${symbol} 的分组`}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -620,7 +620,7 @@ export function WatchlistGroupPicker({ groups, groupIds, symbol, disabled, onTog
               />
             ))}
             {memberGroups.length > 3 && (
-              <span className="ml-0.5 font-mono text-[9px] leading-none text-muted">+{memberGroups.length - 3}</span>
+              <span className="ml-0.5 tabular-nums text-[11px] leading-none text-muted">+{memberGroups.length - 3}</span>
             )}
           </span>
         )}
@@ -641,9 +641,9 @@ export function WatchlistGroupPicker({ groups, groupIds, symbol, disabled, onTog
           className="z-50 rounded-card border border-border bg-base p-1 shadow-xl"
           onClick={event => event.stopPropagation()}
         >
-          <div className="px-2 pb-1 pt-1.5 text-[10px] text-muted">加入分组（可多选）</div>
+          <div className="px-2 pb-1 pt-1.5 text-[11px] text-muted">加入分组（可多选）</div>
           {groups.length === 0 ? (
-            <div className="px-2 py-2 text-xs text-muted">暂无分组，请先新建</div>
+            <div className="px-2 py-2 text-xs text-muted">暂无分组</div>
           ) : groups.map(group => {
             const color = resolveWatchlistGroupColor(group.color)
             const member = memberSet.has(group.id)
@@ -669,8 +669,8 @@ export function WatchlistGroupPicker({ groups, groupIds, symbol, disabled, onTog
             )
           })}
           {groups.length > 0 && groupIds.length === 0 && (
-            <div className="border-t border-border/60 px-2 pb-1 pt-1.5 text-[10px] text-muted">
-              未加入任何分组 — 标的仍在自选中
+            <div className="border-t border-border/60 px-2 pb-1 pt-1.5 text-[11px] text-muted">
+              未加入分组 · 仍在自选中
             </div>
           )}
         </div>,

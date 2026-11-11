@@ -49,7 +49,7 @@ it('offers no daily price-limit signals', () => {
 it('sidebar identifies ETF prices, not index points', () => {
   const text = source('components/Layout.tsx')
   for (const symbol of ['SPY', 'QQQ', 'DIA', 'IWM']) expect(text).toContain(`name: '${symbol} ETF'`)
-  expect(text).toContain('ETF 价格 (USD)')
+  expect(text).toContain('ETF 价格（USD）')
   expect(text).toContain('whitespace-nowrap')
 })
 
@@ -83,7 +83,9 @@ it('empty ledger has an explicit empty state, not a blank events section', () =>
   const qc = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity, retry: false } } })
   qc.setQueryData(['portfolio', 'overview'], { cash: 100000, nav: 100000, open_risk: 0, positions: [], events: [], nav_daily: [] })
   const html = renderToStaticMarkup(<QueryClientProvider client={qc}><Portfolio /></QueryClientProvider>)
-  expect(html).toContain('暂无台账事件')
+  // 历史区默认页签 = 已平仓: 空账户有明确空状态, 且「记录」页签在场 (点开后的空状态见 Portfolio.ledger.test)
+  expect(html).toContain('暂无已平仓交易')
+  expect(html).toMatch(/data-hist="log"[^>]*>记录<span[^>]*>0<\/span>/)
   qc.clear()
 })
 
@@ -129,9 +131,9 @@ it('量额格式化只作数量级缩写，不换算手数或币种，缺失值�
 })
 
 it('自选和策略列名明确股数与美元，不对紧凑数字添加错误单位', () => {
-  expect(BUILTIN_COLUMNS.find(c => c.id === 'builtin:volume')?.label).toBe('成交量 (股)')
+  expect(BUILTIN_COLUMNS.find(c => c.id === 'builtin:volume')?.label).toBe('成交量（股）')
   for (const cols of [BUILTIN_COLUMNS, SCREENER_BUILTIN_COLUMNS]) {
-    expect(cols.find(c => c.id === 'builtin:amount')?.label).toBe('成交额 (USD)')
+    expect(cols.find(c => c.id === 'builtin:amount')?.label).toBe('成交额（USD）')
     expect(cols.find(c => c.id === 'builtin:float_val')).toBeUndefined()
   }
 })
@@ -140,7 +142,7 @@ it('首次向导不承诺虚构的全市场数量、拉取耗时或无数据源�
   const text = source('pages/Onboarding.tsx')
   expect(text.match(/5500|1-3 分钟|无需 Key|即可使用全部功能|IEX 15 分钟延迟/)).toBeNull()
   expect(text).toContain('美股')
-  expect(text).toContain('纸面交易')
+  expect(text).toContain('模拟交易')
 })
 
 it('助手上下文不再引用连板梯队入口', () => {

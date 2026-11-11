@@ -129,7 +129,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
     if (hMatch) {
       const level = hMatch[1].length
       const text = hMatch[2]
-      const sizeCls = level === 1 ? 'text-[16px] leading-6' : level === 2 ? 'text-sm' : 'text-xs'
+      const sizeCls = level === 1 ? 'text-[14px] leading-6' : level === 2 ? 'text-sm' : 'text-xs'
       const mtCls = level <= 2 ? 'mt-6' : 'mt-5'
       blocks.push(
         <div key={key++} className={`${sizeCls} ${mtCls} mb-3 font-semibold text-foreground flex items-center gap-1.5`}>
@@ -230,7 +230,7 @@ export function MarkdownRenderer({ content }: { content: string }) {
         <ol key={key++} className="my-4 space-y-2">
           {items.map((item, ii) => (
             <li key={ii} className="flex items-start gap-2 text-xs text-foreground/90 leading-relaxed">
-              <span className="mt-0.5 h-4 w-4 rounded-full bg-accent/10 text-accent text-[10px] font-mono flex items-center justify-center shrink-0">
+              <span className="mt-0.5 h-4 w-4 rounded-full bg-accent/10 text-accent dark:text-blue-400 text-[11px] font-mono flex items-center justify-center shrink-0">
                 {ii + 1}
               </span>
               <span className="flex-1 text-foreground">{renderInline(item, `ol-${key}-${ii}`)}</span>

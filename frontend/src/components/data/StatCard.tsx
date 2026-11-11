@@ -13,12 +13,12 @@ export const CARD_META: Record<string, {
 }> = {
   // 标的维表走 exchanges 端点,免费服务器即可获取,无需付费能力
   instruments: { capKey: '',                        missingCapName: '' },
-  daily:       { capKey: 'kline.daily.batch',       missingCapName: '日 K(批量)' },
+  daily:       { capKey: 'kline.daily.batch',       missingCapName: '日 K（批量）' },
   adj_factor:  { capKey: 'adj_factor',              missingCapName: '复权因子' },
   enriched:    { capKey: '',                        missingCapName: '' },
   // ETF 复用日K批量能力(免费档即可),缺能力时随日K卡提示,不单独显示徽章
   etf:         { capKey: 'kline.daily.batch',       missingCapName: '' },
-  minute:      { capKey: 'kline.minute.batch',      missingCapName: '分钟 K(批量)' },
+  minute:      { capKey: 'kline.minute.batch',      missingCapName: '分钟 K（批量）' },
   financials:  { capKey: 'financial',               missingCapName: '财务数据' },
   regime:      { capKey: '',                        missingCapName: '' },
 }
@@ -26,8 +26,8 @@ export const CARD_META: Record<string, {
 export function Pill({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-btn bg-base/40 border border-border px-3 py-1.5">
-      <div className="text-[10px] uppercase tracking-wider text-muted">{label}</div>
-      <div className="font-mono text-sm font-medium tabular-nums mt-0.5">{value}</div>
+      <div className="text-[11px] uppercase tracking-wider text-muted">{label}</div>
+      <div className="tabular-nums text-sm font-medium mt-0.5">{value}</div>
     </div>
   )
 }
@@ -47,7 +47,7 @@ function CapBadge({ hasCap, isLocal, missingCapName, capInfo, localSuffix, custo
   // 走自定义数据源时, 显示数据源名 (能力来源对所有数据源统一表达)
   if (customProvider) {
     return (
-      <span className="text-[10px] text-accent bg-accent/8 rounded px-1.5 py-px font-medium">
+      <span className="text-[11px] text-accent bg-accent/8 rounded px-1.5 py-px font-medium">
         {customProvider}
       </span>
     )
@@ -55,7 +55,7 @@ function CapBadge({ hasCap, isLocal, missingCapName, capInfo, localSuffix, custo
 
   if (isLocal) {
     return (
-      <span className="text-[10px] text-secondary bg-elevated rounded px-1.5 py-px font-medium">
+      <span className="text-[11px] text-secondary bg-elevated rounded px-1.5 py-px font-medium">
         本地计算{localSuffix ? ` · ${localSuffix}` : ''}
       </span>
     )
@@ -65,7 +65,7 @@ function CapBadge({ hasCap, isLocal, missingCapName, capInfo, localSuffix, custo
     const parts = ['可用', `${capInfo.rpm}/min`]
     if (capInfo.batch != null && capInfo.batch > 1) parts.push(`${capInfo.batch}股/批`)
     return (
-      <span className="text-[10px] text-accent bg-accent/8 rounded px-1.5 py-px font-mono font-medium">
+      <span className="text-[11px] text-accent bg-accent/8 rounded px-1.5 py-px tabular-nums font-medium">
         {parts.join(' · ')}
       </span>
     )
@@ -78,7 +78,7 @@ function CapBadge({ hasCap, isLocal, missingCapName, capInfo, localSuffix, custo
 
   if (hasCap) {
     return (
-      <span className="text-[10px] text-accent bg-accent/8 rounded px-1.5 py-px font-medium">
+      <span className="text-[11px] text-accent bg-accent/8 rounded px-1.5 py-px font-medium">
         可用
       </span>
     )
@@ -216,7 +216,7 @@ export function StatCard({
         <h3 className="text-sm font-medium text-foreground">{title}</h3>
         <div className="flex items-center gap-1.5">
           {auto !== undefined && !loading && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium">
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium">
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${auto ? 'bg-accent shadow-[0_0_4px_rgba(61,214,140,0.5)]' : 'bg-muted'}`} />
               <span className={auto ? 'text-accent' : 'text-muted'}>{auto ? '自动' : '关闭'}</span>
             </span>
@@ -224,7 +224,7 @@ export function StatCard({
           {active && <Loader2 className="h-3.5 w-3.5 text-accent animate-spin" />}
           {done && !active && !skipped && <CheckCircle2 className="h-3.5 w-3.5 text-bear" />}
           {skipped && !active && (
-            <span className="text-[10px] text-muted bg-elevated rounded px-1.5 py-px font-medium">
+            <span className="text-[11px] text-muted bg-elevated rounded px-1.5 py-px font-medium">
               本次跳过
             </span>
           )}
@@ -242,7 +242,7 @@ export function StatCard({
         </div>
       </div>
 
-      <div className="px-4 pb-1 text-[10px] text-muted">{hint}</div>
+      <div className="px-4 pb-1 text-[11px] text-muted">{hint}</div>
 
       <div className="px-4 pb-2">
         {loading ? (
@@ -267,14 +267,14 @@ export function StatCard({
           </>
         ) : empty ? (
           <>
-            <div className="font-mono text-2xl font-bold tracking-tight tabular-nums text-foreground">—</div>
+            <div className="tabular-nums text-[20px] leading-7 font-bold tracking-tight text-foreground">—</div>
             <div className="text-[11px] text-muted mt-0.5">
               暂无数据{renderFieldButtons()}
             </div>
           </>
         ) : (
           <>
-            <div className="font-mono text-2xl font-bold tracking-tight tabular-nums text-foreground">
+            <div className="tabular-nums text-[20px] leading-7 font-bold tracking-tight text-foreground">
               {stats.fields
                 ? stats.fields
                 : stats.trading_days && !stats.rows
@@ -298,22 +298,22 @@ export function StatCard({
           <>
             <div className="flex justify-between text-[11px]">
               <span className="text-muted">{isInstrument ? '快照日' : isFactor ? '日K覆盖起' : '起'}</span>
-              <span className="font-mono text-secondary">—</span>
+              <span className="tabular-nums text-secondary">—</span>
             </div>
             <div className="flex justify-between text-[11px]">
               <span className="text-muted">{isInstrument ? '标的数' : isFactor ? '日K覆盖止' : '止'}</span>
-              <span className="font-mono text-secondary">—</span>
+              <span className="tabular-nums text-secondary">—</span>
             </div>
           </>
         ) : (
           <>
             <div className="flex justify-between text-[11px]">
               <span className="text-muted">{isInstrument ? '快照日' : isFactor ? '日K覆盖起' : '起'}</span>
-              <span className="font-mono text-secondary">{fmtDate(isInstrument ? stats.latest_as_of : stats.earliest_date)}</span>
+              <span className="tabular-nums text-secondary">{fmtDate(isInstrument ? stats.latest_as_of : stats.earliest_date)}</span>
             </div>
             <div className="flex justify-between text-[11px]">
               <span className="text-muted">{isInstrument ? '标的数' : isFactor ? '日K覆盖止' : '止'}</span>
-              <span className="font-mono text-secondary">{isInstrument ? String(stats.rows) : fmtDate(stats.latest_date)}</span>
+              <span className="tabular-nums text-secondary">{isInstrument ? String(stats.rows) : fmtDate(stats.latest_date)}</span>
             </div>
           </>
         )}

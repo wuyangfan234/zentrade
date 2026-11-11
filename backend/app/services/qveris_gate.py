@@ -253,7 +253,7 @@ def fetch(data_dir: Path, kind: str, symbol: str, parameters: dict, *, fresh: Ca
             spent = spent_today(data_dir, day=day)
             limit = daily_limit()
             if spent + cost > limit + 1e-9:
-                raise QuotaExceeded(f"今日 QVeris 积分已用 {spent:g}/{limit:g}，本次需约 {cost:g}，已拒绝（明天美东 0 点重置，或在设置页调高上限）")
+                raise QuotaExceeded(f"今日 QVeris 积分已用 {spent:g}/{limit:g}，本次需约 {cost:g}，已拒绝（明天 00:00 ET 重置，或在设置页调高上限）")
             ts = now or time.time()
             row = {"at": datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "day": day,
                    "kind": kind, "symbol": symbol, "variant": variant, "trigger": trigger, "expected": cost}

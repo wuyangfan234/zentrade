@@ -116,7 +116,7 @@ export function StrategyOptimizer() {
             <Square className="h-3.5 w-3.5" /> 停止
           </button>
         ) : (
-          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
             <Play className="h-3.5 w-3.5" /> 开始优化
           </button>
         )}
@@ -141,7 +141,7 @@ export function StrategyOptimizer() {
         )}
 
         {!result && !task?.isPending && (
-          <EmptyState title="参数优化" hint="选择策略、勾选要扫描的参数与优化目标；任务在后台进程中复用基础数据，逐个组合执行。" />
+          <EmptyState title="参数优化" hint="选择策略、扫描参数与优化目标后开始 · 任务在后台运行" />
         )}
 
         {result && (

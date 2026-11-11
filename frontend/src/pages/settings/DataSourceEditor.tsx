@@ -7,7 +7,7 @@ import { toast } from '@/components/Toast'
 
 // 暗色适配的标准输入框样式 (与 AI 页统一, bg-base 在暗色下为深色, 不会白底白字)
 const INPUT_CLS =
-  'w-full h-9 px-2.5 rounded-lg bg-base border-0 ring-1 ring-border/40 text-xs text-foreground placeholder:text-muted/30 focus:outline-none focus:ring-2 focus:ring-accent/40 transition-shadow'
+  'w-full h-9 px-2.5 rounded-lg bg-base border-0 ring-1 ring-border/40 text-xs text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/40 transition-shadow'
 
 const DATASETS = ['daily', 'adj_factor', 'realtime', 'minute', 'full_minute'] as const
 type DatasetKey = typeof DATASETS[number]
@@ -30,23 +30,23 @@ const TARGET_FIELDS: Record<DatasetKey, string[]> = {
 
 // 内部字段的中文说明 (下拉选项展示用)
 const FIELD_LABELS: Record<string, string> = {
-  symbol: '股票代码 (美股纯代码，如 NVDA / AAPL / BRK.B)',
+  symbol: '股票代码（如 NVDA / AAPL / BRK.B）',
   date: '交易日期 (YYYY-MM-DD)',
   datetime: '时间戳 (YYYY-MM-DD HH:MM:SS)',
   open: '开盘价',
   high: '最高价',
   low: '最低价',
   close: '收盘价',
-  volume: '成交量 (股)',
+  volume: '成交量（股）',
   amount: '成交额 (USD)',
   trade_date: '除权日期 (YYYY-MM-DD)',
   ex_factor: '复权因子',
   name: '股票名称',
   last_price: '最新价',
   prev_close: '昨收价',
-  change_pct: '涨跌幅 (小数 0.0366=3.66%)',
+  change_pct: '涨跌幅（小数，0.0366 = 3.66%）',
   change_amount: '涨跌额',
-  amplitude: '振幅 (小数)',
+  amplitude: '振幅（小数）',
   timestamp: '时间戳',
   session: '交易时段',
 }
@@ -186,14 +186,14 @@ export function DataSourceEditor({
         </div>
         <div className="flex items-center gap-2">
           {!isNew && isActive && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-accent bg-accent/10 px-2 py-1 rounded">
+            <span className="inline-flex items-center gap-1 text-[11px] text-accent dark:text-blue-400 bg-accent/10 px-2 py-1 rounded">
               <Check className="h-2.5 w-2.5" /> 使用中
             </span>
           )}
           {!isNew && !isActive && config.name.trim() && (
             <button
               onClick={() => onActivate(config.name.toLowerCase().trim())}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-accent/10 text-accent text-xs font-medium hover:bg-accent/20 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn bg-accent/10 text-accent dark:text-blue-400 text-xs font-medium hover:bg-accent/20 transition-colors"
             >
               <Zap className="h-3.5 w-3.5" /> 切换为当前数据源
             </button>
@@ -210,7 +210,7 @@ export function DataSourceEditor({
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-sm text-muted">加载配置...</div>
+        <div className="p-12 text-center text-sm text-muted">加载中</div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-[260px_1fr]">
           {/* 左: 基本信息 + 鉴权 + 数据集开关 */}
@@ -256,7 +256,7 @@ export function DataSourceEditor({
             </Field>
 
             <div className="pt-2 border-t border-border/30 space-y-1.5">
-              <div className="text-[10px] uppercase tracking-widest text-muted">数据集</div>
+              <div className="text-[11px] uppercase tracking-widest text-muted">数据集</div>
               {DATASETS.map(key => {
                 const enabled = !!config.datasets[key]
                 return (
@@ -270,8 +270,8 @@ export function DataSourceEditor({
                     <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${enabled ? 'bg-accent' : 'bg-muted/30'}`} />
                     <span className="flex-1 text-left">{DATASET_LABEL[key]}</span>
                     {enabled
-                      ? <span className="text-[9px] text-accent">已配置</span>
-                      : <span className="text-[9px] text-muted">回退 TF</span>
+                      ? <span className="text-[11px] text-accent">已配置</span>
+                      : <span className="text-[11px] text-muted">回退 TF</span>
                     }
                     <Toggle
                       checked={enabled}
@@ -311,10 +311,10 @@ export function DataSourceEditor({
           <button
             onClick={() => save.mutate()}
             disabled={!canSave}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn bg-accent text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-medium hover:bg-accent/90 disabled:opacity-50 transition-colors"
           >
             <Save className="h-3.5 w-3.5" />
-            {save.isPending ? '保存中...' : '保存'}
+            {save.isPending ? '保存中' : '保存'}
           </button>
         </div>
       </div>
@@ -360,7 +360,7 @@ function DatasetDetail({
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-medium text-foreground">{DATASET_LABEL[datasetKey]}</h3>
-          <span className="text-[10px] text-muted font-mono">{datasetKey}</span>
+          <span className="text-[11px] text-muted font-mono">{datasetKey}</span>
         </div>
         <Toggle checked={enabled} onChange={() => onToggle(!enabled)} />
       </div>
@@ -443,10 +443,10 @@ function DatasetDetail({
                 onClick={() => setShowParams(v => !v)}
                 className="w-full flex items-center gap-1.5 mb-2"
               >
-                <span className="text-[10px] uppercase tracking-widest text-muted">请求参数字段映射</span>
+                <span className="text-[11px] uppercase tracking-widest text-muted">请求参数字段映射</span>
                 <ChevronDown className={`h-3 w-3 text-muted transition-transform ${showParams ? 'rotate-180' : ''}`} />
               </button>
-              <div className="text-[10px] text-muted mb-1.5">
+              <div className="text-[11px] text-muted mb-1.5">
                 改外部接口的参数名（留空用默认）
               </div>
               <AnimatePresence initial={false}>
@@ -508,8 +508,8 @@ function DatasetDetail({
                         </>
                       )}
                       {datasetKey === 'realtime' && (
-                        <div className="col-span-full text-[10px] text-muted">
-                          实时行情为全市场快照接口，不逐标的拉取，无需配置请求参数名。
+                        <div className="col-span-full text-[11px] text-muted">
+                          实时行情为全市场快照 · 无需配置请求参数名
                         </div>
                       )}
                     </div>
@@ -520,16 +520,16 @@ function DatasetDetail({
 
             <div>
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] uppercase tracking-widest text-muted">响应参数字段映射</div>
+                <div className="text-[11px] uppercase tracking-widest text-muted">响应参数字段映射</div>
                 <span
-                  className="text-[10px] text-muted"
-                  title="项目内文档: docs/custom-data-source.md (用 AI 生成映射配置)"
+                  className="text-[11px] text-muted"
+                  title="docs/custom-data-source.md"
                 >
-                  映射说明见 docs/custom-data-source.md
+                  映射说明见接入文档
                 </span>
               </div>
-              <div className="text-[10px] text-muted mb-1.5">
-                外部字段 → 内部字段 · 不知道怎么填? 参考上方项目文档用 AI 整理
+              <div className="text-[11px] text-muted mb-1.5">
+                外部字段 → 内部字段 · 填写方法见接入文档
               </div>
               <FieldMapEditor
                 key={datasetKey}
@@ -549,14 +549,14 @@ function DatasetDetail({
                   value={testSymbols}
                   onChange={e => setTestSymbols(e.target.value)}
                   className={`${INPUT_CLS} flex-1 text-xs`}
-                  placeholder="测试标的，逗号分隔"
+                  placeholder="测试代码，逗号分隔"
                 />
                 <button
                   onClick={() => test.mutate()}
                   disabled={test.isPending || !cfg.url}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-btn bg-elevated text-secondary hover:text-foreground text-xs disabled:opacity-40 transition-colors"
                 >
-                  {test.isPending ? '测试中...' : '测试'}
+                  {test.isPending ? '测试中' : '测试'}
                 </button>
               </div>
               {test.data && (
@@ -580,10 +580,10 @@ function DatasetDetail({
             className="py-12 text-center"
           >
             <div className="text-sm text-muted mb-1">{DATASET_LABEL[datasetKey]} 未启用</div>
-            <div className="text-[11px] text-muted">启用后此数据集将由该自定义源提供，未启用则使用内置数据源</div>
+            <div className="text-[11px] text-muted">启用后该数据集由此数据源提供 · 未启用时使用内置数据源</div>
             <button
               onClick={() => onToggle(true)}
-              className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-btn bg-accent/10 text-accent text-xs font-medium hover:bg-accent/20 transition-colors"
+              className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 rounded-btn bg-accent/10 text-accent dark:text-blue-400 text-xs font-medium hover:bg-accent/20 transition-colors"
             >
               <Plus className="h-3 w-3" /> 启用{DATASET_LABEL[datasetKey]}
             </button>
@@ -660,7 +660,7 @@ function FieldMapEditor({
   return (
     <div className="space-y-1.5">
       {!hasValid && (
-        <div className="text-[11px] text-muted py-1">填写外部字段名后自动生效，无需的字段可删除</div>
+        <div className="text-[11px] text-muted py-1">填写外部字段名后生效 · 不需要的字段可删除</div>
       )}
       {rows.map((row) => (
         <div key={row.id} className="grid grid-cols-[1fr_auto_1.2fr_auto] gap-1.5 items-center">
@@ -670,13 +670,13 @@ function FieldMapEditor({
             placeholder="外部字段名"
             className={`${INPUT_CLS} text-xs`}
           />
-          <span className="text-muted text-[10px]">→</span>
+          <span className="text-muted text-[11px]">→</span>
           <select
             value={targets.includes(row.target) ? row.target : ''}
             onChange={e => updateRow(row.id, { target: e.target.value })}
             className={`${INPUT_CLS} text-xs ${row.target && !targets.includes(row.target) ? 'text-warning' : ''}`}
           >
-            <option value="">{row.target || '(选择)'}</option>
+            <option value="">{row.target || '（选择）'}</option>
             {targets.map(t => (
               <option key={t} value={t}>
                 {t}（{FIELD_LABELS[t] || t}）
@@ -705,8 +705,8 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-widest text-muted">{label}</span>
-        {hint && <span className="text-[9px] text-muted normal-case">{hint}</span>}
+        <span className="text-[11px] uppercase tracking-widest text-muted">{label}</span>
+        {hint && <span className="text-[11px] text-muted normal-case">{hint}</span>}
       </div>
       {children}
     </div>

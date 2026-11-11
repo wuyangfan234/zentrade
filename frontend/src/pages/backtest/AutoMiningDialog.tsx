@@ -133,14 +133,14 @@ export function AutoMiningDialog({
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <div className="space-y-3">
           <div>
-            <div className="mb-1 text-[10px] text-muted">资产</div>
+            <div className="mb-1 text-[11px] text-muted">资产</div>
             <div className="inline-flex rounded-btn border border-border bg-surface/80 p-0.5">
               {(['stock', 'etf'] as const).map(value => (
                 <button
                   key={value}
                   type="button"
                   onClick={() => setAssetType(value)}
-                  className={`h-7 rounded-[5px] px-3 text-[11px] font-medium transition-colors ${assetType === value ? 'bg-accent text-white' : 'text-secondary hover:text-foreground'}`}
+                  className={`h-7 rounded-[5px] px-3 text-[11px] font-medium transition-colors ${assetType === value ? 'bg-accent dark:bg-blue-700 text-white' : 'text-secondary hover:text-foreground'}`}
                 >
                   {value === 'stock' ? '股票' : 'ETF'}
                 </button>
@@ -148,7 +148,7 @@ export function AutoMiningDialog({
             </div>
           </div>
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">验证档位（决定筛选门槛与样本要求）</span>
+            <span className="mb-1 block text-[11px] text-muted">验证档位（决定筛选门槛与样本要求）</span>
             <select
               value={profile}
               onChange={event => { setProfileTouched(true); setProfile(event.target.value as MiningBudgetProfile) }}
@@ -167,11 +167,11 @@ export function AutoMiningDialog({
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
-              <span className="mb-1 block text-[10px] text-muted">开始</span>
+              <span className="mb-1 block text-[11px] text-muted">开始</span>
               <input type="date" value={start} onChange={event => setStart(event.target.value)} className={INPUT_CLS} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[10px] text-muted">结束</span>
+              <span className="mb-1 block text-[11px] text-muted">结束</span>
               <input type="date" value={end} onChange={event => setEnd(event.target.value)} className={INPUT_CLS} />
             </label>
           </div>
@@ -181,7 +181,7 @@ export function AutoMiningDialog({
               {availability.exploratory?.eligible ? ' · 可改「探索」档' : ' · 需补历史行情'}
             </div>
           )}
-          <p className="text-[10px] leading-relaxed text-muted">
+          <p className="text-[11px] leading-relaxed text-muted">
             后台运行 · 筛选约 1–3 分钟 · 结果见「挖掘 · 最近运行」
           </p>
         </div>
@@ -192,7 +192,7 @@ export function AutoMiningDialog({
           type="button"
           onClick={submitAutoMining}
           disabled={!start || !end || start > end || currentAvailable === false}
-          className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" />
           开始自动挖掘

@@ -20,7 +20,7 @@ interface ChildItem {
 
 const SRC_MAP: Record<string, string> = { builtin: '内置', custom: '自定义', ai: 'AI' }
 const BADGE_CLS: Record<string, string> = {
-  builtin: 'bg-accent/10 text-accent border-accent/20',
+  builtin: 'bg-accent/10 text-accent dark:text-blue-400 border-accent/20',
   ai: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
   custom: 'bg-amber-400/10 text-amber-700 dark:text-amber-400 border-amber-400/30',
 }
@@ -189,7 +189,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
               <span className="text-sm font-semibold text-foreground">
                 {isEdit ? '编辑叠加策略' : '创建叠加策略'}
               </span>
-              <span className="text-[10px] text-muted">
+              <span className="text-[11px] text-muted">
                 引用多个子策略，合并选股与回测信号
               </span>
               <button onClick={onClose} className="ml-auto text-muted hover:text-foreground">
@@ -208,7 +208,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                     readOnly
                     disabled
                     placeholder="composite_..."
-                    className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 font-mono text-[11px] text-muted cursor-not-allowed"
+                    className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 tabular-nums text-[11px] text-muted cursor-not-allowed"
                   />
                 </div>
                 <div>
@@ -217,7 +217,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                     value={name}
                     onChange={e => { setName(e.target.value); setNameDirty(true) }}
                     placeholder="我的叠加策略"
-                    className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 text-xs text-foreground placeholder:text-muted/40"
+                    className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 text-xs text-foreground placeholder:text-muted"
                   />
                 </div>
               </div>
@@ -227,7 +227,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                   value={description}
                   onChange={e => setDescription(e.target.value)}
                   placeholder="说明这个叠加策略的意图"
-                  className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 text-xs text-foreground placeholder:text-muted/40"
+                  className="w-full rounded-btn border border-border bg-elevated px-2 py-1.5 text-xs text-foreground placeholder:text-muted"
                 />
               </div>
 
@@ -263,13 +263,13 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                   <label className="text-xs font-medium text-foreground">
                     子策略（{children.length}）
                   </label>
-                  <span className="text-[10px] text-muted flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted flex items-center gap-1.5">
                     权重
-                    <span className={`font-mono ${children.length > 0 && totalPct !== 100 ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
+                    <span className={`tabular-nums ${children.length > 0 && totalPct !== 100 ? 'text-amber-700 dark:text-amber-400' : 'text-emerald-700 dark:text-emerald-400'}`}>
                       {totalPct}%
                     </span>
                     {children.length > 0 && totalPct !== 100 && (
-                      <span className="text-amber-700 dark:text-amber-400/60">(保存时自动按比例归一)</span>
+                      <span className="text-amber-700 dark:text-amber-400/60">（保存时按比例归一）</span>
                     )}
                   </span>
                 </div>
@@ -286,14 +286,14 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                         <button
                           type="button"
                           onClick={() => setEditingChildId(c.strategy_id)}
-                          title="点击编辑该子策略的配置"
+                          title="编辑子策略"
                           className="flex min-w-0 flex-1 items-center gap-1 text-left text-xs text-foreground transition-colors hover:text-accent cursor-pointer"
                         >
                           <span className="truncate">{s?.name ?? c.strategy_id}</span>
                           <Settings2 className="h-3 w-3 shrink-0 text-muted" />
                         </button>
                         {s?.source && (
-                          <span className={`rounded border px-1 text-[8px] ${BADGE_CLS[s.source] ?? ''}`}>
+                          <span className={`rounded border px-1 text-[11px] ${BADGE_CLS[s.source] ?? ''}`}>
                             {SRC_MAP[s.source] ?? s.source}
                           </span>
                         )}
@@ -307,7 +307,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                           className="h-1 w-24 cursor-pointer accent-teal-400"
                           aria-label={`${s?.name ?? c.strategy_id}权重`}
                         />
-                        <span className="w-9 shrink-0 text-right font-mono text-[10px] text-muted">{Math.round(c.weight)}%</span>
+                        <span className="w-9 shrink-0 text-right tabular-nums text-[11px] text-muted">{Math.round(c.weight)}%</span>
                         <button onClick={() => removeChild(c.strategy_id)} className="text-danger hover:text-danger">
                           <X className="h-3 w-3" />
                         </button>
@@ -326,7 +326,7 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                     value={search}
                     onChange={e => setSearch(e.target.value)}
                     placeholder="搜索策略名称或 ID"
-                    className="w-full rounded-btn border border-border bg-elevated py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted/40"
+                    className="w-full rounded-btn border border-border bg-elevated py-1.5 pl-7 pr-2 text-xs text-foreground placeholder:text-muted"
                   />
                 </div>
                 <div className="max-h-72 space-y-1 overflow-y-auto rounded-btn border border-border bg-elevated p-1.5">
@@ -347,11 +347,11 @@ export function CompositeStrategyDialog({ open, onClose, onSavedId, editStrategy
                       <Plus className="h-3 w-3 shrink-0 text-teal-700 dark:text-teal-400" />
                       <span className="flex-1 truncate">{s.name}</span>
                       {s.source && (
-                        <span className={`rounded border px-1 text-[8px] ${BADGE_CLS[s.source] ?? ''}`}>
+                        <span className={`rounded border px-1 text-[11px] ${BADGE_CLS[s.source] ?? ''}`}>
                           {SRC_MAP[s.source] ?? s.source}
                         </span>
                       )}
-                      <span className="font-mono text-[9px] text-muted">{s.id}</span>
+                      <span className="tabular-nums text-[11px] text-muted">{s.id}</span>
                     </button>
                   ))}
                 </div>

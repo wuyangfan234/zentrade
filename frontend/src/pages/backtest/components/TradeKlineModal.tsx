@@ -141,9 +141,9 @@ export function TradeKlineModal({ trade, navItems, currentKey, onNavigate, onClo
             <div className="flex items-center justify-between gap-4 border-b border-border px-5 py-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm font-semibold text-foreground">{trade.symbol}</span>
+                  <span className="tabular-nums text-sm font-semibold text-foreground">{trade.symbol}</span>
                   <span className="truncate text-sm text-foreground">{trade.name || '交易回放'}</span>
-                  <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">交易回放</span>
+                  <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent dark:text-blue-400">交易回放</span>
 
                   {/* 切交易: 上一笔 / n·N / 下一笔 */}
                   <NavPager nav={nav} prevLabel="上一笔" nextLabel="下一笔" />
@@ -167,7 +167,7 @@ export function TradeKlineModal({ trade, navItems, currentKey, onNavigate, onClo
                   onClick={() => setShowIntraday((v) => !v)}
                   className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs transition-colors ${
                     showIntraday
-                      ? 'border border-accent/30 bg-accent/15 text-accent'
+                      ? 'border border-accent/30 bg-accent/15 text-accent dark:text-blue-400'
                       : 'border border-border bg-elevated text-secondary hover:border-accent/30'
                   }`}
                 >

@@ -258,11 +258,11 @@ export function StrategyNavChart({ result }: Props) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-4 px-4 pb-2">
-        <span className="flex items-center gap-1.5 text-[10px] text-secondary">
+        <span className="flex items-center gap-1.5 text-[11px] text-secondary">
           <span className="w-3 h-0.5 rounded bg-[#3b82f6]" />
           策略净值
         </span>
-        <span className="flex items-center gap-1.5 text-[10px] text-secondary">
+        <span className="flex items-center gap-1.5 text-[11px] text-secondary">
           <span className="w-3 h-0.5 rounded bg-[#f04438]" />
           回撤
         </span>
@@ -270,8 +270,8 @@ export function StrategyNavChart({ result }: Props) {
           <button
             type="button"
             onClick={() => toggleLegend('仓位')}
-            title="点击显示/隐藏"
-            className={`flex items-center gap-1.5 text-[10px] text-secondary cursor-pointer transition-opacity ${
+            title="显示 / 隐藏"
+            className={`flex items-center gap-1.5 text-[11px] text-secondary cursor-pointer transition-opacity ${
               hidden.has('仓位') ? 'opacity-40' : 'opacity-100'
             }`}
           >
@@ -283,8 +283,8 @@ export function StrategyNavChart({ result }: Props) {
           <button
             type="button"
             onClick={() => toggleLegend(benchmarkLabel)}
-            title="点击显示/隐藏"
-            className={`flex items-center gap-1.5 text-[10px] text-secondary cursor-pointer transition-opacity ${
+            title="显示 / 隐藏"
+            className={`flex items-center gap-1.5 text-[11px] text-secondary cursor-pointer transition-opacity ${
               hidden.has(benchmarkLabel) ? 'opacity-40' : 'opacity-100'
             }`}
           >
@@ -292,7 +292,7 @@ export function StrategyNavChart({ result }: Props) {
             {benchmarkLabel}
           </button>
         )}
-        <span className="ml-auto text-[10px] text-muted">滚轮缩放 · 拖动平移</span>
+        <span className="ml-auto text-[11px] text-muted">滚轮缩放 · 拖动平移</span>
       </div>
       <div ref={chartRef} className="h-[282px]" />
     </div>

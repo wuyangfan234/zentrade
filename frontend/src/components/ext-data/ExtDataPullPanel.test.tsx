@@ -22,7 +22,7 @@ function dateFormatSelect(dateFormat: string) {
 describe('external pull date serialization help', () => {
   it('labels epoch date parameters as ET midnight, matching the backend market clock', () => {
     const select = dateFormatSelect('ts_s')
-    expect(select.title).toContain('美东时间 (ET) 00:00:00')
+    expect(select.title).toContain('00:00:00 ET')
     expect(select.title).not.toContain('北京')
   })
 

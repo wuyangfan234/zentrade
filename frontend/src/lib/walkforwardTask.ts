@@ -181,7 +181,7 @@ function connectSSE(url: string): void {
         // 清 localStorage: 否则刷新页面 tryReconnect 会重连到这个已放弃的任务。
         localStorage.removeItem(RECONNECT_KEY)
         localStorage.removeItem(JOB_KEY_KEY)
-        current = { ...current, isPending: false, error: '连接中断, 重连多次失败' }
+        current = { ...current, isPending: false, error: '连接中断 · 重连失败' }
         emit()
       }
     }

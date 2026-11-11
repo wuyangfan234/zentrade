@@ -50,17 +50,17 @@ export function StrategyStoreDialog({ open, onClose }: Props) {
                 </div>
               </div>
 
-              <h3 className="text-[16px] leading-6 font-semibold text-foreground mb-1.5">
+              <h3 className="text-[14px] leading-6 font-semibold text-foreground mb-1.5">
                 不定时更新更多策略
               </h3>
               <p className="text-sm text-muted leading-relaxed max-w-[380px]">
-                敬请期待。
+                即将上线
               </p>
 
               <div className="mt-6 flex items-center gap-4 text-[11px] text-muted">
                 <span className="flex items-center gap-1">
                   <Download className="h-3.5 w-3.5" />
-                  一键下载
+                  下载
                 </span>
                 <span className="w-px h-3 bg-border" />
                 <span className="flex items-center gap-1">

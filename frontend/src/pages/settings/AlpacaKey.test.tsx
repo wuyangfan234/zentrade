@@ -38,7 +38,9 @@ it('Alpaca 详情可以在页面填写 Key (未配置)', async () => {
   const input = box.querySelector('input[type="password"]') as HTMLInputElement
   expect(input).not.toBeNull()
   expect(input.placeholder).toBe('KEY_ID:SECRET')
-  expect(box.textContent).toContain('ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY')
+  // 环境变量名只放悬停, 不上屏
+  expect(box.querySelector('[title="ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY"]')!.textContent).toBe('环境变量')
+  expect(box.textContent).not.toContain('ALPACA_API_KEY_ID')
   expect(box.textContent).toContain('未配置')
   expect(box.textContent).not.toMatch(/未配置\s*未配置/)                 // 状态不重复
   expect(host.querySelector('[data-testid="alpaca-routed-no-key"]')).not.toBeNull()  // 路由在用但无 Key: 不显示「服务中」

@@ -59,7 +59,7 @@ it('实际与回放并排, 区间不重叠的行标红, 对账不一致显示', 
   expect(fill.textContent).toContain('0%')
   expect(fill.textContent).toContain('59%')
   expect(long.querySelector('[data-settle-row="win"]')!.hasAttribute('data-mismatch')).toBe(false)
-  expect(host.querySelector('[data-settle-card="AAPL"]')!.textContent).toContain('未回区')
+  expect(host.querySelector('[data-settle-card="AAPL"]')!.textContent).toContain('未成交')
   expect(host.querySelector('[data-reconcile]')!.getAttribute('data-reconcile')).toBe('bad')
   expect(host.querySelector('[data-reconcile]')!.textContent).toContain('1 处不一致')
   expect(host.querySelector('[data-zero-hit]')!.textContent).toContain('tv_halftrend:short 连续 14 天 0 命中（历史最长 10）')
@@ -95,7 +95,7 @@ it('影子对照: 被截掉 / 被 4h 门挡掉的候选并排同日上板的卡 
   })
   await render()
   const box = host.querySelector('[data-swing-shadow]')!
-  expect(box.textContent).toContain('已结算 17 张')
+  expect(box.textContent).toContain('已结算 17 条')
   const cut = box.querySelector('[data-shadow-row="cut:short"]')!.textContent!
   expect(cut).toContain('被截掉 · 空')
   expect(cut).toContain('6/11 · +1.93')

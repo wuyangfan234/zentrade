@@ -98,7 +98,7 @@ export function SettingsSystemPanel() {
     }
   }, [qc])
 
-  // 刷新前端缓存: 清除 react-query 缓存 + 强制重载 (绕过浏览器缓存)
+  // 刷新页面缓存: 清除 react-query 缓存 + 强制重载 (绕过浏览器缓存)
   // 不动 localStorage (用户列配置/策略池等偏好保留), 也不影响后端的本地股票数据
   const handleClearCache = useCallback(() => {
     setClearing(true)
@@ -113,7 +113,7 @@ export function SettingsSystemPanel() {
     <>
       <PageHeader
         title="系统设置"
-        subtitle="全局行为开关"
+        subtitle="页面行为 · 通知 · 版本"
       />
 
       <section className="rounded-card border border-border bg-surface p-5">
@@ -124,7 +124,7 @@ export function SettingsSystemPanel() {
 
         <ToggleRow
           label="进入策略页自动运行策略"
-          desc="开启后进入策略页自动跑所有策略获取命中数；关闭则需手动点击"
+          desc="进入策略页时自动运行全部策略"
           checked={screenerAutoRun}
           disabled={saving}
           onChange={(v) => save({ screener_auto_run: v })}
@@ -222,7 +222,7 @@ export function SettingsSystemPanel() {
 
         <ToggleRow
           label="监控告警语音播报"
-          desc="收到告警时用中文语音播报内容 (需浏览器支持，默认关闭)"
+          desc="收到告警时语音播报（需浏览器支持）"
           checked={voiceEnabled}
           disabled={!toastEnabled}
           onChange={(v) => {
@@ -240,7 +240,7 @@ export function SettingsSystemPanel() {
               <div className="text-[11px] leading-4 text-muted">
                 {voices.length === 0
                   ? '未检测到中文语音，将用系统默认'
-                  : '默认优先 Google 中国大陆 (音质最佳)'}
+                  : '默认优先 Google 普通话'}
               </div>
             </div>
           </div>
@@ -333,9 +333,9 @@ export function SettingsSystemPanel() {
 
         <div className="flex items-center justify-between gap-4 py-2">
           <div className="min-w-0">
-            <div className="text-sm text-foreground">刷新前端缓存</div>
+            <div className="text-sm text-foreground">刷新页面缓存</div>
             <div className="text-[11px] leading-4 text-muted">
-              清除页面缓存并强制重新加载 (不影响个人配置和本地股票数据)
+              清除页面缓存并重新加载 · 不影响设置与数据
             </div>
           </div>
           <button
@@ -380,16 +380,16 @@ export function SettingsSystemPanel() {
               {updateState === 'found' && updateInfo
                 ? (updateInfo.source === 'commit'
                     ? `新构建 · ${updateInfo.latestRevision?.slice(0, 7) ?? '—'}`
-                    : `发现新版本 ${updateInfo.latest} (当前 ${versionData?.version ?? '—'})`)
+                    : `发现新版本 ${updateInfo.latest} （当前 ${versionData?.version ?? '—'}）`)
                 : updateState === 'latest'
-                  ? `已是最新版本 (${versionData?.version ?? '—'})`
+                  ? `已是最新版本（${versionData?.version ?? '—'}）`
                   : updateState === 'error'
-                    ? `检查失败${updateError ? `：${updateError}` : ' (网络受限?)'}`
-                    : `对比 ${updateRepo || '上游仓库'} 的最新版本 (服务端每 6 小时查一次)`}
+                    ? `检查失败${updateError ? `：${updateError}` : '（网络受限）'}`
+                    : `对比 ${updateRepo || '上游仓库'} 的最新版本 · 每 6 小时检查`}
             </div>
             {updateState === 'found' && updateInfo && (
               <div className="mt-1 text-[11px] leading-4 text-secondary" data-update-howto>
-                更新方法：在部署目录执行 git pull 后重新构建（docker compose up -d --build），详见 docs/deployment.md「更新与备份」。
+                <span className="cursor-help underline decoration-dotted underline-offset-2" title="在部署目录执行 git pull 后重新构建（docker compose up -d --build）· docs/deployment.md「更新与备份」">更新步骤见部署文档</span>
               </div>
             )}
             {updateState === 'found' && updateInfo?.notes && (

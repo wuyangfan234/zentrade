@@ -20,7 +20,7 @@ export function RobustnessValidation() {
               type="button"
               onClick={() => setMode(value)}
               className={`inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-colors ${mode === value
-                ? 'bg-accent text-white shadow-sm'
+                ? 'bg-accent dark:bg-blue-700 text-white shadow-sm'
                 : 'text-secondary hover:bg-elevated hover:text-foreground'
               }`}
             >

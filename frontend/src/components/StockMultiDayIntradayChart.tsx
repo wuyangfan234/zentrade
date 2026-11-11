@@ -73,7 +73,7 @@ export function StockMultiDayIntradayChart({
       autoSyncRef.current = null  // 失败清标记, 允许上限内自动重试
       const msg = e.message || ''
       if (msg.includes('403') || msg.includes('Pro')) {
-        toast('分钟K(批量)数据不可用', 'error')
+        toast('分钟 K（批量）数据不可用', 'error')
       } else {
         toast(`补齐数据失败: ${msg}`, 'error')
       }
@@ -148,7 +148,7 @@ export function StockMultiDayIntradayChart({
               <button
                 type="button"
                 onClick={() => syncMinute.mutate()}
-                className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+                className="inline-flex items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
               >
                 <Download className="h-3.5 w-3.5" />
                 获取近 {days} 日

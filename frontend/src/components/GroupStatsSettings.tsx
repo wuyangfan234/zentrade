@@ -49,7 +49,7 @@ export function GroupStatsSettings({
         title={ariaLabel}
         className={`inline-flex h-5 w-5 items-center justify-center rounded transition-colors ${
           open
-            ? 'text-accent bg-accent/10'
+            ? 'text-accent dark:text-blue-400 bg-accent/10'
             : 'text-muted hover:text-foreground hover:bg-elevated'
         }`}
       >
@@ -57,7 +57,7 @@ export function GroupStatsSettings({
       </button>
       {open && (
         <div className="absolute right-0 top-full z-30 mt-1 w-64 rounded-card border border-border bg-base p-3 shadow-xl">
-          <div className="text-[10px] uppercase tracking-wider text-muted">指标</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted">指标</div>
           <div className="mt-1 flex flex-wrap gap-1">
             {GROUP_METRICS.map(m => (
               <button
@@ -67,7 +67,7 @@ export function GroupStatsSettings({
                 onClick={() => onChange({ metric: m.id })}
                 className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
                   config.metric === m.id
-                    ? 'bg-accent/15 text-accent'
+                    ? 'bg-accent/15 text-accent dark:text-blue-400'
                     : 'bg-elevated text-secondary hover:text-foreground hover:bg-elevated/80'
                 }`}
               >
@@ -75,7 +75,7 @@ export function GroupStatsSettings({
               </button>
             ))}
           </div>
-          <div className="mt-2.5 text-[10px] uppercase tracking-wider text-muted">排序</div>
+          <div className="mt-2.5 text-[11px] uppercase tracking-wider text-muted">排序</div>
           <div className="mt-1 flex flex-wrap gap-1">
             {GROUP_SORT_OPTIONS.map(s => (
               <button
@@ -84,7 +84,7 @@ export function GroupStatsSettings({
                 onClick={() => onChange({ sort: s.id })}
                 className={`px-2 py-0.5 rounded text-[11px] transition-colors ${
                   config.sort === s.id
-                    ? 'bg-accent/15 text-accent'
+                    ? 'bg-accent/15 text-accent dark:text-blue-400'
                     : 'bg-elevated text-secondary hover:text-foreground hover:bg-elevated/80'
                 }`}
               >
@@ -94,7 +94,7 @@ export function GroupStatsSettings({
           </div>
           {showCardLimit && (
             <>
-              <div className="mt-2.5 text-[10px] uppercase tracking-wider text-muted">卡片显示</div>
+              <div className="mt-2.5 text-[11px] uppercase tracking-wider text-muted">卡片显示</div>
               <div className="mt-1 flex items-center gap-2" title="分组卡片默认展示组内前 N 条，可展开查看全部">
                 <button
                   type="button"
@@ -105,7 +105,7 @@ export function GroupStatsSettings({
                 >
                   <Minus className="h-3 w-3" />
                 </button>
-                <span className="w-16 text-center font-mono text-[11px] tabular-nums text-secondary">
+                <span className="w-16 text-center tabular-nums text-[11px] text-secondary">
                   前 {config.cardTopN} 条
                 </span>
                 <button
@@ -160,7 +160,7 @@ export function GroupStatsSettings({
               </div>
             </>
           )}
-          <div className="mt-2.5 text-[10px] leading-relaxed text-muted">
+          <div className="mt-2.5 text-[11px] leading-relaxed text-muted">
             {GROUP_METRICS.find(m => m.id === config.metric)?.hint}
           </div>
         </div>

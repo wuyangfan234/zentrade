@@ -22,11 +22,11 @@ type NavKey = 'slots' | 'matrix' | 'discover' | 'library' | 'tools'
 // 0.54.0 C 方案: 首页 = 按用途看因子 (槽位), 第二视图 = 依赖矩阵; 原「发现」改名「进件」,
 // 检验 / 编辑器 / 组合 / 挖掘收进「工具」。旧地址 ?tab=discover|inspect|library|editor|composite|mining 照旧可用。
 const NAV: { key: NavKey; title: string; icon: typeof Sigma }[] = [
-  { key: 'slots', title: '槽位', icon: LayoutGrid },
+  { key: 'slots', title: '总览', icon: LayoutGrid },
   { key: 'matrix', title: '依赖矩阵', icon: Grid3x3 },
-  { key: 'discover', title: '进件', icon: Compass },
+  { key: 'discover', title: '采集', icon: Compass },
   { key: 'library', title: '因子库', icon: LibrarySquare },
-  { key: 'tools', title: '工具', icon: Wrench },
+  { key: 'tools', title: '检验工具', icon: Wrench },
 ]
 const TOOLS: { key: ToolTab; title: string; icon: typeof Sigma }[] = [
   { key: 'inspect', title: '检验', icon: Sigma },
@@ -37,9 +37,9 @@ const TOOLS: { key: ToolTab; title: string; icon: typeof Sigma }[] = [
 const isTool = (t: string | null): t is ToolTab => t === 'inspect' || t === 'editor' || t === 'composite' || t === 'mining'
 
 const TAB_SUBTITLE: Record<Tab, string> = {
-  slots: '在用 vs 挑战 · 每个槽位一把尺子',
+  slots: '在用与挑战 · 按用途对照',
   matrix: '打分因子 × 策略族',
-  discover: '采集 · 投递 · 周度挖掘',
+  discover: '采集 · 提交 · 每周挖掘',
   library: '因子目录',
   inspect: '单因子 · 批量检验',
   editor: '公式 · 校验 · 试算',
@@ -108,14 +108,14 @@ export function Factors() {
                         onClick={() => changeTab(item.key === 'tools' ? lastTool.current : item.key)}
                         aria-current={active ? 'page' : undefined}
                         className={`inline-flex h-7 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:text-xs ${active
-                          ? 'bg-accent text-white shadow-sm'
+                          ? 'bg-accent dark:bg-blue-700 text-white shadow-sm'
                           : 'text-secondary hover:bg-elevated hover:text-foreground'
                         }`}
                       >
                         <Icon className="hidden h-3.5 w-3.5 sm:block" />
                         {item.title}
                         {item.key === 'discover' && pending > 0 && (
-                          <span data-tab-badge="" className={`rounded-full px-1.5 text-[10.5px] font-semibold tabular-nums ${active ? 'bg-black/30 text-white' : 'bg-elevated text-foreground'}`}>{pending}</span>
+                          <span data-tab-badge="" className={`rounded-full px-1.5 text-[11px] font-semibold tabular-nums ${active ? 'bg-black/30 text-white' : 'bg-elevated text-foreground'}`}>{pending}</span>
                         )}
                       </button>
                     </span>

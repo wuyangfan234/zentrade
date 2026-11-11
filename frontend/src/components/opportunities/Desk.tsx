@@ -6,6 +6,7 @@ import type { ReactNode } from 'react'
 import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, LiveVsReplay, OpenRadarPayload, OppDesk, OppRadarView,
   RadarBlip, SwingBoardsPayload } from '@/lib/api'
 import { cardVerdict, p2, rS, SIDE_ZH, usdS } from '@/components/opportunities/terms'
+import { badge } from '@/components/ui/badge'
 
 const sgn = (v?: number | null) => (typeof v !== 'number' || !Number.isFinite(v) || v === 0 ? 'text-foreground' : v > 0 ? 'text-bull' : 'text-bear')
 const pc = (v?: number | null, d = 2) => (typeof v === 'number' && Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d)}%` : '—')
@@ -27,11 +28,28 @@ function Panel({ children, className = '', ...rest }: { children: ReactNode; cla
 
 function Head({ title, count, meta }: { title: string; count?: number; meta?: string }) {
   return (
-    <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2.5">
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 pb-1.5 pt-2.5">
       <h2 className="shrink-0 whitespace-nowrap text-[14px] font-semibold text-foreground">{title}</h2>
       {count !== undefined && <span className="shrink-0 text-[13px] font-semibold tabular-nums text-secondary">{count}</span>}
-      {meta && <span title={meta} className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>}
+      {meta && <span data-head-meta className="ml-auto min-w-0 text-right text-[12px] tabular-nums text-muted">{meta}</span>}
     </div>
+  )
+}
+
+/** 「a · b · c」按分隔符拆成不可断开的小段: 放不下时整段落到下一行, 不在数字中间断开, 也不截成省略号 */
+function segs(node: ReactNode): ReactNode {
+  if (typeof node !== 'string' || !node.includes(' · ')) return node
+  const parts = node.split(' · ')
+  return (
+    <span className="block overflow-hidden">
+      <span className="-ml-3 flex flex-wrap">
+        {parts.map((p, i) => (
+          <span key={i} className="relative whitespace-nowrap pl-3">
+            {i > 0 && <span aria-hidden className="absolute left-0 w-3 whitespace-pre text-center text-muted">{' · '}</span>}{p}
+          </span>
+        ))}
+      </span>
+    </span>
   )
 }
 
@@ -41,15 +59,14 @@ function Row({ symbol, onOpen, mark, main, sub, right, rightCls, dim, ...rest }:
   return (
     <div role="button" tabIndex={0} {...rest} onClick={() => onOpen(symbol)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(symbol) } }}
-      className="grid min-h-[44px] cursor-pointer grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-2 border-t border-border/70 px-3 py-1.5 tabular-nums first:border-t-0 hover:bg-elevated">
+      className="grid min-h-[44px] cursor-pointer grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-x-2 border-t border-border/70 px-3 py-1.5 tabular-nums first:border-t-0 hover:bg-elevated">
       <span className={`text-[14px] font-bold ${dim ? 'text-muted' : 'text-foreground'}`}>
         {symbol}{mark && <i data-res-mark className="ml-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent" />}
       </span>
-      <span className="min-w-0">
-        <span className={`block truncate text-[12.5px] ${dim ? 'text-muted' : 'text-foreground'}`}>{main}</span>
-        {sub && <span className="block truncate text-[11.5px] text-secondary">{sub}</span>}
-      </span>
+      <span data-row-main className={`min-w-0 text-[13px] leading-[18px] ${dim ? 'text-muted' : 'text-foreground'}`}>{segs(main)}</span>
       <span className={`whitespace-nowrap text-right text-[13px] font-semibold ${rightCls ?? 'text-foreground'}`}>{right}</span>
+      {/* 第二行跨中、右两栏, 放不下就换行, 不截成省略号 */}
+      {sub && <span data-row-sub className="col-span-2 col-start-2 min-w-0 text-[12px] leading-4 text-secondary">{segs(sub)}</span>}
     </div>
   )
 }
@@ -60,7 +77,7 @@ export function LiveLine({ label, live, lead, leadRef, stale, ...rest }: { label
   stale?: boolean } & Record<`data-${string}`, string | undefined>) {
   if (!live) return null
   const ciTxt = live.ci ? `${rS(live.ci[0])} ~ ${rS(live.ci[1])}` : ''
-  const title = live.ci ? '区间 = 出卡日聚类 95%' : '出卡日不足 8 个，不给区间'
+  const title = live.ci ? '区间 = 按机会生成日聚类的 95% 区间' : '机会生成日不足 8 个 · 不给区间'
   return (
     <span {...rest} data-diverged={live.diverged ? '' : undefined} title={title} className="inline-flex flex-wrap items-baseline gap-x-1.5 whitespace-nowrap">
       {label && <b className="font-semibold text-foreground">{label}</b>}
@@ -69,20 +86,20 @@ export function LiveLine({ label, live, lead, leadRef, stale, ...rest }: { label
       {live.n > 0 && <span className="text-secondary">{'每笔 '}<b className={`font-semibold ${sgn(live.mean_r)}`}>{rS(live.mean_r)}</b></span>}
       {ciTxt && <span className="text-muted">{ciTxt}</span>}
       <span className="text-muted">{`回放 ${stale ? '—' : rS(live.replay_mean_r)}`}</span>
-      {live.diverged && <span data-diverged-badge className="rounded-[4px] border border-warning/60 px-1 text-[11px] leading-4 text-warning">背离</span>}
+      {live.diverged && <span data-diverged-badge className={`${badge('warn')} !px-1 !leading-4`}>背离</span>}
     </span>
   )
 }
 
-const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 pt-1 text-[12.5px] text-muted">{t}</div>
-const Err = ({ name }: { name: string }) => <div data-col-error className="px-3 pb-3 pt-1 text-[12.5px] text-danger">{`${name}读取失败`}</div>
+const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 pt-1 text-[13px] text-muted">{t}</div>
+const Err = ({ name }: { name: string }) => <div data-col-error className="px-3 pb-3 pt-1 text-[13px] text-danger">{`${name}读取失败`}</div>
 
 // ── 大盘状态条 ──
 /** 0.51.0: 盘前判断移到页面上方独立一行 (MoodBar), 大盘状态条只写盘中实况 */
 export function RegimeBar({ desk }: { desk: OppDesk }) {
   const r = desk.regime
   const k = r.key
-  const cls = k === 'up' ? 'bg-bull/15 text-bull' : k === 'down' ? 'bg-bear/15 text-bear' : 'bg-accent/10 text-accent'
+  const cls = k === 'up' ? 'bg-bull/15 text-bull dark:text-red-400' : k === 'down' ? 'bg-bear/15 text-emerald-800 dark:text-bear' : 'bg-accent/10 text-accent dark:text-blue-400'
   return (
     <Panel data-regime={k ?? 'none'} className="mb-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 px-3 py-2.5 text-[13px] tabular-nums">
       <span data-regime-badge className={`rounded-btn px-2.5 py-0.5 text-[14px] font-bold ${k ? cls : 'bg-elevated text-muted'}`}>{k ? REGIME_ZH[k] : '大盘 —'}</span>
@@ -100,22 +117,22 @@ function chips(x: DeskResonance): string[] {
   if (e.gap) out.push(`跳空 ${pc(e.gap.pct, 1)}`)
   if (e.open) out.push(`开盘放量 #${e.open.rank ?? '—'} ${x1(e.open.rvol)}`)
   for (const c of e.intraday?.cards ?? []) out.push(`盘中强势 ${md(c.day)} ${rS(c.r)}`)
-  if (e.board) out.push(e.board.state === 'in_zone' ? '机会板 在区' : '机会板 挂单')
+  if (e.board) out.push(e.board.state === 'in_zone' ? '机会板 入场区内' : '机会板 挂单')
   return out
 }
 
 function ResonanceCol({ desk, error, onOpen }: { desk: OppDesk | null; error?: string; onOpen: (s: string) => void }) {
   const xs = desk?.resonance ?? []
   const sh = desk?.shadow
-  const meta = ['不含模型', sh ? `影子 ${sh.n} · 已结算 ${sh.settled}${typeof sh.mean5 === 'number' ? ` · 5日 ${pc(sh.mean5)}` : ''}` : ''].filter(Boolean).join(' · ')
+  const meta = sh ? `观察 ${sh.n} · 已结算 ${sh.settled}${typeof sh.mean5 === 'number' ? ` · 5 日 ${pc(sh.mean5)}` : ''}` : ''
   return (
     <Panel data-resonance data-col="resonance" className="flex flex-col">
-      <Head title="引擎共振" count={xs.length} meta={meta} />
+      <Head title="多信号共振" count={xs.length} meta={meta} />
       <div data-col-body className={COL_BODY}>
-        {error ? <Err name="引擎共振" /> : !desk ? <Empty t="—" /> : xs.length === 0 ? <Empty t="无" /> : xs.map((x) => (
+        {error ? <Err name="多信号共振" /> : !desk ? <Empty t="—" /> : xs.length === 0 ? <Empty t="无" /> : xs.map((x) => (
           <Row key={x.symbol} data-res={x.symbol} symbol={x.symbol} onOpen={onOpen}
-            main={<>{`${x.n} 引擎 · `}<b className={x.side === 'long' ? 'text-bull' : 'text-bear'}>{SIDE_ZH[x.side]}</b></>}
-            sub={<>{chips(x).join(' · ')}{' · '}<span data-res-shadow>{x.shadow_at ? `影子 ${etHm(x.shadow_at)}` : '影子'}</span></>}
+            main={<>{`${x.n} 个信号 · `}<b className={x.side === 'long' ? 'text-bull' : 'text-bear'}>{SIDE_ZH[x.side]}</b></>}
+            sub={<>{chips(x).join(' · ')}{' · '}<span data-res-shadow>{x.shadow_at ? `观察 ${etHm(x.shadow_at)}` : '观察'}</span></>}
             right={pc(x.chg)} rightCls={sgn(x.chg)} />
         ))}
       </div>
@@ -147,12 +164,12 @@ function OpenCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void }) {
     <>
       {picks.map((x) => (
         <Row key={x.symbol} data-open-row={x.symbol} symbol={x.symbol} onOpen={onOpen} mark={d.res.has(x.symbol)}
-          main={`#${x.rank} · 相对量 ${x1(x.rvol)} · 开盘5分 ${pc(x.or_chg_pct, 1)}`} sub={`区间 ${p2(x.or_low)}–${p2(x.or_high)}`}
+          main={`#${x.rank} · 相对量 ${x1(x.rvol)} · 开盘 5 分 ${pc(x.or_chg_pct, 1)}`} sub={`区间 ${p2(x.or_low)}–${p2(x.or_high)}`}
           right={pc(x.chg_now_pct)} rightCls={sgn(x.chg_now_pct)} />
       ))}
       {others.map((x) => (
         <Row key={x.symbol} data-open-other={x.symbol} symbol={x.symbol} onOpen={onOpen} dim
-          main={`相对量 ${x1(x.rvol)} · 开盘5分 ${pc(x.or_chg_pct, 1)}`} right={pc(x.chg_now_pct)} rightCls={sgn(x.chg_now_pct)} />
+          main={`相对量 ${x1(x.rvol)} · 开盘 5 分 ${pc(x.or_chg_pct, 1)}`} right={pc(x.chg_now_pct)} rightCls={sgn(x.chg_now_pct)} />
       ))}
     </>
   )
@@ -169,12 +186,12 @@ function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void })
     <>
       {active.map((c) => (
         <Row key={c.card_id} data-intraday-row={c.symbol} symbol={c.symbol} onOpen={onOpen} mark={d.res.has(c.symbol)}
-          main={`${md(c.day)} ${c.check} · 第 ${c.day_n ?? 1}/${c.hold_days} 天`} sub={`入 ${p2(c.entry)} · 止 ${p2(c.stop)} · 目 ${p2(c.target)}`}
+          main={`${md(c.day)} ${c.check} · 第 ${c.day_n ?? 1}/${c.hold_days} 天`} sub={`入场 ${p2(c.entry)} · 止损 ${p2(c.stop)} · 目标 ${p2(c.target)}`}
           right={rS(c.r_now)} rightCls={sgn(c.r_now)} />
       ))}
       {closedToday.map((c) => (
         <Row key={c.card_id} data-intraday-closed={c.symbol} symbol={c.symbol} onOpen={onOpen} dim
-          main={`${c.check} 出 · ${etHm(c.exit_at ?? '') || '—'} ${c.exit_reason === 'target' ? '目标' : c.exit_reason === 'stop' ? '止损' : '结束'}`}
+          main={`${c.check} 入场 · ${etHm(c.exit_at ?? '') || '—'} ${c.exit_reason === 'target' ? '目标' : c.exit_reason === 'stop' ? '止损' : '结束'}`}
           right={rS(c.r)} rightCls={sgn(c.r)} />
       ))}
     </>
@@ -203,26 +220,26 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
     <Panel data-strategy-board data-source="strategy" className="mb-3 overflow-hidden border-accent/60">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5">
         <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted">策略机会</span>
-        <h2 className="shrink-0 text-[15px] font-semibold text-foreground">机会板</h2>
-        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">3+3 策略命中</span>
-        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">4h 方向门</span>
-        <span data-board-orders className="shrink-0 rounded-[4px] bg-accent px-1.5 text-[11px] font-semibold leading-5 text-white dark:bg-blue-700">{`下单 ${nOrder}`}</span>
-        {nSkip > 0 && <span data-board-skips className="shrink-0 rounded-[4px] border border-warning/60 px-1.5 text-[11px] font-semibold leading-5 text-warning">{`不下单 ${nSkip}`}</span>}
+        <h2 className="shrink-0 text-[14px] font-semibold text-foreground">机会板</h2>
+        <span className={badge('limit')}>策略命中</span>
+        <span className={badge('limit')}>4h 趋势过滤</span>
+        <span data-board-orders className={badge('action')}>{`下单 ${nOrder}`}</span>
+        {nSkip > 0 && <span data-board-skips className={badge('warn')}>{`不下单 ${nSkip}`}</span>}
         <span className="ml-auto whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>
       </div>
       {live && (
         <div data-board-live className="flex flex-wrap items-baseline gap-x-5 gap-y-1 border-t border-border/70 px-3 py-1.5 text-[12px] tabular-nums">
           {(['long', 'short'] as const).map((k) => (
             <LiveLine key={k} data-board-live-side={k} label={SIDE_ZH[k]} live={live[k]} stale={live[k].replay_stale}
-              lead={`实际回区 ${live[k].n}/${live[k].cards}`} leadRef={live[k].replay_stale ? undefined : `回放 ${pct0(live[k].replay_fill)}`} />
+              lead={`已成交 ${live[k].n}/${live[k].cards}`} leadRef={live[k].replay_stale ? undefined : `回放 ${pct0(live[k].replay_fill)}`} />
           ))}
         </div>
       )}
       {error ? <Err name="机会板" /> : !swing ? <Empty t="—" /> : cards.length === 0 ? <Empty t="无" /> : (
         <div className="overflow-x-auto border-t border-border/70">
-          <table className="w-full min-w-[1120px] text-[12.5px] tabular-nums">
-            <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
-              {['股票', '方向', '结论', '命中策略', '4h 门', '入场区', '止损', '目标', '股数', '回区', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 || i === 3 ? 'text-left' : 'text-right'}`}>{h}</th>)}
+          <table className="w-full min-w-[1120px] text-[13px] tabular-nums">
+            <thead><tr className="h-8 bg-elevated text-[12px] text-muted">
+              {['代码', '方向', '结论', '命中策略', '4h 趋势', '入场区', '止损', '目标', '股数', '成交率', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 || i === 3 ? 'text-left' : 'text-right'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
               {cards.map((c, i) => {
@@ -235,7 +252,7 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
                     <td className={`px-3 text-left text-[14px] font-bold ${v.order ? 'text-foreground' : 'text-muted'}`}>{c.symbol}{res.has(c.symbol) && <i data-res-mark className="ml-1 inline-block h-1.5 w-1.5 -translate-y-0.5 rounded-full bg-accent" />}</td>
                     <td className={`px-3 text-right font-semibold ${c.side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[c.side]}</td>
                     <td data-board-verdict className="whitespace-nowrap px-3 text-left" title={v.title}>
-                      <span className={`rounded-[4px] border px-1.5 text-[11px] font-semibold leading-5 ${v.order ? 'border-accent/50 text-accent' : 'border-warning/60 text-warning'}`}>{v.label}</span>
+                      <span className={badge(v.order ? 'action' : 'warn')}>{v.label}</span>
                       <span className={`ml-1.5 text-[12px] ${v.order ? 'text-secondary' : 'text-warning'}`}>{v.detail}</span>
                     </td>
                     <td className="max-w-[220px] truncate px-3 text-left text-secondary" title={c.strategies.map((s) => s.name).join(' · ')}>{c.strategies.map((s) => s.name).join(' · ') || '—'}</td>
@@ -244,7 +261,7 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
                     <td className="px-3 text-right text-foreground">{p2(c.stop)}</td>
                     <td data-board-target className="px-3 text-right text-foreground">{p2(c.target)}</td>
                     <td className="px-3 text-right text-foreground">{c.odds?.qty ?? c.qty ?? '—'}</td>
-                    <td data-board-fill className="px-3 text-right text-secondary" title={stale ? '回放表不是这张卡的出卡规则' : undefined}>{typeof c.odds?.fill === 'number' ? `${(c.odds.fill * 100).toFixed(0)}%` : '—'}</td>
+                    <td data-board-fill className="px-3 text-right text-secondary" title={stale ? '回放统计不适用于本条规则' : undefined}>{typeof c.odds?.fill === 'number' ? `${(c.odds.fill * 100).toFixed(0)}%` : '—'}</td>
                     <td className="px-3 text-right text-secondary">{p2(c.price)}</td>
                   </tr>
                 )
@@ -271,9 +288,8 @@ export function EngineCols({ order, d, desk, onOpen }: { order: DeskEngine[]; d:
     <section data-radar-section className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
       <div className="flex flex-wrap items-center gap-2 px-3 py-2.5">
         <span className="text-[11px] font-medium tracking-wide text-muted">盘中参考</span>
-        <h2 className="text-[15px] font-semibold text-foreground">盘面雷达</h2>
-        <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只记录</span>
-        <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">不含模型</span>
+        <h2 className="text-[14px] font-semibold text-foreground">盘面雷达</h2>
+        <span title="只记录，不下单；不计入模型评分" className={badge('limit')}>仅观察</span>
       </div>
       <div data-cols className="grid gap-3 border-t border-border/70 bg-base p-3 md:grid-cols-2 xl:grid-cols-4">
         {radarOrder.map((k) => {
@@ -299,12 +315,12 @@ export function Holdings({ view, onOpen }: { view: OppRadarView; onOpen: (s: str
   const pnl = hs.reduce((s, b) => s + (b.hold.pnl_usd ?? 0), 0)
   return (
     <Panel data-holdings>
-      <Head title="持仓" count={hs.length} meta={hs.length ? `浮动 ${usdS(pnl)}` : ''} />
+      <Head title="持仓" count={hs.length} meta={hs.length ? `浮动盈亏 ${usdS(pnl)}` : ''} />
       {hs.length === 0 ? <Empty t="无" /> : (
         <div className="overflow-x-auto pb-1">
           <table className="w-full min-w-[560px] text-[13px] tabular-nums">
             <thead><tr className="text-[12px] text-muted">
-              {['票', '方向', '股数', '成本', '现价', '止损', '浮动', '第几天'].map((h, i) => <th key={h} className={`px-3 py-1.5 font-medium ${i ? 'text-right' : 'text-left'}`}>{h}</th>)}
+              {['代码', '方向', '股数', '成本', '现价', '止损', '浮动盈亏', '持有天数'].map((h, i) => <th key={h} className={`px-3 py-1.5 font-medium ${i ? 'text-right' : 'text-left'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
               {hs.map((b) => {
@@ -316,7 +332,7 @@ export function Holdings({ view, onOpen }: { view: OppRadarView; onOpen: (s: str
                     <td className="px-3 py-2 text-right">{h.qty}</td>
                     <td className="px-3 py-2 text-right">{p2(h.avg)}</td>
                     <td className="px-3 py-2 text-right">{p2(h.price)}</td>
-                    <td className="px-3 py-2 text-right">{p2(h.stop_now)}{h.stop_moved && <span className="text-muted">{` (${p2(h.stop_initial)})`}</span>}</td>
+                    <td className="px-3 py-2 text-right">{p2(h.stop_now)}{h.stop_moved && <span data-stop-initial className="block text-[11px] leading-4 text-muted">{`原 ${p2(h.stop_initial)}`}</span>}</td>
                     <td className={`px-3 py-2 text-right font-semibold ${sgn(h.r_now)}`}>{`${rS(h.r_now)} · ${usdS(h.pnl_usd)}`}</td>
                     <td className="px-3 py-2 text-right">{`${h.day_n}/${h.max_days}`}</td>
                   </tr>

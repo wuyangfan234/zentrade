@@ -133,7 +133,7 @@ export function StockDataTable({
                 >
                   {contentOverride !== undefined ? contentOverride : col.label}
                   {sortable && (
-                    <span className={`inline-block ml-1 text-[10px] transition-colors ${isSorted ? 'text-foreground' : 'text-muted group-hover:text-secondary'}`}>
+                    <span className={`inline-block ml-1 text-[11px] transition-colors ${isSorted ? 'text-foreground' : 'text-muted group-hover:text-secondary'}`}>
                       {isSorted ? (dir === 'asc' ? '↑' : '↓') : '↕'}
                     </span>
                   )}

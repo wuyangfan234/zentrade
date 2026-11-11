@@ -15,7 +15,7 @@ export function NavPager({ nav, prevLabel, nextLabel }: NavPagerProps) {
   if (!nav.navEnabled) return null
   return (
     <>
-      <span className="mx-0.5 shrink-0 text-muted/20">|</span>
+      <span className="mx-0.5 shrink-0 text-xs text-muted">|</span>
       <button
         onClick={() => nav.go(-1)}
         title={`${prevLabel} (←)`}
@@ -24,7 +24,7 @@ export function NavPager({ nav, prevLabel, nextLabel }: NavPagerProps) {
       >
         <ChevronLeft className="h-3.5 w-3.5" />
       </button>
-      <span className="shrink-0 font-mono text-[11px] text-secondary tabular-nums whitespace-nowrap">
+      <span className="shrink-0 tabular-nums text-[11px] text-secondary whitespace-nowrap">
         {nav.navIdx + 1} / {nav.navTotal}
       </span>
       <button

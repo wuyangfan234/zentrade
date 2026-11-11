@@ -500,7 +500,7 @@ export function EChartsIntraday({
     <div className="w-full">
       <div style={{ backgroundColor: ct.infoBarBg }}>
         {/* 第一行: 日期 + OHLC */}
-        <div className="flex items-center gap-x-2 px-2 font-mono text-[11px] select-none flex-wrap" style={{ minHeight: 20 }}>
+        <div className="flex items-center gap-x-2 px-2 tabular-nums text-[11px] select-none flex-wrap" style={{ minHeight: 20 }}>
           {!d && <span className="text-muted">—</span>}
           {ohlc && (
             <>
@@ -518,7 +518,7 @@ export function EChartsIntraday({
           )}
         </div>
         {/* 第二行: 价格+均价+量+额 */}
-        <div className="flex flex-wrap items-center gap-x-2 px-2 font-mono text-[11px] select-none" style={{ minHeight: 20 }}>
+        <div className="flex flex-wrap items-center gap-x-2 px-2 tabular-nums text-[11px] select-none" style={{ minHeight: 20 }}>
           {d && (
             <>
               <span className="flex items-center gap-x-1">

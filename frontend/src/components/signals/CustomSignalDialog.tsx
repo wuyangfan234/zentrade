@@ -147,7 +147,7 @@ export function CustomSignalDialog({ open, signal, defaultKind = 'exit', onClose
             <div className="flex items-center justify-between gap-3 border-b border-border/50 px-5 py-4">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">{editing ? '编辑自定义信号' : '新建自定义信号'}</h3>
-                <p className="mt-1 text-[11px] text-muted">标识保存后不可修改，如需更换请新建。自定义信号保存为 csg_* 列。</p>
+                <p className="mt-1 text-[11px] text-muted">标识保存后不可修改 · 需更换请新建</p>
               </div>
               <button onClick={onClose} className="rounded-lg p-1.5 text-muted transition-colors hover:bg-elevated hover:text-foreground">
                 <X className="h-4 w-4" />
@@ -201,7 +201,7 @@ export function CustomSignalDialog({ open, signal, defaultKind = 'exit', onClose
                     const condOps = isStr ? stringOperators : operators
                     return (
                     <div key={i} className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] text-muted w-5 text-right shrink-0">{i === 0 ? '当' : '且'}</span>
+                      <span className="text-[11px] text-muted w-5 text-right shrink-0">{i === 0 ? '当' : '且'}</span>
 
                       {/* 左操作数: 前N日 + 字段(弹出选择) */}
                       <DaysInput value={c.leftDays ?? 0} max={maxDays} onChange={v => updateCond(i, { leftDays: v })} />
@@ -240,8 +240,8 @@ export function CustomSignalDialog({ open, signal, defaultKind = 'exit', onClose
                     </div>
                     {aiConfigured === false ? (
                       <div className="text-xs text-amber-700 dark:text-amber-400/80">
-                        AI 未配置，无法生成信号。{' '}
-                        <a href="/settings?tab=ai" className="underline hover:text-amber-700 dark:hover:text-amber-300">去设置页配置 API Key</a>
+                        AI 未配置 ·{' '}
+                        <a href="/settings?tab=ai" className="underline hover:text-amber-700 dark:hover:text-amber-300">前往设置</a>
                       </div>
                     ) : (
                       <>
@@ -267,8 +267,8 @@ export function CustomSignalDialog({ open, signal, defaultKind = 'exit', onClose
                     )}
                   </div>
                 )}
-                <p className="text-[10px] text-muted px-1">
-                  每个操作数左侧的 <span className="text-foreground/70">最新</span> 按钮可点击切换为「前N日」(取 N 个交易日前的值)。例:收盘价(最新) &gt; 收盘价(前1日) = 上涨。带偏移的条件仅盘后/回测生效，盘中实时跳过。
+                <p className="text-[11px] text-muted px-1">
+                  每个操作数左侧的 <span className="text-foreground/70">最新</span> 按钮可切换为「前 N 日」（取 N 个交易日前的值）。例:收盘价(最新) &gt; 收盘价(前1日) = 上涨。带偏移的条件仅盘后/回测生效，盘中实时跳过。
                 </p>
               </div>
 
@@ -367,13 +367,13 @@ function FieldPicker({ value, fields, groups, onChange }: {
                   {filteredGroups ? (
                     filteredGroups.length > 0 ? filteredGroups.map(g => (
                       <div key={g.key} className="mb-1">
-                        <div className="px-2 py-1 text-[10px] text-muted font-medium">{g.label}</div>
+                        <div className="px-2 py-1 text-[11px] text-muted font-medium">{g.label}</div>
                         {g.fields.map(f => (
                           <button
                             key={f.key}
                             onClick={() => { onChange(f.key); setOpen(false) }}
                             className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors ${
-                              f.key === value ? 'bg-accent/10 text-accent' : 'text-foreground/80 hover:bg-elevated'
+                              f.key === value ? 'bg-accent/10 text-accent dark:text-blue-400' : 'text-foreground/80 hover:bg-elevated'
                             }`}
                           >
                             {f.label}
@@ -389,7 +389,7 @@ function FieldPicker({ value, fields, groups, onChange }: {
                         key={f.key}
                         onClick={() => { onChange(f.key); setOpen(false) }}
                         className={`w-full text-left px-2.5 py-1.5 rounded text-xs transition-colors ${
-                          f.key === value ? 'bg-accent/10 text-accent' : 'text-foreground/80 hover:bg-elevated'
+                          f.key === value ? 'bg-accent/10 text-accent dark:text-blue-400' : 'text-foreground/80 hover:bg-elevated'
                         }`}
                       >
                         {f.label}
@@ -415,7 +415,7 @@ function DaysInput({ value, max, onChange }: { value: number; max: number; onCha
       <button
         type="button"
         onClick={() => onChange(1)}
-        title="点击切换为「前N日」(取 N 个交易日前的值)"
+        title="切换为「前 N 日」（取 N 个交易日前的值）"
         className="h-7 px-2 rounded bg-base border border-border text-[11px] text-muted hover:text-accent hover:border-accent/50 transition-colors shrink-0 cursor-pointer"
       >
         最新

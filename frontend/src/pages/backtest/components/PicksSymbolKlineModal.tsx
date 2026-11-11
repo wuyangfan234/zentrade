@@ -119,14 +119,14 @@ export function PicksSymbolKlineModal({ symbol, result, periodStart, periodEnd, 
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-mono text-sm font-semibold text-foreground">{symbol}</span>
+                    <span className="tabular-nums text-sm font-semibold text-foreground">{symbol}</span>
                     {name && <span className="truncate text-sm text-foreground">{name}</span>}
                     {tag && (
-                      <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">
+                      <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent dark:text-blue-400">
                         {tag}
                       </span>
                     )}
-                    <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">标的回放</span>
+                    <span className="rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent dark:text-blue-400">K 线回放</span>
 
                     {/* 切标的: 上一只 / n·N / 下一只 */}
                     <NavPager nav={nav} prevLabel="上一只" nextLabel="下一只" />
@@ -134,8 +134,8 @@ export function PicksSymbolKlineModal({ symbol, result, periodStart, periodEnd, 
                   <div className="mt-1 text-[11px] text-muted">
                     回测 {periodStart} ~ {periodEnd} · {trades.length} 笔交易
                   </div>
-                  <div className="mt-1 text-[10px] text-muted">
-                    ▲ 买入(红) · ▼ 卖出(绿) · 箭头旁为成交价 · 同日多笔合并显示
+                  <div className="mt-1 text-[11px] text-muted">
+                    ▲ 买入（红）· ▼ 卖出（绿）· 箭头旁为成交价 · 同日多笔合并
                   </div>
                 </div>
 
@@ -163,7 +163,7 @@ export function PicksSymbolKlineModal({ symbol, result, periodStart, periodEnd, 
                   <button
                     onClick={onClose}
                     className="rounded-btn p-1 text-secondary transition-colors hover:bg-elevated hover:text-foreground"
-                    aria-label="关闭标的回放"
+                    aria-label="关闭"
                   >
                     <X className="h-4 w-4" />
                   </button>

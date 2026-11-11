@@ -5,14 +5,15 @@
  * - SetupBanner: 首页横幅。必需项缺失时常驻不可关; 只缺建议项时可关闭 (状态存后端)。
  * 数据只读 GET /api/settings/setup-checklist, 不含任何密钥原文。
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, CheckCircle2, CircleDashed, ExternalLink, ListChecks, Loader2, Save, X } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, CircleDashed, ExternalLink, ListChecks, Loader2, Save, X } from 'lucide-react'
 import { api, type SetupChecklist, type SetupItem } from '@/lib/api'
 import { cardFlashCls, useCardFlash } from '@/lib/useCardFlash'
 import { QK } from '@/lib/queryKeys'
 import { toast } from '@/components/Toast'
+import { badge } from '@/components/ui/badge'
 
 const LEVEL_LABEL: Record<SetupItem['level'], string> = { required: '必需', recommended: '建议', optional: '可选' }
 const GROUP_LABEL: Record<SetupItem['group'], string> = { market: '行情数据', news: '新闻与基本面', ai: 'AI 模型', notify: '推送' }
@@ -68,7 +69,7 @@ function InlineSecret({ itemId, autoFocus = false }: { itemId: string; autoFocus
       <button
         type="submit"
         disabled={!value.trim() || save.isPending}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs text-white disabled:opacity-50"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 text-xs text-white disabled:opacity-50"
       >
         {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         保存
@@ -84,43 +85,58 @@ function ItemRow({ item, highlight }: { item: SetupItem; highlight?: string }) {
   const targeted = highlight === anchor
   // 指向清单本行的链接 (Finnhub / SEC 在本行内直接填写) 不再显示「去配置」: 点了也只是原地不动
   const selfLink = item.where.includes(`highlight=${anchor}`)
+  // 一行一项: 已配置的默认收起, 未配置或被定位到的默认展开 (要看影响与填写框)
+  const [open, setOpen] = useState(!item.configured || targeted)
+  useEffect(() => { if (targeted) setOpen(true) }, [targeted])
+  const src = item.source && item.source !== '已配置' ? (item.source === '.env' ? '环境变量' : item.source) : ''
   return (
     <li className="border-t border-border first:border-t-0">
-    <div ref={ref} id={anchor} className={`flex gap-3 py-3 ${cardFlashCls(flash)}`}>
-      <div className="pt-0.5"><StatusIcon item={item} /></div>
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="text-sm font-medium text-foreground">{item.label}</span>
-          <span className={`rounded px-1.5 py-px text-[10px] ${item.level === 'required' ? 'bg-bull/10 text-bull' : 'bg-elevated text-secondary'}`}>
+    <div ref={ref} id={anchor} className={cardFlashCls(flash)}>
+      <div data-setup-row={item.id} className="flex min-h-[40px] items-center gap-3 py-1.5">
+        <StatusIcon item={item} />
+        <button type="button" aria-expanded={open} onClick={() => setOpen(v => !v)}
+          className="flex min-w-0 flex-1 cursor-pointer flex-wrap items-center gap-x-2 gap-y-1 text-left">
+          <span className="text-[13px] font-medium text-foreground">{item.label}</span>
+          <span className={`rounded-[4px] px-1.5 text-[11px] leading-5 ${item.level === 'required' ? 'bg-bull/10 text-bull dark:text-red-400' : 'bg-elevated text-secondary'}`}>
             {LEVEL_LABEL[item.level]}
           </span>
-          <span className="text-[11px] text-muted">{item.configured ? `已配置${item.source ? ` · ${item.source}` : ''}` : '未配置'}</span>
-        </div>
-        <p className="mt-1 text-xs leading-relaxed text-secondary">{item.purpose}</p>
-        {!item.configured && <p className="mt-1 text-xs leading-relaxed text-foreground/80">{item.impact}</p>}
-        {item.configured && item.id === 'ai_news' && <p className="mt-1 text-xs leading-relaxed text-secondary">{item.impact}</p>}
-        {item.warn && (
-          <p className="mt-1.5 flex gap-1.5 rounded-btn bg-warning/10 px-2 py-1.5 text-xs leading-relaxed text-warning">
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
-            <span>{item.warn}</span>
-          </p>
-        )}
-        {item.note && <p className="mt-1 text-[11px] text-muted">{item.note}</p>}
-        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
-          {item.env.length > 0 && (
-            <span className="text-muted">.env：<code className="font-mono text-secondary">{item.env.join(' / ')}</code></span>
-          )}
-          {href && !selfLink && <Link to={href} className="text-accent hover:underline">去配置</Link>}
-          {item.link && (
+          <span className="text-[11px] text-muted">{item.configured ? `已配置${src ? ` · ${src}` : ''}` : '未配置'}</span>
+          {item.warn && !open && <span className={badge('warn')}>有提示</span>}
+        </button>
+        <div className="grid shrink-0 grid-cols-[2rem_3rem_1.5rem] items-center gap-2 text-[11px]">
+          {href && !selfLink ? <Link to={href} className="text-accent hover:underline">配置</Link> : <span />}
+          {item.link ? (
             <a href={item.link} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 text-accent hover:underline">
-              申请 <ExternalLink className="h-3 w-3" />
+              官网 <ExternalLink className="h-3 w-3" />
             </a>
-          )}
+          ) : <span />}
+          <button type="button" aria-label={open ? '收起说明' : '展开说明'} onClick={() => setOpen(v => !v)} className="cursor-pointer p-1 text-muted hover:text-foreground">
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
         </div>
-        {INLINE_EDIT[item.id] && (item.configured
-          ? <details open={targeted || undefined} className="mt-1.5 text-[11px]"><summary className="cursor-pointer text-accent">修改</summary><InlineSecret itemId={item.id} autoFocus={targeted} /></details>
-          : <InlineSecret itemId={item.id} autoFocus={targeted} />)}
       </div>
+      {open && (
+        <div data-setup-detail className="pb-3 pl-7">
+          <p className="text-xs leading-relaxed text-secondary">{item.purpose}</p>
+          {!item.configured && <p className="mt-1 text-xs leading-relaxed text-foreground/80">{item.impact}</p>}
+          {item.configured && item.id === 'ai_news' && <p className="mt-1 text-xs leading-relaxed text-secondary">{item.impact}</p>}
+          {item.warn && (
+            <p className="mt-1.5 flex gap-1.5 rounded-btn bg-warning/10 px-2 py-1.5 text-xs leading-relaxed text-warning">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-px" />
+              <span>{item.warn}</span>
+            </p>
+          )}
+          {item.note && <p className="mt-1 text-[11px] text-muted">{item.note}</p>}
+          {item.env.length > 0 && (
+            <div className="mt-1.5 text-[11px]">
+              <span className="cursor-help text-muted underline decoration-dotted underline-offset-2" title={item.env.join(' / ')}>环境变量</span>
+            </div>
+          )}
+          {INLINE_EDIT[item.id] && (item.configured
+            ? <details open={targeted || undefined} className="mt-1.5 text-[11px]"><summary className="cursor-pointer text-accent">修改</summary><InlineSecret itemId={item.id} autoFocus={targeted} /></details>
+            : <InlineSecret itemId={item.id} autoFocus={targeted} />)}
+        </div>
+      )}
     </div>
     </li>
   )
@@ -142,7 +158,7 @@ export function SetupChecklistCard({ highlight }: { highlight?: string } = {}) {
         )}
       </div>
       <p className="mb-3 text-[11px] text-muted">
-        所有 Key 可以在页面填写（存 data/user_data/secrets.json，优先于 .env），也可以写进 .env 后重启。
+        密钥可在本页填写 · 仅保存在本机
       </p>
       {q.isLoading && <Loader2 className="h-4 w-4 animate-spin text-muted" />}
       {q.isError && <p className="text-xs text-bull">读取失败：{(q.error as Error).message}</p>}
@@ -186,8 +202,8 @@ export function SetupBanner({ requiredOnly = false }: { requiredOnly?: boolean }
       <AlertTriangle className={`h-4 w-4 shrink-0 mt-px ${blocking ? 'text-bull' : 'text-warning'}`} />
       <div className="min-w-0 flex-1 leading-relaxed text-secondary">
         {blocking
-          ? <><span className="font-medium text-foreground">未配置：{names(req)}</span>。系统没有行情数据，机会板与纸面交易无法运行。</>
-          : <><span className="font-medium text-foreground">建议配置：{names(rec)}</span>。不影响交易环，相关功能缺失或降级。</>}
+          ? <><span className="font-medium text-foreground">未配置：{names(req)}</span> · 无行情数据时机会板与模拟交易不可用</>
+          : <><span className="font-medium text-foreground">建议配置：{names(rec)}</span> · 不影响交易，相关功能不可用或降级</>}
         {' '}
         <Link to="/settings?tab=data-sources&highlight=setup-checklist" className="text-accent hover:underline">查看配置清单</Link>
       </div>

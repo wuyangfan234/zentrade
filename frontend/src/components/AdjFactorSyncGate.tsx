@@ -62,11 +62,11 @@ export function useAdjFactorSyncGate() {
             <h3 className="text-sm font-semibold text-foreground mb-1.5">当前无除权因子能力</h3>
             <p className="text-xs text-secondary leading-relaxed">
               本次同步的日K将以<span className="text-foreground font-medium">不复权价格</span>入库并计算指标,
-              K 线可能包含除权跳空。后续配置除权因子能力后重新同步，才能得到前复权的数据。
+              K 线可能含除权跳空 · 配置除权因子后重新同步可得到前复权数据
             </p>
             <div className="mt-2 flex items-start gap-1.5 text-[11px] text-warning">
               <Info className="h-3.5 w-3.5 shrink-0 mt-px text-warning" />
-              <span>若期间发生除权(分红/送转)事件，已有数据需要重新校准。</span>
+              <span>期间如有除权（分红 / 送转），已有数据需重新校准</span>
             </div>
             <label className="mt-3 flex items-center gap-1.5 text-[11px] text-muted cursor-pointer select-none">
               <input
@@ -92,7 +92,7 @@ export function useAdjFactorSyncGate() {
               pending.run()
               setPending(null)
             }}
-            className="px-4 h-9 rounded-btn bg-accent text-white text-sm font-medium hover:bg-accent/90 transition-colors"
+            className="px-4 h-9 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-medium hover:bg-accent/90 transition-colors"
           >
             仍然同步
           </button>

@@ -28,7 +28,7 @@ export function OptionsHeatmap({ h }: { h: HM }) {
     <div data-opt-heatmap className="space-y-2">
       <div data-heat-sentence className="text-sm font-medium text-foreground">{heatSentence(h)}</div>
       <div className="overflow-x-auto">
-        <table className="w-full border-separate border-spacing-0.5 text-[10px] tabular-nums">
+        <table className="w-full border-separate border-spacing-0.5 text-[11px] tabular-nums">
           <thead>
             <tr>
               <th />
@@ -62,7 +62,7 @@ export function OptionsHeatmap({ h }: { h: HM }) {
           </tbody>
         </table>
       </div>
-      <div className="flex items-center gap-3 text-[10px] text-muted">
+      <div className="flex items-center gap-3 text-[11px] text-muted">
         <span><span className="mr-1 inline-block h-2 w-3 rounded-sm bg-bull/70 align-middle" />看涨多</span>
         <span><span className="mr-1 inline-block h-2 w-3 rounded-sm bg-bear/70 align-middle" />看跌多</span>
         <span>颜色越深持仓越大 · 点格子看明细</span>

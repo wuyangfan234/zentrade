@@ -17,7 +17,7 @@ function etTime(iso?: string) {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
-  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d) + ' 美东'
+  return new Intl.DateTimeFormat('zh-CN', { timeZone: 'America/New_York', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d) + ' ET'
 }
 
 function useUsage() {
@@ -43,14 +43,14 @@ export function PaidFetchBar({ meta, pending, onFetch, label, error }: {
         type="button"
         onClick={onFetch}
         disabled={pending || !configured || ledgerBlocked}
-        className="inline-flex h-6 items-center gap-1 rounded bg-accent px-2.5 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+        className="inline-flex h-6 items-center gap-1 rounded bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-2.5 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
       >
         {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
         {label}
       </button>
       <span className="inline-flex items-center gap-1 text-secondary">
         <Coins className="h-3 w-3" />
-        {freshCache ? '缓存仍新鲜 · 再点免费' : `约 ${meta?.cost ?? 1} 积分`}
+        {freshCache ? '缓存有效 · 再次查询不计费' : `约 ${meta?.cost ?? 1} 积分`}
       </span>
       {meta?.available && meta.fetched_at && (
         <span className="text-muted">
@@ -61,10 +61,10 @@ export function PaidFetchBar({ meta, pending, onFetch, label, error }: {
         <span className="ml-auto text-muted tabular-nums">
           {u.configured
             ? `今日 ${num(u.spent_today, 2)}/${num(u.daily_limit, 0)} · 余额 ${u.balance.remaining != null ? num(u.balance.remaining, 2) : '—'}`
-            : '未配置 QVeris Key（设置 → 数据源）'}
+            : '未配置 QVeris Key（设置 › 数据源）'}
         </span>
       )}
-      {ledgerBlocked && <span role="alert" className="basis-full text-danger">额度未知，暂停收费查询。{u?.error}</span>}
+      {ledgerBlocked && <span role="alert" className="basis-full text-danger">额度未知 · 已暂停付费查询 {u?.error}</span>}
       {error && <span className="basis-full text-danger">{error}</span>}
     </div>
   )
@@ -93,15 +93,15 @@ export function OptionsPanel({ symbol }: { symbol: string }) {
     <div data-options-panel className="space-y-3 text-xs">
       <PaidFetchBar meta={data} pending={m.isPending} onFetch={() => m.mutate()} label="查询期权"
         error={m.error ? (m.error as Error).message : null} />
-      {q.isLoading && <div className="py-4 text-muted">读取缓存…</div>}
-      {data && !data.available && <div className="py-4 text-muted">尚未查询该股期权。点「查询期权」获取全链（含希腊值与隐含波动率）。</div>}
+      {q.isLoading && <div className="py-4 text-muted">加载中</div>}
+      {data && !data.available && <div className="py-4 text-muted">暂无期权数据 · 查询后显示全链、希腊值与隐含波动率</div>}
       {data?.available && a && !a.ok && <div className="py-4 text-warning">{a.reason ?? '期权数据不可用'}</div>}
       {data?.available && a?.ok && (
         <>
           <div className="text-[11px] text-muted">
             {`数据日 ${a.as_of ?? '—'} · ${a.contracts} 个合约 / ${a.expirations} 个到期日 · 现价 $${num(data.spot)}（${data.spot_source}）`}
           </div>
-          {data.source === 'alpaca' && <div className="text-[10px] text-muted" data-options-source="alpaca">免费源 · 持仓量为上一交易日</div>}
+          {data.source === 'alpaca' && <div className="text-[11px] text-muted" data-options-source="alpaca">免费源 · 持仓量为上一交易日</div>}
           {a.iv_hidden && <div className="text-[11px] text-muted" data-iv-hidden>{a.iv_hidden_reason ?? '非交易时段不显示隐含波动率'}</div>}
           {a.heatmap && <OptionsHeatmap h={a.heatmap} />}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -154,7 +154,7 @@ export function OptionsPanel({ symbol }: { symbol: string }) {
               )}
             </div>
           </div>
-          <div className="text-[10px] text-muted">期权数据反映市场定价与资金流向，不是方向判断；只用于展示与辅助判断，不参与开仓。</div>
+          <div className="text-[11px] text-muted">期权数据仅供参考 · 不参与开仓</div>
         </>
       )}
     </div>
@@ -164,9 +164,9 @@ export function OptionsPanel({ symbol }: { symbol: string }) {
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded border border-border/60 px-2 py-1.5">
-      <div className="text-[10px] text-muted">{label}</div>
+      <div className="text-[11px] text-muted">{label}</div>
       <div className="text-sm font-medium tabular-nums text-foreground">{value}</div>
-      {hint && <div className="truncate text-[10px] text-muted" title={hint}>{hint}</div>}
+      {hint && <div className="truncate text-[11px] text-muted" title={hint}>{hint}</div>}
     </div>
   )
 }
@@ -191,7 +191,7 @@ export function EarningsPanel({ symbol }: { symbol: string }) {
         </div>
         <PaidFetchBar meta={est.data} pending={est.m.isPending} onFetch={() => est.m.mutate()} label="查询预期"
           error={est.m.error ? (est.m.error as Error).message : null} />
-        {est.data && !est.data.available && <div className="py-3 text-muted">尚未查询。10 个交易日内有财报的持仓与候选每天美东 08:45 自动查一次。</div>}
+        {est.data && !est.data.available && <div className="py-3 text-muted">暂无数据 · 10 个交易日内有财报的持仓与候选每日 08:45 ET 自动查询</div>}
         {est.data?.available && e && (
           <div className="mt-2 space-y-2">
             {e.next && (
@@ -221,7 +221,7 @@ export function EarningsPanel({ symbol }: { symbol: string }) {
         )}
       </section>
       <TranscriptSection symbol={symbol} />
-      <div className="text-[10px] text-muted">一致预期为分析师观点汇总；电话会情绪分来自数据源。只用于展示与 AI 分析参考，不参与开仓。</div>
+      <div className="text-[11px] text-muted">一致预期为分析师汇总，电话会情绪分来自数据源 · 仅供参考，不参与开仓</div>
     </div>
   )
 }
@@ -250,12 +250,12 @@ function TranscriptSection({ symbol }: { symbol: string }) {
         <h4 className="text-[12px] font-medium text-foreground">财报电话会</h4>
         <label className="text-[11px] text-secondary">季度
           <input value={quarter} onChange={ev => setQuarter(ev.target.value.toUpperCase())} maxLength={6}
-            className="ml-1 w-[68px] rounded border border-border bg-transparent px-1 py-0.5 font-mono text-[11px]" />
+            className="ml-1 w-[68px] rounded border border-border bg-transparent px-1 py-0.5 tabular-nums text-[11px]" />
         </label>
       </div>
       <PaidFetchBar meta={d} pending={t.m.isPending} onFetch={() => t.m.mutate()} label="查询电话会"
         error={t.m.error ? (t.m.error as Error).message : null} />
-      {d && !d.available && <div className="py-3 text-muted">{d.reason === '尚未查询' ? '尚未查询该季度电话会（查询后永久缓存）。' : d.reason}</div>}
+      {d && !d.available && <div className="py-3 text-muted">{d.reason === '尚未查询' ? '暂无该季度电话会数据' : d.reason}</div>}
       {d?.available && (
         <div className="mt-2 space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-secondary">
@@ -281,7 +281,7 @@ function TranscriptSection({ symbol }: { symbol: string }) {
             <div className="max-h-80 space-y-2 overflow-y-auto rounded border border-border/60 p-2">
               {(d.segments ?? []).map((s, i) => (
                 <div key={i}>
-                  <div className="text-[10px] text-muted">{`${s.speaker} · ${s.title}${s.sentiment != null ? ` · 情绪 ${s.sentiment}` : ''}`}</div>
+                  <div className="text-[11px] text-muted">{`${s.speaker} · ${s.title}${s.sentiment != null ? ` · 情绪 ${s.sentiment}` : ''}`}</div>
                   <div className="text-[11px] leading-relaxed text-secondary">{s.content}</div>
                 </div>
               ))}

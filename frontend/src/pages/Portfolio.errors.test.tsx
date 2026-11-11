@@ -121,8 +121,9 @@ it('connected protections show source and freshness', async () => {
   expect(text()).not.toContain('尚未接入')
   expect(container.querySelector('[data-alerts]')).toBeNull()
   // 纸面免责: 胶囊常显「纸面账户 · 无真实下单」, 完整免责在悬停说明
-  expect(container.querySelector('[data-chip="paper"]')!.textContent).toBe('纸面账户 · 无真实下单')
-  expect(container.querySelector('[data-chip="paper"]')!.getAttribute('title')).toBe('当前结果仅作纸面验证，不等同可实盘策略')
+  // 「无真实下单」只在页头副标题出现一处, 状态胶囊不再重复
+  expect(container.querySelector('[data-chip="paper"]')).toBeNull()
+  expect(text()).toContain('模拟账户 · 无真实下单')
 })
 
 it('unavailable protections are shown in red as pausing new entries', async () => {
@@ -138,7 +139,9 @@ it('unavailable protections are shown in red as pausing new entries', async () =
   expect(container.querySelector('[data-chip="earnings"]')!.textContent).toBe('财报保护 ✕')
   expect(container.querySelector('[data-chip="earnings"]')!.className).toContain('text-danger')
   expect(container.querySelector('[data-chip="corp"]')!.textContent).toBe('公司行动保护 ✕')
-  expect(container.querySelector('[data-chip="paper"]')!.textContent).toBe('纸面账户 · 无真实下单')
+  // 「无真实下单」只在页头副标题出现一处, 状态胶囊不再重复
+  expect(container.querySelector('[data-chip="paper"]')).toBeNull()
+  expect(text()).toContain('模拟账户 · 无真实下单')
 })
 
 // 10-10 全量 review: 后端公司行动状态有 connected / stale / unavailable 三种。缓存超过 26 小时

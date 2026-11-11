@@ -15,18 +15,19 @@ import { LsRank, LsRankEmpty } from '@/components/opportunities/LsRank'
 import { MoodBar } from '@/components/opportunities/MoodBar'
 import { useOppPage } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
+import { badge } from '@/components/ui/badge'
 import type { OppPagePayload, SwingBoardsPayload } from '@/lib/api'
 
 // 个股预览 (K 线 / 分时, 含 ~1MB ECharts) 只在点开后才需要: 懒加载, 不进首屏包。
 const StockPreviewDialog = lazy(() => import('@/components/StockPreviewDialog').then((m) => ({ default: m.StockPreviewDialog })))
 
 function SectionError({ name, err }: { name: string; err: string }) {
-  return <div data-section-error={name} className="mb-3 rounded-card border border-dashed border-danger/40 px-3 py-3 text-xs text-danger">{`${name}读取失败（${err}）`}</div>
+  return <div data-section-error={name} className="mb-3 rounded-card border border-dashed border-danger/40 px-3 py-3 text-xs text-danger">{`${name}读取失败 · ${err}`}</div>
 }
 
 /** 页头第二行: 数据时点 (信号日 / 机会板刷新) */
 export function headMeta(sw: SwingBoardsPayload): string {
-  return [sw.as_of ? `信号日 ${md(sw.as_of)}` : '', sw.refresh?.last_at ? `机会板刷新 ${hm(sw.refresh.last_at)} 北京` : ''].filter(Boolean).join(' · ')
+  return [sw.as_of ? `信号日 ${md(sw.as_of)}` : '', sw.refresh?.last_at ? `机会板刷新 ${hm(sw.refresh.last_at)}（北京）` : ''].filter(Boolean).join(' · ')
 }
 
 function Head({ d, onGear }: { d: OppPagePayload | undefined; onGear: () => void }) {
@@ -34,7 +35,7 @@ function Head({ d, onGear }: { d: OppPagePayload | undefined; onGear: () => void
   return (
     <div data-head className="mb-3 flex items-center gap-2">
       <h1 className="shrink-0 text-lg font-semibold tracking-tight">机会</h1>
-      <span className="rounded-btn border border-dashed border-border px-1.5 text-[11px] leading-5 text-secondary">纸面</span>
+      <span className={badge('limit')} title="模拟账户 · 无真实下单">模拟</span>
       {sw && <span data-swing-head className="min-w-0 truncate text-xs tabular-nums text-muted">{headMeta(sw)}</span>}
       <button type="button" aria-label="规则" title="规则设置" data-gear onClick={onGear}
         className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-btn text-secondary hover:bg-elevated hover:text-foreground max-md:h-11 max-md:w-11">
@@ -67,15 +68,15 @@ export function Opportunities() {
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-4 pb-24 md:px-6">
       <Head d={d} onGear={() => setConsoleOpen(true)} />
-      {q.isLoading && <div data-loading role="status" className="py-12 text-center text-sm text-muted">加载中…</div>}
+      {q.isLoading && <div data-loading role="status" className="py-12 text-center text-sm text-muted">加载中</div>}
       {q.isError && !d && <div data-error className="py-6 text-sm text-danger">{(q.error as Error)?.message || '读取失败'}</div>}
-      {stale && <div data-stale className="mb-2 rounded-btn border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">{`刷新失败 · 显示 ${hm(d!.generated_at)} 北京的数据`}</div>}
+      {stale && <div data-stale className="mb-2 rounded-btn border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">{`刷新失败 · 当前为 ${hm(d!.generated_at)}（北京）的数据`}</div>}
       {d && (
         <>
           {view ? <StatusRail view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
-          {errs.mood ? <SectionError name="盘前判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
+          {errs.mood ? <SectionError name="大盘判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
           {errs.ls_rank ? <SectionError name="今日多空" err={errs.ls_rank} /> : d.ls_rank ? <LsRank d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
-          {desk ? <RegimeBar desk={desk} /> : <SectionError name="大盘状态" err={errs.desk ?? '无数据'} />}
+          {desk ? <RegimeBar desk={desk} /> : <SectionError name="市场宽度" err={errs.desk ?? '无数据'} />}
           <StrategyBoard swing={d.swing} error={errs.swing} res={res} onOpen={setOpen} />
           <EngineCols order={order} onOpen={setOpen} desk={desk}
             d={{ gaps: d.gaps, radar: d.radar, intraday: d.intraday, errors: errs, chg: desk?.regime.chg ?? {}, res }} />

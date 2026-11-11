@@ -52,8 +52,8 @@ export function WarmupBadge() {
         ref={anchorRef}
         type="button"
         onClick={() => setOpen(o => !o)}
-        className="inline-flex items-center gap-0.5 rounded-full px-1.5 text-[10px] text-amber-700 dark:text-amber-500/70 transition-colors hover:bg-amber-400/10 hover:text-amber-700 dark:hover:text-amber-500"
-        title="为什么开头可能没交易?"
+        className="inline-flex items-center gap-0.5 rounded-full px-1.5 text-[11px] text-amber-700 dark:text-amber-500/70 transition-colors hover:bg-amber-400/10 hover:text-amber-700 dark:hover:text-amber-500"
+        title="预热期说明"
       >
         <Info className="h-3 w-3" strokeWidth={1.5} />
         预热 ≥120 天
@@ -78,7 +78,7 @@ export function WarmupBadge() {
                 className="z-[70] rounded-btn border border-border bg-surface p-3 text-[11px] leading-relaxed text-secondary shadow-2xl"
                 onClick={e => e.stopPropagation()}
               >
-                <div className="mb-1.5 font-medium text-foreground">为什么开头几个月可能没有交易?</div>
+                <div className="mb-1.5 font-medium text-foreground">预热期说明</div>
                 <p className="text-muted">
                   技术指标 (MA / MACD / RSI 等) 需要历史数据才能算出。系统会自动在回测起点之前多取约
                   <span className="font-medium text-amber-700 dark:text-amber-300"> 120 天 (≈4 个月)</span> 数据做预热。

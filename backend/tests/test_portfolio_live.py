@@ -62,7 +62,7 @@ def test_closed_round_trips_have_entry_exit_return_and_reason(client):
     (c,) = body["closed"]
     assert c["symbol"] == "BBB" and c["entry_price"] == 20.0 and c["exit_price"] == 22.5
     assert c["entry_date"] == "2026-09-30" and c["exit_date"] == "2026-10-01"
-    assert c["exit_reason"] == "target_zone_upper" and c["exit_reason_label"] == "到达目标上沿"
+    assert c["exit_reason"] == "target_zone_upper" and c["exit_reason_label"] == "到达目标"
     assert c["pnl"] == pytest.approx(50 * 22.5 - 1 - (50 * 20 + 1), abs=0.01)
     assert c["return_pct"] == pytest.approx(c["pnl"] / (50 * 20 + 1) * 100, abs=0.01)
     assert c["r_multiple"] == 2.46 and c["fees"] == pytest.approx(2.0)

@@ -71,7 +71,9 @@ def test_missing_or_failed_alerts_feishu(tmp_path, state, status):
             "last": {"status": status, "error": "SyncFailedError"} if status else None}
     ow.evaluate_alerts(tmp_path, [], [item], datetime(2026, 10, 12, 19, 0, tzinfo=ET),
                        lambda k, p: sent.append((k, p)) or True)
-    assert sent and "美股财务同步" in json.dumps(sent[0][1], ensure_ascii=False)
+    # 告警里的任务名与系统状态页同名 (ops_watch.WATCHED 一处定义)
+    assert ow.WATCHED[fs.JOB_ID] == "财务数据同步"
+    assert sent and "财务数据同步" in json.dumps(sent[0][1], ensure_ascii=False)
 
 
 def test_frontend_job_label_present():

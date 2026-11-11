@@ -45,7 +45,7 @@ export function fallbackText(symbol: string): string {
 }
 
 const SIZE_CLASS = {
-  sm: 'h-5 w-5 rounded-[5px] text-[9px]',
+  sm: 'h-5 w-5 rounded-[5px] text-[11px]',
   md: 'h-7 w-7 rounded-md text-[11px]',
   lg: 'h-9 w-9 rounded-lg text-xs',
 } as const

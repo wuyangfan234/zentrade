@@ -12,7 +12,7 @@ import { useCardFlash, cardFlashCls } from '@/lib/useCardFlash'
 
 // 统一的输入框样式(与项目其他设置页一致)
 const INPUT_CLS =
-  'w-full h-9 px-2.5 rounded-lg bg-base border-0 ring-1 ring-border/30 text-xs font-mono text-foreground placeholder:text-muted/30 focus:outline-none focus:ring-2 focus:ring-accent/30 transition-shadow'
+  'w-full h-9 px-2.5 rounded-lg bg-base border-0 ring-1 ring-border/30 text-xs font-mono text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 transition-shadow'
 
 // 空/非法输入 → undefined (后端保持原值), 合法正整数 → int
 const toPositiveInt = (v: string) => {
@@ -38,7 +38,7 @@ type CodexModelOption = { label: string; value: string; model: string; effort: s
 
 const CODEX_MODEL_OPTIONS: CodexModelOption[] = [
   { label: 'GPT-5.6 Sol · 极高（推荐）', value: 'gpt-5.6-sol:xhigh', model: 'gpt-5.6-sol', effort: 'xhigh', hint: '旗舰档，适合复杂金融分析与专业任务' },
-  { label: 'GPT-5.6 Terra · 极高', value: 'gpt-5.6-terra:xhigh', model: 'gpt-5.6-terra', effort: 'xhigh', hint: '平衡智能、速度与使用成本' },
+  { label: 'GPT-5.6 Terra · 极高', value: 'gpt-5.6-terra:xhigh', model: 'gpt-5.6-terra', effort: 'xhigh', hint: '均衡' },
   { label: 'GPT-5.6 Luna · 极高', value: 'gpt-5.6-luna:xhigh', model: 'gpt-5.6-luna', effort: 'xhigh', hint: '适合成本敏感与高频分析任务' },
   { label: 'gpt-5.5 · 高', value: 'gpt-5.5:high', model: 'gpt-5.5', effort: 'high', hint: '使用 gpt-5.5 + high 推理档' },
   { label: 'gpt-5.5 · 极高', value: 'gpt-5.5:xhigh', model: 'gpt-5.5', effort: 'xhigh', hint: '使用 gpt-5.5 + xhigh 推理档' },
@@ -55,13 +55,13 @@ const codexModelLabel = (model?: string, effort?: string) => {
 type AiPreset = { label: string; provider?: string; url: string; model: string; codexCommand?: string; website: string; websiteLabel: string; description: ReactNode; custom?: boolean }
 
 const PRESETS: AiPreset[] = [
-  { label: '自定义', url: '', model: '', website: '', websiteLabel: '', description: '不自动填充任何配置，完全手动填写 API 地址、模型和密钥。', custom: true },
-  { label: 'OpenAI', provider: OPENAI_PROVIDER, url: 'https://api.openai.com/v1', model: DEFAULT_OPENAI_MODEL, website: 'https://platform.openai.com/', websiteLabel: 'platform.openai.com', description: 'OpenAI 官方接口，可单独配置模型支持的推理强度。' },
-  { label: 'DeepSeek', url: 'https://api.deepseek.com', model: 'deepseek-v4-pro', website: 'https://www.deepseek.com/', websiteLabel: 'deepseek.com', description: 'DeepSeek 官方 OpenAI 兼容接口。' },
-  { label: '通义千问', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-3.6plus', website: 'https://tongyi.aliyun.com/', websiteLabel: 'tongyi.aliyun.com', description: '阿里云 DashScope 兼容模式接口。' },
-  { label: '智谱 GLM', url: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-5.2', website: 'https://open.bigmodel.cn/', websiteLabel: 'open.bigmodel.cn', description: '智谱 AI 官方 OpenAI 兼容接口。' },
-  { label: 'Kimi', url: 'https://api.moonshot.cn/v1', model: 'kimi-k2.7-code', website: 'https://platform.moonshot.cn/', websiteLabel: 'platform.moonshot.cn', description: '月之暗面 Moonshot 官方 OpenAI 兼容接口，支持超长上下文。' },
-  { label: 'Codex CLI', provider: CODEX_PROVIDER, url: '', model: DEFAULT_CODEX_MODEL, codexCommand: CODEX_COMMAND, website: 'https://developers.openai.com/codex/noninteractive', websiteLabel: 'codex exec', description: '调用本机 Codex CLI 的 codex exec, 适合已登录 ChatGPT/Codex 的本地环境。' },
+  { label: '自定义', url: '', model: '', website: '', websiteLabel: '', description: '手动填写 API 地址、模型和密钥', custom: true },
+  { label: 'OpenAI', provider: OPENAI_PROVIDER, url: 'https://api.openai.com/v1', model: DEFAULT_OPENAI_MODEL, website: 'https://platform.openai.com/', websiteLabel: 'platform.openai.com', description: 'OpenAI 官方接口 · 可配置推理强度' },
+  { label: 'DeepSeek', url: 'https://api.deepseek.com', model: 'deepseek-v4-pro', website: 'https://www.deepseek.com/', websiteLabel: 'deepseek.com', description: 'DeepSeek 官方接口（OpenAI 兼容）' },
+  { label: '通义千问', url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-3.6plus', website: 'https://tongyi.aliyun.com/', websiteLabel: 'tongyi.aliyun.com', description: '阿里云 DashScope 接口（OpenAI 兼容）' },
+  { label: '智谱 GLM', url: 'https://open.bigmodel.cn/api/paas/v4', model: 'glm-5.2', website: 'https://open.bigmodel.cn/', websiteLabel: 'open.bigmodel.cn', description: '智谱 AI 官方接口（OpenAI 兼容）' },
+  { label: 'Kimi', url: 'https://api.moonshot.cn/v1', model: 'kimi-k2.7-code', website: 'https://platform.moonshot.cn/', websiteLabel: 'platform.moonshot.cn', description: 'Moonshot 官方接口（OpenAI 兼容）· 支持长上下文' },
+  { label: 'Codex CLI', provider: CODEX_PROVIDER, url: '', model: DEFAULT_CODEX_MODEL, codexCommand: CODEX_COMMAND, website: 'https://developers.openai.com/codex/noninteractive', websiteLabel: 'codex exec', description: '使用本机 Codex CLI · 需已登录 ChatGPT / Codex' },
 ]
 
 const findPreset = (provider: string, baseUrl: string, codexCommand: string) => PRESETS.find(p => {
@@ -117,7 +117,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
           value: SAVED_CODEX_OPTION_VALUE,
           model: savedCodexModel,
           effort: savedCodexEffort,
-          hint: '保留项目中已保存的模型与推理档；此兼容项不可编辑',
+          hint: '沿用已保存的模型与推理档 · 不可编辑',
         }
       : null
   const codexModelOptions = savedCodexOption
@@ -328,7 +328,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
                 ? (savedCodexProvider
                   ? `${s?.ai_codex_command ?? CODEX_COMMAND} · ${codexModelLabel(s?.ai_model, s?.ai_codex_reasoning_effort)}`
                   : `${s?.ai_model} · ${s?.ai_api_key_masked}`)
-                : (isCodexProvider ? '使用本机 codex exec, 此处无需填写 API Key。' : '配置 API Key 后即可使用 AI 功能。')}
+                : (isCodexProvider ? '使用本机 Codex CLI · 无需 API Key' : '未配置 API Key')}
             </div>
           </div>
         </div>
@@ -344,7 +344,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
         <div className="flex flex-wrap items-start gap-2">
           {PRESETS.map(p => (
             <button key={p.label} onClick={() => handlePreset(p)}
-              className={`rounded-lg border px-3 py-2 text-left transition-all ${selectedPreset?.label === p.label ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border bg-base text-secondary hover:border-accent/30'}`}>
+              className={`rounded-lg border px-3 py-2 text-left transition-all ${selectedPreset?.label === p.label ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400' : 'border-border bg-base text-secondary hover:border-accent/30'}`}>
               <div className="flex items-center gap-1.5 text-xs font-medium">
                 <span>{p.label}</span>
                 {p.provider === CODEX_PROVIDER && <Terminal className="h-3 w-3" />}
@@ -372,7 +372,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
         icon={Settings2}
         title={configTitle}
         right={
-          <span className="inline-flex items-center gap-1.5 text-[10px] text-muted" title={isCodexProvider ? 'Use local Codex CLI via codex exec' : 'Use OpenAI-compatible Chat Completions API'}>
+          <span className="inline-flex items-center gap-1.5 text-[11px] text-muted" title={isCodexProvider ? 'Use local Codex CLI via codex exec' : 'Use OpenAI-compatible Chat Completions API'}>
             <span className="rounded-full border border-border/40 bg-base/50 px-1.5 py-px font-mono">{isCodexProvider ? 'codex exec' : 'Chat Completions'}</span>
             {isCodexProvider ? 'CLI' : '接口'}
           </span>
@@ -381,7 +381,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
         <div className="space-y-4">
           {isCodexProvider ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <Field label="CLI 命令" hint="固定使用默认 codex 命令，由后端自动解析本机 Codex Desktop/CLI, 不支持自定义可执行路径。">
+              <Field label="CLI 命令" hint="使用默认 codex 命令 · 不支持自定义路径">
                 <div className={`${INPUT_CLS} flex items-center text-muted select-none`} aria-label="Codex CLI command">
                   {CODEX_COMMAND}
                 </div>
@@ -420,7 +420,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
               {isOpenAIProvider && (
                 <div className="rounded-lg border border-accent/15 bg-accent/[0.03] p-3">
                   <div className="mb-2.5">
-                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">OpenAI 专属</span>
+                    <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent dark:text-blue-400">OpenAI 专属</span>
                   </div>
                   <div className="max-w-xs">
                     <Field label="推理强度">
@@ -467,10 +467,10 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
 
           <div className="border-t border-border/20 pt-4">
             <div className="grid grid-cols-2 gap-4">
-              <Field label="输出上限 max_tokens" hint="所有 AI 任务的输出 token 上限，任务请求会被钳制到此值；默认 16384">
+              <Field label="输出上限 max_tokens" hint="全部 AI 任务的输出 token 上限 · 默认 16384">
                 <input type="number" min={1} value={maxOutputTokens} onChange={e => setMaxOutputTokens(e.target.value)} placeholder="16384" className={INPUT_CLS} />
               </Field>
-              <Field label="上下文窗口 (输入上限)" hint="输入估算超出此窗口时会报错并提示调大；默认 128000">
+              <Field label="上下文窗口（输入上限）" hint="输入超出时报错 · 默认 128000">
                 <input type="number" min={1} value={contextWindow} onChange={e => setContextWindow(e.target.value)} placeholder="128000" className={INPUT_CLS} />
               </Field>
             </div>
@@ -482,15 +482,15 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
         <Shield className="h-4 w-4 text-amber-700 dark:text-amber-400/70 mt-0.5 shrink-0" />
         <div className="text-[11px] text-amber-700 dark:text-amber-400/70 leading-relaxed">
           {isCodexProvider
-            ? 'Codex CLI 模式会复用本机已登录的 Codex 账户，个股、财务、复盘等分析上下文会发送给 OpenAI/Codex。保存即表示确认仅在本机或可信内网使用。'
-            : 'API Key 仅保存在本机项目文件中，不会上传到任何服务器。请妥善保管。'}
+            ? 'Codex CLI 模式使用本机已登录的 Codex 账户，分析内容会发送至 OpenAI。请仅在本机或可信内网使用。'
+            : '密钥仅保存在本机'}
         </div>
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => save.mutate()} disabled={save.isPending || !canSave} className="flex-1 h-10 rounded-xl bg-accent text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all">
+        <button onClick={() => save.mutate()} disabled={save.isPending || !canSave} className="flex-1 h-10 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all">
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {save.isPending ? '保存中...' : saved ? '已保存' : '保存配置'}
+          {save.isPending ? '保存中' : saved ? '已保存' : '保存配置'}
         </button>
         {configured && (
           <button onClick={() => setConfirmClear(true)} disabled={clear.isPending} className="h-10 px-4 rounded-xl bg-elevated text-secondary hover:text-danger text-sm flex items-center justify-center gap-1.5 hover:bg-elevated/80 disabled:opacity-50 transition-all shrink-0" title="Clear AI provider configuration">
@@ -506,14 +506,14 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
           <div className="relative w-[90vw] max-w-[380px] rounded-card border border-border bg-base shadow-2xl p-6">
             <h3 className="text-sm font-medium text-foreground mb-2">清空 AI 配置</h3>
             <p className="text-xs text-secondary mb-5 leading-relaxed">
-              这会清空已保存的 provider、API Key、API 地址、模型和 Codex CLI 命令。之后可以重新配置。
+              清空已保存的接口、API Key、API 地址、模型与 Codex CLI 设置 · 可重新配置
             </p>
             <div className="flex items-center justify-end gap-2">
               <button onClick={() => setConfirmClear(false)} className="px-3 py-1.5 rounded-btn bg-elevated text-secondary hover:bg-elevated/80 text-sm transition-colors">
                 取消
               </button>
               <button onClick={() => clear.mutate()} disabled={clear.isPending} className="px-3 py-1.5 rounded-btn bg-danger/15 text-danger hover:bg-danger/25 text-sm font-medium transition-colors disabled:opacity-50">
-                {clear.isPending ? '清空中...' : '确认'}
+                {clear.isPending ? '清空中' : '确认'}
               </button>
             </div>
           </div>
@@ -596,18 +596,18 @@ export function AiModelLibraryCard() {
     <Card icon={Library} title="模型库" anchor="ai-models"
       right={editing === null && (
         <button type="button" onClick={() => startEdit()} data-ai-model-add
-          className="inline-flex h-7 items-center gap-1 rounded-btn bg-accent px-2.5 text-[11px] font-medium text-white hover:opacity-90">
+          className="inline-flex h-7 items-center gap-1 rounded-btn bg-accent dark:bg-blue-700 px-2.5 text-[11px] font-medium text-white hover:opacity-90">
           <Plus className="h-3.5 w-3.5" />添加模型
         </button>
       )}>
       <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-        可同时登记多个 OpenAI 兼容模型（例如 DeepSeek 做新闻翻译、Claude 做助手对话），再到下方「AI 模型分工」给每个任务选一个。API 地址或 Key 留空时沿用上方全局配置。
+        可添加多个 OpenAI 兼容模型，并在下方「AI 模型分工」中分配给各任务 · API 地址或 Key 留空时沿用全局配置
       </p>
       {q.isLoading && <div className="text-xs text-muted">加载中…</div>}
       {q.isError && <div className="text-xs text-danger">读取失败</div>}
       {!q.isLoading && models.length === 0 && editing === null && (
         <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[11px] text-muted" data-ai-models-empty>
-          还没有登记模型。所有任务目前都用上方全局配置。
+          暂无模型 · 全部任务使用全局配置
         </div>
       )}
       <div className="space-y-2">
@@ -616,15 +616,15 @@ export function AiModelLibraryCard() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="text-xs font-medium text-foreground">{m.name}</div>
-                <div className="truncate font-mono text-[10px] text-muted">
+                <div className="truncate font-mono text-[11px] text-muted">
                   {m.model} · {m.base_url || '沿用全局地址'} · {m.has_api_key ? `Key ${m.api_key_masked}` : '沿用全局 Key'}
                 </div>
                 {m.used_by.length > 0 && (
-                  <div className="mt-0.5 text-[10px] text-secondary" data-ai-model-used>
+                  <div className="mt-0.5 text-[11px] text-secondary" data-ai-model-used>
                     用于：{m.used_by.map(t => TASK_LABELS[t] ?? t).join('、')}
                   </div>
                 )}
-                {testing[m.id] && <div className="mt-0.5 text-[10px] text-secondary">{testing[m.id]}</div>}
+                {testing[m.id] && <div className="mt-0.5 text-[11px] text-secondary">{testing[m.id]}</div>}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <button type="button" onClick={() => void runTest(m.id)} title="连通测试"
@@ -656,7 +656,7 @@ export function AiModelLibraryCard() {
             {PRESETS.filter(p => !p.custom && p.provider !== CODEX_PROVIDER).map(p => (
               <button key={p.label} type="button"
                 onClick={() => setForm(f => ({ ...f, name: f.name || p.label, base_url: p.url, model: p.model }))}
-                className="rounded-full border border-border px-2 py-0.5 text-[10px] text-secondary hover:border-accent/40 hover:text-accent">
+                className="rounded-full border border-border px-2 py-0.5 text-[11px] text-secondary hover:border-accent/40 hover:text-accent">
                 {p.label}
               </button>
             ))}
@@ -674,7 +674,7 @@ export function AiModelLibraryCard() {
           </div>
           <div className="mt-2 flex items-center gap-3">
             <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !form.name.trim() || !form.model.trim()}
-              className="h-7 rounded-btn bg-accent px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+              className="h-7 rounded-btn bg-accent dark:bg-blue-700 px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
               {save.isPending ? '保存中…' : '保存'}
             </button>
             {editingEntry?.has_api_key && (
@@ -691,7 +691,7 @@ export function AiModelLibraryCard() {
 }
 
 const TASK_LABELS: Record<string, string> = {
-  news_translate: '新闻翻译与打标', stock_analysis: '个股分析', strategy_gen: '策略生成', assistant: '助手对话', market_mood: '盘前大盘情绪',
+  news_translate: '新闻翻译与打标', stock_analysis: '个股分析', strategy_gen: '策略生成', assistant: '助手对话', market_mood: '大盘判断',
 }
 
 export function AiTasksCard() {
@@ -712,7 +712,7 @@ export function AiTasksCard() {
   return (
     <Card icon={Layers} title="AI 模型分工" anchor="ai-tasks">
       <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-        每个任务可从上方模型库选一个模型，或单独填写；都不选时沿用全局配置。档位越高越慢、越耗额度；翻译这类短任务用「关」：部分推理型模型的思考会占满输出额度导致正文为空。模型不支持的档位会自动去掉后重试。
+        每个任务可选模型库中的模型或单独填写，未选时沿用全局配置 · 思考档位越高越慢、消耗越多，翻译等短任务建议「关」
       </p>
       <div className="mb-3 flex items-start justify-between gap-3 rounded-lg border border-border/60 p-3">
         <div>
@@ -772,18 +772,18 @@ function AiTaskRowEditor({ row, models, onSaved }: { row: AiTaskRow; models: AiM
       {/* 手机上「实际」一行放不下时整行换到标签下方, 不把四字标签挤成两行 */}
       <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
         <span className="shrink-0 whitespace-nowrap text-xs font-medium text-foreground">{row.label}</span>
-        <span className="font-mono text-[10px] text-muted" data-ai-task-effective>
+        <span className="font-mono text-[11px] text-muted" data-ai-task-effective>
           实际：{eff.model || '—'} · {effectiveThinkingLabel(eff)}
           {eff.model_ref_name ? ` · 模型库「${eff.model_ref_name}」` : eff.overridden.length > 0 ? ' · 已单独配置' : ' · 沿用全局'}
         </span>
       </div>
       {row.task === 'news_translate' && (
         <p className="mt-1.5 text-[11px] leading-relaxed text-warning" data-ai-task-cost-hint>
-          调用量最大的任务：约 600 条/交易日，关思考时粗估约 12 万 token/日。建议单独配一个低价、关思考的模型（DeepSeek / Kimi / 通义千问轻量档），不要跟随旗舰推理模型。
+          调用量最大：约 600 条 / 交易日，约 12 万 token / 日（关思考）· 建议单独配置低价、关思考的模型
         </p>
       )}
       {eff.model_ref_missing && (
-        <p className="mt-1.5 text-[11px] text-warning" data-ai-task-ref-missing>引用的库模型已不存在，当前回退全局配置；请重新选择。</p>
+        <p className="mt-1.5 text-[11px] text-warning" data-ai-task-ref-missing>所选模型已删除 · 当前使用全局配置，请重新选择</p>
       )}
       <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <select className={INPUT_CLS} value={ref} onChange={e => setRef(e.target.value)} aria-label={`${row.label}使用的模型`} data-ai-task-ref>
@@ -807,7 +807,7 @@ function AiTaskRowEditor({ row, models, onSaved }: { row: AiTaskRow; models: AiM
       </div>
       <div className="mt-2 flex items-center gap-3">
         <button type="button" onClick={() => save.mutate()} disabled={save.isPending}
-          className="h-7 rounded-btn bg-accent px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+          className="h-7 rounded-btn bg-accent dark:bg-blue-700 px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
           {save.isPending ? '保存中…' : '保存'}
         </button>
         {row.override.has_api_key && ref === CUSTOM_REF && (
@@ -868,8 +868,8 @@ function Field({ label, hint, inline, children }: {
     return (
       <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
-          {hint && <div className="text-[10px] text-muted mt-0.5">{hint}</div>}
+          <div className="text-[11px] text-muted uppercase tracking-wider">{label}</div>
+          {hint && <div className="text-[11px] text-muted mt-0.5">{hint}</div>}
         </div>
         {children}
       </div>
@@ -877,9 +877,9 @@ function Field({ label, hint, inline, children }: {
   }
   return (
     <div className="space-y-1.5">
-      <div className="text-[10px] text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-[11px] text-muted uppercase tracking-wider">{label}</div>
       {children}
-      {hint && <div className="text-[10px] text-muted">{hint}</div>}
+      {hint && <div className="text-[11px] text-muted">{hint}</div>}
     </div>
   )
 }

@@ -19,7 +19,7 @@ export function Sheet({ title, onClose, children, attr, footer }: {
       <div {...attr} role="dialog" aria-modal="true"
         className="absolute inset-y-0 right-0 flex w-full max-w-2xl flex-col border-l border-border bg-surface shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-border bg-surface px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-          <div className="min-w-0 text-[16px] font-semibold leading-6 text-foreground">{title}</div>
+          <div className="min-w-0 text-[14px] font-semibold leading-6 text-foreground">{title}</div>
           <button type="button" aria-label="关闭" onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-btn text-secondary hover:bg-elevated hover:text-foreground">
             <X className="h-5 w-5" />
           </button>

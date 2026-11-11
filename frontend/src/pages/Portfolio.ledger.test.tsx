@@ -163,6 +163,11 @@ it('已平仓: 出场原因按原因码给短词 (空头也写止损, 不写跌�
 
 it('台账: 止损调整写从→到, 平仓带 R 与原因短词, 按美东日期分组', async () => {
   await render()
+  // 历史区两个页签: 默认已平仓, 记录不同时铺开
+  expect(container.querySelector('[data-hist="closed"]')!.getAttribute('aria-pressed')).toBe('true')
+  expect(container.querySelector('[data-log-section]')).toBeNull()
+  await act(async () => { (container.querySelector('[data-hist="log"]') as HTMLButtonElement).click() })   // 记录在第二个页签
+  expect(container.querySelector('[data-closed-section]')).toBeNull()
   expect(container.querySelector('[data-event="11"]')!.textContent).toContain('$95.00 → $100.00')
   expect(container.querySelector('[data-event="11"]')!.textContent).toContain('浮盈 1.0R')
   const close = container.querySelector('[data-event="13"]')!.textContent ?? ''
@@ -175,7 +180,7 @@ it('台账: 止损调整写从→到, 平仓带 R 与原因短词, 按美东日�
 it('状态一行胶囊: 正常时无红色告警框', async () => {
   await render()
   expect([...container.querySelectorAll('[data-chip]')].map((c) => c.getAttribute('data-chip'))).toEqual(
-    ['paper', 'session', 'price', 'earnings', 'corp', 'notify'])
+    ['session', 'price', 'earnings', 'corp', 'notify'])
   expect(container.querySelector('[data-chip="price"]')!.textContent).toBe('价格 最近收盘')
   expect(container.querySelector('[data-alerts]')).toBeNull()
 })

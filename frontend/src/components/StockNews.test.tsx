@@ -56,8 +56,8 @@ it('shows only main news in Chinese by default, with direction colour and AI dis
   expect(text).toContain('主角新闻 2 条')
   expect(text).toContain('华盛顿瞄准中国光模块')
   expect(text).not.toContain('顺带一提的行业综述')
-  expect(text).toContain('（未翻译）')                 // 无译文时如实标注, 不冒充中文
-  expect(text).toContain('未打标')
+  expect(text).toContain('原文')                 // 无译文时如实标注, 不冒充中文
+  expect(text).toContain('待标注')
   expect(text).toContain('AI 判读')
   const dir = host.querySelector('[data-news-direction="bullish"]') as HTMLElement
   expect(dir.textContent).toBe('偏利好')
@@ -80,7 +80,7 @@ it('explains an empty list without inventing news', async () => {
   mocks.stockNews.mockResolvedValue({ symbol: 'AAOI', days: 7, disclaimer: 'x', items: [],
     summary: { count_24h: 0, high_bearish_48h: false, high_bullish_48h: false, top: [] } })
   await render(<StockNewsPanel symbol="AAOI" />)
-  expect(host.textContent).toContain('近 7 日没有点名该股的新闻')
+  expect(host.textContent).toContain('近 7 日无相关新闻')
 })
 
 it('news badge hides when empty and turns bearish-coloured on high bearish', async () => {

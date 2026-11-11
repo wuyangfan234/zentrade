@@ -195,7 +195,7 @@ export function EquityCurve({ points, principal }: { points: EquityPoint[]; prin
         ))}
       </svg>
 
-      <div className="relative mt-1.5 h-3.5 text-[10px] leading-none tabular-nums text-secondary">
+      <div className="relative mt-1.5 h-3.5 text-[11px] leading-none tabular-nums text-secondary">
         {geom.labels.map(i => (
           <span
             key={points[i].date}

@@ -141,13 +141,13 @@ export function AddFactorSignalDialog({
           </div>
           {selected && <p className="mt-1 font-mono text-[11px] text-muted">{selected.factor_name}</p>}
         </div>
-        {selected && <span className="shrink-0 rounded-btn bg-elevated px-1.5 py-0.5 text-[10px] text-secondary">{selected.label}</span>}
+        {selected && <span className="shrink-0 rounded-btn bg-elevated px-1.5 py-0.5 text-[11px] text-secondary">{selected.label}</span>}
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {!item && (
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">因子</span>
+            <span className="mb-1 block text-[11px] text-muted">因子</span>
             <select value={selectedId} onChange={event => pickFactor(event.target.value)} className={INPUT_CLS}>
               <option value="">{library.isPending ? '加载中' : '选择因子'}</option>
               {grouped.map(([group, factors]) => (
@@ -171,14 +171,14 @@ export function AddFactorSignalDialog({
         )}
         <div className="grid grid-cols-[5rem_1fr] gap-2">
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">运算符</span>
+            <span className="mb-1 block text-[11px] text-muted">运算符</span>
             <select value={op} onChange={event => pickOp(event.target.value as '>' | '<')} className={INPUT_CLS}>
               <option value=">">&gt; 超过阈值</option>
               <option value="<">&lt; 低于阈值</option>
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">阈值</span>
+            <span className="mb-1 block text-[11px] text-muted">阈值</span>
             <input
               type="number" step="any" value={threshold} placeholder="手填"
               onChange={event => setThreshold(event.target.value)}
@@ -187,18 +187,18 @@ export function AddFactorSignalDialog({
           </label>
         </div>
         <label className="block">
-          <span className="mb-1 block text-[10px] text-muted">信号名称</span>
+          <span className="mb-1 block text-[11px] text-muted">信号名称</span>
           <input type="text" value={name} maxLength={24} onChange={event => setName(event.target.value)} className={INPUT_CLS} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-[10px] text-muted">类型</span>
+          <span className="mb-1 block text-[11px] text-muted">类型</span>
           <select value={kind} disabled={save.isPending} onChange={event => setKind(event.target.value as 'entry' | 'exit' | 'both')} className={INPUT_CLS}>
             <option value="entry">入场</option>
             <option value="exit">出场</option>
             <option value="both">出入通用</option>
           </select>
         </label>
-        <p className="text-[10px] leading-relaxed text-muted">
+        <p className="text-[11px] leading-relaxed text-muted">
           选股 · 回测 · 盘后监控可用 · 盘中不触发
         </p>
       </div>

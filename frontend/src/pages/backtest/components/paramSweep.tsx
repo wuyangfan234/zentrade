@@ -15,8 +15,8 @@ export const OBJECTIVES: { id: string; label: string }[] = [
   { id: 'annual_return', label: '年化收益' },
   { id: 'win_rate', label: '胜率' },
   { id: 'profit_factor', label: '盈亏比' },
-  { id: 'max_drawdown', label: '最大回撤(越小越好)' },
-  { id: 'mc_maxdd_p95', label: '蒙卡回撤P95(越小越好)' },
+  { id: 'max_drawdown', label: '最大回撤（越小越好）' },
+  { id: 'mc_maxdd_p95', label: '蒙特卡洛回撤 P95（越小越好）' },
   { id: 'avg_holding_days', label: '平均持仓天数' },
 ]
 
@@ -137,7 +137,7 @@ export function SweepParamList({ params, sweeps, updateSweep }: {
   if (!params.length) return null
   return (
     <div>
-      <div className="mb-1.5 text-xs font-medium text-secondary">扫描参数 (勾选后设范围)</div>
+      <div className="mb-1.5 text-xs font-medium text-secondary">扫描参数（勾选后设置范围）</div>
       <div className="space-y-2">
         {params.map(p => {
           const s = sweeps[p.id] ?? defaultSweep(p)

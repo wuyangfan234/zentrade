@@ -33,7 +33,7 @@ export function PipelineScopeConfig() {
   return (
     <div className="space-y-2.5">
       <p className="text-xs text-secondary leading-relaxed">
-        勾选盘后管道每次自动拉取的数据类型。仅影响后续同步，已存储的历史数据不受影响。
+        盘后同步自动更新的数据类型 · 仅影响后续同步
       </p>
       <div className="space-y-1.5">
         {ITEMS.map((item) => {
@@ -61,7 +61,7 @@ export function PipelineScopeConfig() {
                   <div className="flex items-center gap-1.5">
                     <span className="text-xs font-medium text-foreground">{item.label}</span>
                   </div>
-                  <div className="text-[10px] text-muted leading-snug mt-0.5">{item.desc}</div>
+                  <div className="text-[11px] text-muted leading-snug mt-0.5">{item.desc}</div>
                 </div>
               </label>
             </div>
@@ -69,12 +69,12 @@ export function PipelineScopeConfig() {
         })}
       </div>
       {updateToggle.isPending && (
-        <div className="flex items-center gap-1.5 text-[10px] text-muted">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted">
           <Loader2 className="h-3 w-3 animate-spin" />保存中…
         </div>
       )}
-      <div className="text-[10px] text-muted leading-relaxed pt-1">
-        数据通道为 Alpaca 免费档 (IEX/SIP),盘后管道自动拉取。
+      <div className="text-[11px] text-muted leading-relaxed pt-1">
+        数据来自 Alpaca 免费档（IEX / SIP）· 盘后自动同步
       </div>
     </div>
   )

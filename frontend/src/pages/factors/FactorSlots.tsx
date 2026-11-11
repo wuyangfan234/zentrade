@@ -3,7 +3,7 @@
  * 只读现有接口, 不新增后端:
  *  - 槽位 1 机会板 · 做多出卡: 齿轮现值 (oppPage.settings.long) + 规则目录 (/api/opportunities/rules) 的卡回放成绩。
  *    尺子 = 比「4h 门内随便挑」每笔多出的 R; 内置策略读离线回放 history, 挖掘 / AI / 排序因子读 candidate (带 95% 区间)。
- *  - 槽位 2 选股策略: 周度发现 (/api/factor-lab/page) 的当前出卡引擎 vs 本周候选, 尺子 = 选股回测 (每日前 20, 自选)。
+ *  - 槽位 2 选股策略: 周度发现 (/api/factor-lab/page) 的现行策略组合 vs 本周候选, 尺子 = 选股回测 (每日前 20, 自选)。
  *  - 槽位 3 策略打分: /api/strategies 的 scoring 权重 vs 近 4 次周度挖掘 (/api/backtest/mining/runs/{id}/result) 的 factors[]。
  *    注意: 周度结果里的 ic_mean 是该次挖掘最后一个外层折的训练窗 (W44 = 2021-07 → 2023-07) 主题池 5 日 Rank IC, 不是最近几周的实现 IC;
  *    所以页面写「训练窗 IC」, 4 次之间几乎不变, 只画一个数。逐周变化看「周度入选」(该次挖掘是否选中它)。
@@ -253,8 +253,8 @@ type SlotData = ReturnType<typeof useSlotData>
 // ---------------------------------------------------------------- small pieces
 function Role({ champ }: { champ: boolean }) {
   return champ
-    ? <span className="inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[10.5px] font-bold text-violet-800 ring-1 ring-inset ring-violet-500/40 bg-violet-500/15 dark:text-violet-200">在用</span>
-    : <span className="inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[10.5px] font-bold text-secondary ring-1 ring-inset ring-muted">挑战</span>
+    ? <span className="inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-bold text-violet-800 ring-1 ring-inset ring-violet-500/40 bg-violet-500/15 dark:text-violet-200">在用</span>
+    : <span className="inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-bold text-secondary ring-1 ring-inset ring-muted">挑战</span>
 }
 function Tag({ children, tone = 'mute' }: { children: ReactNode; tone?: 'mute' | 'warn' | 'run' | 'ok' }) {
   const cls = tone === 'warn' ? 'bg-warning/15 text-foreground' : tone === 'run' ? 'bg-accent/15 text-foreground' : tone === 'ok' ? 'bg-elevated text-foreground' : 'bg-elevated text-secondary'
@@ -267,12 +267,12 @@ function SlotCard({ no, title, sub, ruler, children, footer, attr, className = '
   return (
     <section {...attr} className={`flex min-w-0 flex-col overflow-hidden rounded-card border border-border bg-surface ${className}`}>
       <header className="flex min-w-0 items-center gap-2.5 border-b border-border px-4 py-2.5">
-        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elevated text-[11.5px] font-bold text-foreground">{no}</span>
+        <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elevated text-[12px] font-bold text-foreground">{no}</span>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-semibold text-foreground">{title}</div>
           <div className="truncate text-[11px] text-secondary">{sub}</div>
         </div>
-        <span data-ruler="" className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-medium text-foreground ring-1 ring-inset ring-border">尺子 · {ruler}</span>
+        <span data-ruler="" className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-medium text-foreground ring-1 ring-inset ring-border">口径 · {ruler}</span>
       </header>
       <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       <footer data-slot-footer="" className="mt-auto flex min-h-[44px] flex-wrap items-center gap-2 border-t border-border px-4 py-2 text-xs">{footer}</footer>
@@ -315,7 +315,7 @@ function SelDots({ sel, weeks = [] }: { sel: (boolean | null)[]; weeks?: string[
   return (
     <span data-sel-dots="" className="inline-flex items-center gap-2" title={sel.map((v, i) => `${weeks[i] ?? i + 1} ${v ? '入选' : v === false ? '落选' : '无'}`).join(' · ')}>
       <span className="inline-flex gap-1">{sel.map((v, i) => <i key={i} className={`h-2.5 w-2.5 rounded-full ${v ? 'bg-foreground/80' : v === false ? 'ring-[1.5px] ring-inset ring-secondary/70' : 'bg-transparent'}`} />)}</span>
-      <span className="text-[11.5px] tabular-nums text-secondary">{`${k}/${sel.length}`}</span>
+      <span className="text-[12px] tabular-nums text-secondary">{`${k}/${sel.length}`}</span>
     </span>
   )
 }
@@ -424,29 +424,29 @@ function BoardSlot({ d }: { d: SlotData }) {
       <td className="py-1.5 pl-4 pr-2 align-middle"><Role champ={r.role === 'champ'} /></td>
       <td className="py-1.5 pr-2 align-middle">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[12.5px] font-semibold text-foreground" title={r.name}>{r.name}</span>
+          <span className="truncate text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
           {r.passed && <Tag tone="ok">过验收</Tag>}
         </div>
         <div className="truncate text-[11px] text-secondary">{`${r.role === 'champ' ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</div>
       </td>
       <td className={`whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[13px] font-semibold tabular-nums ${rTone(r.excess)}`}>{r.note ?? fmtR(r.excess)}</td>
-      <td className="whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[11.5px] tabular-nums text-secondary">
+      <td className="whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[12px] tabular-nums text-secondary">
         {r.lo != null && r.hi != null ? `${fmtR(r.lo).replace('R', '')} ~ ${fmtR(r.hi).replace('R', '')}` : r.p != null ? `p ${r.p.toFixed(3)}` : DASH}
       </td>
       <td className="py-1.5 pr-4 align-middle"><RangeBar v={r.excess} lo={r.lo} hi={r.hi} min={min} max={max} champ={r.role === 'champ'} /></td>
     </tr>
   )
   return (
-    <SlotCard no={1} title="机会板 · 做多出卡" ruler="卡回放" attr={{ 'data-slot': 'board' }}
-      sub={`3+3 做多 ${champs.length} 条 · 每笔比 4h 门内随便挑多出的 R`}
+    <SlotCard no={1} title="机会板 · 做多策略" ruler="机会回放" attr={{ 'data-slot': 'board' }}
+      sub={`做多 ${champs.length} 条 · 每笔超额 R（对比 4h 同向随机入场）`}
       footer={<>
         <span data-slot-verdict="" className="min-w-0 flex-1 truncate text-secondary">
-          {err ? '读取失败' : passed.length ? `${passed.map(r => r.name).join(' · ')} 过验收 · 可在 3+3 设置里换上`
+          {err ? '读取失败' : passed.length ? `${passed.map(r => r.name).join(' · ')} 通过检验 · 可在机会板策略中启用`
             : best ? `挑战者区间都跨 0 · 下限最高 ${best.name} ${fmtR(best.lo)}` : '暂无可比挑战者'}
         </span>
         <button type="button" data-go-gear="" onClick={() => setGear(true)} disabled={!d.settings} title="和机会页右上角齿轮是同一个面板"
           className="inline-flex h-7 shrink-0 items-center gap-1 rounded-btn border border-border bg-surface px-2.5 text-xs font-medium text-secondary hover:border-accent/50 hover:text-foreground disabled:opacity-50">
-          <Settings2 className="h-3.5 w-3.5" />3+3 设置
+          <Settings2 className="h-3.5 w-3.5" />机会板策略
         </button>
         {gear && <RulesConsole settings={d.settings} onClose={() => setGear(false)} />}
       </>}>
@@ -466,7 +466,7 @@ function BoardSlot({ d }: { d: SlotData }) {
             </tbody>
           </table>
           {thinChs.length > 0 && (
-            <div data-board-thin="" className="flex min-w-0 items-center gap-2 border-t border-border/60 px-4 py-2 text-[11.5px] text-secondary">
+            <div data-board-thin="" className="flex min-w-0 items-center gap-2 border-t border-border/60 px-4 py-2 text-[12px] text-secondary">
               <span className="shrink-0 font-medium text-foreground">{`样本不足 ${thinChs.length} 个`}</span><span className="shrink-0 text-muted">·</span>
               <span className="min-w-0 truncate" title={thinChs.map(r => `${r.name} ${r.n ?? 0} 笔`).join(' / ')}>{thinChs.map(r => `「${r.name}」${r.n ?? 0} 笔`).join('  ')}</span>
             </div>
@@ -474,7 +474,7 @@ function BoardSlot({ d }: { d: SlotData }) {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-[11px] text-secondary">
             <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full bg-violet-600" />在用 · 点 = 每笔超额</span>
             <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full ring-2 ring-inset ring-accent" />挑战 · 线 = 95% 区间</span>
-            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-3 rounded bg-warning" />区间跨 0 · 未证实</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-3 rounded bg-warning" />区间跨 0 · 不显著</span>
           </div>
         </div>
       )}
@@ -491,7 +491,7 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
     mutationFn: ({ sig, action }: { sig: string; action: 'save' | 'discard' }) => api.factorLabDecide(w!.week, sig, action),
     onSuccess: (r, v) => {
       if (v.action === 'save') toast(r.candidate_id ? '已保存 · 候选方案' : '已记录 · 候选方案未建出', r.candidate_id ? 'success' : 'error')
-      else toast('已放弃', 'success')
+      else toast('未采用', 'success')
       void qc.invalidateQueries({ queryKey: QK.factorLabPage }); void qc.invalidateQueries({ queryKey: QK.researchCandidates })
     },
   })
@@ -519,7 +519,7 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
         </span>
         {pending.length > 0 && lead && !decision(lead) && <>
           <button type="button" data-decide="discard" disabled={decide.isPending} onClick={() => decide.mutate({ sig: lead.signature, action: 'discard' })}
-            className="inline-flex h-7 shrink-0 items-center rounded-btn border border-border bg-surface px-2.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50">放弃</button>
+            className="inline-flex h-7 shrink-0 items-center rounded-btn border border-border bg-surface px-2.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50">不采用</button>
           <button type="button" data-decide="save" disabled={decide.isPending} onClick={() => decide.mutate({ sig: lead.signature, action: 'save' })}
             className="inline-flex h-7 shrink-0 items-center rounded-btn border border-accent bg-accent/10 px-2.5 text-xs font-semibold text-foreground hover:bg-accent/20 disabled:opacity-50">保存</button>
         </>}
@@ -540,7 +540,7 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
             <tbody>
               <tr data-stock-row="champ" className="border-b border-border/60 bg-violet-500/[0.05]">
                 <td className="py-1.5 pl-4 pr-2"><Role champ /></td>
-                <td className="py-1.5 pr-2"><div className="truncate text-[12.5px] font-semibold text-foreground">当前出卡引擎</div>
+                <td className="py-1.5 pr-2"><div className="truncate text-[13px] font-semibold text-foreground">现行策略组合</div>
                   <div className="truncate text-[11px] text-secondary" title={engine.legs.map(l => displayStrategyName(l.name)).join(' · ')}>{engine.legs.map(l => displayStrategyName(l.name)).join(' · ')}</div></td>
                 <td className="py-1.5 pr-3 text-right">{ann(engine.stats.annual_return)}</td>
                 <td className="py-1.5 pr-3 text-right font-semibold tabular-nums text-foreground">{fin(engine.stats.sharpe) ? engine.stats.sharpe.toFixed(2) : DASH}</td>
@@ -553,8 +553,8 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
                 return (
                   <tr key={c.signature} data-stock-row="ch" className="border-b border-border/60 last:border-b-0">
                     <td className="py-1.5 pl-4 pr-2"><Role champ={false} /></td>
-                    <td className="py-1.5 pr-2"><div className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground" title={c.name}>{c.name}</span>
-                      {dd === 'save' ? <Tag tone="ok">已保存</Tag> : dd === 'discard' ? <Tag>已放弃</Tag> : <Tag tone="run">待审</Tag>}</div>
+                    <td className="py-1.5 pr-2"><div className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate text-[13px] font-semibold text-foreground" title={c.name}>{c.name}</span>
+                      {dd === 'save' ? <Tag tone="ok">已保存</Tag> : dd === 'discard' ? <Tag>未采用</Tag> : <Tag tone="run">待审</Tag>}</div>
                       <div className="truncate text-[11px] text-secondary">{`周度挖掘 · ${(c.legs ?? []).length} 个因子 · 样本外夏普 ${fin(c.oos?.oos_sharpe) ? c.oos!.oos_sharpe!.toFixed(2) : DASH}`}</div></td>
                     <td className="py-1.5 pr-3 text-right">{ann(c.stats.annual_return)}</td>
                     <td className="py-1.5 pr-3 text-right font-semibold tabular-nums text-foreground">{fin(c.stats.sharpe) ? c.stats.sharpe.toFixed(2) : DASH}</td>
@@ -568,9 +568,9 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
         </div>
         <div className="flex flex-wrap items-center gap-4 px-4 pt-2 text-[11px] text-secondary" data-stock-legend="">
           <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-4 rounded bg-violet-500" />在用</span>
-          {lead && <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-4 rounded" style={decision(lead) === 'discard' ? { background: 'repeating-linear-gradient(90deg, hsl(var(--accent)) 0 4px, transparent 4px 7px)' } : { background: 'hsl(var(--accent))' }} />{decision(lead) === 'discard' ? '挑战 · 已放弃' : '挑战'}</span>}
+          {lead && <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-4 rounded" style={decision(lead) === 'discard' ? { background: 'repeating-linear-gradient(90deg, hsl(var(--accent)) 0 4px, transparent 4px 7px)' } : { background: 'hsl(var(--accent))' }} />{decision(lead) === 'discard' ? '挑战 · 未采用' : '挑战'}</span>}
           <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-4 rounded" style={{ background: 'repeating-linear-gradient(90deg, hsl(var(--fg-muted)) 0 4px, transparent 4px 7px)' }} />SPY</span>
-          <span className="ml-auto" title="曲线约每 24 个交易日取一点 · 最大回撤按日净值算 · 会比曲线看起来更深">抽样净值 · 起点 1.00</span>
+          <span className="ml-auto" title="曲线约每 24 个交易日取一点 · 最大回撤按日净值计算，可能深于曲线所示">抽样净值 · 起点 1.00</span>
         </div>
         <div className="flex min-h-0 flex-1 px-2 pb-1"><NavLines dates={dates} series={series} /></div>
       </>}
@@ -583,7 +583,7 @@ const FLAG_TIP: Record<ScoreFlag, string> = {
   缺数据: '没有美股数据源 · 打分时这一项被跳过',
   无检验: '原始列 · 能算但不在因子库 · 周度挖掘不评',
   方向不一: '有的策略要大值 · 有的要小值',
-  方向相反: `近 ${WEEKS_SHOWN} 次周度的训练窗 IC 折算后都 < 0 且 |IC| ≥ ${REVERSE_MIN} · 主题池上打分偏好的方向反而更差 · 不是策略命中后的条件效果`,
+  方向相反: `近 ${WEEKS_SHOWN} 次周度的训练窗 IC 折算后都 < 0 且 |IC| ≥ ${REVERSE_MIN} · 打分偏好的方向在主题池上表现更差 · 非策略命中后的条件效果`,
 }
 function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) => void }) {
   const { uses, nStrat } = d.scoring
@@ -628,10 +628,10 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
                 return (
                   <tr key={u.id} data-score-row="champ" data-flag={u.flag ?? ''} className={`border-b border-border/60 bg-violet-500/[0.04] ${u.flag === '方向相反' || u.flag === '缺数据' ? 'shadow-[inset_3px_0_0_hsl(var(--warning))]' : ''}`}>
                     <td className="py-1.5 pl-4 pr-2"><Role champ /></td>
-                    <td className="py-1.5 pr-2"><span className="block truncate text-[12.5px] font-semibold text-foreground" title={u.id}>{u.label}</span></td>
+                    <td className="py-1.5 pr-2"><span className="block truncate text-[13px] font-semibold text-foreground" title={u.id}>{u.label}</span></td>
                     <td className={`${cell} text-right font-semibold tabular-nums text-foreground`}>{pctOf.get(u.id)}%</td>
                     <td className={`${cell} text-right font-semibold tabular-nums text-foreground`}>{u.n}</td>
-                    <td className={cell}><span className="block truncate text-[11.5px] text-secondary" title={by.map(x => `${x.name} ${x.w.toFixed(2)}`).join(' / ')}>{by.slice(0, 3).map(x => x.name).join(' · ')}{by.length > 3 ? ` 等 ${by.length} 个` : ''}</span></td>
+                    <td className={cell}><span className="block truncate text-[12px] text-secondary" title={by.map(x => `${x.name} ${x.w.toFixed(2)}`).join(' / ')}>{by.slice(0, 3).map(x => x.name).join(' · ')}{by.length > 3 ? ` 等 ${by.length} 个` : ''}</span></td>
                     <td className={cell}><SelDots sel={u.sel} weeks={weeks} /></td>
                     <td className={cell}><div className="flex items-center justify-end gap-2"><IcBar v={u.sign === 0 ? null : u.dirMean} scale={icScale} />
                       <span className={`w-[52px] text-right font-semibold tabular-nums ${u.flag === '方向相反' ? 'text-warning' : 'text-foreground'}`}>{fmtIc(u.sign === 0 ? null : u.dirMean)}</span></div></td>
@@ -643,17 +643,17 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
               {challengers.map(c => (
                 <tr key={c.id} data-score-row="ch" className="border-b border-border/60 last:border-b-0">
                   <td className="py-1.5 pl-4 pr-2"><Role champ={false} /></td>
-                  <td className="py-1.5 pr-2"><div className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate text-[12.5px] font-semibold text-foreground" title={c.id}>{c.label}</span>
+                  <td className="py-1.5 pr-2"><div className="flex min-w-0 items-center gap-1.5"><span className="min-w-0 truncate text-[13px] font-semibold text-foreground" title={c.id}>{c.label}</span>
                     {c.tag === 'pending' ? <Tag tone="run">待审</Tag> : c.tag === 'watch' ? <Tag>观察</Tag> : null}</div>
                     {c.dir && <div className="truncate text-[11px] text-secondary">{`${c.dir}值优先`}</div>}</td>
                   <td className={`${cell} text-right text-muted`}>{DASH}</td>
                   <td className={`${cell} text-right text-muted`}>{DASH}</td>
-                  <td className={`${cell} text-[11.5px] text-secondary`}>{c.note ?? (c.tag === 'pool' ? '未被打分引用' : DASH)}</td>
+                  <td className={`${cell} text-[12px] text-secondary`}>{c.note ?? (c.tag === 'pool' ? '未被打分引用' : DASH)}</td>
                   <td className={cell}>{c.tag === 'pending' ? <span className="text-[11px] text-muted">待审 · 采集复核</span> : <SelDots sel={c.sel} weeks={weeks} />}</td>
                   <td className={cell}><div className="flex items-center justify-end gap-2"><IcBar v={c.dirMean} scale={icScale} />
                     <span className="w-[52px] text-right font-semibold tabular-nums text-foreground">{fmtIc(c.dirMean)}</span></div></td>
                   <td className="py-1.5 pr-4">{c.tag !== 'pending' && (
-                    <button type="button" data-inspect={c.id} onClick={() => onInspect(c.id)} className="text-[11.5px] font-medium text-accent hover:underline">检验</button>
+                    <button type="button" data-inspect={c.id} onClick={() => onInspect(c.id)} className="text-[12px] font-medium text-accent hover:underline">检验</button>
                   )}</td>
                 </tr>
               ))}
@@ -679,7 +679,7 @@ function IdleStrip({ d }: { d: SlotData }) {
     <div data-idle="" className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-1.5 rounded-card border border-border bg-surface px-4 py-2.5 text-xs text-secondary">
       <span>因子库 <b className="tabular-nums text-foreground">{lib.length || DASH}</b></span>
       <span>进打分 <b className="tabular-nums text-foreground">{inScore}</b>{outLib > 0 && <span className="text-muted">{` + 库外 ${outLib}`}</span>}</span>
-      <span>未进槽位 <b className="tabular-nums text-foreground">{lib.length ? spare : DASH}</b></span>
+      <span>未使用 <b className="tabular-nums text-foreground">{lib.length ? spare : DASH}</b></span>
       <span>缺数据 <b className="tabular-nums text-foreground">{missing}</b></span>
       <span className="ml-auto">采集 · 下次 <b className="tabular-nums text-foreground">{next}</b> 北京</span>
       <span>周度挖掘 · 下次 <b className="tabular-nums text-foreground">{d.lab.data?.schedule.next_weekly?.slice(5) ?? DASH}</b> 盘后</span>
@@ -721,7 +721,7 @@ export function FactorMatrix() {
   return (
     <div data-factor-matrix="" className="pb-2">
       <div className="mb-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <h2 className="text-[13.5px] font-semibold text-foreground">依赖矩阵</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">依赖矩阵</h2>
         <span className="text-xs text-secondary">{`打分因子 ${uses.length} × ${nStrat} 个打分策略 · 按策略族`}</span>
         <span className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-secondary">
           <span>格内 = 引用策略数</span>
@@ -738,7 +738,7 @@ export function FactorMatrix() {
             <th className="py-2 pl-4 text-left font-medium">因子</th>
             {FAMS.map((f, i) => <th key={f} className="px-2 py-2 text-center font-medium" title={scoredStrats.filter(s => strategyFamily(s.tags) === f).map(s => displayStrategyName(s.name)).join(' / ')}>{f}<span className="ml-1 font-normal text-muted">{famCount[i]}</span></th>)}
             <th className="px-2 py-2 text-right font-medium" title="四族合计">引用</th>
-            <th className="border-x border-border bg-violet-500/[0.06] px-2 py-2 text-center font-medium" title={`3+3 现值里用到打分的策略 (已含在左边各族里): ${inPlayScored.map(s => displayStrategyName(s.name)).join(' / ') || '无'}`}>其中 3+3<span className="ml-1 font-normal text-muted">{inPlayScored.length}</span></th>
+            <th className="border-x border-border bg-violet-500/[0.06] px-2 py-2 text-center font-medium" title={`入选策略中用到打分的策略（已含在左侧各族内）: ${inPlayScored.map(s => displayStrategyName(s.name)).join(' / ') || '无'}`}>其中入选<span className="ml-1 font-normal text-muted">{inPlayScored.length}</span></th>
             <th className="px-2 py-2 text-right font-medium">权重占比</th>
             <th className="px-2 py-2 text-left font-medium" title="每个点 = 一次周度挖掘 · 实心 = 被选中">周度入选</th>
             <th className="px-2 py-2 text-right font-medium" title="训练窗 IC · 已按打分方向折算">折算 IC</th>
@@ -753,14 +753,14 @@ export function FactorMatrix() {
                 const wsum = hits.reduce((a, x) => a + x.w, 0)
                 return (
                   <td key={key} className={`px-2 py-1.5 text-center ${inPlay ? 'border-x border-border bg-violet-500/[0.06]' : ''}`} title={hits.map(x => `${x.name} ${x.w.toFixed(2)}`).join(' / ')}>
-                    <span data-matrix-cell="" data-bin={bin(wsum)} className={`inline-flex h-6 min-w-[56px] items-center justify-center gap-0.5 rounded px-1.5 text-[11.5px] text-foreground ${risky ? 'ring-[1.5px] ring-inset ring-warning' : ''}`}
-                      style={{ background: BIN_BG[bin(wsum)] }}><b className="tabular-nums">{hits.length}</b><span className="text-[10.5px]">策略</span></span>
+                    <span data-matrix-cell="" data-bin={bin(wsum)} className={`inline-flex h-6 min-w-[56px] items-center justify-center gap-0.5 rounded px-1.5 text-[12px] text-foreground ${risky ? 'ring-[1.5px] ring-inset ring-warning' : ''}`}
+                      style={{ background: BIN_BG[bin(wsum)] }}><b className="tabular-nums">{hits.length}</b><span className="text-[11px]">策略</span></span>
                   </td>
                 )
               }
               return (
                 <tr key={u.id} data-matrix-row={u.id} className={`border-b border-border/60 last:border-b-0 ${risky ? 'shadow-[inset_3px_0_0_hsl(var(--warning))]' : ''}`}>
-                  <td className="py-1.5 pl-4 pr-2"><span className="block truncate text-[12.5px] font-semibold text-foreground" title={u.id}>{u.label}</span></td>
+                  <td className="py-1.5 pl-4 pr-2"><span className="block truncate text-[13px] font-semibold text-foreground" title={u.id}>{u.label}</span></td>
                   {FAMS.map(f => cellOf(u.uses.filter(x => x.fam === f), f))}
                   <td className="px-2 py-1.5 text-right font-semibold tabular-nums text-foreground">{u.n}</td>
                   {play.length ? cellOf(play, 'play', true) : <td className="border-x border-border bg-violet-500/[0.06] px-2 py-1.5 text-center text-muted">·</td>}

@@ -16,7 +16,7 @@ const ruleOptions = {
   scopes: [{ key: 'all', label: '全市场' }], severities: [],
   threshold_fields: [
     { key: 'close', label: '收盘价' }, { key: 'volume', label: '成交量 (手)' },
-    { key: 'amount', label: '成交额 (元)' }, { key: 'rsi_14', label: 'RSI14' },
+    { key: 'amount', label: '成交额 (元)' }, { key: 'rsi_14', label: 'RSI(14)' },
     { key: 'consecutive_limit_ups', label: '连板数' },
     { key: 'consecutive_limit_downs', label: '跌停连板' },
     { key: 'limit_up_price', label: '涨停价' }, { key: 'limit_down_price', label: '跌停价' },
@@ -101,8 +101,8 @@ it('切换股数和金额口径保留各自原始阈值', async () => {
 })
 it('基础过滤保留美元价格成交额，清除隐藏旧市值过滤以免保存后继续生效', async () => {
   await render({ basic_filter: { price_min: 5.25, market_cap_min: 123456789, amount_min: 23456789, float_cap_min: 34567890, float_cap_max: 987654321, exclude_st: false } })
-  expect(inputFor('股价区间 (USD)').value).toBe('5.25')
-  expect(inputFor('当日成交额下限 (USD)').value).toBe('23456789')
+  expect(inputFor('股价区间（USD）').value).toBe('5.25')
+  expect(inputFor('当日成交额下限（USD）').value).toBe('23456789')
   expect(host.textContent).not.toMatch(/总市值下限|流通市值[上下]限/)
   await change(inputFor('当日成交额下限'), '23456789.5')
   await save()
@@ -116,7 +116,7 @@ it.each([
   await save()
   await act(async () => { await new Promise(resolve => setTimeout(resolve, 0)) })
   expect(saveRule).not.toHaveBeenCalled()
-  expect(host.textContent).toContain('必须是 ≥1')
+  expect(host.textContent).toContain('须为 ≥1')
   expect(host.textContent).toContain(unit)
   expect(host.textContent).not.toMatch(/手数|万元/)
 })
@@ -125,7 +125,7 @@ it.each([false, true])('完整/极简模式 simple=%s 不提供连板涨跌停�
   const labels = [...host.querySelectorAll('select option')].map(x => x.textContent)
   for (const label of ['连板数', '跌停连板', '涨停价', '跌停价', '3日偏离']) expect(labels).not.toContain(label)
   for (const key of ['turnover_rate', 'total_shares', 'float_shares', 'market_cap', 'float_market_cap', 'deviate_10d', 'deviate_30d']) expect(labels).not.toContain(key)
-  expect(labels).toEqual(expect.arrayContaining(['成交量 (股)', '成交额 (USD)', 'RSI14', '自定义指标']))
+  expect(labels).toEqual(expect.arrayContaining(['成交量（股）', '成交额（USD）', 'RSI(14)', '自定义指标']))
   expect(host.textContent).not.toMatch(/连板梯队|涨停|跌停|异动监控|板块监控/)
 })
 it.each(['consecutive_limit_ups', 'turnover_rate', 'total_shares', 'float_shares', 'market_cap', 'float_market_cap', 'deviate_3d', 'deviate_10d', 'deviate_30d'])('编辑旧 %s 条件保留原值并提示不可用', async field => {
@@ -136,7 +136,7 @@ it.each(['consecutive_limit_ups', 'turnover_rate', 'total_shares', 'float_shares
     severity: 'info', message: '', direction: 'entry',
   }
   await render({}, false, rule)
-  expect(host.textContent).toContain('旧条件（美股不可用）')
+  expect(host.textContent).toContain('该条件已不支持')
   const selected = host.querySelector<HTMLOptionElement>(`option[value="${field}"]`)!
   expect(selected.selected).toBe(true)
   expect(selected.disabled).toBe(true)
@@ -161,7 +161,7 @@ it.each(['signal_limit_up', 'signal_deviate_3d', 'signal_deviate_10d', 'signal_d
     { field, op: 'truth' },
     { field: 'signal_volume_surge', op: 'truth' },
   ] })
-  expect(host.textContent).toContain('旧条件（美股不可用）')
+  expect(host.textContent).toContain('该条件已不支持')
   expect(host.textContent).not.toContain('涨停')
   await click('移除旧条件')
   await save()

@@ -8,7 +8,7 @@ const source = readFileSync(resolve('src/pages/backtest/MiningWorkbench.tsx'), '
 
 it('mining form has no stamp-tax input and sends US per-share costs', () => {
   expect(source).not.toMatch(/印花税 bp|draft\.stampTaxBps|stamp_tax_pct:/)
-  expect(source).toContain('每股佣金 (USD/股)')
+  expect(source).toContain('每股佣金（USD / 股）')
   expect(source).toContain('每笔最低 (USD)')
   const payload = buildMiningCostPayload({ commissionPerShare: '0.005', commissionMin: '1', slippageBps: '5' })
   expect(payload).toEqual({ cost_model: 'us_per_share_v1', commission_per_share: 0.005, commission_min: 1, slippage_bps: 5 })

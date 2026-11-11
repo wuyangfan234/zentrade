@@ -17,7 +17,7 @@ const DELETABLE_SOURCES = new Set(['custom', 'ai', 'composite'])
 const isDeletable = (s?: StrategyDetail) => !!s && DELETABLE_SOURCES.has(s.source)
 
 const SOURCE_CLS: Record<string, string> = {
-  builtin: 'bg-accent/10 text-accent border-accent/20',
+  builtin: 'bg-accent/10 text-accent dark:text-blue-400 border-accent/20',
   custom: 'bg-amber-400/10 text-amber-700 dark:text-amber-400 border-amber-400/30',
   ai: 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20',
   // 叠加策略归入「自定义」分组展示, 徽标与 StrategyCard 一致用 teal 区分
@@ -33,7 +33,7 @@ const SOURCE_LABEL: Record<string, string> = {
   invalid: '失效',
 }
 
-const TF_BADGE_CLS = 'text-[8px] px-1 py-px rounded border leading-tight shrink-0 border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
+const TF_BADGE_CLS = 'text-[11px] px-1 py-px rounded border leading-tight shrink-0 border-sky-500/30 bg-sky-500/10 text-sky-700 dark:text-sky-400'
 
 type SourceTab = 'all' | 'builtin' | 'custom' | 'ai'
 
@@ -191,14 +191,14 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); void handleDelete(id) }}
-            className="px-1.5 py-0.5 rounded-btn text-[10px] text-white bg-danger hover:bg-danger/90 transition-colors cursor-pointer"
+            className="px-1.5 py-0.5 rounded-btn text-[11px] text-white bg-danger hover:bg-danger/90 transition-colors cursor-pointer"
           >
             确认删除
           </button>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(null) }}
-            className="px-1.5 py-0.5 rounded-btn text-[10px] text-muted border border-border hover:text-foreground transition-colors cursor-pointer"
+            className="px-1.5 py-0.5 rounded-btn text-[11px] text-muted border border-border hover:text-foreground transition-colors cursor-pointer"
           >
             取消
           </button>
@@ -239,7 +239,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
       await loadStrategies()
       setActiveTab(result.source === 'ai' ? 'ai' : 'custom')
       const srcLabel = result.source === 'ai'
-        ? (result.research_only ? 'AI 草稿(发布后可用)' : 'AI 策略')
+        ? (result.research_only ? 'AI 草稿（发布后可用）' : 'AI 策略')
         : '自定义策略'
       setImportMsg(`已导入到${srcLabel}: ${result.strategy_id}`)
     } catch (e: any) {
@@ -270,7 +270,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
             <span className="text-sm font-medium text-foreground">
               策略池 <span className="text-muted font-normal text-xs">{validDraft.length} / {allStrategies.length}</span>
-              {invalidPoolCount > 0 && <span className="ml-2 text-[10px] text-danger">{invalidPoolCount} 个失效</span>}
+              {invalidPoolCount > 0 && <span className="ml-2 text-[11px] text-danger">{invalidPoolCount} 个失效</span>}
             </span>
             <div className="flex items-center gap-2">
               <input
@@ -286,7 +286,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={importing}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-btn border border-accent/30 bg-accent/10 text-accent text-xs font-medium hover:bg-accent/15 disabled:opacity-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-btn border border-accent/30 bg-accent/10 text-accent dark:text-blue-400 text-xs font-medium hover:bg-accent/15 disabled:opacity-50 transition-colors cursor-pointer"
               >
                 {importing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                 导入策略
@@ -324,12 +324,12 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                         onClick={() => setActiveTab(tab.id)}
                         className={`px-2.5 py-1 text-[11px] font-medium rounded-btn transition-colors cursor-pointer ${
                           activeTab === tab.id
-                            ? 'bg-accent/10 text-accent'
+                            ? 'bg-accent/10 text-accent dark:text-blue-400'
                             : 'text-muted hover:text-secondary hover:bg-elevated'
                         }`}
                       >
                         {tab.label}
-                        <span className="ml-1 text-[9px] opacity-60">{count}</span>
+                        <span className="ml-1 text-[11px] opacity-60">{count}</span>
                       </button>
                     )
                   })}
@@ -337,7 +337,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                     onClick={handleAddGroup}
                     disabled={filteredAvailable.length === 0}
                     title="把当前分组剩余的策略全部加入策略池"
-                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-btn text-[10px] text-accent border border-accent/25 bg-accent/8 hover:bg-accent/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-btn text-[11px] text-accent border border-accent/25 bg-accent/8 hover:bg-accent/15 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
                   >
                     <ListPlus className="h-3 w-3" />
                     本组全加
@@ -347,8 +347,8 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                   {activeTab === 'ai' && drafts.length > 0 && (
                     <div className="mb-3">
                       <div className="flex items-center justify-between px-1 mb-1">
-                        <span className="text-[10px] font-medium text-muted">草稿</span>
-                        <span className="text-[9px] text-muted">{drafts.length} 个待发布</span>
+                        <span className="text-[11px] font-medium text-muted">草稿</span>
+                        <span className="text-[11px] text-muted">{drafts.length} 个待发布</span>
                       </div>
                       <div className="space-y-0.5">
                         {drafts.map(s => (
@@ -358,14 +358,14 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                           >
                             <span className="flex-1 min-w-0">
                               <span className="text-[12px] text-foreground block truncate">
-                                {s.name} <span className="text-[10px] text-muted font-mono">{s.id}</span>
+                                {s.name} <span className="text-[11px] text-muted tabular-nums">{s.id}</span>
                               </span>
-                              <span className="text-[10px] text-muted truncate block">{s.description}</span>
+                              <span className="text-[11px] text-muted truncate block">{s.description}</span>
                             </span>
                             <button
                               onClick={() => handlePublish(s.id)}
                               disabled={publishingId === s.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-btn text-[10px] text-purple-700 dark:text-purple-400 border border-purple-500/25 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-btn text-[11px] text-purple-700 dark:text-purple-400 border border-purple-500/25 bg-purple-500/10 hover:bg-purple-500/20 disabled:opacity-50 transition-colors cursor-pointer shrink-0"
                             >
                               {publishingId === s.id && <Loader2 className="h-3 w-3 animate-spin" />}
                               发布
@@ -377,7 +377,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                     </div>
                   )}
                   {activeTab === 'ai' && drafts.length > 0 && (
-                    <div className="px-1 mb-1 text-[10px] font-medium text-muted">待选</div>
+                    <div className="px-1 mb-1 text-[11px] font-medium text-muted">待选</div>
                   )}
                   <div className="space-y-0.5">
                     {filteredAvailable.length === 0 ? (
@@ -396,11 +396,11 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                       >
                         <span className="flex-1 min-w-0">
                           <span className="text-[12px] text-foreground group-hover:text-accent transition-colors block truncate">
-                            {s.name} <span className="text-[10px] text-muted font-mono">{s.id}</span>
+                            {s.name} <span className="text-[11px] text-muted tabular-nums">{s.id}</span>
                           </span>
-                          <span className="text-[10px] text-muted truncate block">{s.description}</span>
+                          <span className="text-[11px] text-muted truncate block">{s.description}</span>
                         </span>
-                        <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[s.source] ?? SOURCE_CLS.builtin}`}>
+                        <span className={`text-[11px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[s.source] ?? SOURCE_CLS.builtin}`}>
                           {SOURCE_LABEL[s.source] ?? '内置'}
                         </span>
                         {s.timeframes?.includes('1m') && (
@@ -418,12 +418,12 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
               <div className="flex flex-col min-h-0">
                 <div className="flex items-center gap-1.5 px-3 py-2 border-b border-border/60 shrink-0">
                   <GripVertical className="h-3 w-3 text-muted" />
-                  <span className="text-[10px] text-muted">已选 · 上下拖拽排序</span>
+                  <span className="text-[11px] text-muted">已选 · 上下拖拽排序</span>
                   <button
                     onClick={handleClearAll}
                     disabled={draftPool.length === 0}
-                    title="清空已选策略池 (未点确定前可用「取消」恢复)"
-                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-btn text-[10px] text-muted border border-border/60 hover:text-danger hover:border-danger/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
+                    title="清空已选（确定前可取消）"
+                    className="ml-auto inline-flex items-center gap-1 px-2 py-1 rounded-btn text-[11px] text-muted border border-border/60 hover:text-danger hover:border-danger/30 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer shrink-0"
                   >
                     <Trash2 className="h-3 w-3" />
                     清空
@@ -432,7 +432,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                 <div className="flex-1 overflow-y-auto px-2 py-2">
                   {draftPool.length === 0 ? (
                     <div className="flex items-center justify-center h-full text-[11px] text-muted">
-                      从左侧点击策略添加
+                      从左侧选择策略
                     </div>
                   ) : (
                     <Reorder.Group
@@ -456,9 +456,9 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
                           >
                             <GripVertical className="h-3.5 w-3.5 text-accent group-hover:text-accent shrink-0" />
                             <span className="flex-1 min-w-0 text-[12px] text-foreground truncate">
-                              {s?.name ?? id} <span className="text-[10px] text-muted font-mono">{id}</span>
+                              {s?.name ?? id} <span className="text-[11px] text-muted tabular-nums">{id}</span>
                             </span>
-                            <span className={`text-[8px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[src] ?? SOURCE_CLS.builtin}`}>
+                            <span className={`text-[11px] px-1 py-px rounded border leading-tight shrink-0 ${SOURCE_CLS[src] ?? SOURCE_CLS.builtin}`}>
                               {SOURCE_LABEL[src] ?? '内置'}
                             </span>
                             {s?.timeframes?.includes('1m') && (
@@ -484,7 +484,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
 
           {/* 底部 */}
           <div className="flex items-center justify-between px-4 py-2 border-t border-border shrink-0">
-            <span className="text-[10px] text-muted">仅策略池中的策略会在扫描时运行 · 垃圾桶=永久删除（仅自定义/AI/叠加）</span>
+            <span className="text-[11px] text-muted">仅运行策略池中的策略 · 删除不可恢复（限自定义 / AI / 叠加）</span>
             <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
@@ -494,7 +494,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
               </button>
               <button
                 onClick={() => { onConfirm(draftPool); onClose() }}
-                className="px-3 py-1 text-xs rounded-btn bg-accent text-white hover:bg-accent/90 transition-colors cursor-pointer"
+                className="px-3 py-1 text-xs rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 transition-colors cursor-pointer"
               >
                 确定
               </button>

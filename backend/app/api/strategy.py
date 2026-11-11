@@ -372,7 +372,7 @@ def run_strategy(req: RunRequest, request: Request):
         svc = ScreenerService(request.app.state.repo, asset_type=req.asset_type)
         as_of = svc.latest_date()
     if not as_of:
-        raise HTTPException(status_code=400, detail="无可用数据日期 — enriched 表为空,请先运行盘后管道")
+        raise HTTPException(status_code=400, detail="无可用数据日期 — enriched 表为空,请先运行盘后同步")
 
     try:
         from app.services.screener import ScreenerService

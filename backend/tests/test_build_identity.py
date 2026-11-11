@@ -13,7 +13,7 @@ from app.services import update_check
 
 @pytest.fixture
 def fixed_build(monkeypatch):
-    monkeypatch.setattr(update_check, "__version__", "0.55.0")
+    monkeypatch.setattr(update_check, "__version__", "0.56.0")
     monkeypatch.setattr(update_check.settings, "update_check_enabled", True)
     monkeypatch.setattr(update_check.settings, "update_check_repo", "owner/repo")
     monkeypatch.setenv("ZENTRADE_COMMIT", "a" * 40)
@@ -30,8 +30,8 @@ def test_health_and_version_share_build_identity(monkeypatch):
     with TestClient(app) as client:
         health = client.get("/health").json()
         version = client.get("/api/data/version").json()
-    assert health["version"] == __version__ == "0.55.0"
-    assert version["version"] == "v0.55.0"
+    assert health["version"] == __version__ == "0.56.0"
+    assert version["version"] == "v0.56.0"
     assert health["revision"] == version["revision"] == "a" * 40
 
 

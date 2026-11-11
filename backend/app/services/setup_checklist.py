@@ -108,15 +108,15 @@ def build() -> dict:
     k, s, src = credentials.alpaca()
     items.append(_item(
         "alpaca", "market", "Alpaca（美股行情）", "required", bool(k and s), source=_src_label(src),
-        purpose="SIP 历史日K / 分钟K、IEX 实时报价、NYSE 交易日历、公司行动、纸面镜像账户、Alpaca 新闻。",
-        impact="不配：没有日K和交易日历，机会板、回测、纸面交易都无法运行。",
+        purpose="SIP 历史日K / 分钟K、IEX 实时报价、NYSE 交易日历、公司行动、模拟镜像账户、Alpaca 新闻。",
+        impact="不配：没有日K和交易日历，机会板、回测、模拟交易都无法运行。",
         where="settings?tab=data-sources&source=alpaca&highlight=source-detail", env=["ALPACA_API_KEY_ID", "ALPACA_API_SECRET_KEY"],
         link="https://app.alpaca.markets/signup", note="免费账户即可；设置页填写格式 KEY_ID:SECRET。"))
     tf = _plugin_status("tickflow")
     items.append(_item(
         "tickflow", "market", "TickFlow（盘中实时）", "optional", bool(tf.get("available")),
         source="已配置" if tf.get("available") else "",
-        purpose="全市场合并口径实时报价，约 5 秒刷新；用于盘中强势、热报价与纸面撮合。",
+        purpose="全市场合并口径实时报价，约 5 秒刷新；用于盘中强势、热报价与模拟撮合。",
         impact="不配：实时行情用 Alpaca IEX（单一交易所，成交量偏小），其余功能不受影响。",
         where="settings?tab=data-sources&source=tickflow&highlight=source-detail", env=["TICKFLOW_API_KEY"], link=TICKFLOW_REGISTER_URL))
 

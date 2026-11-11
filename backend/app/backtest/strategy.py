@@ -1300,7 +1300,7 @@ class StrategyBacktestService:
                 return _err(f"回测特征准备失败: {e}")
             timing_ms["load_panel"] = round((time.perf_counter() - t_load) * 1000, 1)
             if panel.is_empty():
-                return _err("无数据，请检查日期范围或先运行盘后管道")
+                return _err("无数据，请检查日期范围或先运行盘后同步")
             # 环境过滤下正式起点=面板首日时顺延 (首日让渡为预热)
             if config.regime_filter:
                 date_labels = tuple(
@@ -1829,7 +1829,7 @@ class StrategyBacktestService:
             return _err(f"回测特征准备失败: {e}")
         timing_ms["load_panel"] = round((time.perf_counter() - t_load) * 1000, 1)
         if panel.is_empty():
-            return _err("无日线数据, 请检查日期范围或先运行盘后管道")
+            return _err("无日线数据, 请检查日期范围或先运行盘后同步")
 
         replayer = MinuteSignalReplayer(self.engine, self.strategy_engine)
         replay = replayer.replay(

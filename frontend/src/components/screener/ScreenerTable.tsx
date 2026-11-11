@@ -105,7 +105,7 @@ function renderTagList(
       {!showAll && hiddenCount > 0 && (
         <button
           onClick={onToggle}
-          className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
+          className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20 transition-colors"
         >
           +{hiddenCount}
         </button>
@@ -113,7 +113,7 @@ function renderTagList(
       {showAll && maxTags > 0 && tags.length > maxTags && (
         <button
           onClick={onToggle}
-          className="inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-muted hover:text-foreground transition-colors"
+          className="inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-muted hover:text-foreground transition-colors"
         >
           收起
         </button>
@@ -122,8 +122,8 @@ function renderTagList(
   )
 }
 
-const EXT_TAG_CLS = 'inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10'
-const STRATEGY_TAG_CLS = 'inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight bg-amber-500/10 text-amber-700 dark:text-amber-600 border border-amber-500/20'
+const EXT_TAG_CLS = 'inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight text-yellow-700 dark:text-yellow-500 bg-yellow-500/10'
+const STRATEGY_TAG_CLS = 'inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight bg-amber-500/10 text-amber-700 dark:text-amber-600 border border-amber-500/20'
 
 function renderExtValue(
   val: any,
@@ -252,13 +252,13 @@ export function ScreenerTable({
                 className={`flex items-center gap-2 text-left ${isExpired ? 'cursor-default' : ''}`}
               >
                 {board ? (
-                  <span className={`shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[9px] font-bold leading-none border ${board.color}`}>
+                  <span className={`shrink-0 inline-flex items-center justify-center w-[18px] h-[18px] rounded text-[11px] font-bold leading-none border ${board.color}`}>
                     {board.label}
                   </span>
                 ) : (
                   <span className="shrink-0 w-[18px]" />
                 )}
-                <span className="font-mono text-secondary group-hover:text-accent transition-colors duration-150 leading-snug">
+                <span className="tabular-nums text-secondary group-hover:text-accent transition-colors duration-150 leading-snug">
                   {r.symbol}
                 </span>
                 {r.name && (
@@ -268,7 +268,7 @@ export function ScreenerTable({
                 )}
               </button>
               {isExpired ? (
-                <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded text-[9px] font-medium leading-tight bg-red-500/10 text-red-700 dark:text-red-400/60 border border-red-500/15">
+                <span className="shrink-0 inline-flex items-center px-1.5 py-px rounded text-[11px] font-medium leading-tight bg-red-500/10 text-red-700 dark:text-red-400/60 border border-red-500/15">
                   失效
                 </span>
               ) : (
@@ -277,7 +277,7 @@ export function ScreenerTable({
                     type="button"
                     onClick={() => onRemoveFromWatchlist(r.symbol)}
                     disabled={watchlistPending}
-                    className="shrink-0 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent transition-colors disabled:opacity-50"
+                    className="shrink-0 inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-full border border-accent/40 bg-accent/10 text-accent dark:text-blue-400 transition-colors disabled:opacity-50"
                     title="移出自选"
                     aria-label={`将 ${r.symbol} 移出自选`}
                   >
@@ -334,12 +334,12 @@ export function ScreenerTable({
             {signals.length > 0 ? (
               <div className="flex flex-wrap gap-0.5">
                 {signals.slice(0, 3).map((s) => (
-                  <span key={s.label} className={`inline-block px-1.5 py-px rounded text-[10px] font-medium leading-tight ${signalCls(s.type)}`}>
+                  <span key={s.label} className={`inline-block whitespace-nowrap px-1.5 py-px rounded text-[11px] font-medium leading-tight ${signalCls(s.type)}`}>
                     {s.label}
                   </span>
                 ))}
                 {signals.length > 3 && (
-                  <span className="text-[10px] text-muted">+{signals.length - 3}</span>
+                  <span className="text-[11px] text-muted">+{signals.length - 3}</span>
                 )}
               </div>
             ) : (
@@ -376,7 +376,7 @@ export function ScreenerTable({
             <div className="flex items-center justify-center">
               {intradayChartVisible
                 ? <MiniIntraday rows={rows} prevClose={r.prev_close} changePct={r.change_pct} width={iw - 4} height={ih} />
-                : <span className="text-[10px] text-muted">分时</span>}
+                : <span className="text-[11px] text-muted">分时</span>}
             </div>
           </td>
         )
@@ -417,7 +417,7 @@ export function ScreenerTable({
                 onClick={(event) => { event.stopPropagation(); onToggleDailyKChart() }}
                 className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${
                   dailyKChartVisible
-                    ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                    ? 'text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20'
                     : 'text-muted hover:text-foreground hover:bg-elevated'
                 }`}
                 title={dailyKChartVisible ? '隐藏日k蜡烛' : '显示日k蜡烛'}
@@ -438,7 +438,7 @@ export function ScreenerTable({
                 onClick={(event) => { event.stopPropagation(); onToggleIntradayChart() }}
                 className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${
                   intradayChartVisible
-                    ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                    ? 'text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20'
                     : 'text-muted hover:text-foreground hover:bg-elevated'
                 }`}
                 title={intradayChartVisible ? '隐藏分时图' : '显示分时图'}
@@ -476,7 +476,7 @@ export function ScreenerTable({
                 onClick={(event) => { event.stopPropagation(); handleToggleStrategyTags() }}
                 className={`inline-flex items-center justify-center w-5 h-5 rounded transition-colors ${
                   strategyTagsExpanded
-                    ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                    ? 'text-accent dark:text-blue-400 bg-accent/10 hover:bg-accent/20'
                     : 'text-muted hover:text-foreground hover:bg-elevated'
                 }`}
                 title={strategyTagsExpanded ? '收起策略标签（每行仅显示前几个）' : '展开全部策略标签'}

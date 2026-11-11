@@ -67,7 +67,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
 
   const save = () => {
     storage.defaultStrategyBasicFilter.set(bf)
-    toast('默认基础参数已保存，之后新建的策略将默认使用', 'success')
+    toast('默认过滤参数已保存', 'success')
     onClose()
   }
 
@@ -92,7 +92,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
     qc.invalidateQueries({ queryKey: ['screener-strategies'] })
     setApplyPhase('idle')
     if (failed === 0) {
-      toast(`已应用到全部 ${ids.length} 个策略，并保存为默认配置；重跑后生效`, 'success')
+      toast(`已应用到全部 ${ids.length} 个策略并保存为默认 · 重新运行后生效`, 'success')
     } else {
       toast(`已应用 ${ids.length - failed}/${ids.length} 个策略（${failed} 个失败），并保存为默认配置`, 'error')
     }
@@ -119,7 +119,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
       {/* 内容 */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
         <p className="text-[11px] text-muted leading-relaxed">
-          之后新建的策略（含 AI 生成）将默认使用以下基础过滤参数；已存在的策略不受影响，可用下方「一键应用」批量同步，或逐策略修改。
+          新建策略（含 AI 生成）默认使用以下过滤参数 · 已有策略不受影响，可批量应用或逐个修改
         </p>
         <div className="space-y-2">
           <RangeField label="价格" minVal={bf.price_min} maxVal={bf.price_max} onMinChange={v => set('price_min', v)} onMaxChange={v => set('price_max', v)} unit="USD" step="1" />
@@ -133,7 +133,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
       <div className="px-4 py-3 border-t border-border/50">
         {applyPhase === 'idle' && (
           <button onClick={() => setApplyPhase('confirm')} disabled={!strategyCount}
-            title="把当前参数写入全部股票策略的基础参数（不影响各策略已调的其他配置）"
+            title="将当前参数应用到全部策略（不影响其他配置）"
             className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-btn text-xs font-medium
               border border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-500 hover:bg-amber-500/20
               transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
@@ -144,7 +144,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
         {applyPhase === 'confirm' && (
           <div className="flex items-center gap-2">
             <span className="flex-1 text-[11px] text-muted leading-tight">
-              将覆盖全部 <span className="text-amber-700 dark:text-amber-500 font-medium">{strategyCount}</span> 个策略的基础参数（只动基础过滤，不碰各策略的参数/评分），重跑后生效。
+              将覆盖全部 <span className="text-amber-700 dark:text-amber-500 font-medium">{strategyCount}</span> 个策略的过滤参数（不改策略参数与评分）· 重新运行后生效
             </span>
             <button onClick={() => setApplyPhase('idle')}
               className="px-2.5 py-1.5 rounded-btn text-xs text-secondary border border-border hover:text-foreground transition-colors cursor-pointer shrink-0">取消</button>
@@ -171,7 +171,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
         <div className="flex items-center gap-2">
           <button onClick={onClose} className="px-3 py-1.5 rounded-btn text-xs text-secondary border border-border hover:text-foreground transition-colors cursor-pointer">取消</button>
           <button onClick={save}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-btn text-xs font-medium text-white bg-accent hover:bg-accent/90 transition-colors cursor-pointer">
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-btn text-xs font-medium text-white bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 hover:bg-accent/90 transition-colors cursor-pointer">
             <Save className="h-3 w-3" />
             保存
           </button>

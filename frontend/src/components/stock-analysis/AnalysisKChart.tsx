@@ -416,7 +416,7 @@ export function AnalysisKChart({
       {/* 价位开关按钮组 */}
       {levels && (
         <div className="flex flex-wrap items-center gap-1.5 mb-2">
-          <span className="text-[10px] text-muted mr-1">关键价位</span>
+          <span className="text-[11px] text-muted mr-1">关键价位</span>
           {LEVEL_GROUPS.map(g => {
             const active = activeTypes.has(g.key)
             // 枢轴点数量按当前档位过滤显示;其他组显示原始数量
@@ -430,7 +430,7 @@ export function AnalysisKChart({
                 onClick={() => toggleType(g.key)}
                 disabled={raw.length === 0}
                 title={`${g.label} (${count} 个)`}
-                className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[10px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
+                className={`inline-flex items-center gap-1 h-6 px-2 rounded-md text-[11px] font-medium border transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                   active
                     ? 'text-foreground'
                     : 'text-muted bg-base/40 border-border/30 hover:border-border/60'
@@ -447,13 +447,13 @@ export function AnalysisKChart({
           {/* 枢轴点档位选择器 —— 仅当枢轴点开启时显示 */}
           {activeTypes.has('pivot') && (levels.pivot?.length ?? 0) > 0 && (
             <div className="inline-flex items-center gap-0.5 ml-1 pl-2 border-l border-border/40">
-              <span className="text-[10px] text-muted mr-1">档位</span>
+              <span className="text-[11px] text-muted mr-1">档位</span>
               {([1, 2, 3] as const).map(r => (
                 <button
                   key={r}
                   onClick={() => setPivotRank(r)}
                   title={r === 1 ? 'P + R1/S1(3 个)' : r === 2 ? '到 R2/S2(5 个)' : '全档 R3/S3(7 个)'}
-                  className={`h-6 px-2 rounded-md text-[10px] font-mono border transition-all ${
+                  className={`h-6 px-2 rounded-md text-[11px] tabular-nums border transition-all ${
                     pivotRank === r
                       ? 'bg-[#8B5CF6]/15 border-[#8B5CF6]/40 text-[#c4b5fd]'
                       : 'text-muted bg-base/40 border-border/30 hover:border-border/60'
@@ -539,8 +539,8 @@ function LevelOverview({
       >
         <span className="h-1.5 w-1.5 rounded-full shrink-0 transition-transform" style={{ backgroundColor: color, transform: hit ? 'scale(1.5)' : 'scale(1)' }} />
         <span className={`text-[11px] w-24 shrink-0 truncate ${hit ? 'text-foreground font-medium' : 'text-secondary'}`}>{p.label}</span>
-        <span className={`text-[11px] font-mono ${hit ? 'text-foreground font-bold' : 'text-foreground'}`}>{p.value.toFixed(2)}</span>
-        <span className="text-[9px] font-mono text-muted">{fmtPct(p.value)}</span>
+        <span className={`text-[11px] tabular-nums ${hit ? 'text-foreground font-bold' : 'text-foreground'}`}>{p.value.toFixed(2)}</span>
+        <span className="text-[11px] tabular-nums text-muted">{fmtPct(p.value)}</span>
       </div>
     )
   }
@@ -549,13 +549,13 @@ function LevelOverview({
     <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 rounded-lg border border-border/40 bg-base/20 px-3 py-2">
       {/* 当前价 */}
       <div className="sm:col-span-2 flex items-center gap-2 pb-1 border-b border-border/30 mb-0.5">
-        <span className="text-[10px] text-muted">当前价</span>
-        <span className="text-xs font-mono font-medium text-foreground">{cur.toFixed(2)}</span>
+        <span className="text-[11px] text-muted">当前价</span>
+        <span className="text-xs tabular-nums font-medium text-foreground">{cur.toFixed(2)}</span>
       </div>
       {/* 压力位(从近到远,即从低到高)倒序展示:最高的在最上 */}
       {resistances.length > 0 && (
         <div>
-          <div className="text-[10px] font-medium text-bear mb-0.5">压力位 ↑</div>
+          <div className="text-[11px] font-medium text-bear mb-0.5">压力位 ↑</div>
           {[...resistances].reverse().map((p, i) => <Row key={`r-${i}`} p={p} />)}
         </div>
       )}
@@ -563,13 +563,13 @@ function LevelOverview({
       <div>
         {supports.length > 0 && (
           <>
-            <div className="text-[10px] font-medium text-bull mb-0.5">支撑位 ↓</div>
+            <div className="text-[11px] font-medium text-bull mb-0.5">支撑位 ↓</div>
             {supports.map((p, i) => <Row key={`s-${i}`} p={p} />)}
           </>
         )}
         {neutrals.length > 0 && (
           <div className={supports.length > 0 ? 'mt-2' : ''}>
-            {supports.length === 0 && <div className="text-[10px] font-medium text-muted mb-0.5">枢轴位</div>}
+            {supports.length === 0 && <div className="text-[11px] font-medium text-muted mb-0.5">枢轴位</div>}
             {neutrals.map((p, i) => <Row key={`n-${i}`} p={p} />)}
           </div>
         )}

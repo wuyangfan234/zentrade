@@ -24,7 +24,7 @@ it('does not promote expired proposals to the active area',async()=>{
 describe('modeLabel', () => {
   it('names v4 as the watchlist rule-set mode, never as legacy v1', () => {
     expect(modeLabel('v4')).toContain('自选 v4')
-    expect(modeLabel('v3')).toBe('新尺子 v3.1')
+    expect(modeLabel('v3')).toBe('检验口径 v3.1')
     expect(modeLabel(undefined)).toBe('旧算法 v1')
   })
 })

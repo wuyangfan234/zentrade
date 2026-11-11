@@ -29,7 +29,7 @@ type Verdict = 'valid' | 'edge' | 'invalid' | 'error'
 
 // P0 判读为客户端经验规则, metrics_v2 (服务端显著性) 落地后切换为服务端 verdict
 const VERDICT_META: Record<Verdict, { label: string; cls: string }> = {
-  valid: { label: '有效', cls: 'bg-bull/10 text-bull' },
+  valid: { label: '有效', cls: 'bg-bull/10 text-bull dark:text-red-400' },
   edge: { label: '边缘', cls: 'bg-amber-400/10 text-amber-700 dark:text-amber-500' },
   invalid: { label: '无效', cls: 'bg-base text-muted' },
   error: { label: '失败', cls: 'bg-danger/10 text-danger' },
@@ -59,8 +59,8 @@ const hasServerVerdict = (results: FactorBatchItem[]): boolean =>
 // 预设场景: 纯前端选择集, 数量按 columns 数据实时计算 (分组名缺失时该项自动为空并禁用)
 type PresetDef = { id: string; label: string; hint: string; groups?: string[]; quick?: boolean }
 const PRESETS: PresetDef[] = [
-  { id: 'all', label: '全面体检', hint: '全部因子，耗时最长' },
-  { id: 'quick', label: '快速体检', hint: '除财务组外每组各取 1 个代表因子' , quick: true },
+  { id: 'all', label: '全量检验', hint: '全部因子，耗时最长' },
+  { id: 'quick', label: '快速检验', hint: '除财务组外每组各取 1 个代表因子' , quick: true },
   { id: 'trend', label: '趋势动量', hint: '动量组 + 趋势组', groups: ['动量', '趋势'] },
   { id: 'reversal', label: '超跌反转', hint: '超买超卖组 + 价格位置组', groups: ['超买超卖', '价格位置'] },
   { id: 'volume', label: '量价资金', hint: '量价组 + 流动性组', groups: ['量价', '流动性'] },
@@ -302,19 +302,19 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
         <div className="flex items-center justify-between border-b border-border/70 pb-2">
           <div>
             <div className="text-xs font-semibold text-foreground">筛选配置</div>
-            <div className="mt-0.5 text-[10px] text-muted">已选 {selected.length} / {allColumns.length}</div>
+            <div className="mt-0.5 text-[11px] text-muted">已选 {selected.length} / {allColumns.length}</div>
           </div>
           <button
             type="button"
             onClick={() => { setActivePreset(null); setSelected(allSelected ? [] : allColumns.map(item => item.id)) }}
-            className="rounded-btn px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10"
+            className="rounded-btn px-2 py-1 text-[11px] text-accent transition-colors hover:bg-accent/10"
           >
             {allSelected ? '清空' : '全选'}
           </button>
         </div>
 
         <div>
-          <div className="mb-1.5 text-[10px] text-muted">预设</div>
+          <div className="mb-1.5 text-[11px] text-muted">预设</div>
           <div className="flex flex-wrap gap-1">
             {PRESETS.map(preset => {
               const ids = presetIds(preset)
@@ -326,19 +326,19 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                   onClick={() => applyPreset(preset)}
                   disabled={ids.length === 0}
                   title={preset.hint}
-                  className={`inline-flex items-center gap-1 rounded-btn border px-2 py-1 text-[10px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40 ${active
-                    ? 'border-accent/60 bg-accent/10 text-accent'
+                  className={`inline-flex items-center gap-1 rounded-btn border px-2 py-1 text-[11px] font-medium transition-colors disabled:pointer-events-none disabled:opacity-40 ${active
+                    ? 'border-accent/60 bg-accent/10 text-accent dark:text-blue-400'
                     : 'border-border bg-surface text-secondary hover:border-accent/40 hover:text-accent'
                   }`}
                 >
                   {preset.label}
-                  <span className="font-mono">{ids.length}</span>
+                  <span className="tabular-nums">{ids.length}</span>
                   {active && <span aria-hidden>✓</span>}
                 </button>
               )
             })}
             {activePreset == null && (
-              <span className="inline-flex items-center rounded-btn border border-dashed border-border px-2 py-1 text-[10px] text-muted">
+              <span className="inline-flex items-center rounded-btn border border-dashed border-border px-2 py-1 text-[11px] text-muted">
                 自定义
               </span>
             )}
@@ -351,7 +351,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             type="text"
             value={factorQuery}
             onChange={event => setFactorQuery(event.target.value)}
-            placeholder="搜索因子 (名称/公式)"
+            placeholder="搜索因子（名称 / 公式）"
             className={`${INPUT_CLS} pl-7`}
           />
         </div>
@@ -366,14 +366,14 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                   <button
                     type="button"
                     onClick={() => toggleGroup(items)}
-                    className="text-[9px] text-muted transition-colors hover:text-accent"
+                    className="text-[11px] text-muted transition-colors hover:text-accent"
                   >
                     {groupSelected === items.length ? '取消本组' : `选择本组 ${groupSelected}/${items.length}`}
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
                   {items.map(item => (
-                    <label key={item.id} className="flex min-w-0 cursor-pointer items-center gap-1.5 text-[10px] text-secondary">
+                    <label key={item.id} className="flex min-w-0 cursor-pointer items-center gap-1.5 text-[11px] text-secondary">
                       <input
                         type="checkbox"
                         checked={selected.includes(item.id)}
@@ -388,7 +388,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             )
           })}
           {Object.keys(factorGroups).length === 0 && (
-            <div className="py-4 text-center text-[10px] text-muted">
+            <div className="py-4 text-center text-[11px] text-muted">
               {columns.isLoading ? '加载中' : '无匹配因子'}
             </div>
           )}
@@ -403,7 +403,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                 type="button"
                 onClick={() => { setAssetType(value); setSymbols('') }}
                 className={`h-full px-3 text-xs font-medium transition-colors ${assetType === value
-                  ? 'bg-accent/10 text-accent'
+                  ? 'bg-accent/10 text-accent dark:text-blue-400'
                   : 'text-muted hover:text-foreground'
                 }`}
               >
@@ -417,7 +417,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
               value={symbols}
               onChange={event => setSymbols(event.target.value)}
               placeholder="留空使用全市场"
-              className={`${INPUT_CLS} min-w-0 flex-1 font-mono`}
+              className={`${INPUT_CLS} min-w-0 flex-1 tabular-nums`}
             />
             <WatchlistGroupMenu
               onSelect={importFromWatchlist}
@@ -429,7 +429,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
               menuLabel="选择自选分组"
               align="right"
               triggerClassName="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-input border border-border bg-surface px-2 text-[11px] text-secondary transition-colors hover:border-accent/50 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-              title={assetType === 'etf' ? 'ETF 模式暂不支持从自选导入 (自选按股票维护)' : '从自选分组加入筛选范围'}
+              title={assetType === 'etf' ? 'ETF 模式不支持从自选导入' : '从自选分组加入筛选范围'}
               ariaLabel="从自选加入筛选范围"
             >
               <ListPlus className="h-3 w-3" />
@@ -455,7 +455,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                 key={months}
                 type="button"
                 onClick={() => { setStart(monthsAgo(months)); setEnd(latestEnd) }}
-                className="flex-1 rounded-btn px-2 py-1 text-[10px] text-muted transition-colors hover:bg-elevated hover:text-secondary"
+                className="flex-1 rounded-btn px-2 py-1 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-secondary"
               >
                 {months === 12 ? '1年' : `${months}个月`}
               </button>
@@ -465,7 +465,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
 
         <div className="grid grid-cols-3 gap-2">
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">调仓</span>
+            <span className="mb-1 block text-[11px] text-muted">调仓</span>
             <select value={rebalance} onChange={event => setRebalance(event.target.value as typeof rebalance)} className={INPUT_CLS}>
               <option value="daily">日度</option>
               <option value="weekly">周度</option>
@@ -473,7 +473,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted">分组</span>
+            <span className="mb-1 block text-[11px] text-muted">分组</span>
             <select value={nGroups} onChange={event => setNGroups(Number(event.target.value))} className={INPUT_CLS}>
               <option value={3}>3 组</option>
               <option value={5}>5 组</option>
@@ -481,7 +481,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-[10px] text-muted" title="按实际换手扣 · 成分不变不重复扣">滑点 (bp)</span>
+            <span className="mb-1 block text-[11px] text-muted" title="按实际换手扣 · 成分不变不重复扣">滑点 (bp)</span>
             <input type="number" min="0" value={slippage} onChange={event => setSlippage(event.target.value)} className={INPUT_CLS} />
           </label>
         </div>
@@ -491,7 +491,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
           onClick={() => run.mutate()}
           disabled={run.isPending || selected.length === 0 || overLimit}
           title={overLimit ? `一次最多 ${MAX_BATCH_FACTORS} 个因子 · 当前 ${selected.length} 个` : undefined}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5" />
           {run.isPending ? '筛选中' : overLimit ? `超过上限 ${MAX_BATCH_FACTORS} · 已选 ${selected.length}` : `筛选 ${selected.length} 个因子`}
@@ -514,16 +514,16 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
           <div className="m-3 rounded-btn border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{run.data.error}</div>
         )}
         {!run.data && !run.isPending && (
-          <EmptyState icon={Search} title="运行因子筛选" hint="批量结果将按预测能力排序。" />
+          <EmptyState icon={Search} title="运行因子筛选" hint="结果按预测能力排序" />
         )}
         {run.data && !run.data.error && (
           <div>
             <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
               <div>
                 <div className="text-sm font-medium text-foreground">筛选结果</div>
-                <div className="mt-0.5 flex items-center gap-3 text-[10px] text-muted">
+                <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted">
                   <span>{run.data.results.length} 个因子</span>
-                  <span>{run.data.n_symbols} 只标的</span>
+                  <span>{run.data.n_symbols} 只</span>
                   <span>{run.data.n_dates} 个交易日</span>
                   <span className="inline-flex items-center gap-1"><Clock className="h-3 w-3" />{run.data.elapsed_ms.toFixed(0)} ms</span>
                 </div>
@@ -541,8 +541,8 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                   </div>
                 )}
               </div>
-              <div className="ml-auto self-center text-[10px] text-muted" title="点击数值列表头可切换排序键与升/降序；IC/IR/t 值/多空收益按绝对值排序（正负都是信号）。">
-                点击表头排序
+              <div className="ml-auto self-center text-[11px] text-muted" title="点击列头排序 · IC / IR / t 值 / 多空收益按绝对值排序">
+                点击列头排序
               </div>
             </div>
             <div className="overflow-x-auto">
@@ -564,7 +564,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                 <tbody>
                   {sortedResults.map((item, index) => (
                     <tr key={item.factor_name} className="border-t border-border/70 transition-colors hover:bg-elevated/40">
-                      <td className="px-3 py-3 text-center font-mono text-muted">{index + 1}</td>
+                      <td className="px-3 py-3 text-center tabular-nums text-muted">{index + 1}</td>
                       <td className="px-3 py-3">
                         <div className="font-medium text-foreground">
                           {item.label}
@@ -574,24 +574,24 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
                               : <span className="ml-1 text-bear" title="样本内方向：值小看多（IC 为负，反向使用）。历史方向不代表未来。">↓</span>
                           )}
                         </div>
-                        <div className="mt-0.5 text-[10px] text-muted">{item.group} · {item.factor_name}</div>
-                        {item.error && <div className="mt-1 text-[10px] text-danger">{item.error}</div>}
+                        <div className="mt-0.5 text-[11px] text-muted">{item.group} · {item.factor_name}</div>
+                        {item.error && <div className="mt-1 text-[11px] text-danger">{item.error}</div>}
                       </td>
-                      <td className={`px-3 py-3 text-right font-mono ${priceColorClass(item.ic_mean)}`}>{item.ic_mean == null ? '—' : fmtPct(item.ic_mean)}</td>
-                      <td className="px-3 py-3 text-right font-mono text-foreground">{item.ir == null ? '—' : item.ir.toFixed(2)}</td>
+                      <td className={`px-3 py-3 text-right tabular-nums ${priceColorClass(item.ic_mean)}`}>{item.ic_mean == null ? '—' : fmtPct(item.ic_mean)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-foreground">{item.ir == null ? '—' : item.ir.toFixed(2)}</td>
                       <td
-                        className={`px-3 py-3 text-right font-mono ${item.t_newey_west != null && Math.abs(item.t_newey_west) >= 2 ? 'text-foreground' : 'text-muted'}`}
+                        className={`px-3 py-3 text-right tabular-nums ${item.t_newey_west != null && Math.abs(item.t_newey_west) >= 2 ? 'text-foreground' : 'text-muted'}`}
                         title={item.t_newey_west != null
                           ? `NW t=${item.t_newey_west.toFixed(2)}${item.q_value != null ? `，BH q=${item.q_value.toFixed(3)}` : ''}（${item.q_value != null && item.q_value <= 0.1 ? '通过' : '未通过'}多重检验校正）`
                           : '样本不足，无法计算'}
                       >
                         {item.t_newey_west == null ? '—' : item.t_newey_west.toFixed(2)}
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-secondary">{item.ic_win_rate == null ? '—' : fmtPct(directionalHitRate(item.ic_mean, item.ic_win_rate))}</td>
-                      <td className={`px-3 py-3 text-right font-mono ${priceColorClass(item.long_short_return)}`}>{item.long_short_return == null ? '—' : fmtPct(item.long_short_return)}</td>
-                      <td className="px-3 py-3 text-right font-mono text-bear">{item.long_short_max_drawdown == null ? '—' : fmtPct(item.long_short_max_drawdown)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-secondary">{item.ic_win_rate == null ? '—' : fmtPct(directionalHitRate(item.ic_mean, item.ic_win_rate))}</td>
+                      <td className={`px-3 py-3 text-right tabular-nums ${priceColorClass(item.long_short_return)}`}>{item.long_short_return == null ? '—' : fmtPct(item.long_short_return)}</td>
+                      <td className="px-3 py-3 text-right tabular-nums text-bear">{item.long_short_max_drawdown == null ? '—' : fmtPct(item.long_short_max_drawdown)}</td>
                       <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[10px] font-medium ${VERDICT_META[verdictOf(item)].cls}`}>
+                        <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${VERDICT_META[verdictOf(item)].cls}`}>
                           {VERDICT_META[verdictOf(item)].label}
                         </span>
                       </td>
@@ -676,7 +676,7 @@ export function FactorDiscovery({ focusFactor }: { focusFactor?: string } = {}) 
               type="button"
               onClick={() => setView(value)}
               className={`inline-flex items-center gap-1.5 rounded-[5px] px-3 py-1.5 text-xs font-medium transition-colors ${view === value
-                ? 'bg-accent text-white shadow-sm'
+                ? 'bg-accent dark:bg-blue-700 text-white shadow-sm'
                 : 'text-secondary hover:bg-elevated hover:text-foreground'
               }`}
             >
@@ -688,7 +688,7 @@ export function FactorDiscovery({ focusFactor }: { focusFactor?: string } = {}) 
         <button
           type="button"
           onClick={() => setAutoOpen(true)}
-          className="ml-auto mr-1 inline-flex items-center gap-1.5 rounded-btn border border-accent/40 bg-accent/5 px-2.5 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accent/10"
+          className="ml-auto mr-1 inline-flex items-center gap-1.5 rounded-btn border border-accent/40 bg-accent/5 px-2.5 py-1.5 text-xs font-medium text-accent dark:text-blue-400 transition-colors hover:bg-accent/10"
           title="全量筛选达标因子 · 搜索组合 · 嵌套样本外验证"
         >
           <Sparkles className="h-3.5 w-3.5" />

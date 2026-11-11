@@ -50,7 +50,7 @@ it('flow bar has six steps and the last one equals pending strategies + pending 
 it('reference card is the current card engine and is not counted as a candidate', async () => {
   await render()
   const ref = host.querySelector('[data-ref]')!
-  expect(ref.textContent).toContain('当前出卡引擎')
+  expect(ref.textContent).toContain('现行策略组合')
   expect(ref.textContent).toContain('对照')
   expect(ref.textContent).not.toContain('保存')
   expect(host.querySelectorAll('[data-cand]').length).toBe(page.week!.candidates.filter(c => !c.error).length)

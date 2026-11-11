@@ -30,7 +30,7 @@ it('disables paid query and explains the lock when spend cannot be established',
   host.innerHTML = renderToStaticMarkup(<PaidFetchBar pending={false} onFetch={() => {}} label="查询期权" />)
   expect(host.querySelector('button')?.disabled).toBe(true)
   expect(host.textContent).toContain('额度未知')
-  expect(host.textContent).toContain('暂停收费查询')
+  expect(host.textContent).toContain('已暂停付费查询')
 })
 
 it('retains normal known-spending and free balance display', () => {
