@@ -37,8 +37,11 @@ export const storage = {
   /** 查询轮询 / SSE 配置 */
   queryConfig:          kv<unknown>('tf-stocks-query-config'),
 
-  /** 策略池 (screener) — 统一池 (日线+分钟共用, 执行按各自声明周期路由) */
+  /** 策略池 (screener) — 统一池 (日线+分钟共用, 执行按各自声明周期路由)。
+   *  真理源在服务器 (/api/strategies/pool); 这里是本机副本, 用于首屏秒出与首次同步时并入旧设备的池 */
   strategyPool:         kv<string[]>('strategy-pool'),
+  /** 本机的策略池是否已与服务器对过一次 (对过之后以服务器为准, 不再把本机旧池并回去) */
+  strategyPoolSynced:   kv<boolean>('strategy-pool-synced'),
   /** 旧分钟隔离池 — 仅作一次性迁移读取源, 迁移完成后移除该 key */
   strategyPoolMinute:   kv<string[]>('strategy-pool-1m'),
 
@@ -86,9 +89,6 @@ export const storage = {
 
   /** 自选分组统计条配置 (metric: 统计指标, sort: 排序方式, card*: 分组卡片显示项) */
   watchlistGroupStats: kv<{ metric: string; sort: string; cardTopN?: number; cardColorBar?: boolean; cardRank?: boolean }>('watchlist_groupStats'),
-
-  /** Screener 卡片尺寸 */
-  screenerCardSize:     kv<string>('screener-card-size'),
 
   /** 策略创建草稿（新建专用） */
   strategyDraft: kv<{ name: string; description: string; direction: string; style?: string; rules: string; code: string; step: number; strategyId: string; source?: 'ai' | 'custom' } | null>('strategy-draft'),

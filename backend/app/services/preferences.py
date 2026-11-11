@@ -8,6 +8,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import re
 import threading
 from pathlib import Path
 
@@ -824,6 +825,36 @@ def set_screener_result_columns(columns: list[dict]) -> list[dict]:
     """保存策略结果列表列配置。"""
     save({"screener_result_columns": columns})
     return columns
+
+
+# ===== 策略池 (策略页全市场扫描哪些策略) =====
+
+_STRATEGY_POOL_MAX = 200
+_STRATEGY_ID_RE = re.compile(r"^[A-Za-z0-9_.:\-]{1,80}$")
+
+
+def _clean_strategy_pool(ids) -> list[str]:
+    """只留合法的策略 id, 去重保序, 截到上限。不核对策略是否存在 (引擎重载瞬间少报一个策略时不能把池洗掉)。"""
+    out: list[str] = []
+    for x in ids if isinstance(ids, list) else []:
+        if isinstance(x, str) and _STRATEGY_ID_RE.match(x) and x not in out:
+            out.append(x)
+        if len(out) >= _STRATEGY_POOL_MAX:
+            break
+    return out
+
+
+def get_strategy_pool() -> list[str] | None:
+    """策略池。None = 从未保存过 (与空列表区分: 空列表 = 清空过)。"""
+    raw = load().get("strategy_pool")
+    return _clean_strategy_pool(raw) if isinstance(raw, list) else None
+
+
+def set_strategy_pool(ids) -> list[str]:
+    """保存策略池 (整份覆盖)。"""
+    clean = _clean_strategy_pool(ids)
+    save({"strategy_pool": clean})
+    return clean
 
 
 # ===== 首次使用引导 =====
