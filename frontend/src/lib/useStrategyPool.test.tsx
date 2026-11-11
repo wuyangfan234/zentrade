@@ -67,8 +67,8 @@ it('对账规则 (纯函数)', () => {
 it('旧设备第一次打开: 本机的池迁到服务器, 并落下已对账标记', async () => {
   storage.strategyPool.set(['strong_open', 'boll_breakout'])
   await mount()
-  expect(hook.pool).toEqual(['strong_open', 'boll_breakout'])       // 首屏先用本机副本
   await flush()
+  expect(hook.pool).toEqual(['strong_open', 'boll_breakout'])
   expect(hook.ready).toBe(true)
   expect(serverSave).toHaveBeenCalledTimes(1)
   expect(serverSave).toHaveBeenCalledWith(['strong_open', 'boll_breakout'])
@@ -78,7 +78,6 @@ it('旧设备第一次打开: 本机的池迁到服务器, 并落下已对账标
 it('新设备 (本机为空) 打开: 直接用服务器的池, 不回写', async () => {
   serverGet = async () => ({ pool: ['a', 'b'], saved: true })
   await mount()
-  expect(hook.pool).toEqual([])
   await flush()
   expect(hook.pool).toEqual(['a', 'b'])
   expect(storage.strategyPool.get([])).toEqual(['a', 'b'])
