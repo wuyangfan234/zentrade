@@ -30,8 +30,8 @@ export const BUILTIN_INFO_FIELDS: ColumnConfig[] = [
 ]
 
 export const INFO_GROUPS: ColumnGroup[] = [
-  { id: 'volume', label: '成交', icon: '📊', keys: ['volume', 'amplitude'] },
-  { id: 'quote', label: '行情', icon: '📈', keys: ['open', 'high', 'low'] },
+  { id: 'volume', label: '成交', keys: ['volume', 'amplitude'] },
+  { id: 'quote', label: '行情', keys: ['open', 'high', 'low'] },
 ]
 
 // ===== localStorage 持久化 =====

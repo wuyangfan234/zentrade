@@ -98,9 +98,9 @@ export type GroupMetric = 'mean' | 'median' | 'up_ratio' | 'max' | 'min'
 
 export const GROUP_METRICS: ReadonlyArray<{ id: GroupMetric; label: string; hint: string }> = [
   { id: 'mean', label: '等权平均', hint: '组内涨跌幅算术平均' },
-  { id: 'median', label: '中位数', hint: '组内涨跌幅中位值, 抗极值' },
-  { id: 'up_ratio', label: '上涨占比', hint: '上涨家数占有效样本比例, 50% 为强弱轴' },
-  { id: 'max', label: '组内最强', hint: '组内最大涨幅 (龙头强度)' },
+  { id: 'median', label: '中位数', hint: '组内涨跌幅中位数' },
+  { id: 'up_ratio', label: '上涨占比', hint: '上涨家数占比 · 50% 为强弱分界' },
+  { id: 'max', label: '组内最强', hint: '组内最大涨幅' },
   { id: 'min', label: '组内最弱', hint: '组内最小涨幅' },
 ]
 

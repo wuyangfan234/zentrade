@@ -172,13 +172,15 @@ it('shows the Alpaca paper mirror with per-order deviation and a kill switch', a
       ledger_kind: 'fill', qty: 100, filled_qty: 100, filled_price: 50.05, deviation_bps: 10 }],
   })
   await render()
+  await act(async () => { (container.querySelector('[data-hist="log"]') as HTMLButtonElement).click() })   // 记录在第二个页签
   expect(container.querySelector('[data-mirror]')).toBeNull()   // 镜像收在「记录」第二个页签
   await act(async () => { (container.querySelector('[data-tab="mirror"]') as HTMLButtonElement).click() })
   const t = container.querySelector('[data-mirror]')?.textContent ?? ''
-  expect(t).toContain('Alpaca 纸面镜像 · 运行中')
+  expect(t).toContain('Alpaca 模拟镜像 · 运行中')
   expect(t).toContain('内部 $50.00 → Alpaca $50.05')
   expect(t).toContain('+10 基点')   // ui-audit-1011: bps 改中文基点
-  expect(t).toContain('一键停用')
+  expect(t).toContain('停用')
+  expect(t).not.toContain('一键')
 })
 
 it('holding source shows the Chinese rule name with direction, raw id only as tooltip / fallback (2026-10-11)', async () => {

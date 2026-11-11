@@ -2,6 +2,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ systemStatus: vi.fn(), entryFunnel: vi.fn(() => new Promise(() => {})) }))
@@ -36,13 +37,24 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); qc.clear() })
 
 it('shows each component with state, summary and source, plus scheduled jobs', async () => {
-  await act(async () => { root.render(<QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider>) })
+  await act(async () => { root.render(<MemoryRouter><QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider></MemoryRouter>) })
   for (let i = 0; i < 3; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
   const mirror = host.querySelector('[data-component="alpaca_mirror"]')!.textContent ?? ''
   expect(mirror).toContain('异常')
   expect(mirror).toContain('最近错误 403')
-  expect(host.querySelector('[data-component="execution_quotes"]')!.textContent).toContain('出处：/api/trading/status')
-  expect(host.querySelector('[data-job="zen_hot_quotes"]')!.textContent).toContain('热报价 (5 秒)')
+  // 正常项是一行一项的表: 行内有名称、状态、摘要; 入口在点开后的详情里
+  const row = host.querySelector('[data-component="execution_quotes"] [data-quiet-row]') as HTMLButtonElement
+  expect(row.textContent).toContain('当前来源 tickflow')
+  expect(host.querySelector('[data-component="execution_quotes"] [data-source]')).toBeNull()
+  await act(async () => { row.click() })
+  expect(row.getAttribute('aria-expanded')).toBe('true')
+  // 出处: 显示可点的页面入口; 接口地址 / 文件路径只在悬停里, 不上屏
+  const src = host.querySelector('[data-component="execution_quotes"] [data-source] a')!
+  expect(src.textContent).toBe('设置 › 数据源')
+  expect(src.getAttribute('href')).toBe('/settings?tab=data-sources')
+  expect(src.getAttribute('title')).toBe('/api/trading/status')
+  expect(host.textContent).not.toContain('/api/trading/status')
+  expect(host.querySelector('[data-job="zen_hot_quotes"]')!.textContent).toContain('实时报价5 秒')   // 名称一行, 频率在第二行
 })
 
 // ── 0.7.1: 5 种场景 ──
@@ -52,7 +64,7 @@ const mk = (phase: 'premarket' | 'session' | 'postmarket' | 'closed', trading_da
 
 async function renderWith(payload: object) {
   mocks.systemStatus.mockResolvedValue(payload)
-  await act(async () => { root.render(<QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider>) })
+  await act(async () => { root.render(<MemoryRouter><QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider></MemoryRouter>) })
   for (let i = 0; i < 3; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 }
 const verdict = () => host.querySelector('[data-verdict]')!
@@ -65,20 +77,20 @@ it('premarket: waiting is grey, not red', async () => {
   ]
   await renderWith({ at: '2026-10-12T07:30:00-04:00', components: comps, jobs: [], market: mk('premarket') })
   expect(verdict().getAttribute('data-verdict')).toBe('ok')
-  expect(host.querySelector('[data-market]')!.textContent).toContain('盘前 · 今天是交易日')
+  expect(host.querySelector('[data-market]')!.textContent).toContain('盘前 · 交易日')
   expect(host.querySelector('[data-group="problems"]')).toBeNull()
-  expect(host.querySelector('[data-component="ops_watch"]')!.textContent).toContain('等待首次运行')
+  expect(host.querySelector('[data-component="ops_watch"]')!.textContent).toContain('未到运行时间')
 })
 
-it('session all ok: verdict green, ok cards expanded, no problems line', async () => {
+it('session all ok: verdict green, ok rows listed, no problems line', async () => {
   await renderWith({ at: '2026-10-12T10:00:00-04:00', market: mk('session'),
     components: [{ id: 'paper_loop', label: '纸面交易员', state: 'ok', summary: '最近运行 10:00' }],
     jobs: [{ id: 'zen_market_mood', next_run: null, state: 'ok', last_at: '2026-10-12T08:36:00-04:00' },
       { id: 'zen_qveris_estimates', next_run: null, state: 'running' }] })
-  expect(verdict().textContent).toContain('一切正常')
+  expect(verdict().textContent).toContain('运行正常')
   expect(host.querySelector('[data-group="ok"] [data-component="paper_loop"]')).not.toBeNull()
   expect(host.querySelector('[data-group="ok"] details')).toBeNull()
-  expect(host.querySelector('[data-no-problems]')!.textContent).toContain('没有需要处理的项')
+  expect(host.querySelector('[data-no-problems]')!.textContent).toContain('无待处理项')
   expect(host.querySelector('[data-job="zen_qveris_estimates"]')!.textContent).toContain('进行中')
   expect(host.querySelector('[data-market]')!.textContent).toContain('收盘')
 })
@@ -90,7 +102,7 @@ it('session loop stalled: red card with reason / impact / next step / last ok', 
     jobs: [] })
   expect(verdict().getAttribute('data-verdict')).toBe('error')
   const card = host.querySelector('[data-group="problems"] [data-component="paper_loop"]')!.textContent ?? ''
-  for (const s of ['原因', '6 分钟没运行', '影响', '下一步', '最后正常', '美东 10:36（新加坡 22:36）']) expect(card).toContain(s)
+  for (const s of ['原因', '6 分钟没运行', '影响', '处理', '最后正常', '10:36 ET（北京 22:36）']) expect(card).toContain(s)
 })
 
 it('postmarket data quality error is red, missing job opens the jobs group', async () => {
@@ -100,21 +112,21 @@ it('postmarket data quality error is red, missing job opens the jobs group', asy
   expect(verdict().textContent).toContain('1 项异常')
   expect(host.querySelector('[data-group="jobs"]')).not.toBeNull()
   expect(host.querySelector('[data-no-problems]')).toBeNull()
-  expect(host.querySelector('[data-job="zen_earnings_postclose"]')!.textContent).toContain('财报日历（盘后）')
+  expect(host.querySelector('[data-job="zen_earnings_postclose"]')!.textContent).toContain('财报日历盘后')
 })
 
 it('closed day: says market closed, nothing red', async () => {
   await renderWith({ at: '2026-10-11T12:00:00-04:00', market: { ...mk('closed', false) },
     components: [{ id: 'paper_loop', label: '纸面交易员', state: 'idle', idle_kind: 'closed', summary: '—' }], jobs: [] })
   expect(verdict().textContent).toContain('休市')
-  expect(host.querySelector('[data-market]')!.textContent).toContain('今天不是交易日')
+  expect(host.querySelector('[data-market]')!.textContent).toContain('非交易日')
   expect(host.querySelector('[data-component="paper_loop"]')!.textContent).toContain('休市')
 })
 
-it('fmtTime marks next day in Singapore', async () => {
+it('fmtTime marks next day in Beijing', async () => {
   const { fmtTime } = await import('./SystemStatus')
-  expect(fmtTime('2026-10-12T16:00:00-04:00')).toBe('美东 16:00（新加坡次日 04:00）')
-  expect(fmtTime('2026-10-12T10:36:00-04:00')).toBe('美东 10:36（新加坡 22:36）')
+  expect(fmtTime('2026-10-12T16:00:00-04:00')).toBe('16:00 ET（北京次日 04:00）')
+  expect(fmtTime('2026-10-12T10:36:00-04:00')).toBe('10:36 ET（北京 22:36）')
 })
 
 // ── 0.13.0: 与数据页/持仓页统一版式 (白底卡、图标分区标题、计数格、任务卡按下次时间排序) ──
@@ -129,8 +141,11 @@ it('0.13.0 layout: max-w-6xl 页宽; 白底卡; 问题卡左色条; 总结论四
   const wrap = host.querySelector('[data-status-wrap]')!.className
   expect(wrap).toContain('max-w-6xl'); expect(wrap).toContain('md:px-8')
   expect(host.querySelector('[data-status-cols]')!.className).toContain('lg:grid-cols-')
-  expect(host.querySelector('[data-group="ok"] [data-card-grid]')!.className).toContain('grid')
-  expect(host.querySelector('[data-group="ok"] [data-component="c"]')!.className).toContain('bg-surface')
+  // 正常 / 未运行项压成表 (一行一项), 不再铺卡片网格; 异常与注意项仍是卡片
+  expect(host.querySelector('[data-group="ok"] [data-card-grid]')).toBeNull()
+  expect(host.querySelector('[data-group="ok"] [data-quiet-table]')!.className).toContain('bg-surface')
+  expect(host.querySelector('[data-group="ok"] [data-component="c"] [data-quiet-summary]')!.textContent).toBe('z')
+  expect(host.querySelector('[data-group="ok"] [data-component-detail]')).toBeNull()
   expect(host.querySelector('[data-group="idle"] [data-component="d"]')).not.toBeNull()
   expect(host.querySelector('[data-group="problems"] [data-component="a"]')!.className).toContain('border-l-rose-500')
   expect(host.querySelector('[data-group="problems"] [data-component="b"]')!.className).toContain('border-l-amber-400')
@@ -140,7 +155,7 @@ it('0.13.0 layout: max-w-6xl 页宽; 白底卡; 问题卡左色条; 总结论四
   expect(host.querySelector('[data-group="jobs"] [data-jobs-list] [data-job="zen_hot_quotes"]')!.textContent).toContain('已完成')
 })
 
-it('0.13.0 定时任务: 按下次运行时间排序, 下次时间拆美东/新加坡两行, 空 next_run 排最后', async () => {
+it('0.13.0 定时任务: 按下次运行时间排序, 下次时间拆 ET / 北京两行, 空 next_run 排最后', async () => {
   await renderWith({ at: '2026-10-13T05:11:00-04:00', market: mk('premarket'), components: [],
     jobs: [
       { id: 'daily_pipeline', next_run: '2026-10-13T16:35:00-04:00' },
@@ -150,18 +165,18 @@ it('0.13.0 定时任务: 按下次运行时间排序, 下次时间拆美东/新�
   const ids = [...host.querySelectorAll('[data-jobs-list] [data-job]')].map((e) => e.getAttribute('data-job'))
   expect(ids).toEqual(['zen_hot_quotes', 'pre_market_instruments', 'daily_pipeline', 'zen_weekly_review'])
   const next = host.querySelector('[data-job="daily_pipeline"] [data-job-next]')!.textContent
-  expect(next).toContain('10-13 16:35 ET'); expect(next).toContain('新加坡次日 04:35')
+  expect(next).toContain('10-13 16:35 ET'); expect(next).toContain('北京次日 04:35')
 })
 
-it('fmtNextRun splits ET / Singapore', async () => {
+it('fmtNextRun splits ET / Beijing', async () => {
   const { fmtNextRun } = await import('./SystemStatus')
-  expect(fmtNextRun('2026-10-13T09:10:00-04:00')).toEqual({ et: '10-13 09:10 ET', sg: '新加坡 21:10' })
+  expect(fmtNextRun('2026-10-13T09:10:00-04:00')).toEqual({ et: '10-13 09:10 ET', local: '北京 21:10' })
   expect(fmtNextRun(null)).toBeNull()
 })
 
 it('0.9.1 读取失败: 红色带原因与重试按钮, 点重试重新请求', async () => {
   mocks.systemStatus.mockRejectedValueOnce(new Error('HTTP 502'))
-  await act(async () => { root.render(<QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider>) })
+  await act(async () => { root.render(<MemoryRouter><QueryClientProvider client={qc}><SystemStatus /></QueryClientProvider></MemoryRouter>) })
   for (let i = 0; i < 3; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
   const alert = host.querySelector('[data-empty="error"]')!
   expect(alert.getAttribute('role')).toBe('alert')

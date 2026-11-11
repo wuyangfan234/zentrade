@@ -2,6 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Wallet } from 'lucide-react'
 import { api, type StopMove, type AlpacaMirrorPayload, type ClosedTrip, type LivePosition, type PortfolioLive, type SetupStatusRow } from '@/lib/api'
+import { corpActionLabel, reasonLabel } from '@/lib/reasonLabels'
 import { formatScheduleDatePart, formatScheduleTimePart } from '@/lib/format'
 import { etToday } from '@/lib/etTime'
 import { cn } from '@/lib/cn'
@@ -124,21 +125,6 @@ function etClock(iso: string): string {
 
 const SETUP_NAME: Record<string, string> = { breakout: '突破', pullback: '回踩', 'strategy:swing': '机会板' }
 
-/** 出场原因: 按原因码给短词 (多空通用); 映射不到回退后端文案 */
-const EXIT_REASON: Record<string, string> = {
-  invalidation: '止损', trailing_stop: '移动止损', time_stop: '到期', target_zone_upper: '到达目标',
-  target_zone_lower: '目标减半', earnings_reduce: '财报前减半', corp_action: '公司行动', manual: '人工',
-  watchlist_removed: '移出自选',
-}
-function reasonLabel(code?: string | null, fallback?: string | null): string {
-  if (!code) return fallback ?? ''
-  if (EXIT_REASON[code]) return EXIT_REASON[code]
-  const m = /^trailing_(-?[\d.]+)R$/.exec(code)
-  if (m) return `浮盈 ${m[1]}R`
-  if (code === 'breakeven_after_partial') return '减半后保本'
-  return fallback ?? code
-}
-
 const KIND_LABEL: Record<string, string> = {
   fill: '开仓', partial_close: '减仓', close: '平仓', stop_move: '止损上移', corp_action: '公司行动',
   adjust: '冲正', opportunity: '机会', entry_intent: '挂单', exit_intent: '待开盘平仓',
@@ -184,8 +170,8 @@ function SideTag({ side }: { side?: Side }) {
   const short = side === 'short'
   return (
     <span data-side={short ? 'short' : 'long'} title={short ? '做空' : '做多'}
-      className={cn('inline-flex h-[18px] w-5 shrink-0 items-center justify-center rounded border border-muted/60 text-[11px] font-semibold text-secondary',
-        short && 'bg-elevated')}>{short ? '空' : '多'}</span>
+      className={cn('inline-flex h-[18px] w-5 shrink-0 items-center justify-center rounded-[4px] text-[11px] font-semibold',
+        short ? 'bg-bear/10 text-emerald-800 dark:text-bear' : 'bg-bull/10 text-bull dark:text-red-400')}>{short ? '空' : '多'}</span>
   )
 }
 
@@ -204,7 +190,7 @@ function Tag({ tone: t = 'plain', dot = true, children, title }: { tone?: TagTon
 function Chip({ danger, children, title, ...rest }: { danger?: boolean; children: React.ReactNode; title?: string } & Record<`data-${string}`, string | undefined>) {
   return (
     <span {...rest} title={title}
-      className={cn('inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-[11px]',
+      className={cn('inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-[4px] border px-2 text-[11px]',
         danger ? 'border-danger/50 bg-danger/10 text-danger' : 'border-border bg-surface text-secondary')}>
       {children}
     </span>
@@ -251,10 +237,10 @@ function Pager({ page, pages, from, to, total, onPage }: { page: number; pages: 
   )
 }
 
-function SectionHead({ title, count, right }: { title: string; count?: number | string; right?: React.ReactNode }) {
+function SectionHead({ title, count, right }: { title: React.ReactNode; count?: number | string; right?: React.ReactNode }) {
   return (
     <div className="mb-2.5 mt-6 flex min-h-[32px] flex-wrap items-center gap-x-3 gap-y-2">
-      <h2 className="text-[13px] font-semibold text-foreground">{title}</h2>
+      {typeof title === 'string' ? <h2 className="text-[14px] font-semibold text-foreground">{title}</h2> : title}
       {count != null && <span className="text-xs tabular-nums text-muted">{count}</span>}
       {right}
     </div>
@@ -369,7 +355,7 @@ function PositionsTable({ rows, open, onToggle }: { rows: Derived[]; open: strin
   return (
     <div className="overflow-x-auto rounded-card border border-border bg-surface">
       <table className="w-full min-w-[980px] text-[13px] tabular-nums">
-        <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
+        <thead><tr className="h-8 bg-elevated text-[12px] text-muted">
           <th className={cn(th, 'pl-9 text-left')}>代码</th>
           <th className={cn(th, 'text-left')}>持有天数</th>
           <th className={cn(th, 'text-right')}>股数</th>
@@ -483,14 +469,14 @@ function ClosedReason({ c }: { c: ClosedTrip }) {
     <span className="inline-flex flex-wrap items-center gap-1">
       <span className="text-secondary">{reasonLabel(c.exit_reason, c.exit_reason_label)}</span>
       {c.partial_exits > 0 && <Tag dot={false}>{`分 ${c.partial_exits + 1} 次`}</Tag>}
-      {over && <Tag tone="warn" title="实际亏损超过计划风险的 1.5 倍 (跳空或收盘才判止损)">亏超 1.5R</Tag>}
+      {over && <Tag tone="warn" title="实际亏损超过计划风险 1.5 倍（跳空或收盘后判定止损）">亏超 1.5R</Tag>}
     </span>
   )
 }
 
 type LiveSummary = NonNullable<PortfolioLive['summary']>
 
-function ClosedSection({ closed, desktop, summary }: { closed: ClosedTrip[]; desktop: boolean; summary: LiveSummary | null }) {
+function ClosedSection({ closed, desktop, summary, lead }: { closed: ClosedTrip[]; desktop: boolean; summary: LiveSummary | null; lead?: React.ReactNode }) {
   const [scope, setScope] = useState<Scope>('all')
   const [page, setPage] = useState(0)
   const list = scope === 'all' ? closed : closed.filter((c) => scopeOf(c) === scope)
@@ -512,21 +498,22 @@ function ClosedSection({ closed, desktop, summary }: { closed: ClosedTrip[]; des
   const dates = (c: ClosedTrip) => `${(c.entry_date ?? '—').slice(5)} → ${(c.exit_date ?? '—').slice(5)}`
   return (
     <section data-closed-section>
-      <SectionHead title="已平仓" right={closed.length > 0 && (
+      <SectionHead title={lead ?? '已平仓'} right={closed.length > 0 && (
         <>
+          <span className="ml-auto" />
           <Seg<Scope> attr="data-scope" value={scope} onChange={(s) => { setScope(s); setPage(0) }}
-            items={[['all', `全部 ${count('all')}`], ['swing', `机会板 ${count('swing')}`], ['legacy', `旧规则 ${count('legacy')}`]]} />
-          <span data-closed-stats className="ml-auto text-xs tabular-nums text-secondary">
+            items={[['all', `全部 ${count('all')}`], ['swing', `机会板 ${count('swing')}`], ['legacy', `历史规则 ${count('legacy')}`]]} />
+          <span data-closed-stats className="text-xs tabular-nums text-secondary">
             {`胜率 ${st.win ?? '—'}% · 平均 `}<span className={tone(st.avgR)}>{fmtR(st.avgR)}</span>{' · 合计 '}<span className={tone(st.pnl)}>{signed(st.pnl, 0, '$')}</span>
           </span>
         </>
       )} />
       {closed.length === 0 ? (
-        <div className="rounded-card border border-border bg-surface px-4 py-3 text-xs text-muted">尚无完整平仓的回合。</div>
+        <div className="rounded-card border border-border bg-surface px-4 py-3 text-xs text-muted">暂无已平仓交易</div>
       ) : desktop ? (
         <div className="overflow-x-auto rounded-card border border-border bg-surface">
           <table className="w-full min-w-[900px] text-[13px] tabular-nums">
-            <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
+            <thead><tr className="h-8 bg-elevated text-[12px] text-muted">
               {['代码', '开仓 → 平仓', '天数', '成本', '平仓价', '盈亏', '收益率', 'R', '出场原因', '规则'].map((h, i) => (
                 <th key={h} title={h === '平仓价' ? '分批平仓时为均价' : undefined}
                   className={cn('whitespace-nowrap px-3 font-medium', i === 0 || i === 1 || i >= 8 ? 'text-left' : 'text-right', h === 'R' && 'pr-6')}>{h}</th>
@@ -544,7 +531,7 @@ function ClosedSection({ closed, desktop, summary }: { closed: ClosedTrip[]; des
                   <td className={cn('px-3 text-right', tone(c.return_pct))}>{pct(c.return_pct)}</td>
                   <td className={cn('px-3 pr-6 text-right', tone(c.r_multiple))}>{fmtR(c.r_multiple)}</td>
                   <td className="px-3"><ClosedReason c={c} /></td>
-                  <td className="whitespace-nowrap px-3 text-secondary">{scopeOf(c) === 'swing' ? '机会板' : '旧规则'}</td>
+                  <td className="whitespace-nowrap px-3 text-secondary">{scopeOf(c) === 'swing' ? '机会板' : '历史规则'}</td>
                 </tr>
               ))}
             </tbody>
@@ -587,7 +574,7 @@ function eventDetail({ e, from }: EventRow): string {
     case 'partial_close':
     case 'close': return `${e.qty ?? '—'} 股 @ $${fmt(e.price)}`
     case 'exit_intent': return e.signal_price ? `收盘 $${fmt(e.signal_price)}` : ''
-    case 'corp_action': return e.action_type === 'cash_dividend' ? `现金分红 $${fmt(e.rate)}/股` : (e.action_type ?? '')
+    case 'corp_action': return e.action_type === 'cash_dividend' ? `现金分红 $${fmt(e.rate)}/股` : corpActionLabel(e.action_type)
     default: return [e.qty ? `${e.qty} 股` : '', e.price ? `@ $${fmt(e.price)}` : ''].filter(Boolean).join(' ')
   }
 }
@@ -597,7 +584,7 @@ function EventResult({ e }: { e: LedgerEvent }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-2">
       {e.kind === 'close' && e.r_multiple != null && <span className={tone(e.r_multiple)}>{fmtR(e.r_multiple)}</span>}
-      {why && <span className="text-muted">{why}</span>}
+      {why && <span className="text-muted" title={why === e.reason ? undefined : e.reason}>{why}</span>}
     </span>
   )
 }
@@ -605,7 +592,7 @@ function EventResult({ e }: { e: LedgerEvent }) {
 function LedgerPane({ rows, desktop }: { rows: EventRow[]; desktop: boolean }) {
   const [page, setPage] = useState(0)
   if (rows.length === 0) {
-    return <EmptyState icon={Wallet} title="暂无台账事件" hint="纸面交易发生后，这里会记录成交、退出与风险调整。空仓不代表系统故障。" />
+    return <EmptyState icon={Wallet} title="暂无记录" />
   }
   const pages = Math.max(1, Math.ceil(rows.length / EVENT_PAGE))
   const cur = Math.min(page, pages - 1)
@@ -644,7 +631,7 @@ function LedgerPane({ rows, desktop }: { rows: EventRow[]; desktop: boolean }) {
   return (
     <div className="overflow-x-auto rounded-card border border-border bg-surface">
       <table className="w-full min-w-[720px] text-[13px] tabular-nums">
-        <thead><tr className="h-8 bg-elevated text-[11.5px] text-muted">
+        <thead><tr className="h-8 bg-elevated text-[12px] text-muted">
           {['时间 ET', '事件', '代码', '明细', '结果'].map((h) => <th key={h} className="whitespace-nowrap px-3 text-left font-medium">{h}</th>)}
         </tr></thead>
         <tbody>
@@ -690,7 +677,7 @@ function AlpacaMirrorPanel({ data }: { data?: AlpacaMirrorPayload }) {
   return (
     <div data-mirror className="rounded-card border border-border bg-surface px-4 py-3 text-xs text-secondary">
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <span className="text-foreground">{`Alpaca 纸面镜像 · ${s.enabled ? '运行中' : '已停用'}`}</span>
+        <span className="text-foreground">{`Alpaca 模拟镜像 · ${s.enabled ? '运行中' : '已停用'}`}</span>
         <span><span className={k}>已镜像</span>{`${s.orders} 笔`}</span>
         <span><span className={k}>已成交</span>{`${s.filled} 笔`}</span>
         <span title="1 基点 = 0.01%，正数 = 比内部撮合差"><span className={k}>平均偏差</span>{s.avg_deviation_bps != null ? `${s.avg_deviation_bps} 基点` : '—'}</span>
@@ -698,9 +685,9 @@ function AlpacaMirrorPanel({ data }: { data?: AlpacaMirrorPayload }) {
         <button
           type="button"
           disabled={toggle.isPending}
-          onClick={() => { if (window.confirm(s.enabled ? '停用镜像下单？（内部纸面台账不受影响）' : '恢复镜像下单？')) toggle.mutate(!s.enabled) }}
+          onClick={() => { if (window.confirm(s.enabled ? '停用镜像下单 · 不影响模拟台账' : '恢复镜像下单？')) toggle.mutate(!s.enabled) }}
           className="ml-auto h-7 whitespace-nowrap rounded-btn border border-border px-2.5 text-[11px] hover:bg-elevated disabled:opacity-50"
-        >{s.enabled ? '一键停用' : '恢复'}</button>
+        >{s.enabled ? '停用' : '恢复'}</button>
       </div>
       {s.last_error && <div className="mt-2 text-warning">{`最近错误：${s.last_error}`}</div>}
       <div className="mt-2 text-[11px] leading-5 text-muted">{s.rules}</div>
@@ -740,13 +727,13 @@ function SetupDegradation() {
         const avg = s.evidence?.avg_r
         return (
           <div key={s.setup} className="flex flex-wrap items-center gap-2 text-danger">
-            <span>{`${name} 已降级为只观察（停新开仓）：近 4 周闭合 ${s.evidence?.samples ?? '—'} 笔，平均 ${typeof avg === 'number' ? `${avg.toFixed(2)}R` : '—'}`}</span>
+            <span>{`${name} 已降级为仅观察（暂停开仓）：近 4 周平仓 ${s.evidence?.samples ?? '—'} 笔，平均 ${typeof avg === 'number' ? `${avg.toFixed(2)}R` : '—'}`}</span>
             <button
               type="button"
               disabled={restore.isPending}
               className="rounded border border-border px-2 py-0.5 text-[11px] text-secondary hover:bg-elevated disabled:opacity-50"
               onClick={() => {
-                if (window.confirm(`确认恢复「${name}」开新仓？降级依据：近 4 周平均 R 为负。`)) restore.mutate(s.setup)
+                if (window.confirm(`恢复「${name}」开仓 · 降级原因：近 4 周平均 R 为负`)) restore.mutate(s.setup)
               }}
             >
               恢复开仓
@@ -764,7 +751,7 @@ function Kpi({ k, label, value, sub, valueClass, title }: { k: string; label: st
   return (
     <div data-kpi={k} title={title} className="min-w-0 bg-surface px-4 py-3 max-md:px-3 max-md:py-2.5">
       <div className="text-xs text-muted">{label}</div>
-      <div className={cn('mt-0.5 truncate text-[22px] font-bold leading-7 tabular-nums max-md:text-[18px] max-md:leading-6', valueClass)}>{value}</div>
+      <div className={cn('mt-0.5 truncate text-[20px] font-bold leading-7 tabular-nums max-md:text-[18px] max-md:leading-6', valueClass)}>{value}</div>
       <div className="mt-0.5 truncate text-xs text-secondary max-md:whitespace-normal">{sub}</div>
     </div>
   )
@@ -773,11 +760,13 @@ function Kpi({ k, label, value, sub, valueClass, title }: { k: string; label: st
 /* ── 页面 ─────────────────────────────────────────── */
 
 type Tab = 'ledger' | 'mirror'
+type Hist = 'closed' | 'log'
 
 export function Portfolio() {
   const desktop = useDesktop()
   const [openSym, setOpenSym] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('ledger')
+  const [hist, setHist] = useState<Hist>('closed')
   const trader = useQuery({ queryKey: ['paper-trading-status'], queryFn: () => api.tradingStatus(), refetchInterval: 15_000 })
   const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } = useQuery<Overview>({
     queryKey: ['portfolio', 'overview'],
@@ -823,14 +812,14 @@ export function Portfolio() {
   }, [live.data?.positions, ledger.pending])
 
   if (isLoading) {
-    return <div><PageHeader title="持仓" subtitle="纸面账户 · 以成交台账为准" /><div className="p-8 text-secondary">加载中…</div></div>
+    return <div><PageHeader title="持仓" subtitle="模拟账户 · 无真实下单" /><div className="p-8 text-secondary">加载中…</div></div>
   }
 
   // 首次加载失败: 只给错误卡, 不能用 $— 与“暂无台账事件”冒充空账本
   if (isError && !data) {
     return (
       <div>
-        <PageHeader title="持仓" subtitle="纸面账户 · 以成交台账为准" />
+        <PageHeader title="持仓" subtitle="模拟账户 · 无真实下单" />
         <div className="mx-auto max-w-3xl p-6">
         <div role="alert" className="rounded-lg border border-danger/40 p-4 text-sm">
           <div className="font-medium text-danger">持仓数据加载失败</div>
@@ -879,10 +868,21 @@ export function Portfolio() {
   const earnTitle = `来源 ${earningsCal?.source ?? '—'} · 更新于 ${earningsCal?.fetched_at ? `${formatScheduleDatePart(earningsCal.fetched_at)} ${formatScheduleTimePart(earningsCal.fetched_at)}` : '—'}`
   const lastRun = trader.data?.last_run_at ? scheduleStamp(trader.data.last_run_at) : '尚无本次启动后的盘中检查'
   const ms = mirror.data?.summary
+  const histTabs = (
+    <div role="tablist" data-hist-tabs className="flex items-center gap-5">
+      {([['closed', '已平仓', live.data?.closed?.length ?? 0], ['log', '记录', ledger.rows.length]] as const).map(([k, label, n]) => (
+        <button key={k} type="button" role="tab" data-hist={k} aria-selected={hist === k} aria-pressed={hist === k} onClick={() => setHist(k)}
+          className={cn('inline-flex h-8 items-center gap-1.5 border-b-2 text-[14px] font-semibold',
+            hist === k ? 'border-accent text-foreground' : 'border-transparent text-secondary hover:text-foreground')}>
+          {label}<span className="text-xs font-normal tabular-nums text-muted">{n}</span>
+        </button>
+      ))}
+    </div>
+  )
 
   return (
     <div>
-      <PageHeader title="持仓" subtitle="纸面账户 · 以成交台账为准" />
+      <PageHeader title="持仓" subtitle="模拟账户 · 无真实下单" />
       <div className="mx-auto max-w-6xl px-4 pb-24 pt-4 md:px-8 md:pt-5">
 
       {isError && (
@@ -892,7 +892,6 @@ export function Portfolio() {
       )}
 
       <div data-status className="flex flex-wrap gap-1.5">
-        <Chip data-chip="paper" title="当前结果仅作纸面验证，不等同可实盘策略"><i className="h-1.5 w-1.5 rounded-full bg-accent" />纸面账户 · 无真实下单</Chip>
         <Chip data-chip="session" danger={trader.isError} title={`最近检查 ${lastRun}`}><i className="h-1.5 w-1.5 rounded-full bg-muted" />{session}</Chip>
         {priceChip && <Chip data-chip="price" title={`每 ${sm?.refresh_seconds ?? LIVE_REFRESH_MS / 1000} 秒刷新`}>{priceChip}</Chip>}
         {trader.data && <Chip data-chip="earnings" danger={!earnOk} title={earnTitle}>{earnOk ? '财报保护 ✓' : '财报保护 ✕'}</Chip>}
@@ -916,11 +915,11 @@ export function Portfolio() {
         <Kpi k="unrealized" label="浮动盈亏" value={signed(sm?.unrealized_pnl, 0, '$')} valueClass={tone(sm?.unrealized_pnl)}
           sub={`持仓 ${nPos} 笔`} />
         <Kpi k="realized" label="已实现" value={signed(sm?.realized_pnl, 0, '$')} valueClass={tone(sm?.realized_pnl)}
-          title="含已平仓回合、仍持有回合已减仓部分、分红与手续费"
+          title="含已平仓、持仓中已减仓部分、分红与手续费"
           sub={`平仓 ${sm?.closed_trades ?? live.data?.closed.length ?? 0} 笔${(livePositions ?? []).some((p) => p.partial_taken) ? ' · 含持仓减仓' : ''}`} />
         <Kpi k="risk" label="组合风险" value={money(openRisk)} valueClass="text-warning"
-          title="全部持仓打到当前止损时 相对成本还会亏的金额 (止损已过成本的计 0)"
-          sub={`打到止损 · 净值 ${openRisk != null && nav ? `${(openRisk / nav * 100).toFixed(2)}%` : '—'}`} />
+          title="全部持仓触及当前止损时相对成本的亏损（止损已过成本的计 0）"
+          sub={`触及止损 · 净值 ${openRisk != null && nav ? `${(openRisk / nav * 100).toFixed(2)}%` : '—'}`} />
         <Kpi k="buying" label="可用资金" value={money(sm?.buying_power)} valueClass="text-foreground"
           sub={sm?.margin_used ? <span data-margin>{`保证金 ${money(sm.margin_used)}`}</span> : '保证金 —'} />
       </div>
@@ -947,7 +946,7 @@ export function Portfolio() {
       {live.isError && <div className="mb-2 text-xs text-warning">实时持仓刷新失败，显示上次结果</div>}
       {nPos === 0 ? (
         <div className="rounded-card border border-border bg-surface">
-          <EmptyState icon={Wallet} title="空仓" hint="波段账户当前无持仓。机会满足条件并完成纸面撮合后，这里会显示持仓。" />
+          <EmptyState icon={Wallet} title="空仓" hint="暂无持仓" />
         </div>
       ) : live.data ? (
         desktop
@@ -966,14 +965,20 @@ export function Portfolio() {
         </div>
       )}
 
-      <ClosedSection closed={live.data?.closed ?? []} desktop={desktop} summary={sm} />
-
-      {/* 记录: 台账事件 / Alpaca 镜像 */}
-      <SectionHead title="记录" right={
-        <Seg<Tab> attr="data-tab" value={tab} onChange={setTab}
-          items={[['ledger', `台账 ${ledger.rows.length}`], ['mirror', `Alpaca 镜像${ms ? ` · ${ms.last_error ? '异常' : ms.enabled ? '运行中' : '已停用'}` : ''}`]]} />
-      } />
-      {tab === 'ledger' ? <LedgerPane rows={ledger.rows} desktop={desktop} /> : <AlpacaMirrorPanel data={mirror.data} />}
+      {/* 历史: 已平仓 / 记录 两个页签, 一次只展开一张表 (当前持仓始终在上方) */}
+      {hist === 'closed' ? (
+        <ClosedSection closed={live.data?.closed ?? []} desktop={desktop} summary={sm} lead={histTabs} />
+      ) : (
+        <section data-log-section>
+          <SectionHead title={histTabs} right={
+            <span className="ml-auto">
+              <Seg<Tab> attr="data-tab" value={tab} onChange={setTab}
+                items={[['ledger', `台账 ${ledger.rows.length}`], ['mirror', `Alpaca 镜像${ms ? ` · ${ms.last_error ? '异常' : ms.enabled ? '运行中' : '已停用'}` : ''}`]]} />
+            </span>
+          } />
+          {tab === 'ledger' ? <LedgerPane rows={ledger.rows} desktop={desktop} /> : <AlpacaMirrorPanel data={mirror.data} />}
+        </section>
+      )}
       </div>
     </div>
   )

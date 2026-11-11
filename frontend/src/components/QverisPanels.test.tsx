@@ -62,7 +62,7 @@ it('options panel reads cache only on open and spends only on click, showing cos
   await render(<OptionsPanel symbol="NVDA" />)
   expect(mocks.qverisOptions).toHaveBeenCalledTimes(1)
   expect(mocks.qverisOptions).toHaveBeenLastCalledWith('NVDA', false)
-  expect(host.textContent).toContain('尚未查询该股期权')
+  expect(host.textContent).toContain('暂无期权数据')
   expect(host.textContent).toContain('约 1 积分')
   expect(host.textContent).toContain('今日 3/100')
   expect(host.textContent).toContain('余额 9,734.23')
@@ -74,7 +74,7 @@ it('options panel reads cache only on open and spends only on click, showing cos
   expect(text).toContain('±3.6%')            // 7 天预期波动
   expect(text).toContain('±10.4%')           // 财报预期波动
   expect(text).toContain('本次扣 1 积分')
-  expect(text).toContain('缓存仍新鲜 · 再点免费')
+  expect(text).toContain('缓存有效 · 再次查询不计费')
   expect(text).toContain('不参与开仓')
   expect(host.querySelector('[data-term] tbody tr')?.textContent).toContain('2026-10-09')
 })
@@ -135,7 +135,7 @@ it('earnings panel: estimates + transcript with free AI digest', async () => {
   expect(text).toContain('4.2083')
   expect(text).toContain('20 上调 / 0 下调')
   expect(text).toContain('$12.52 亿')
-  expect(text).toContain('缓存仍新鲜 · 再点免费')
+  expect(text).toContain('缓存有效 · 再次查询不计费')
   expect(mocks.qverisTranscript.mock.calls[0][2]).toBe(false)     // 打开只读缓存
 
   await click(button('查询电话会'))

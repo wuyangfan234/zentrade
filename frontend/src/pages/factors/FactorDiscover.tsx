@@ -44,7 +44,7 @@ const CHECK_LABEL: Record<string, string> = {
   years_positive: '2023–2025 正收益',
   hold_days: '平均持有 ≤ 7 天',
   max_drawdown: '最大回撤 ≤ 25%',
-  corr_engine: '与当前出卡引擎相关 < 0.7',
+  corr_engine: '与现行策略组合相关 < 0.7',
   corr_spy: '与 SPY 相关 < 0.7',
   quote: '原句核对',
   compile: '编译',
@@ -111,7 +111,7 @@ function Metric({ label, value, cls = 'text-foreground' }: { label: string; valu
   return (
     <div className="min-w-0">
       <div className="text-[11px] text-secondary">{label}</div>
-      <div className={`truncate text-[15px] font-semibold tabular-nums ${cls}`}>{value}</div>
+      <div className={`truncate text-[14px] font-semibold tabular-nums ${cls}`}>{value}</div>
     </div>
   )
 }
@@ -137,12 +137,12 @@ function FlowBar({ page, onStep }: { page: FactorLabPage; onStep: (i: number) =>
         {steps.map((s, i) => (
           <button key={s.no} type="button" data-step={i} onClick={() => onStep(i)}
             className={`relative px-4 py-3.5 text-left hover:bg-elevated/60 ${i === 0 ? 'xl:border-r xl:border-dashed xl:border-muted' : 'xl:border-r xl:border-border'} last:border-r-0 ${i === 5 ? 'rounded-r-card bg-accent/10 shadow-[inset_0_0_0_2px_hsl(var(--accent))]' : ''}`}>
-            <div className="flex items-center gap-2 text-[13.5px] font-semibold text-foreground">
+            <div className="flex items-center gap-2 text-[14px] font-semibold text-foreground">
               <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold ${i === 5 ? 'bg-surface text-foreground ring-2 ring-accent' : 'bg-elevated text-foreground'}`}>{s.no}</span>
               {s.t}
-              <span className={`ml-auto rounded px-1.5 py-px text-[10.5px] font-semibold ${i === 5 ? 'bg-surface text-foreground ring-1 ring-accent' : 'bg-elevated text-secondary'}`}>{s.tag}</span>
+              <span className={`ml-auto rounded px-1.5 py-px text-[11px] font-semibold ${i === 5 ? 'bg-surface text-foreground ring-1 ring-accent' : 'bg-elevated text-secondary'}`}>{s.tag}</span>
             </div>
-            <div className="mt-2.5 text-[22px] font-semibold leading-none tabular-nums text-foreground">{s.big}<small className="ml-1 text-[12.5px] font-medium text-secondary">{s.unit}</small></div>
+            <div className="mt-2.5 text-[20px] font-semibold leading-none tabular-nums text-foreground">{s.big}<small className="ml-1 text-[13px] font-medium text-secondary">{s.unit}</small></div>
             <div className="mt-1 whitespace-nowrap text-[11px] text-secondary">{s.sub}</div>
             {i < 5 && <span className="absolute right-[-11px] top-1/2 z-[1] hidden h-[22px] w-[22px] -translate-y-1/2 place-items-center rounded-full border border-border bg-surface text-xs text-secondary xl:grid" style={i === 4 ? { right: 3 } : undefined}>›</span>}
           </button>
@@ -277,7 +277,7 @@ function Detail({ page, sel, onDecide, onIntake }: {
   let dates = curves.dates as string[]
   const C_MAIN = 'hsl(var(--accent))', C_REF = 'hsl(var(--fg-secondary))', C_SPY = 'hsl(var(--fg-muted))'
   if (sel.kind === 'engine' && engine) {
-    title = '当前出卡引擎'; tag = '对照'; stats = engine.stats; yearly = engineYearly; checks = engine.checks
+    title = '现行策略组合'; tag = '对照'; stats = engine.stats; yearly = engineYearly; checks = engine.checks
     legsHead = ['规则', '资金', '年化', '交易']
     legs = engine.legs.map(l => [l.name, `1/${engine.legs.length}`, pct(l.annual_return), String(l.n_trades ?? DASH)])
     trades = engine.last_trades
@@ -286,7 +286,7 @@ function Detail({ page, sel, onDecide, onIntake }: {
     if (c && c.stats) {
       title = c.name ?? c.signature; tag = c.oos_gate === 'observe' ? '候选 · 观察通过' : '候选'; stats = c.stats; yearly = c.stats.yearly ?? {}; checks = c.checks ?? []
       if (c.oos_gate === 'observe') {
-        note = <div className="border-b border-border bg-warning/10 px-4 py-1.5 text-[11.5px] text-secondary" data-observe-note="">{OBSERVE_NOTE}{c.oos_gate_reasons?.length ? ` · ${c.oos_gate_reasons.length} 项未过` : ''}</div>
+        note = <div className="border-b border-border bg-warning/10 px-4 py-1.5 text-[12px] text-secondary" data-observe-note="">{OBSERVE_NOTE}{c.oos_gate_reasons?.length ? ` · ${c.oos_gate_reasons.length} 项未过` : ''}</div>
       }
       main = { key: c.signature, values: (curves[c.signature] as (number | null)[]) ?? [], color: C_MAIN, label: '候选', width: 2.4 }
       legsHead = ['因子', '方向', '权重', '样本外夏普']
@@ -296,7 +296,7 @@ function Detail({ page, sel, onDecide, onIntake }: {
       actions = (
         <>
           <Btn primary={decided !== 'save'} disabled={decided === 'save'} onClick={() => onDecide(c.signature, 'save')} attr={{ 'data-act': 'save' }}>{decided === 'save' ? '已保存' : '保存'}</Btn>
-          <Btn disabled={decided === 'discard'} onClick={() => onDecide(c.signature, 'discard')} attr={{ 'data-act': 'discard' }}>{decided === 'discard' ? '已放弃' : decided === 'save' ? '放弃 · 撤销保存' : '放弃'}</Btn>
+          <Btn disabled={decided === 'discard'} onClick={() => onDecide(c.signature, 'discard')} attr={{ 'data-act': 'discard' }}>{decided === 'discard' ? '未采用' : decided === 'save' ? '不采用 · 撤销保存' : '不采用'}</Btn>
         </>
       )
     }
@@ -341,11 +341,11 @@ function Detail({ page, sel, onDecide, onIntake }: {
     if (main) main = { ...main, values: ov.curve.values }
   }
   const series: Series[] = sel.kind === 'engine'
-    ? [{ key: 'engine', values: (curves.engine as number[]) ?? [], color: C_MAIN, label: '当前出卡引擎', width: 2.4 },
+    ? [{ key: 'engine', values: (curves.engine as number[]) ?? [], color: C_MAIN, label: '现行策略组合', width: 2.4 },
        { key: 'spy', values: (curves.spy as number[]) ?? [], color: C_SPY, label: 'SPY', width: 1.6, dash: '4 3' }]
-    : [main!, { key: 'engine', values: (curves.engine as number[]) ?? [], color: C_REF, label: '当前出卡引擎', width: 1.6 },
+    : [main!, { key: 'engine', values: (curves.engine as number[]) ?? [], color: C_REF, label: '现行策略组合', width: 1.6 },
        { key: 'spy', values: (curves.spy as number[]) ?? [], color: C_SPY, label: 'SPY', width: 1.6, dash: '4 3' }]
-  const cols = sel.kind === 'engine' ? ['当前出卡引擎', 'SPY'] : [main?.label ?? '', '当前出卡引擎', 'SPY']
+  const cols = sel.kind === 'engine' ? ['现行策略组合', 'SPY'] : [main?.label ?? '', '现行策略组合', 'SPY']
   const years = Array.from(new Set([...Object.keys(engineYearly), ...Object.keys(yr)])).sort()
   const thisYear = years[years.length - 1]
   const ok = checks.filter(c => c[0]).length
@@ -405,7 +405,7 @@ function Detail({ page, sel, onDecide, onIntake }: {
         <div className="flex flex-col">
           {checks.map((c, i) => (
             <div key={i} className={`flex items-center gap-2 px-3 py-1.5 text-xs ${c[0] ? '' : 'bg-warning/10'}`}>
-              <span className={`grid h-4 w-4 place-items-center rounded-full text-[10px] font-bold ${c[0] ? 'bg-elevated text-secondary' : 'bg-surface text-foreground ring-2 ring-warning'}`}>{c[0] ? '✓' : '!'}</span>
+              <span className={`grid h-4 w-4 place-items-center rounded-full text-[11px] font-bold ${c[0] ? 'bg-elevated text-secondary' : 'bg-surface text-foreground ring-2 ring-warning'}`}>{c[0] ? '✓' : '!'}</span>
               <span className="text-foreground">{CHECK_LABEL[c[1]] ?? c[1]}</span>
               <span className={`ml-auto tabular-nums ${c[0] ? 'text-secondary' : 'font-semibold text-warning'}`}>{checkValue(c)}</span>
             </div>
@@ -461,7 +461,7 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
             <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-identity=""
               className="flex min-w-0 cursor-pointer items-center gap-2 lg:col-start-1 lg:row-start-1">
               <Chip>候选 {i + 1}</Chip><span className="truncate text-sm font-semibold text-foreground">{c.name}</span>
-              <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>已放弃</Pill> : <Pill kind="run">待审</Pill>}</span>
+              <span className="ml-auto">{d === 'save' ? <Pill>已保存</Pill> : d === 'discard' ? <Pill>未采用</Pill> : <Pill kind="run">待审</Pill>}</span>
             </div>
             <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-legs=""
               className="flex min-w-0 cursor-pointer flex-wrap gap-1 lg:col-start-1 lg:row-start-2">
@@ -474,9 +474,9 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
               <Metric label="最大回撤" value={pct(st.max_drawdown)} cls={tone(st.max_drawdown)} />
               <Metric label="交易" value={String(st.n_trades ?? DASH)} />
             </div>
-            <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:justify-end lg:border-t-0 lg:pt-0">
+            <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[12px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:justify-end lg:border-t-0 lg:pt-0">
               <span>检查</span><b className="text-foreground">{ok} / {(c.checks ?? []).length}</b><Bar checks={c.checks ?? []} />
-              {!d && <span className="ml-auto flex flex-wrap gap-1.5 lg:ml-0 lg:justify-end"><Btn onClick={() => onDecide(c.signature, 'save')}>保存</Btn><Btn onClick={() => onDecide(c.signature, 'discard')}>放弃</Btn></span>}
+              {!d && <span className="ml-auto flex flex-wrap gap-1.5 lg:ml-0 lg:justify-end"><Btn onClick={() => onDecide(c.signature, 'save')}>保存</Btn><Btn onClick={() => onDecide(c.signature, 'discard')}>不采用</Btn></span>}
             </div>
           </div>
         )
@@ -485,7 +485,7 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
         <div data-ref="" data-comparison-row=""
           className={`grid min-w-0 cursor-pointer grid-cols-1 gap-2.5 border-b border-dashed border-muted bg-base px-3.5 py-3 last:border-b-0 lg:grid-cols-[minmax(210px,1.05fr)_minmax(330px,1.3fr)_minmax(210px,.85fr)] lg:gap-x-4 lg:gap-y-1.5 ${sel.kind === 'engine' ? 'bg-accent/[0.06] shadow-[inset_3px_0_0_hsl(var(--accent))]' : ''}`}>
           <div onClick={() => setSel({ kind: 'engine' })} data-row-identity="" className="flex min-w-0 items-center gap-2 lg:col-start-1 lg:row-start-1">
-            <Chip dashed>对照</Chip><span className="truncate text-sm font-semibold text-foreground">当前出卡引擎</span><span className="ml-auto"><Pill>在用</Pill></span>
+            <Chip dashed>对照</Chip><span className="truncate text-sm font-semibold text-foreground">现行策略组合</span><span className="ml-auto"><Pill>在用</Pill></span>
           </div>
           <div onClick={() => setSel({ kind: 'engine' })} data-row-legs="" className="flex min-w-0 flex-wrap gap-1 lg:col-start-1 lg:row-start-2">
             {engine.legs.map(l => <Chip key={l.id}>{l.name}</Chip>)}
@@ -496,7 +496,7 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
             <Metric label="最大回撤" value={pct(engine.stats.max_drawdown)} cls="text-secondary" />
             <Metric label="交易" value={String(engine.stats.n_trades ?? DASH)} cls="text-secondary" />
           </div>
-          <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:pt-0">
+          <div data-row-actions="" className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[12px] text-secondary lg:col-start-3 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:pt-0">
             <span>检查</span><b className="text-foreground">{engine.checks.filter(x => x[0]).length} / {engine.checks.length}</b><Bar checks={engine.checks} />
           </div>
         </div>
@@ -537,13 +537,13 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
       className={`grid min-w-0 grid-cols-1 gap-x-4 gap-y-2 border-b border-border/60 px-3.5 py-3 last:border-b-0 lg:grid-cols-[minmax(180px,.75fr)_minmax(280px,1.25fr)_minmax(230px,.85fr)] ${archived ? 'border-dashed bg-base' : ''} ${active ? 'shadow-[inset_3px_0_0_hsl(var(--accent))]' : ''}`}>
       <div className="flex min-h-[22px] min-w-0 items-center gap-2 lg:col-span-3">
         <Chip dashed={archived}>采集</Chip>
-        <span className="truncate text-[11.5px] text-secondary">{c.source_name} · {c.published?.slice(5, 10) ?? DASH} · {c.title}</span>
+        <span className="truncate text-[12px] text-secondary">{c.source_name} · {c.published?.slice(5, 10) ?? DASH} · {c.title}</span>
         <span className="ml-auto shrink-0">{c.stage === 'pending' ? <Pill kind="run">待审</Pill> : c.stage === 'merged' ? <Pill>已并入</Pill> : <Pill>{c.duplicate ? '重复' : (c.reason ?? '已归档')}</Pill>}</span>
       </div>
       <div className="flex min-w-0 flex-col gap-2" data-intake-content="">
         <div className={`text-sm font-semibold ${archived ? 'text-secondary' : 'text-foreground'}`}>{f?.name}</div>
         {c.formulas.length > 1 && (
-          <div className="flex flex-col gap-0.5 text-[11.5px] text-secondary" data-formulas="">
+          <div className="flex flex-col gap-0.5 text-[12px] text-secondary" data-formulas="">
             {c.formulas.map((x, i) => (
               <button key={i} type="button" onClick={() => onOpen(i)} className={`truncate text-left hover:text-foreground ${i === pick ? 'text-foreground' : ''}`}>
                 {i + 1}. {x.name}{x.screen?.duplicate ? ' · 重复' : x.screen?.error ? ' · 快筛失败' : ''}
@@ -559,12 +559,12 @@ function IntakeCardView({ c, active, onOpen, onIntake }: { c: IntakeCard; active
       </div>
       <div className="flex min-w-0 flex-col gap-2" data-intake-evidence="">
         <div title={f?.quote} className={`line-clamp-3 min-h-[44px] rounded-r-md border-l-[3px] border-border px-2.5 py-1.5 text-xs italic ${archived ? 'bg-surface text-muted' : 'bg-base text-secondary'}`}>“{f?.quote}”</div>
-        <div title={f?.dsl} className={`truncate rounded-md border border-border px-2.5 py-1.5 font-mono text-[11.5px] ${archived ? 'bg-surface text-secondary' : 'bg-base text-foreground'}`}>{f?.dsl}</div>
+        <div title={f?.dsl} className={`truncate rounded-md border border-border px-2.5 py-1.5 font-mono text-[12px] ${archived ? 'bg-surface text-secondary' : 'bg-base text-foreground'}`}>{f?.dsl}</div>
       </div>
       <div className={`grid grid-cols-2 gap-x-4 gap-y-2 self-center rounded-md p-2.5 ${archived ? 'bg-surface' : 'bg-base'}`} data-intake-metrics="">
         {metrics.map(([k, v, cl]) => <Metric key={k} label={k} value={v} cls={archived ? 'text-secondary' : cl || 'text-foreground'} />)}
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[11.5px] text-secondary lg:col-span-3">
+      <div className="mt-1 flex flex-wrap items-center gap-2 border-t border-border pt-2 text-[12px] text-secondary lg:col-span-3">
         <span>检查</span><b className="text-foreground">{ok} / {checks.length}</b><Bar checks={checks} />
         <span className="ml-auto flex flex-wrap gap-1.5">
           {c.stage === 'pending' && <>
@@ -642,7 +642,7 @@ function SubmissionsBlock({ page, flash, onRetry, onIntake, onProcess, onOpen, b
   return (
     <Card attr={{ 'data-mine': '' }}>
       <div className="flex flex-wrap items-center gap-2 border-b border-border px-3.5 py-2.5 text-xs">
-        <span className="text-[13.5px] font-semibold text-foreground">我的投递</span>
+        <span className="text-[14px] font-semibold text-foreground">我的提交</span>
         <span className="text-secondary">{list.length} 条</span>
         {waiting > 0 && (
           <span className="text-secondary" data-waiting={waiting}>
@@ -658,7 +658,7 @@ function SubmissionsBlock({ page, flash, onRetry, onIntake, onProcess, onOpen, b
         </span>
       </div>
       {list.length === 0
-        ? <div className="p-4 text-center text-xs text-muted">还没有投递 · 右上角「投递」放链接或正文</div>
+        ? <div className="p-4 text-center text-xs text-muted">暂无提交</div>
         : list.map(s => (
           <SubmissionRow key={s.id} s={s} flash={flash === s.id}
             onRetry={() => onRetry(s.id)} onIntake={(a, i) => onIntake(s.id, a, i)} onOpen={i => onOpen(s.id, i)} />
@@ -758,7 +758,7 @@ function SubmitSheet({ onClose, onDone }: { onClose: () => void; onDone: (id: st
     onSuccess: (d) => { void qc.invalidateQueries({ queryKey: QK.factorLabPage }); onClose(); onDone(d.id, d.ahead ?? 0) },
   })
   return (
-    <Sheet title="投递" onClose={onClose} attr={{ 'data-sheet': 'submit' }}
+    <Sheet title="提交" onClose={onClose} attr={{ 'data-sheet': 'submit' }}
       footer={<><Chip>X</Chip><Chip>TradingView</Chip><Chip>SSRN</Chip><span className="ml-auto" /><Btn primary disabled={sub.isPending || (mode === 'link' ? !url : !text)} onClick={() => sub.mutate()}>提交</Btn></>}>
       <div className="flex flex-col gap-3">
         <Seg value={mode} onChange={setMode} options={[['link', '链接'], ['text', '正文 / Pine / 公式']]} />
@@ -783,7 +783,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
   const flashTimer = useRef<number | undefined>(undefined)
   const refresh = () => void qc.invalidateQueries({ queryKey: QK.factorLabPage })
   const onSubmitted = (id: string, ahead: number) => {
-    toast(ahead > 0 ? `已收到 · 前面还有 ${ahead} 条投递` : '已收到 · 下一次抽取就轮到它', 'success')
+    toast(ahead > 0 ? `已收到 · 前面还有 ${ahead} 条` : '已收到 · 下一轮处理', 'success')
     setFlash(id)
     window.clearTimeout(flashTimer.current)
     flashTimer.current = window.setTimeout(() => setFlash(null), 6000)
@@ -795,7 +795,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
     // 只在后端真的建出候选 (返回 candidate_id) 后提示「已保存」; 失败时 409 由请求层报错, 这里不再盖一个成功提示
     onSuccess: (d, v) => {
       if (v.action === 'save') toast(d.candidate_id ? '已保存 · 候选方案' : '已记录 · 候选方案未建出', d.candidate_id ? 'success' : 'error')
-      else toast(d.removed_candidate_id ? '已放弃 · 候选方案已撤销' : '已放弃', 'success')
+      else toast(d.removed_candidate_id ? '未采用 · 候选方案已撤销' : '未采用', 'success')
       refresh(); void qc.invalidateQueries({ queryKey: QK.researchCandidates })
     },
   })
@@ -811,7 +811,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
   })
   const processIntake = useMutation({
     mutationFn: () => api.intakeProcess(),
-    onSuccess: () => { toast('已开始 · 处理投递', 'success'); setTimeout(refresh, 1500); refresh() },
+    onSuccess: () => { toast('已开始处理', 'success'); setTimeout(refresh, 1500); refresh() },
   })
 
   // 选中项在新一次轮询里不存在 (换周 / 采集条目被裁剪) 时回落到默认项, 不渲染空详情
@@ -853,9 +853,9 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       <FlowBar page={page} onStep={onStep} />
 
       <div id="fl-cands" className="mb-2.5 mt-4 flex scroll-mt-24 flex-wrap items-center gap-2">
-        <h2 className="text-[13.5px] font-semibold text-foreground">候选策略</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">候选策略</h2>
         {w && <span className="text-xs text-secondary" data-ccount="">{w.week.replace(/^\d{4}-/, '')} · {counts.all} 候选{refs ? ` · ${refs} 对照` : ''} · 自选 {w.symbols} · {w.window[0].slice(0, 7)} → {w.window[1].slice(0, 7)}</span>}
-        <div className="ml-auto"><Seg value={candFilter} onChange={setCandFilter} attr="cands" options={[['week', `本周 ${counts.week}`], ['saved', `已保存 ${counts.saved}`], ['discarded', `已放弃 ${counts.discarded}`], ['all', `全部 ${counts.all}`]]} /></div>
+        <div className="ml-auto"><Seg value={candFilter} onChange={setCandFilter} attr="cands" options={[['week', `本周 ${counts.week}`], ['saved', `已保存 ${counts.saved}`], ['discarded', `未采用 ${counts.discarded}`], ['all', `全部 ${counts.all}`]]} /></div>
       </div>
       {w ? <CandidateCards page={page} sel={effectiveSel ?? { kind: 'engine' }} setSel={openSel} filter={candFilter} onDecide={(sig, action) => decide.mutate({ sig, action })} />
         : <Card className="p-6 text-center text-xs text-muted">本周未生成 · 周五 17:40 ET</Card>}
@@ -863,12 +863,12 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       {effectiveSel && (w || effectiveSel.kind === 'intake') && <Detail key={selectionKey(effectiveSel)} page={page} sel={effectiveSel} onDecide={(sig, action) => decide.mutate({ sig, action })} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />}
 
       <div id="fl-intake" className="mb-2.5 mt-5 flex scroll-mt-24 flex-wrap items-center gap-2">
-        <h2 className="text-[13.5px] font-semibold text-foreground">采集与投递</h2>
+        <h2 className="text-[14px] font-semibold text-foreground">采集与提交</h2>
         <span className="text-xs text-secondary">{it ? `近 30 天 · ${it.sources.filter(s => s.enabled).length} 源 · ${funnel?.fetched ?? 0} 篇` : '读取失败'}</span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <Seg value={intakeFilter} onChange={setIntakeFilter} attr="intake" options={[['all', `全部 ${intakeCounts.all}`], ['pending', `待审 ${intakeCounts.pending}`], ['archived', `已归档 ${intakeCounts.archived}`]]} />
           <Btn onClick={() => runIntake.mutate()} disabled={runIntake.isPending}>立即采集</Btn>
-          <Btn onClick={() => setSheet('submit')}>投递</Btn>
+          <Btn onClick={() => setSheet('submit')}>提交</Btn>
           <Btn onClick={() => setSheet('sources')} attr={{ 'data-open': 'sources' }}>监控清单 {(it?.sources ?? []).length}</Btn>
         </div>
       </div>
@@ -893,7 +893,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       </Card>
 
       {page.weeks.length > 0 && <>
-        <div className="mb-2.5 mt-5"><h2 className="text-[13.5px] font-semibold text-foreground">近 4 周</h2></div>
+        <div className="mb-2.5 mt-5"><h2 className="text-[14px] font-semibold text-foreground">近 4 周</h2></div>
         <Card className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-xs" data-weeks="">
             <thead><tr className="text-secondary"><th className="px-3 py-1.5" />{page.weeks.map(x => <th key={x.week} className="px-3 py-1.5 text-right font-medium">{x.week.replace(/^\d{4}-/, '')} · {x.data_as_of?.slice(5)}</th>)}</tr></thead>

@@ -92,6 +92,7 @@ it('L-16 来源列不显示 strategy:swing 原始码', async () => {
 
 it('L-17 台账事件区不含机会流水, 空头止损写成止损下移', async () => {
   await render()
+  await act(async () => { (container.querySelector('[data-hist="log"]') as HTMLButtonElement).click() })   // 记录在第二个页签
   const text = container.textContent ?? ''
   expect(container.querySelector('[data-tab="ledger"]')!.textContent).toBe('台账 3')
   expect(text).not.toContain('SQQQ')

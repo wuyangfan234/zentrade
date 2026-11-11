@@ -116,13 +116,13 @@ export function FactorGroupNavChart({ result }: Props) {
     <div>
       <div className="flex items-center gap-3 px-4 pb-2">
         {groupCols.map((col, i) => (
-          <span key={col} className="flex items-center gap-1 text-[10px] text-secondary">
+          <span key={col} className="flex items-center gap-1 text-[11px] text-secondary">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: GROUP_COLORS[i % GROUP_COLORS.length] }} />
             {col}
           </span>
         ))}
         {result.long_short_nav?.length > 0 && (
-          <span className="flex items-center gap-1 text-[10px] text-secondary">
+          <span className="flex items-center gap-1 text-[11px] text-secondary">
             <span className="w-2 h-0.5 rounded bg-yellow-400" style={{ borderTop: '2px dashed #fbbf24' }} />
             多空
           </span>

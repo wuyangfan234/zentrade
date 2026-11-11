@@ -22,7 +22,8 @@ it('术语: 页面不再直接露出 enriched / worker / outer folds / matrix-na
     ['components/stock-analysis/StockSearchBox.tsx', ['如 NVDA / Apple']],
   ]
   for (const [file, banned] of cases) for (const b of banned) expect(src(file), `${file}: ${b}`).not.toContain(b)
-  expect(src('pages/Backtest.tsx')).toContain('影子账本（只记录不下单）')
+  expect(src('pages/Backtest.tsx')).toContain('观察账本')
+  expect(src('pages/Backtest.tsx')).not.toContain('影子')
 })
 
 it('列名: 60日动量 (不中英混写 60D)', () => {
@@ -51,9 +52,11 @@ it('证据页来源名: 事件来源有中文兜底, 不露原始 id', () => {
 
 it('时区: 数据页「最后获取」与下次运行按美东显示; 系统状态页下次运行带 ET; 持仓页最近检查不露裸 ISO', () => {
   expect(src('components/data/QuoteConfigCard.tsx')).toContain('formatScheduleTimePart(iso)')
-  // 0.7.1: 下次运行改由 fmtTime 显示「美东 HH:MM（新加坡 HH:MM）」
-  expect(src('pages/SystemStatus.tsx')).toContain("`美东 ${f('America/New_York')}（新加坡${next} ${f('Asia/Singapore')}）`")
-  // 0.13.0: 定时任务下次运行由 fmtNextRun 拆两行「MM-DD HH:MM ET」+「新加坡 HH:MM」(渲染断言见 SystemStatus.test)
+  // 下次运行由 fmtTime 显示「HH:MM ET（北京 HH:MM）」; 括号里的城市全站一处定义, 页面里不再写死城市名
+  expect(src('pages/SystemStatus.tsx')).toContain("`${f('America/New_York')} ET（${LOCAL_TZ_LABEL}${next} ${f(LOCAL_TZ)}）`")
+  expect(src('pages/SystemStatus.tsx')).not.toContain('新加坡')
+  expect(src('lib/localTime.ts')).toContain("LOCAL_TZ_LABEL = '北京'")
+  // 0.13.0: 定时任务下次运行由 fmtNextRun 拆两行「MM-DD HH:MM ET」+「北京 HH:MM」(渲染断言见 SystemStatus.test)
   expect(src('pages/SystemStatus.tsx')).toContain("et: `${day('America/New_York').slice(5)} ${f('America/New_York')} ET`")
   expect(src('pages/SystemStatus.tsx')).toContain('fmtNextRun(j.next_run)')
   expect(src('pages/Portfolio.tsx')).toContain('scheduleStamp(trader.data.last_run_at)')
@@ -132,5 +135,5 @@ it('持仓: 总账六格都显式给文字色, 不靠 body 继承; 组合风险�
   expect(kpis.map((k) => k[0])).toEqual(['nav', 'total', 'unrealized', 'realized', 'risk', 'buying'])
   for (const [k, cls] of kpis) expect(cls, k).toMatch(/text-(foreground|warning)|tone\(/)
   expect(Object.fromEntries(kpis).risk).toBe('text-warning')
-  expect(s).toMatch(/text-\[22px\] font-bold[^']*max-md:text-\[18px\]/)
+  expect(s).toMatch(/text-\[20px\] font-bold[^']*max-md:text-\[18px\]/)
 })

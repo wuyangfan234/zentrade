@@ -32,7 +32,7 @@ export function FeishuAppPanel({ credentialsSet, chatId }: { credentialsSet: boo
   if (!credentialsSet) {
     return (
       <div className="text-[11px] text-warning">
-        服务端未配置飞书应用凭据（ZENTRADE_FEISHU_APP_ID / ZENTRADE_FEISHU_APP_SECRET），应用机器人推送不可用。
+        未配置飞书应用凭据 · 应用机器人推送不可用
       </div>
     )
   }
@@ -41,7 +41,7 @@ export function FeishuAppPanel({ credentialsSet, chatId }: { credentialsSet: boo
   return (
     <div className="space-y-2">
       <div className="text-[11px] text-muted">
-        应用凭据已在服务端配置。推送目标为机器人所在的群；把机器人拉进新群后点「刷新」即可选择。
+        应用凭据已配置 · 推送至机器人所在的群，新群加入机器人后刷新可选
       </div>
       <div className="flex items-center gap-2">
         <select
@@ -68,7 +68,7 @@ export function FeishuAppPanel({ credentialsSet, chatId }: { credentialsSet: boo
           type="button"
           onClick={() => save.mutate(draft)}
           disabled={save.isPending || draft === chatId}
-          className="px-3 py-1.5 rounded-btn bg-accent text-white text-xs font-medium disabled:opacity-50 hover:bg-accent/90"
+          className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 hover:bg-accent/90"
         >
           {save.isPending ? '保存中…' : '保存'}
         </button>
@@ -80,7 +80,7 @@ export function FeishuAppPanel({ credentialsSet, chatId }: { credentialsSet: boo
         >
           {test.isPending ? '测试中…' : '发送测试'}
         </button>
-        {chatId && <span className="text-[10px] text-emerald-700 dark:text-emerald-500">● 推送到 {knownName || chatId}</span>}
+        {chatId && <span className="text-[11px] text-emerald-700 dark:text-emerald-500">● 推送到 {knownName || chatId}</span>}
       </div>
       {test.data && (
         <div className={`text-[11px] ${test.data.ok ? 'text-emerald-700 dark:text-emerald-500' : 'text-danger'}`}>{test.data.detail}</div>

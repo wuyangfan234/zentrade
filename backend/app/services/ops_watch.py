@@ -24,24 +24,24 @@ logger = logging.getLogger(__name__)
 
 # 受管任务: 每天按 Cron 触发、错过会影响当天证据的任务。秒级轮询任务不进台账。
 WATCHED = {
-    "pre_market_instruments": "盘前标的维表",
+    "pre_market_instruments": "盘前标的列表",
     "zen_corporate_actions": "公司行动",
     "zen_earnings_premarket": "财报日历（盘前）",
-    "zen_market_mood": "盘前大盘情绪",
-    "zen_qveris_estimates": "QVeris 财报预期",
+    "zen_market_mood": "大盘判断",
+    "zen_qveris_estimates": "财报预期查询",
     "zen_premarket_gap": "盘前跳空预警",
     "zen_swing_pm_check": "盘前越止损检查",
-    "zen_intraday_strength": "盘中强势卡",
-    "zen_intraday_strength_settle": "盘中强势卡收盘结算",
+    "zen_intraday_strength": "盘中强势检查",
+    "zen_intraday_strength_settle": "盘中强势结算",
     "zen_open_radar": "开盘放量榜",
     "zen_open_radar_settle": "开盘放量榜收盘记录",
-    "zen_market_mood_score": "大盘情绪记分",
-    "daily_pipeline": "盘后管道",
+    "zen_market_mood_score": "大盘判断记分",
+    "daily_pipeline": "盘后同步",
     "zen_earnings_postclose": "财报日历（盘后）",
-    "zen_market_mood_score_retry": "大盘情绪补记分",
-    "zen_fundamentals_sync": "美股财务同步",
-    "zen_resonance_settle": "共振影子账本结算",
-    "zen_ls_rank": "今日多空补出名单",
+    "zen_market_mood_score_retry": "大盘判断补记分",
+    "zen_fundamentals_sync": "财务数据同步",
+    "zen_resonance_settle": "信号共振结算",
+    "zen_ls_rank": "今日多空名单补生成",
 }
 # 可补跑的幂等任务 → 最晚补跑时刻 (ET); None 表示当天任何时候都可补。
 # daily_pipeline 有自己的开机补跑, 不在这里重复。
@@ -71,9 +71,9 @@ MAX_ALERTS_PER_REASON = 5
 # 0.7.1: 正在跑的受管任务 (内存; 进程重启自然清空), 超过 TTL 视为遗留标记失效
 RUNNING_TTL = timedelta(hours=3)
 REASON_LABEL = {
-    "loop_not_running": "交易环没有运行",
-    "loop_error": "交易环报错",
-    "quotes_stale": "执行报价断流",
+    "loop_not_running": "交易循环未运行",
+    "loop_error": "交易循环报错",
+    "quotes_stale": "成交报价中断",
 }
 _LOCK = threading.Lock()
 _RUN_LOCK = threading.Lock()

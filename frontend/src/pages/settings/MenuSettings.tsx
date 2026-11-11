@@ -33,16 +33,16 @@ interface NavEntry {
 // 与 Layout 侧边栏默认顺序保持一致 (nav_order 未保存时的默认展示顺序)
 const BUILTIN_PAGES: NavEntry[] = [
   { id: '/', label: '机会', type: 'builtin', visible: true },
+  { id: '/paper', label: '持仓', type: 'builtin', visible: true },
   { id: '/intel', label: '情报', type: 'builtin', visible: true },
   { id: '/watchlist', label: '自选', type: 'builtin', visible: true },
+  { id: '/stock-analysis', label: '个股分析', type: 'builtin', visible: true },
   { id: '/screener', label: '策略', type: 'builtin', visible: true },
   { id: '/factors', label: '因子', type: 'builtin', visible: true },
   { id: '/backtest', label: '回测', type: 'builtin', visible: true },
-  { id: '/stock-analysis', label: '个股分析', type: 'builtin', visible: true },
+  { id: '/signals', label: '信号库', type: 'builtin', visible: true },
   { id: '/monitor', label: '监控中心', type: 'builtin', visible: true },
   { id: '/lots', label: '持仓提醒', type: 'builtin', visible: true },
-  { id: '/paper', label: '持仓', type: 'builtin', visible: true },
-  { id: '/signals', label: '信号库', type: 'builtin', visible: true },
   { id: '/data', label: '数据', type: 'builtin', visible: true },
   { id: '/status', label: '系统状态', type: 'builtin', visible: true },
 ]
@@ -92,13 +92,13 @@ function SortableItem({ entry, hidden, onToggleHidden, badgeEnabled, onToggleBad
           {entry.label}
         </span>
         {hidden && (
-          <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-muted shrink-0">已隐藏</span>
+          <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] text-muted shrink-0">已隐藏</span>
         )}
         <span className="truncate text-[11px] text-muted font-mono">{entry.id}</span>
       </div>
       <div>
         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
-          entry.type === 'analysis' ? 'bg-accent/10 text-accent' : 'bg-elevated text-muted'
+          entry.type === 'analysis' ? 'bg-accent/10 text-accent dark:text-blue-400' : 'bg-elevated text-muted'
         }`}>
           {entry.type === 'builtin' ? '内置' : '扩展'}
         </span>
@@ -286,9 +286,9 @@ export function SettingsMenuSettingsPanel() {
     <div className="max-w-5xl space-y-6">
       <section className="rounded-2xl border border-border bg-surface p-6 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.12),transparent_38%)]">
         <div className="text-[11px] uppercase tracking-[0.2em] text-accent">菜单设置</div>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">调整左侧菜单顺序</h2>
+        <h2 className="mt-2 text-lg font-semibold tracking-tight text-foreground">调整左侧菜单顺序</h2>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
-          拖动左侧手柄调整菜单排列顺序，点击眼睛图标控制菜单在侧边栏中的显示或隐藏。
+          拖动调整顺序 · 眼睛图标控制显示
         </p>
       </section>
 
@@ -325,7 +325,7 @@ export function SettingsMenuSettingsPanel() {
         </DndContext>
 
         {menus.isLoading && (
-          <div className="px-5 py-10 text-center text-sm text-muted">正在加载菜单...</div>
+          <div className="px-5 py-10 text-center text-sm text-muted">加载中</div>
         )}
       </section>
     </div>

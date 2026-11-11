@@ -61,7 +61,7 @@ function subscribe(fn: () => void) { listeners.add(fn); return () => { listeners
 
 function normalizeAiError(msg: string) {
   return msg.includes('API Key') || msg.includes('api_key')
-    ? 'AI 未配置或无效,请在「设置 → AI」中检查当前 AI 提供方'
+    ? 'AI 未配置或无效 · 请在「设置 › AI 设置」中检查'
     : msg
 }
 
@@ -169,7 +169,7 @@ export async function startAnalysis(symbol: string, name: string, focus = ''): P
   }
   const ongoing = activeTasks.filter(t => t.phase === 'loading' || t.phase === 'streaming')
   if (ongoing.length >= MAX_ACTIVE) {
-    return { error: `同时进行的个股分析任务不能超过 ${MAX_ACTIVE} 个,请等待现有任务完成` }
+    return { error: `同时进行的个股分析任务不能超过 ${MAX_ACTIVE} 个 · 请等待现有任务完成` }
   }
 
   const id = `stask_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
@@ -214,7 +214,7 @@ async function runStream(id: string, symbol: string, _name: string, focus: strin
     if (final && final.phase !== 'error') {
       // 兜底:流正常结束但从未收到 delta(后端在生成内容前异常断流)→ 标记失败,避免卡死
       if (!final.content) {
-        patchTask(id, { phase: 'error', error: '分析未返回内容(后端可能异常中断),请重试' })
+        patchTask(id, { phase: 'error', error: '分析未返回内容 · 请重试' })
         return
       }
       try {

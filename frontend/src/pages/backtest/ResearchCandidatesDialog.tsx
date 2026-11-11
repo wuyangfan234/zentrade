@@ -181,7 +181,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
             onClick={() => setKind(value)}
             aria-pressed={kind === value}
             className={`rounded-btn px-3 py-1.5 text-xs font-medium transition-colors ${kind === value
-              ? 'bg-accent/15 text-accent'
+              ? 'bg-accent/15 text-accent dark:text-blue-400'
               : 'text-secondary hover:bg-elevated hover:text-foreground'
             }`}
           >
@@ -217,7 +217,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
             <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_8rem_7rem] md:items-center">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[9px] font-medium ${item.kind === 'factor'
+                  <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium ${item.kind === 'factor'
                     ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-400'
                     : 'border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-400'
                   }`}>
@@ -260,7 +260,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                     type="button"
                     onClick={() => onLoadStrategy(item)}
                     className="inline-flex h-8 items-center gap-1.5 rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10"
-                    title="把此候选保存的回测配置 (策略/区间/参数/费率/仓位/环境过滤) 回填到回测表单，可直接复测"
+                    title="将该候选的回测配置填入回测表单"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                     载入复测
@@ -295,7 +295,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
             {linking && linkDraft && (
               <div className="grid gap-3 border-t border-border/60 bg-surface/45 px-4 py-3 md:grid-cols-[minmax(12rem,1fr)_9rem_8rem_auto] md:items-end">
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-[10px] text-muted">目标策略</span>
+                  <span className="mb-1 block text-[11px] text-muted">目标策略</span>
                   <select
                     value={linkDraft.strategyId}
                     onChange={event => setLinkDraft(current => current ? { ...current, strategyId: event.target.value } : current)}
@@ -309,7 +309,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                   </select>
                 </label>
                 <div>
-                  <span className="mb-1 block text-[10px] text-muted">评分方向</span>
+                  <span className="mb-1 block text-[11px] text-muted">评分方向</span>
                   <div className="grid h-8 grid-cols-2 overflow-hidden rounded-input border border-border bg-base">
                     {([['high', ArrowUp, '高值'], ['low', ArrowDown, '低值']] as const).map(([value, Icon, label]) => (
                       <button
@@ -331,7 +331,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                   </div>
                 </div>
                 <label className="block">
-                  <span className="mb-1 flex items-center justify-between text-[10px] text-muted">
+                  <span className="mb-1 flex items-center justify-between text-[11px] text-muted">
                     初始权重
                     {ic != null && <span>{ic < 0 ? 'IC<0 推荐低值' : 'IC≥0 推荐高值'}</span>}
                   </span>
@@ -349,7 +349,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                       } : current)}
                       className="h-8 w-full rounded-input border border-border bg-base px-2 pr-7 text-xs text-foreground focus:border-accent focus:outline-none"
                     />
-                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-muted">%</span>
+                    <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[11px] text-muted">%</span>
                   </div>
                 </label>
                 <div className="flex items-center justify-end gap-2">
@@ -364,7 +364,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                     type="button"
                     onClick={() => applyFactor.mutate({ candidate: item, draft: linkDraft })}
                     disabled={!linkDraft.strategyId || applyFactor.isPending}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {applyFactor.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
                     应用

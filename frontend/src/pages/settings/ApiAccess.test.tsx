@@ -92,9 +92,9 @@ it('create button disabled without a name; revoke asks for confirmation', async 
 
 it('mcp snippets use the given endpoint and a placeholder before a key exists', () => {
   const s = mcpSnippets('https://zt.example.com/api/mcp', '')
-  expect(s.claudeCode).toBe('claude mcp add --transport http zentrade https://zt.example.com/api/mcp --header "Authorization: Bearer <你的密钥>"')
+  expect(s.claudeCode).toBe('claude mcp add --transport http zentrade https://zt.example.com/api/mcp --header "Authorization: Bearer <API_KEY>"')
   expect(JSON.parse(s.json).mcpServers.zentrade).toEqual({
-    type: 'http', url: 'https://zt.example.com/api/mcp', headers: { Authorization: 'Bearer <你的密钥>' },
+    type: 'http', url: 'https://zt.example.com/api/mcp', headers: { Authorization: 'Bearer <API_KEY>' },
   })
   expect(s.curl).toContain('https://zt.example.com/api/watchlist')
 })

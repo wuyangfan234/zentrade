@@ -98,10 +98,10 @@ def _ledger_feed(events: list[dict]) -> list[dict]:
 
 LIVE_REFRESH_SECONDS = 5
 EXIT_REASON_LABEL = {
-    "target_zone_upper": "到达目标上沿", "target_zone_lower": "到达目标下沿(减半)",
-    "invalidation": "跌破失效位", "trailing_stop": "移动止损", "time_stop": "持有到期时间止损",
+    "target_zone_upper": "到达目标", "target_zone_lower": "到达目标下沿（减半）",  # noqa: RUF001
+    "invalidation": "触及止损", "trailing_stop": "移动止损", "time_stop": "持有到期",
     "earnings_reduce": "财报前减半", "corp_action": "公司行动", "manual": "人工",
-    "watchlist_removed": "移出自选次日开盘平仓",
+    "watchlist_removed": "移出自选 · 次日开盘平仓",
 }
 
 

@@ -747,7 +747,7 @@ export function Screener() {
     <>
       <PageHeader
         title="策略"
-        subtitle="基于本地技术指标表 · 条件即时筛选"
+        subtitle="全市场条件选股 · 日线 / 分钟"
         right={
           <div aria-label="策略工具栏" className="flex min-w-0 max-w-full flex-wrap items-center gap-2 whitespace-nowrap [&>div]:shrink-0 [&>button]:shrink-0 [&_button]:whitespace-nowrap [&_svg]:shrink-0">
             {/* 资产类型切换: 股票 / ETF (分钟策略 asset_types 仅股票, ETF 列表自然不含) */}
@@ -758,7 +758,7 @@ export function Screener() {
                   onClick={() => { setAssetType(t); setActiveStrategy(null); setResult(null); setShowAll(false) }}
                   className={`h-full px-2.5 text-xs font-medium transition-colors
                     cursor-pointer ${assetType === t
-                      ? 'bg-accent/10 text-accent'
+                      ? 'bg-accent/10 text-accent dark:text-blue-400'
                       : 'text-muted hover:text-secondary hover:bg-elevated'
                     }`}
                 >
@@ -778,7 +778,7 @@ export function Screener() {
                   }}
                   className={`h-full px-2.5 text-xs font-medium transition-colors cursor-pointer
                     ${tfFilter === tf
-                      ? 'bg-accent/10 text-accent'
+                      ? 'bg-accent/10 text-accent dark:text-blue-400'
                       : 'text-muted hover:text-secondary hover:bg-elevated'
                     }`}
                 >
@@ -790,7 +790,7 @@ export function Screener() {
             <button
               onClick={() => reloadStrategies.mutate()}
               disabled={reloadStrategies.isPending}
-              title="重新加载策略并运行全部策略，刷新当前符合条件的个股"
+              title="重新运行全部策略"
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-btn
                 border border-border bg-surface text-xs font-medium text-muted
                 hover:text-accent hover:border-accent/50 transition-colors cursor-pointer
@@ -813,7 +813,7 @@ export function Screener() {
               title="显示全部策略个股"
               className={`inline-flex items-center justify-center h-7 w-7 rounded-btn border transition-colors cursor-pointer
                 ${showAll
-                  ? 'border-accent/50 bg-accent/10 text-accent'
+                  ? 'border-accent/50 bg-accent/10 text-accent dark:text-blue-400'
                   : 'border-border bg-surface text-muted hover:text-secondary hover:border-accent/40'
                 }`}
             >
@@ -825,9 +825,9 @@ export function Screener() {
                 <button
                   key={sz}
                   onClick={() => { setCardSize(sz); storage.screenerCardSize.set(sz) }}
-                  className={`h-full px-2 text-[10px] font-medium transition-colors cursor-pointer
+                  className={`h-full px-2 text-[11px] font-medium transition-colors cursor-pointer
                     ${cardSize === sz
-                      ? 'bg-accent/10 text-accent'
+                      ? 'bg-accent/10 text-accent dark:text-blue-400'
                       : 'text-muted hover:text-secondary hover:bg-elevated'
                     }`}
                 >
@@ -844,7 +844,7 @@ export function Screener() {
             >
               <Layers className="h-3.5 w-3.5" />
               策略池
-              <span className="ml-0.5 min-w-[28px] h-4 flex items-center justify-center rounded-full bg-accent/15 text-accent text-[10px] font-bold">
+              <span className="ml-0.5 min-w-[28px] h-4 flex items-center justify-center rounded-full bg-accent/15 text-accent dark:text-blue-400 text-[11px] font-bold">
                 {visiblePool.length}/{strategyPresets.length}
               </span>
             </button>
@@ -866,7 +866,7 @@ export function Screener() {
                 hover:bg-amber-400/15 transition-colors cursor-pointer"
             >
               <Sparkles className="h-3.5 w-3.5" />
-              创建策略 · AI
+              新建策略
             </button>
             {/* 获取策略（占位，敬请期待）— 暂时隐藏 */}
             {SHOW_STRATEGY_STORE && (
@@ -883,7 +883,7 @@ export function Screener() {
             {/* 默认基础参数: 之后新建策略默认使用的基础过滤配置 */}
             <button
               onClick={() => setShowDefaultParams(true)}
-              title="默认基础参数 — 新建策略默认使用的基础过滤配置"
+              title="新建策略的默认过滤参数"
               className="inline-flex items-center justify-center h-7 w-7 rounded-btn
                 border border-border bg-surface text-muted
                 hover:text-accent hover:border-accent/50 transition-colors cursor-pointer"
@@ -902,8 +902,8 @@ export function Screener() {
           {!strategies.isLoading && displayPool.length === 0 && (
             <div className="text-sm text-muted py-4 text-center border border-dashed border-border rounded-btn">
               {pool.length === 0
-                ? '策略池为空，点击上方「策略池」按钮添加策略'
-                : '当前周期筛选下无策略，切换周期筛选或编辑策略池'}
+                ? <>策略池为空<button type="button" data-empty-action onClick={() => setShowPoolDialog(true)} className="ml-3 inline-flex h-7 items-center rounded-btn border border-border px-2.5 text-xs font-medium text-foreground hover:bg-elevated">添加策略</button></>
+                : '当前周期下无策略'}
             </div>
           )}
           <div data-strategy-cards className={cardWrapCls(cardSize)}>
@@ -984,7 +984,7 @@ export function Screener() {
                         onClick={() => setShowFilter(v => !v)}
                         className={`inline-flex items-center gap-1.5 px-2.5 text-xs font-medium transition-colors duration-150 cursor-pointer
                           ${filterActive(filter)
-                            ? 'bg-accent/15 text-accent'
+                            ? 'bg-accent/15 text-accent dark:text-blue-400'
                             : showFilter
                               ? 'bg-accent/8 text-accent'
                               : 'text-secondary hover:bg-elevated hover:text-foreground'
@@ -993,7 +993,7 @@ export function Screener() {
                         <Filter className="h-3 w-3" />
                         筛选
                         {filterActive(filter) && (
-                          <span className="bg-accent text-white rounded-full min-w-4 h-4 px-1 flex items-center justify-center text-[10px] font-bold leading-none">
+                          <span className="bg-accent dark:bg-blue-700 text-white rounded-full min-w-4 h-4 px-1 flex items-center justify-center text-[11px] font-bold leading-none">
                             {countActiveFilters(filter)}
                           </span>
                         )}
@@ -1036,7 +1036,7 @@ export function Screener() {
                     title="列表配置"
                     className={`inline-flex items-center justify-center h-7 w-7 rounded-btn border text-xs font-medium transition-colors cursor-pointer
                       ${customizerOpen
-                        ? 'border-accent/50 bg-accent/10 text-accent'
+                        ? 'border-accent/50 bg-accent/10 text-accent dark:text-blue-400'
                         : 'border-border bg-surface text-secondary hover:text-accent hover:border-accent/50'
                       }`}
                   >
@@ -1086,8 +1086,8 @@ export function Screener() {
                   icon={ScanSearch}
                   title={filterActive(filter) ? '筛选后无命中' : '今日无命中'}
                   hint={filterActive(filter)
-                    ? '当前筛选条件过严，试试放宽或重置筛选。'
-                    : '可能数据未跑盘后管道，或策略条件过于严苛。试试 POST /api/pipeline/run。'}
+                    ? '可放宽或重置筛选'
+                    : '请确认当日数据已同步'}
                 />
               ) : (
                 <>
@@ -1128,8 +1128,8 @@ export function Screener() {
                 <ScanSearch className="h-7 w-7 text-accent" />
               </div>
               <div className="flex flex-col items-center gap-1.5">
-                <span className="text-sm text-secondary">点击策略卡片查看选股结果</span>
-                <span className="text-[11px] text-muted">若提示指标表无数据，请先到「数据」页运行盘后同步</span>
+                <span className="text-sm text-secondary">选择策略查看结果</span>
+                <span className="text-[11px] text-muted">无指标数据时请先在「数据」页同步</span>
               </div>
             </div>
           )}
@@ -1236,7 +1236,7 @@ export function Screener() {
         onSavedId={async (id, researchOnly) => {
           if (researchOnly) {
             // AI 策略保存为 research_only 草稿, 不进入策略池, 提示用户去策略池发布
-            toast('AI 策略已保存为草稿，请在策略池「AI」标签发布后使用', 'success')
+            toast('AI 策略已保存为草稿 · 在策略池「AI」页签发布后可用', 'success')
             return
           }
           const data = await qc.fetchQuery({ queryKey: QK.screenerStrategies('all'), queryFn: () => api.screenerStrategies(), staleTime: 0 })

@@ -64,7 +64,8 @@ html.dark {
   background-clip: content-box;
 }
 .tabular { font-variant-numeric: tabular-nums; }
-.num { font-family: theme('fontFamily.mono'); font-variant-numeric: tabular-nums; }
+/* 数字统一用界面字体的等宽数字 (Inter tabular); 等宽字体 (font-mono) 只留给代码、公式、密钥 */
+.num { font-variant-numeric: tabular-nums; }
 
 /* 默认 1px 细分隔线(暗色用边框区分层次,不用 shadow) */
 * { border-color: hsl(var(--border)); }
@@ -73,6 +74,8 @@ body {
   background: hsl(var(--base));
   color: hsl(var(--fg-primary));
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  /* 全站等宽数字: 表格与读数的小数点、位数纵向对齐 */
+  font-variant-numeric: tabular-nums;
   /* 暗色模式不用 antialiased — 让字形保持饱满,不发虚 */
   -webkit-font-smoothing: subpixel-antialiased;
   -moz-osx-font-smoothing: auto;
@@ -84,4 +87,24 @@ body {
 @keyframes rh-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
+}
+
+/* 手机端 (<768px): 小按钮的可点区域不小于 36px。
+ * 不改按钮本身的尺寸 (改尺寸会撑高表格行、挤歪开关): 用居中的透明 ::after 把点击区补到 36px。
+ * :where 把优先级压到最低, 组件自己的 position / after: 工具类照常生效; 开关、单选、复选与自带 after: 的按钮不处理。 */
+@media (max-width: 767px) {
+  main :where(button, [role='tab']):where(:not([role='switch'], [role='checkbox'], [role='radio'], [class*='after:'], [data-compact])) {
+    position: relative;
+  }
+  main :where(button, [role='tab']):where(:not([role='switch'], [role='checkbox'], [role='radio'], [class*='after:'], [data-compact]))::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: max(100%, 36px);
+    height: max(100%, 36px);
+    transform: translate(-50%, -50%);
+  }
+  /* 情报页信息密度高, 手机上最小字号提到 12px */
+  [data-page='intel'] .text-\[11px\] { font-size: 12px; }
 }

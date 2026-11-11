@@ -14,7 +14,7 @@ type SignalSection = 'builtin' | 'custom'
 
 const KIND_LABEL: Record<SignalKind, string> = { entry: '入场', exit: '出场', both: '出入通用' }
 const KIND_CLASS: Record<SignalKind, string> = {
-  entry: 'bg-accent/10 text-accent',
+  entry: 'bg-accent/10 text-accent dark:text-blue-400',
   exit: 'bg-warning/10 text-warning',
   both: 'bg-muted/10 text-muted',
 }
@@ -26,7 +26,7 @@ export function Signals() {
 
   return (
     <div className="flex flex-col h-full">
-      <PageHeader title="信号库" subtitle="内置预计算信号与自定义条件信号，供策略 / 回测 / 监控统一使用" />
+      <PageHeader title="信号库" subtitle="内置信号 · 自定义信号" />
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
         <div className="mx-auto max-w-6xl">
           <SignalsBody highlight={highlight} />
@@ -120,11 +120,11 @@ function SignalsBody({ highlight }: { highlight: string }) {
                 onClick={() => setActiveSection(tab.key)}
                 aria-current={active ? 'page' : undefined}
                 className={`inline-flex h-7 items-center gap-1.5 rounded-[5px] px-2.5 text-[11px] font-medium transition-colors sm:text-xs ${active
-                  ? 'bg-amber-700 text-white shadow-sm dark:bg-amber-600'
+                  ? 'bg-amber-700 text-white shadow-sm'
                   : 'text-secondary hover:bg-elevated hover:text-foreground'}`}
               >
                 {tab.label}
-                <span className={`rounded px-1 py-px text-[10px] font-mono ${active ? 'bg-black/15 text-white' : 'bg-elevated text-muted'}`}>
+                <span className={`rounded px-1 py-px text-[11px] font-mono ${active ? 'bg-black/15 text-white' : 'bg-elevated text-muted'}`}>
                   {tab.count}
                 </span>
               </button>
@@ -132,7 +132,7 @@ function SignalsBody({ highlight }: { highlight: string }) {
           })}
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[11px] text-muted">自定义信号保存为 <span className="font-mono text-secondary">csg_*</span> 列，条件字段可用行情指标与全部注册因子</span>
+          <span className="text-[11px] text-muted" title="自定义信号保存为 csg_* 列">条件字段可用行情指标与全部因子</span>
           <button
             onClick={openNew}
             className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn border border-amber-400/30 bg-amber-400/5 px-3 text-xs font-medium text-amber-700 dark:text-amber-400 transition-colors hover:bg-amber-400/10"
@@ -153,10 +153,10 @@ function SignalsBody({ highlight }: { highlight: string }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate text-sm font-medium text-foreground">{sig.name}</h3>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] ${KIND_CLASS[sig.kind]}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] ${KIND_CLASS[sig.kind]}`}>
                         {KIND_LABEL[sig.kind]}
                       </span>
-                      {!sig.enabled && <span className="rounded bg-muted/10 px-1.5 py-0.5 text-[10px] text-muted">已停用</span>}
+                      {!sig.enabled && <span className="rounded bg-muted/10 px-1.5 py-0.5 text-[11px] text-muted">已停用</span>}
                     </div>
                     <p className="mt-1 truncate font-mono text-[11px] text-muted">csg_{sig.id}</p>
                   </div>
@@ -171,8 +171,8 @@ function SignalsBody({ highlight }: { highlight: string }) {
                       <button
                         onClick={() => handleDeleteClick(sig)}
                         disabled={del.isPending}
-                        title="再次点击确认删除"
-                        className="inline-flex animate-pulse cursor-pointer items-center gap-1 rounded-md border border-danger/30 bg-danger/15 px-1.5 py-0.5 text-[10px] font-medium text-danger disabled:opacity-50"
+                        title="再次点击确认"
+                        className="inline-flex animate-pulse cursor-pointer items-center gap-1 rounded-md border border-danger/30 bg-danger/15 px-1.5 py-0.5 text-[11px] font-medium text-danger disabled:opacity-50"
                       >
                         <Trash2 className="h-2.5 w-2.5" />确认
                       </button>
@@ -214,7 +214,7 @@ function SignalsBody({ highlight }: { highlight: string }) {
               ))}
             {!list.isLoading && signals.length === 0 && (
               <div className="rounded-card border border-dashed border-border px-5 py-10 text-center text-sm text-muted md:col-span-2">
-                暂无自定义信号。可用「字段 + 运算符 + 值」组合条件创建，或从检验页因子行一键生成；也可让 AI 按描述生成。
+                暂无自定义信号
               </div>
             )}
           </div>
@@ -226,7 +226,7 @@ function SignalsBody({ highlight }: { highlight: string }) {
         <section className="rounded-card border border-border bg-surface p-4">
           <div className="mb-3 flex items-center gap-2 text-xs text-muted">
             <Lock className="h-3.5 w-3.5" />
-            系统在 enriched 数据中预计算，策略选择器直接展示，只读。
+            系统预计算 · 只读
           </div>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {BUILTIN_SIGNAL_DEFINITIONS.map(sig => (
@@ -235,13 +235,13 @@ function SignalsBody({ highlight }: { highlight: string }) {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <h4 className="truncate text-sm font-medium text-foreground">{sig.name}</h4>
-                      <span className={`rounded px-1.5 py-0.5 text-[10px] ${KIND_CLASS[sig.kind]}`}>
+                      <span className={`rounded px-1.5 py-0.5 text-[11px] ${KIND_CLASS[sig.kind]}`}>
                         {KIND_LABEL[sig.kind]}
                       </span>
                     </div>
                     <p className="mt-1 truncate font-mono text-[11px] text-muted">{sig.id}</p>
                   </div>
-                  <span className="shrink-0 rounded border border-border bg-elevated px-1.5 py-0.5 text-[10px] text-muted">{sig.category}</span>
+                  <span className="shrink-0 rounded border border-border bg-elevated px-1.5 py-0.5 text-[11px] text-muted">{sig.category}</span>
                 </div>
                 <p className="mt-3 text-xs leading-5 text-secondary">{sig.description}</p>
               </div>

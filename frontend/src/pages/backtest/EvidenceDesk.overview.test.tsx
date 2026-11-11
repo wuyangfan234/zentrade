@@ -98,7 +98,7 @@ it('status bar answers 能不能出手 with tradable sources, account cash and u
 it('cross-day executable cards come first with plain-language explain, window and cash downsizing', async () => {
   await render()
   const tabs = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
-  expect(tabs).toEqual(['全股票池 (2)', '自选股 (3)', '来源管理', '卡结局'])
+  expect(tabs).toEqual(['全市场（2）', '自选（3）', '来源管理', '结算'])
   expect(host.querySelector('[data-exec-section]')!.textContent).toContain('① 可执行')
   const t = host.querySelector('[data-card="TIGO"]')!
   expect(t.querySelector('[data-exec]')!.textContent).toContain('入场窗至 2026-10-08（剩 4 个交易日）')
@@ -139,7 +139,7 @@ it('a failed opportunities request is an error, not a legal zero-opportunity day
   await render()
   expect(host.querySelector('[data-load-error]')!.textContent).toContain('这不是“零机会”')
   expect(host.textContent).not.toContain('零机会是合法产出')
-  expect(host.querySelector('[data-status-bar][data-error]')!.textContent).toContain('不代表没有机会')
+  expect(host.querySelector('[data-status-bar][data-error]')!.textContent).toContain('下方机会仍可查看')
 })
 
 it('news summary is fetched in batches of 100 so no card silently loses its catalyst line', async () => {

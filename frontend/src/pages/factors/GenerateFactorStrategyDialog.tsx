@@ -107,7 +107,7 @@ export function GenerateFactorStrategyDialog({
           </div>
           <p className="mt-1 font-mono text-[11px] text-muted">{item.id}</p>
         </div>
-        <span className="shrink-0 rounded-btn bg-elevated px-1.5 py-0.5 text-[10px] text-secondary">{item.label}</span>
+        <span className="shrink-0 rounded-btn bg-elevated px-1.5 py-0.5 text-[11px] text-secondary">{item.label}</span>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-3">
@@ -115,11 +115,11 @@ export function GenerateFactorStrategyDialog({
           单因子排名 · 入场 ≥ 70 · 离场 ≤ 40 · 每日前 20
         </div>
         <label className="block">
-          <span className="mb-1 block text-[10px] text-muted">策略名称</span>
+          <span className="mb-1 block text-[11px] text-muted">策略名称</span>
           <input type="text" value={name} maxLength={24} onChange={event => setName(event.target.value)} className={INPUT_CLS} />
         </label>
         <div>
-          <span className="mb-1 block text-[10px] text-muted">方向</span>
+          <span className="mb-1 block text-[11px] text-muted">方向</span>
           <div className="flex gap-1.5">
             {([['high', '值大看多'], ['low', '值小看多']] as const).map(([value, label]) => (
               <button
@@ -127,7 +127,7 @@ export function GenerateFactorStrategyDialog({
                 type="button"
                 onClick={() => setDirection(value)}
                 className={`rounded-btn border px-2.5 py-1.5 text-[11px] transition-colors ${direction === value
-                  ? 'border-accent/50 bg-accent/10 text-accent'
+                  ? 'border-accent/50 bg-accent/10 text-accent dark:text-blue-400'
                   : 'border-border bg-base text-muted hover:border-accent/40'}`}
               >
                 {label}
@@ -135,7 +135,7 @@ export function GenerateFactorStrategyDialog({
             ))}
           </div>
         </div>
-        <p className="text-[10px] leading-relaxed text-muted">
+        <p className="text-[11px] leading-relaxed text-muted">
           止损 −8% · 持有 ≤ 30 日
         </p>
       </div>
@@ -146,7 +146,7 @@ export function GenerateFactorStrategyDialog({
           type="button"
           onClick={() => generate.mutate()}
           disabled={generate.isPending || !name.trim() || !direction}
-          className="inline-flex items-center gap-1.5 rounded-btn bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" />
           {generate.isPending ? '生成中' : '生成策略'}

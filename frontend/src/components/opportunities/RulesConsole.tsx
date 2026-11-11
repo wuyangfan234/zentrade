@@ -29,7 +29,7 @@ type Row = { id: string; name: string; history: WatchlistRuleHistory | null | un
 
 const isDiscovered = (kind?: string) => kind === 'custom' || kind === 'ai' || kind === 'ranker'
 
-const HIST_SRC_FALLBACK = '机会板同一张卡（内置策略离线回放）'
+const HIST_SRC_FALLBACK = '机会板同口径离线回放（内置策略）'
 
 /** 0.30.1: 来源 = 回放文件自己的元数据 (信号日窗口 / 名单 / 数据截至), 重算后自动跟上, 不写死日期与票数 */
 export function histSource(meta: WatchlistRulesPayload['history_meta'] | undefined): string {
@@ -39,10 +39,10 @@ export function histSource(meta: WatchlistRulesPayload['history_meta'] | undefin
   const n = (meta?.universe ?? '').match(/watchlist\s+(\d+)/i)?.[1]
   const who = n ? `，自选 ${n} 只` : ''
   const end = meta?.data_end ? `，数据到 ${meta.data_end}` : ''
-  return `离线回放（${span} 信号日${who}${end}，机会板同一张卡）`
+  return `离线回放（${span} 信号日${who}${end}，与机会板同口径）`
 }
-const CAND_SRC = '按机会板卡回放（2023-01 起，自选，含账户上限）'
-const RANK_SRC = '排序因子 · 4h 门内按值挑前 5，机会板卡回放（2023-01 起，自选，含账户上限）'
+const CAND_SRC = '机会板回放（2023-01 起，自选，含账户上限）'
+const RANK_SRC = '排序因子 · 4h 同向个股中按值取前 5，机会板回放（2023-01 起，自选，含账户上限）'
 
 type Seg = NonNullable<NonNullable<NonNullable<Candidate>['segments']>['mining']>
 const ym = (d?: string | null) => (typeof d === 'string' && d.length >= 7 ? d.slice(0, 7) : '')
@@ -63,9 +63,9 @@ export function candidateBadgeTitle(kind: string | undefined, c: NonNullable<Can
   const span = segSpan('holdout', c.segments?.holdout)
   const why = kind === 'ranker'
     ? `排序因子 · 全窗与留出段${span ? `（${span}）` : ''}的 95% 区间下限都 > 0`
-    : '系统发现 · 按机会板卡回放赢过“4h 门内随便挑”'
+    : '候选 · 回放超额为正（对比 4h 同向随机入场）'
   const ci = c.excess_ci ? `${rr(c.excess_ci[0])} ~ ${rr(c.excess_ci[1])}` : '—'
-  return `${why}: 每笔多 ${rr(c.excess)}（区间 ${ci}），${c.n} 笔`
+  return `${why}: 每笔超额 ${rr(c.excess)}（区间 ${ci}），${c.n} 笔`
 }
 
 /** 挖掘 / AI 验收失败的原因 (后端 error 类名 + detail) 转短句; 全文放悬停 */
@@ -92,25 +92,25 @@ export function historyCell(r: Row, src: string = HIST_SRC_FALLBACK): HistCell {
       const seg = (k: 'mining' | 'holdout') => {
         const x = c.segments?.[k]
         const label = segLabel(k, x)
-        return x && typeof x.n === 'number' ? `${label} ${x.n} 笔 · 每笔多 ${rr(x.excess)}` : `${label} —`
+        return x && typeof x.n === 'number' ? `${label} ${x.n} 笔 · 每笔超额 ${rr(x.excess)}` : `${label} —`
       }
       const title = r.kind === 'ranker'
-        ? `${RANK_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R。${seg('mining')}；${seg('holdout')}${r.formula ? `。公式 ${r.formula}（${r.direction === 'low' ? '值小优先' : '值大优先'}）` : ''}`
-        : `${CAND_SRC}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R`
+        ? `${RANK_SRC}：笔数 · 每笔平均 R；右列 = 每笔超额 R（对比 4h 同向随机入场）。${seg('mining')}；${seg('holdout')}${r.formula ? `。公式 ${r.formula}（${r.direction === 'low' ? '值小优先' : '值大优先'}）` : ''}`
+        : `${CAND_SRC}：笔数 · 每笔平均 R；右列 = 每笔超额 R（对比 4h 同向随机入场）`
       if (c.n === 0) return { left: '0 笔', title, note: true }
       return { left: `${c.n} · ${rr(c.mean_r)}`, right: rr(c.excess), rightTone: tone(c.excess), title }
     }
-    if (r.kind === 'ranker') return { left: '未复核', title: '导入后用当前候选池复核；候选池每个交易日美东 17:40 重导', note: true }
-    return { left: '未回放', title: '发布后与周度挖掘后自动回放；也可点下方「重新回放」', note: true }
+    if (r.kind === 'ranker') return { left: '未复核', title: '导入后按当前候选池复核 · 候选池每个交易日 17:40 ET 更新', note: true }
+    return { left: '未回放', title: '发布后与每周挖掘后自动回放 · 可手动重新回放', note: true }
   }
   const h = r.history
-  if (!h) return { left: '无回放', title: `不在 ${src} 里`, note: true }
+  if (!h) return { left: '无回放', title: `${src}中无此规则`, note: true }
   if (h.thin || typeof h.mean_r !== 'number') {
     return { left: `样本少 · ${h.n} 笔`, note: true,
-      title: `${src}：命中 ${h.raw ?? '?'} 次，其中 4h 门同向 ${h.signals ?? h.n} 次，回区成交 ${h.n} 笔；不足 5 笔不算 R` }
+      title: `${src}：命中 ${h.raw ?? '?'} 次，其中 4h 同向 ${h.signals ?? h.n} 次，入场区成交 ${h.n} 笔；不足 5 笔不计算 R` }
   }
   return { left: `${h.n} · ${rr(h.mean_r)}`, right: rr(h.excess), rightTone: tone(h.excess),
-    title: `${src}：笔数 · 每笔平均 R；右边 = 比 4h 门内随便挑多出的平均 R` }
+    title: `${src}：笔数 · 每笔平均 R；右列 = 每笔超额 R（对比 4h 同向随机入场）` }
 }
 
 function PickList({ side, rows, picked, onToggle, src }: { side: 'long' | 'short'; rows: Row[]; picked: Set<string>; onToggle: (id: string) => void; src: string }) {
@@ -133,7 +133,7 @@ function PickList({ side, rows, picked, onToggle, src }: { side: 'long' | 'short
               {/* 两行而不是单行截断: 做空名的区分在末尾 (…翻空 / …下穿), 单行会被截掉 */}
               <span data-swing-name className="line-clamp-2 min-w-0 flex-1 break-words leading-4" title={name}>{name}</span>
               {r.candidate?.passed && (
-                <span data-candidate={r.id} className="shrink-0 rounded border border-accent/40 px-1 text-[10px] leading-4 text-accent"
+                <span data-candidate={r.id} className="shrink-0 rounded border border-accent/40 px-1 text-[11px] leading-4 text-accent"
                   title={candidateBadgeTitle(r.kind, r.candidate)}>候选</span>
               )}
               <span data-swing-hist={r.id} data-note={cell.note ? '' : undefined} title={cell.title}
@@ -156,15 +156,15 @@ function CandidateRerun({ status }: { status: SwingCandidatesStatus | undefined 
   })
   const running = !!status?.running
   const state = running ? '回放中 · 约 1–2 分钟'
-    : status?.pending_at ? '已排队 · 美东 17:05 自动跑（北京 05:05 / 冬令时 06:05）'
-    : status?.generated_at ? `上次回放 ${status.generated_at.slice(5, 10)} ${hm(status.generated_at)} 北京` : '还没回放过'
+    : status?.pending_at ? '已排队 · 17:05 ET 运行'
+    : status?.generated_at ? `上次回放 ${status.generated_at.slice(5, 10)} ${hm(status.generated_at)}（北京）` : '未回放'
   return (
     <div data-candidate-rerun className="mt-3 flex flex-wrap items-center gap-2 text-[11px] text-muted">
       <span>挖掘 / AI 策略</span>
       <button type="button" data-candidate-run disabled={running || run.isPending} onClick={() => run.mutate()}
-        title="只重跑挖掘 / AI 策略：美东 17:00 后立即跑；交易日 09:00–17:00 排队到 17:05；只写回放结果，不改 3+3、不下单"
+        title="仅重跑挖掘 / AI 策略 · 17:00 ET 后立即运行，交易日 09:00–17:00 ET 排队至 17:05 · 只更新回放结果，不改入选策略、不下单"
         className="rounded-btn border border-border px-2 py-1 text-secondary hover:bg-elevated hover:text-foreground disabled:opacity-40">
-        {run.isPending ? '提交中…' : '重新回放'}
+        {run.isPending ? '提交中' : '重新回放'}
       </button>
       <span data-candidate-state>{state}</span>
       {run.isError && <span className="text-danger">{(run.error as Error).message}</span>}
@@ -184,7 +184,7 @@ export function RadarPushEditor({ cur, enabled, minRvol, onEnabled, onMinRvol }:
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-5 text-foreground">开盘放量推送</div>
-          <div className="text-[11px] leading-4 text-muted">09:51 ET 出榜后按全局推送设置发送 · 每日每渠道至多一条 · 观察，不下单</div>
+          <div className="text-[11px] leading-4 text-muted">09:51 ET 发布后推送 · 每渠道每日 1 条 · 仅观察</div>
         </div>
         <button type="button" role="switch" aria-checked={enabled} aria-label="开盘放量推送" data-radar-push-toggle=""
           onClick={() => onEnabled(!enabled)}
@@ -198,7 +198,7 @@ export function RadarPushEditor({ cur, enabled, minRvol, onEnabled, onMinRvol }:
           return (
             <button key={l.v} type="button" data-radar-push-level={String(l.v)} aria-pressed={on} disabled={!enabled}
               onClick={() => onMinRvol(l.v)}
-              title={`回放 ${cur?.period ?? ''}：约 ${pctTxt(l.days)} 的交易日有推送，日均 ${l.per_day.toFixed(2)} 只；推到的票当天收涨≥5% ${pctTxt(l.up5)}，其余开盘收阳的票 ${pctTxt(cur?.other ?? 0)}`}
+              title={`回放 ${cur?.period ?? ''}：约 ${pctTxt(l.days)} 的交易日有推送，日均 ${l.per_day.toFixed(2)} 只；推送个股当日收涨 ≥5% ${pctTxt(l.up5)}，其余开盘收阳个股 ${pctTxt(cur?.other ?? 0)}`}
               className={`rounded-btn border px-2 py-1.5 text-left tabular-nums ${on ? 'border-accent bg-accent/10 text-accent dark:bg-blue-700 dark:text-white' : 'border-border text-secondary hover:bg-elevated'}`}>
               <div className="whitespace-nowrap text-[13px] font-semibold leading-5">{`相对量 ≥${l.v}x`}</div>
               <div className="whitespace-nowrap text-[11px] leading-4">{`${pctTxt(l.days)} 交易日有推送`}</div>
@@ -278,25 +278,25 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
   const err = q.isError ? (q.error as Error).message : null
 
   return (
-    <Sheet attr={{ 'data-console': '' }} onClose={onClose} title="出卡策略"
+    <Sheet attr={{ 'data-console': '' }} onClose={onClose} title="机会板策略"
       footer={(
         <>
           <button type="button" data-save disabled={!dirty || riskBad || save.isPending || !settings}
             onClick={() => save.mutate()}
             className="rounded-btn border border-accent/60 px-3 py-1.5 text-accent hover:bg-accent/10 disabled:opacity-40"
-          >{save.isPending ? '保存中…' : '保存'}</button>
+          >{save.isPending ? '保存中' : '保存'}</button>
           {riskBad && <span data-risk-error className="text-danger">单笔风险 0.1–2</span>}
           {save.isError && <span className="text-danger">{(save.error as Error).message}</span>}
         </>
       )}>
-      <div data-swing-explain className="mb-3 text-xs text-muted">{`${settings?.gate?.name ?? '方向门'}定方向 · 最多 3 条策略打分 · 纸面只下机会板卡`}</div>
+      <div data-swing-explain className="mb-3 text-xs text-muted">{`${settings?.gate?.name ?? '方向门'}定方向 · 多空各至多 3 条策略 · 模拟账户仅执行机会板`}</div>
       <div data-forward-summary className="mb-3 flex flex-wrap items-end gap-3 rounded-card border border-border bg-base p-3 text-xs">
         <div className="min-w-0 flex-1">
-          <div className="text-[11px] leading-4 text-muted">当前 3+3</div>
+          <div className="text-[11px] leading-4 text-muted">当前入选</div>
           <div className="text-sm tabular-nums leading-5">{`${longIds.length} 多 · ${shortIds.length} 空`}</div>
         </div>
         <div className="min-w-0">
-          <div className="text-[11px] leading-4 text-muted">单笔风险 %（纸面）</div>
+          <div className="text-[11px] leading-4 text-muted">单笔风险 %（模拟账户）</div>
           <input data-risk aria-label="单笔风险" inputMode="decimal"
             className="mt-0.5 w-20 rounded-input border border-border bg-surface px-2 py-0.5 text-sm tabular-nums text-foreground"
             value={riskVal} onChange={(e) => setRisk(e.target.value)} />
@@ -310,7 +310,7 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
               <PickList side="long" rows={[...sticky(longIds, longRows), ...longRows]} picked={longSet} onToggle={(id) => toggle('long', id)} src={src} />
               <PickList side="short" rows={[...sticky(shortIds, shortBase), ...shortBase]} picked={shortSet} onToggle={(id) => toggle('short', id)} src={src} />
             </div>
-            <div data-hist-legend className="mt-2 text-[11px] text-muted">右侧 = 机会板卡回放：笔数 · 每笔 R · 比随便挑多的 R（悬停看来源）</div>
+            <div data-hist-legend className="mt-2 text-[11px] text-muted">右列：回放笔数 · 每笔 R · 超额 R（对比 4h 同向随机入场）</div>
             {hasDiscovered && <CandidateRerun status={d?.candidates} />}
           </>
         )}

@@ -334,7 +334,7 @@ export function Data() {
       case 'instruments':
         return (
           <StatCard
-            title="个股维表"
+            title="标的列表"
             hint="盘前同步 · 元数据快照"
             stats={s?.instruments}
             isInstrument
@@ -353,7 +353,7 @@ export function Data() {
         return (
           <StatCard
             title="日 K"
-            hint="增量因子记录 · 日期范围为日K覆盖，非逐日因子天数"
+            hint="增量因子记录 · 日期范围为日 K 覆盖范围"
             stats={s?.daily}
             loading={isLoading}
             active={activeCard === 'daily'}
@@ -373,7 +373,7 @@ export function Data() {
         return (
           <StatCard
             title="除权因子"
-            hint="增量因子记录 · 日期范围为日K覆盖，非逐日因子天数"
+            hint="增量因子记录 · 日期范围为日 K 覆盖范围"
             stats={s?.adj_factor}
             loading={isLoading}
             active={activeCard === 'adj_factor'}
@@ -438,11 +438,11 @@ export function Data() {
       <div ref={topRef} />
       <PageHeader
         title="数据"
-        subtitle="本地数据画像 · 同步状态 · 历史记录"
+        subtitle="数据覆盖 · 同步状态 · 同步记录"
         right={
           <div className="flex flex-wrap items-center gap-2 md:gap-3">
             {!hasData && !isLoading && (
-              <span className="text-xs text-accent animate-pulse">首次使用请点击右侧按钮同步数据</span>
+              <span className="text-xs text-accent animate-pulse">首次使用请先同步数据</span>
             )}
             <button
               onClick={() => adjGate.guard(() => startSync.mutate())}
@@ -525,7 +525,7 @@ export function Data() {
           <div className="flex items-center gap-2 rounded-card border border-border bg-elevated/40 px-3 py-2 text-xs">
             <Info className="h-4 w-4 shrink-0 text-muted" />
             <span className="text-secondary leading-relaxed">
-              当前无需 API Key,历史日K将使用免费通道获取。
+              历史日 K 无需 API Key
               实时行情、分钟K等能力取决于所选数据源，可在
               <Link to="/settings?tab=data-sources&highlight=data-sources" className="mx-0.5 font-medium text-accent hover:underline">
                 数据源设置
@@ -582,9 +582,9 @@ export function Data() {
               </div>
             ) : (
               <div className="space-y-2">
-                <div className="flex items-center gap-1.5 text-[10px] text-muted pb-2 border-b border-border/50">
+                <div className="flex items-center gap-1.5 text-[11px] text-muted pb-2 border-b border-border/50">
                   <span className="text-accent font-medium">盘前</span>
-                  <span>个股维表</span>
+                  <span>标的列表</span>
                   <span className="text-muted">→</span>
                   <span className="text-accent font-medium">盘后</span>
                   {pipelineSteps.map((step, i) => (
@@ -596,13 +596,13 @@ export function Data() {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <span className="text-muted">时区</span>
-                  <span className="font-mono text-secondary">ET · America/New_York</span>
+                  <span className="tabular-nums text-secondary">ET · America/New_York</span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-1">
-                    <span className="text-muted">盘前 · 个股维表</span>
+                    <span className="text-muted">盘前 · 标的列表</span>
                     <span className="text-muted">·</span>
-                    <span className="font-mono text-secondary">
+                    <span className="tabular-nums text-secondary">
                       {`${String(instrumentsSched.hour).padStart(2, '0')}:${String(instrumentsSched.minute).padStart(2, '0')} ET`}
                     </span>
                     <button
@@ -612,7 +612,7 @@ export function Data() {
                       <Clock className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 font-mono text-secondary">
+                  <div className="flex items-center gap-2 tabular-nums text-secondary">
                     {s?.last_instruments_run && (
                       <span className={`inline-flex flex-col items-center leading-tight ${isToday(s.last_instruments_run) ? 'text-bear' : 'text-secondary'}`}>
                         <span>✓ {formatScheduleDatePart(s.last_instruments_run)}</span>
@@ -647,9 +647,9 @@ export function Data() {
                 </AnimatePresence>
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="flex items-center gap-1">
-                    <span className="text-muted">盘后 · 全量管道</span>
+                    <span className="text-muted">盘后 · 全量同步</span>
                     <span className="text-muted">·</span>
-                    <span className="font-mono text-secondary">
+                    <span className="tabular-nums text-secondary">
                       {`${String(pipelineSched.hour).padStart(2, '0')}:${String(pipelineSched.minute).padStart(2, '0')} ET`}
                     </span>
                     <button
@@ -659,7 +659,7 @@ export function Data() {
                       <Clock className="h-3 w-3" />
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 font-mono text-secondary">
+                  <div className="flex items-center gap-2 tabular-nums text-secondary">
                     {s?.last_pipeline_run && (
                       <span className={`inline-flex flex-col items-center leading-tight ${isToday(s.last_pipeline_run) ? 'text-bear' : 'text-secondary'}`}>
                         <span>✓ {formatScheduleDatePart(s.last_pipeline_run)}</span>
@@ -706,7 +706,7 @@ export function Data() {
               {isLoading ? (
                 <Skeleton w="w-12" />
               ) : (
-                <span className="font-mono text-xs text-muted">{s ? `${s.storage.total_size_mb} MB` : '—'}</span>
+                <span className="tabular-nums text-xs text-muted">{s ? `${s.storage.total_size_mb} MB` : '—'}</span>
               )}
             </div>
             <div className="space-y-2">
@@ -721,7 +721,7 @@ export function Data() {
                   </div>
                 ))
               ) : [
-                { label: '个股维表', files: s?.storage.instruments_files, size: s?.storage.instruments_size_mb },
+                { label: '标的列表', files: s?.storage.instruments_files, size: s?.storage.instruments_size_mb },
                 { label: '日 K',     files: s?.storage.daily_files,       size: s?.storage.daily_size_mb },
                 { label: '除权因子', files: s?.storage.adj_factor_files,  size: s?.storage.adj_factor_size_mb },
                 { label: '技术指标', files: s?.storage.enriched_files,    size: s?.storage.enriched_size_mb },
@@ -730,8 +730,8 @@ export function Data() {
                 <div key={item.label} className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <span className="text-muted">{item.label}</span>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-secondary">{item.files ?? 0} 文件</span>
-                    <span className="font-mono text-muted w-16 text-right">{(item.size ?? 0).toFixed(1)} MB</span>
+                    <span className="tabular-nums text-secondary">{item.files ?? 0} 文件</span>
+                    <span className="tabular-nums text-muted w-16 text-right">{(item.size ?? 0).toFixed(1)} MB</span>
                   </div>
                 </div>
               ))}
@@ -740,8 +740,8 @@ export function Data() {
                 <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] border-t border-border/50 pt-2 mt-1">
                   <span className="text-muted">扩展数据</span>
                   <div className="flex items-center gap-3">
-                    <span className="font-mono text-secondary">{s?.storage.ext_data_files ?? extConfigs.data.items.length} 文件</span>
-                    <span className="font-mono text-muted w-16 text-right">
+                    <span className="tabular-nums text-secondary">{s?.storage.ext_data_files ?? extConfigs.data.items.length} 文件</span>
+                    <span className="tabular-nums text-muted w-16 text-right">
                       {s?.storage.ext_data_size_mb != null ? `${s.storage.ext_data_size_mb.toFixed(1)} MB` : '—'}
                     </span>
                   </div>
@@ -864,7 +864,7 @@ export function Data() {
 
       <AnimatePresence>
         {openSettings === 'pipeline-scope' && (
-          <SettingsModal title="盘后管道 · 拉取内容" onClose={() => setOpenSettings(null)}>
+          <SettingsModal title="盘后同步 · 同步内容" onClose={() => setOpenSettings(null)}>
             <PipelineScopeConfig />
           </SettingsModal>
         )}
@@ -915,11 +915,11 @@ export function Data() {
                     当前任务将在<span className="text-foreground font-medium">正在拉取的分块完成后</span>中断（协作式停止，不会损坏已写入的数据）。
                   </p>
                   <p className="mt-2 text-[11px] text-danger leading-relaxed">
-                    停止后再次拉取需要重新走完整管道（拉取 → 指标计算 → 监控规则），无法从停止处续跑。
+                    停止后需从头重新同步，无法续传
                   </p>
                   <div className="mt-2 flex items-start gap-1.5 text-[11px] text-muted">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-px text-muted" />
-                    <span>已写入的部分数据会保留，下次同步时覆盖或补齐。</span>
+                    <span>已写入的数据会保留，下次同步时补齐</span>
                   </div>
                 </div>
               </div>
@@ -974,15 +974,15 @@ export function Data() {
                     此操作将<span className="text-danger font-medium">永久删除</span>所有已同步的本地数据，包括：
                   </p>
                   <ul className="mt-2 text-[11px] text-muted leading-relaxed space-y-0.5">
-                    <li>· 个股维表、日 K、除权因子</li>
+                    <li>· 标的列表、日 K、除权因子</li>
                     <li>· 技术指标数据、分钟 K</li>
                   </ul>
                   <p className="mt-2 text-[11px] text-danger">
-                    操作不可恢复，需重新执行同步才能恢复数据。
+                    不可恢复 · 需重新同步
                   </p>
                   <div className="mt-2 flex items-start gap-1.5 text-[11px] text-warning">
                     <Info className="h-3.5 w-3.5 shrink-0 mt-px text-warning" />
-                    <span>此操作不会清除扩展数据，如需删除请在扩展数据设置中单独操作。</span>
+                    <span>不清除扩展数据</span>
                   </div>
                 </div>
               </div>

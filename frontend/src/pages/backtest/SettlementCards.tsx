@@ -57,7 +57,7 @@ export function SettlementCards() {
         <table className="w-full whitespace-nowrap">
           <thead className="text-muted">
             <tr className="border-b border-border">
-              {['信号日', '票', '方向', '规则', '结局', '记录', '成交日', '离场日', '天', '退出原因', 'R', '超额R', '来源'].map((h, i) => (
+              {['信号日', '代码', '方向', '规则', '结局', '记录', '成交日', '离场日', '天', '退出原因', 'R', '超额R', '来源'].map((h, i) => (
                 <th key={h} className={`py-1.5 pr-3 font-normal ${i >= 8 && i <= 11 && i !== 9 ? 'text-right' : 'text-left'}`}>{h}</th>
               ))}
             </tr>

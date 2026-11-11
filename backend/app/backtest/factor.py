@@ -210,7 +210,7 @@ class FactorBacktestService:
             expected_generation=generation,
         )
         if panel.is_empty():
-            return self._error_result(config, run_id, t0, "无数据, 请检查日期范围或先运行盘后管道")
+            return self._error_result(config, run_id, t0, "无数据, 请检查日期范围或先运行盘后同步")
 
         if config.factor_name in FUNDAMENTAL_FACTOR_NAMES and self._fundamentals_missing():
             return self._error_result(
@@ -278,7 +278,7 @@ class FactorBacktestService:
             return FactorBatchResult(
                 run_id=run_id,
                 config=result_config,
-                error="无数据, 请检查日期范围或先运行盘后管道",
+                error="无数据, 请检查日期范围或先运行盘后同步",
                 elapsed_ms=round((time.perf_counter() - t0) * 1000, 1),
             )
 

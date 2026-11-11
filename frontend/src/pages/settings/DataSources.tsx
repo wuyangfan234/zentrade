@@ -59,12 +59,12 @@ const CAP_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
 
 /** 提供方标签样式: 当前项高亮(accent), 其余弱化可点; 未就绪源禁用置灰 */
 function tagCls(active: boolean, disabled = false, interactive = true) {
-  const base = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors select-none'
+  const base = 'inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] transition-colors select-none'
   if (disabled) return `${base} bg-elevated/40 text-muted cursor-not-allowed`
-  if (!interactive) return `${base} cursor-default ${active ? 'bg-accent/15 text-accent font-medium' : 'bg-elevated/60 text-muted'}`
+  if (!interactive) return `${base} cursor-default ${active ? 'bg-accent/15 text-accent dark:text-blue-400 font-medium' : 'bg-elevated/60 text-muted'}`
   return `${base} cursor-pointer disabled:opacity-50 ${
     active
-      ? 'bg-accent/15 text-accent font-medium'
+      ? 'bg-accent/15 text-accent dark:text-blue-400 font-medium'
       : 'bg-elevated/60 text-muted hover:bg-accent/15 hover:text-accent'
   }`
 }
@@ -129,20 +129,20 @@ export function CapabilityCard({ cap, pendingKey, onSelect }: {
         {cap.id === 'financial' && !cap.usable && (
           <span
             data-testid="cap-no-us-source"
-            title="财务数据源当前不可用，请在下方选择 SEC EDGAR"
-            className="ml-auto shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-px text-[9px] text-amber-600 dark:text-amber-400"
+            title="财务数据源不可用 · 请选择 SEC EDGAR"
+            className="ml-auto shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1 py-px text-[11px] text-amber-600 dark:text-amber-400"
           >财务源不可用</span>
         )}
       </div>
-      {cap.desc && <div title={cap.desc} className="mt-1 line-clamp-2 text-[10px] leading-4 text-muted">{cap.desc}</div>}
+      {cap.desc && <div title={cap.desc} className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted">{cap.desc}</div>}
 
       {/* 当前生效提供方 */}
       <div className="mt-2 flex items-center gap-1.5 min-w-0">
-        <span className="text-[9px] font-medium uppercase tracking-wider text-muted shrink-0">当前</span>
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted shrink-0">当前</span>
         {unmet ? (
           <span
             className="inline-flex items-center gap-1 text-[11px] font-medium text-warning truncate"
-            title={`「${cap.label}」当前路由的源无法提供该能力 — 可切换下方可用源，或在数据源区接入其他源`}
+            title={`「${cap.label}」当前数据源不提供该能力 · 请切换或接入其他数据源`}
           >
             <AlertTriangle className="h-3 w-3 shrink-0" />
             能力不可用
@@ -166,7 +166,7 @@ export function CapabilityCard({ cap, pendingKey, onSelect }: {
             return (
               <span
                 key={c.name}
-                title={`「${cap.label}」仅 ${c.display} 提供 (不可路由)`}
+                title={`「${cap.label}」仅 ${c.display} 提供（不可切换）`}
                 className={tagCls(active, false, false)}
               >
                 {c.display}
@@ -199,7 +199,7 @@ export function CapabilityCard({ cap, pendingKey, onSelect }: {
           </span>
         ))}
         {chipsEmpty && (
-          <span className="text-[10px] text-muted">
+          <span className="text-[11px] text-muted">
             暂无可用提供方
           </span>
         )}
@@ -283,7 +283,7 @@ function CapabilityRoutingSection() {
         <div className="flex items-center gap-2.5 min-w-0">
           <Route className="h-4 w-4 text-secondary shrink-0" />
           <h2 className="text-sm font-medium text-foreground">能力路由</h2>
-          <span className="text-[10px] text-muted shrink-0">{list.length} 个能力</span>
+          <span className="text-[11px] text-muted shrink-0">{list.length} 个能力</span>
         </div>
         {anyCustom && (
           <button
@@ -297,8 +297,7 @@ function CapabilityRoutingSection() {
         )}
       </div>
       <p className="text-[11px] text-muted mb-4">
-        每个能力独立选择提供方 — 点标签即刻生效。选项只列出当前可提供该能力的源
-        (各源按自身可用性过滤，详见下方数据源介绍); 未就绪的源置灰提示。
+        每项能力单独选择数据源 · 即时生效
       </p>
 
       {matrix.isError ? (
@@ -315,13 +314,13 @@ function CapabilityRoutingSection() {
           </button>
         </div>
       ) : matrix.isLoading || list.length === 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+          {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="h-[120px] rounded-lg border border-border/50 bg-elevated/20 animate-pulse" />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
           {list.map(cap => (
             <CapabilityCard
               key={cap.id}
@@ -374,7 +373,7 @@ function PluginKeyConfig({ plugin, keyHint, keyPlaceholder, envLabel }: {
       if (data.ok) {
         toast(
           data.plugin_available
-            ? '已清除界面配置的 Key(.env 中的同名变量仍然生效)'
+            ? '已清除本页填写的密钥 · 环境变量中的同名配置仍生效'
             : 'Key 已清除，插件不再可用',
           'success',
         )
@@ -388,7 +387,7 @@ function PluginKeyConfig({ plugin, keyHint, keyPlaceholder, envLabel }: {
       <div className="flex items-center gap-2 mb-2">
         <KeyRound className="h-3.5 w-3.5 text-secondary" />
         <h3 className="text-xs font-medium text-foreground">API Key</h3>
-        <span className="text-[10px] text-muted uppercase tracking-wider">{envName}</span>
+        <span className="cursor-help text-[11px] text-muted underline decoration-dotted underline-offset-2" title={envName}>环境变量</span>
       </div>
 
       {/* 申请说明 + 官网链接 (对齐 TickFlow Key 区话术) */}
@@ -405,19 +404,19 @@ function PluginKeyConfig({ plugin, keyHint, keyPlaceholder, envLabel }: {
               {plugin.display_name} 官网
               <ExternalLink className="h-3 w-3 self-center" />
             </a>
-            {' '}申请获取。
+            {' '}申请
           </>
         ) : (
-          <>向该数据源官方申请 API Key。</>
+          <>请向数据源官方申请 API Key</>
         )}
-        Key 仅存本地（secrets.json 优先，环境变量 {envName} 兜底），不会上传任何第三方，请妥善保管。
+        {' · '}密钥仅保存在本机
         {keyHint && <span className="block mt-1 text-muted">{keyHint}</span>}
       </p>
 
       {/* 当前状态 */}
       <div className="flex items-center justify-between mb-4">
         <div className="min-w-0">
-          <div className="text-[10px] uppercase tracking-widest text-muted">状态</div>
+          <div className="text-[11px] uppercase tracking-widest text-muted">状态</div>
           <div className="mt-1 flex items-center gap-2 min-w-0">
             {plugin.available ? (
               <>
@@ -480,10 +479,10 @@ function PluginKeyConfig({ plugin, keyHint, keyPlaceholder, envLabel }: {
         <button
           type="submit"
           disabled={save.isPending || (!keyInput.trim() && !saved)}
-          className="w-full h-9 rounded-xl bg-accent text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all"
+          className="w-full h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all"
         >
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
-          {save.isPending ? '验证中...' : saved ? '已保存' : '保存并检测'}
+          {save.isPending ? '验证中' : saved ? '已保存' : '保存并检测'}
         </button>
       </form>
 
@@ -508,7 +507,7 @@ function CapabilityChips({ caps, servingSet }: {
   caps: CapabilityRoute[]
   servingSet: Set<string>
 }) {
-  if (caps.length === 0) return <span className="text-[10px] text-muted">未声明能力</span>
+  if (caps.length === 0) return <span className="text-[11px] text-muted">未声明能力</span>
   return (
     <div className="flex flex-wrap gap-1">
       {caps.map(cap => {
@@ -517,8 +516,8 @@ function CapabilityChips({ caps, servingSet }: {
           <span
             key={cap.id}
             title={servingNow ? `正在提供「${cap.label}」` : `已适配「${cap.label}」`}
-            className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] leading-none ${
-              servingNow ? 'bg-accent/15 text-accent' : 'bg-elevated/60 text-muted'
+            className={`inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] leading-none ${
+              servingNow ? 'bg-accent/15 text-accent dark:text-blue-400' : 'bg-elevated/60 text-muted'
             }`}
           >
             {servingNow && <Check className="h-2.5 w-2.5" />}
@@ -685,10 +684,10 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
             <Database className="h-4 w-4 text-secondary shrink-0" />
             <h2 className="text-sm font-medium text-foreground">数据源</h2>
             <span
-              className="text-[10px] text-muted font-mono truncate hidden lg:inline max-w-[480px]"
+              className="hidden cursor-help text-[11px] text-muted underline decoration-dotted underline-offset-2 lg:inline"
               title={sources.data?.config_dir}
             >
-              {sources.data?.config_dir}
+              {sources.data?.config_dir ? '配置目录' : ''}
             </span>
           </div>
           <button
@@ -705,12 +704,9 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
         <div className="mb-4 flex items-start gap-2 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5">
           <Puzzle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
           <div className="text-[11px] leading-relaxed text-muted">
-            <span className="text-secondary">数据源已插件化</span>
-            。接入自有行情？把文档发给 AI 即可自动接入：
-            <span className="mx-0.5 rounded bg-elevated/70 px-1 py-px font-mono text-[10px] text-secondary">docs/custom-data-source.md</span>
-            （自有 HTTP 接口）·
-            <span className="mx-0.5 rounded bg-elevated/70 px-1 py-px font-mono text-[10px] text-secondary">docs/plugin-development.md</span>
-            (插件开发)
+            <span className="text-secondary">支持自定义数据源</span>
+            {' · '}
+            <span className="cursor-help underline decoration-dotted underline-offset-2" title="docs/custom-data-source.md（自有 HTTP 接口）· docs/plugin-development.md（插件开发）">接入文档</span>
           </div>
         </div>
 
@@ -758,9 +754,9 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                   </span>
 
                   {item.name === 'alpaca' ? (
-                    <span className="shrink-0 rounded bg-accent/15 px-1 py-0.5 text-[9px] font-medium leading-none text-accent">内置</span>
+                    <span className="shrink-0 rounded bg-accent/15 px-1 py-0.5 text-[11px] font-medium leading-none text-accent dark:text-blue-400">内置</span>
                   ) : !customNames.has(item.name) && (
-                    <span className="shrink-0 rounded bg-warning/10 px-1 py-0.5 text-[9px] font-medium leading-none text-warning">第三方</span>
+                    <span className="shrink-0 rounded bg-warning/10 px-1 py-0.5 text-[11px] font-medium leading-none text-warning">第三方</span>
                   )}
                 </div>
 
@@ -771,27 +767,27 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
 
                 {/* 底部: 状态提示 + 操作 */}
                 <div className="mt-2 pt-2 border-t border-border/50 flex items-center justify-between gap-2 min-h-[22px]">
-                  <span className="text-[10px] text-muted truncate min-w-0">
+                  <span className="text-[11px] text-muted truncate min-w-0">
                     {servingCount > 0 && pluginUnavailable
-                      ? `已设为 ${servingCount} 项能力的数据源 · 点击配置 Key`
+                      ? `已设为 ${servingCount} 项能力的数据源 · 配置 Key`
                       : servingCount > 0
                       ? `服务中 ${servingCount} 项能力`
                       : pluginUnavailable
-                        ? (plugin?.runtime === 'none' ? '点击配置 Key' : (plugin?.install_hint || plugin?.status || ''))
+                        ? (plugin?.runtime === 'none' ? '配置 Key' : (plugin?.install_hint || plugin?.status || ''))
                         : ''}
                   </span>
                   <div className="flex items-center gap-1 shrink-0">
                     {pluginUnavailable ? (
                       plugin?.runtime !== 'none' && (
                         installing ? (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-accent">
-                            <RefreshCw className="h-2.5 w-2.5 animate-spin" /> 安装中...
+                          <span className="inline-flex items-center gap-1 text-[11px] text-accent">
+                            <RefreshCw className="h-2.5 w-2.5 animate-spin" /> 安装中
                           </span>
                         ) : (
                           <button
                             onClick={(e) => { e.stopPropagation(); installMut.mutate(item.name) }}
                             disabled={installMut.isPending}
-                            className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                            className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-accent/10 text-accent dark:text-blue-400 hover:bg-accent/20 transition-colors disabled:opacity-50"
                           >
                             安装
                           </button>
@@ -802,7 +798,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                         <button
                           onClick={(e) => { e.stopPropagation(); switchProvider.mutate(item.name) }}
                           disabled={switchProvider.isPending}
-                          className="rounded px-1.5 py-0.5 text-[10px] font-medium bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-50"
+                          className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-accent/10 text-accent dark:text-blue-400 hover:bg-accent/20 transition-colors disabled:opacity-50"
                         >
                           套用
                         </button>
@@ -813,7 +809,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                             <button
                               onClick={(e) => { e.stopPropagation(); uninstallMut.mutate(item.name) }}
                               disabled={uninstallMut.isPending}
-                              className="text-[10px] text-muted hover:text-danger transition-colors disabled:opacity-40"
+                              className="text-[11px] text-muted hover:text-danger transition-colors disabled:opacity-40"
                               title="卸载依赖"
                             >
                               卸载
@@ -833,7 +829,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
             onClick={() => setSelected('__new__')}
             className={`rounded-lg border border-dashed px-3.5 py-3 transition-all flex items-center justify-center gap-1.5 text-sm ${
               selected === '__new__'
-                ? 'border-accent/50 bg-accent/5 text-accent'
+                ? 'border-accent/50 bg-accent/5 text-accent dark:text-blue-400'
                 : 'border-border/50 text-muted hover:text-foreground hover:border-border hover:bg-elevated/30'
             }`}
           >
@@ -856,10 +852,10 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
           </div>
         )}
 
-        <div className="mt-3 flex items-center gap-3 text-[10px] text-muted flex-wrap">
+        <div className="mt-3 flex items-center gap-3 text-[11px] text-muted flex-wrap">
           <span>芯片：高亮 = 服务中 · 灰 = 已适配 · <Lock className="inline h-2.5 w-2.5" /> = 需更高档位</span>
           <span className="text-muted">·</span>
-          <span>单击卡片查看介绍与配置，点「套用」让该源接管其适配的全部能力</span>
+          <span>套用：由该数据源提供其支持的全部能力</span>
         </div>
 
       </section>
@@ -928,7 +924,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
           <div className="relative w-[90vw] max-w-[380px] rounded-card border border-border bg-base shadow-2xl p-6">
             <h3 className="text-sm font-medium text-foreground mb-2">删除数据源</h3>
             <p className="text-xs text-secondary mb-5">
-              确认删除「{customList.find(s => s.name === confirmDelete)?.display_name || confirmDelete}」? 该数据源的配置文件将被移除，此操作不可撤销。
+              确认删除「{customList.find(s => s.name === confirmDelete)?.display_name || confirmDelete}」 · 配置将被移除，不可撤销
             </p>
             <div className="flex items-center justify-end gap-2">
               <button
@@ -942,7 +938,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
                 disabled={remove.isPending}
                 className="px-3 py-1.5 rounded-btn bg-danger/15 text-danger hover:bg-danger/25 text-sm font-medium transition-colors disabled:opacity-50"
               >
-                {remove.isPending ? '删除中...' : '确认删除'}
+                {remove.isPending ? '删除中' : '确认删除'}
               </button>
             </div>
           </div>
@@ -969,11 +965,11 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h3 className="text-[16px] leading-6 font-semibold text-foreground">{plugin.display_name}</h3>
-            <span className="text-[10px] text-muted uppercase tracking-wider">插件 · {plugin.runtime}</span>
-            <span className="rounded bg-warning/10 px-1 py-0.5 text-[9px] font-medium leading-none text-warning">第三方</span>
+            <h3 className="text-[14px] leading-6 font-semibold text-foreground">{plugin.display_name}</h3>
+            <span className="text-[11px] text-muted uppercase tracking-wider">插件 · {plugin.runtime}</span>
+            <span className="rounded bg-warning/10 px-1 py-0.5 text-[11px] font-medium leading-none text-warning">第三方</span>
             {isActive && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-accent bg-accent/10 px-2 py-1 rounded">
+              <span className="inline-flex items-center gap-1 text-[11px] text-accent dark:text-blue-400 bg-accent/10 px-2 py-1 rounded">
                 <Check className="h-2.5 w-2.5" /> 服务中
               </span>
             )}
@@ -1025,18 +1021,18 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
                   <Icon className="h-3.5 w-3.5 text-secondary shrink-0" />
                   <div className="flex-1 min-w-0 truncate">
                     <span className="text-xs text-foreground">{cap.label}</span>
-                    <span className="ml-1.5 text-[10px] text-muted">{cap.desc}</span>
+                    <span className="ml-1.5 text-[11px] text-muted">{cap.desc}</span>
                   </div>
                   {serving ? (
-                    <span className="w-[56px] text-right text-[10px] text-bear inline-flex items-center justify-end gap-0.5 shrink-0">
+                    <span className="w-[56px] text-right text-[11px] text-bear inline-flex items-center justify-end gap-0.5 shrink-0">
                       <Check className="h-2.5 w-2.5" />服务中
                     </span>
                   ) : declaredCap ? (
-                    <span className={`w-[56px] text-right text-[10px] shrink-0 ${plugin.available ? 'text-secondary' : 'text-warning'}`}>
+                    <span className={`w-[56px] text-right text-[11px] shrink-0 ${plugin.available ? 'text-secondary' : 'text-warning'}`}>
                       {plugin.available ? '已适配' : '未就绪'}
                     </span>
                   ) : (
-                    <span className="w-[56px] text-right text-[10px] text-muted shrink-0">—</span>
+                    <span className="w-[56px] text-right text-[11px] text-muted shrink-0">—</span>
                   )}
                 </div>
               )
@@ -1060,22 +1056,21 @@ function AlpacaDetail({ active, plugin }: { active: boolean; plugin?: PluginData
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-[16px] leading-6 font-semibold text-foreground">{plugin?.display_name ?? 'Alpaca (美股)'}</h2>
-            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[10px] font-medium text-accent">内置</span>
+            <h2 className="text-[14px] leading-6 font-semibold text-foreground">{plugin?.display_name ?? 'Alpaca (美股)'}</h2>
+            <span className="rounded bg-accent/15 px-1.5 py-0.5 text-[11px] font-medium text-accent dark:text-blue-400">内置</span>
             {active && plugin?.available !== false && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-accent bg-accent/10 px-2 py-1 rounded">
+              <span className="inline-flex items-center gap-1 text-[11px] text-accent dark:text-blue-400 bg-accent/10 px-2 py-1 rounded">
                 <Check className="h-2.5 w-2.5" /> 服务中
               </span>
             )}
             {active && plugin?.available === false && (
-              <span data-testid="alpaca-routed-no-key" className="inline-flex items-center gap-1 text-[10px] text-warning bg-warning/10 px-2 py-1 rounded">
+              <span data-testid="alpaca-routed-no-key" className="inline-flex items-center gap-1 text-[11px] text-warning bg-warning/10 px-2 py-1 rounded">
                 <AlertTriangle className="h-2.5 w-2.5" /> 已设为数据源 · Key 未配置
               </span>
             )}
           </div>
           <p className="text-xs text-secondary mt-1.5 leading-relaxed">
-            ZenTrade 内置美股源：历史日K/分钟K（SIP，最近 16 分钟受免费档限制）、除权因子、09:30 官方开盘价。实时行情与纸面撮合报价由 TickFlow 提供（选中「实时行情 = TickFlow」时），TickFlow 不可用时纸面撮合自动回退 IEX。
-            Key 格式 KEY_ID:SECRET，先探后存，仅存本地 secrets.json。
+            内置美股数据源：历史日 K / 分钟 K（SIP，免费档最近 16 分钟不可用）、除权因子、09:30 官方开盘价 · 实时行情与模拟撮合报价由 TickFlow 提供，不可用时回退 IEX
           </p>
         </div>
       </div>
@@ -1084,7 +1079,7 @@ function AlpacaDetail({ active, plugin }: { active: boolean; plugin?: PluginData
       <div className="mt-5 pt-5 border-t border-border grid grid-cols-1 gap-6 items-start">
         <div className="min-w-0" data-testid="alpaca-key-config">
           {plugin
-            ? <PluginKeyConfig plugin={plugin} keyHint="格式：KEY_ID:SECRET（Key ID 与 Secret 用英文冒号连接）。在 Alpaca 控制台 Paper 账户的 API Keys 页生成。" keyPlaceholder="KEY_ID:SECRET" envLabel="ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY" />
+            ? <PluginKeyConfig plugin={plugin} keyHint="格式 KEY_ID:SECRET（英文冒号连接）· 在 Alpaca 控制台 Paper 账户的 API Keys 页生成" keyPlaceholder="KEY_ID:SECRET" envLabel="ALPACA_API_KEY_ID / ALPACA_API_SECRET_KEY" />
             : <div className="text-xs text-muted">数据源列表加载中…</div>}
         </div>
       </div>

@@ -25,14 +25,18 @@ it('机会页源码里的中文字面量不含禁用词 (注释不算)', () => {
 })
 
 it('机会板卡结论: 以后端裁决为准, 不下单写原因; 没有裁决的旧载荷按 blocked 判', () => {
-  expect(cardVerdict({ verdict: 'order', state: 'in_zone' })).toEqual({ order: true, label: '下单', detail: '在区' })
-  expect(cardVerdict({ verdict: 'order', state: 'pending', dist_pct: -1.44 })).toEqual({ order: true, label: '下单', detail: '距区 1.4%' })
+  expect(cardVerdict({ verdict: 'order', state: 'in_zone' })).toEqual({ order: true, label: '下单', detail: '入场区内' })
+  expect(cardVerdict({ verdict: 'order', state: 'pending', dist_pct: -1.44 })).toEqual({ order: true, label: '下单', detail: '距入场 1.4%' })
   expect(cardVerdict({ verdict: 'order', state: 'pending', dist_pct: null }).detail).toBe('待触发')
   expect(cardVerdict({ verdict: 'skip', verdict_reason: 'premarket_beyond_stop', dist_pct: -3 })).toMatchObject({ order: false, label: '不下单', detail: '盘前越止损' })
   expect(cardVerdict({ verdict: 'skip', verdict_reason: 'cooldown', blocked: 'cooldown' }).detail).toBe('平仓冷却')
-  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'holding_other' }).detail).toBe('同票持仓')
+  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'holding_other' }).detail).toBe('已持仓')
   expect(cardVerdict({ verdict: 'skip', verdict_reason: 'direction_conflict' }).detail).toBe('多空冲突')
-  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'x_new_code' }).detail).toBe('x_new_code')            // 新原因码原样显示, 不吞掉
+  // 新原因码不直接上屏: 写「其他」, 原码留在悬停, 不吞掉
+  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'x_new_code' })).toMatchObject({ detail: '其他', title: 'x_new_code' })
+  // 交易环给的英文准入码换成中文
+  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：direction_conflict；sector_side_cap' }).detail).toBe('多空冲突')
+  expect(cardVerdict({ verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：source_not_tradable:phantom_4h' }).detail).toBe('该来源未开放下单')
   const pw = cardVerdict({ verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：单日开仓已满; 现金不足' })
   expect(pw.detail).toBe('单日开仓已满')
   expect(pw.title).toBe('准入阻断：单日开仓已满; 现金不足')

@@ -31,8 +31,8 @@ it('describes global channel routing instead of Feishu-only delivery', async () 
   })
 
   const description = host.querySelector('[data-radar-push]')?.textContent ?? ''
-  expect(description).toContain('09:51 ET 出榜后按全局推送设置发送')
-  expect(description).toContain('每日每渠道至多一条')
+  expect(description).toContain('09:51 ET 发布后推送')
+  expect(description).toContain('每渠道每日 1 条')
   expect(description).not.toContain('出榜后推送飞书')
 })
 
@@ -86,9 +86,9 @@ it('candidate badge title names the holdout start from the payload', async () =>
   const { candidateBadgeTitle } = await import('./RulesConsole')
   const c = { passed: true, n: 620, mean_r: 0.31, excess: 0.07, excess_ci: [0.01, 0.13] }
   expect(candidateBadgeTitle('ranker', { ...c, segments: { mining: null, holdout: { n: 320, window: ['2025-07-01', '2026-11-06'] } } }))
-    .toBe('排序因子 · 全窗与留出段（2025-07 起）的 95% 区间下限都 > 0: 每笔多 +0.07R（区间 +0.01R ~ +0.13R），620 笔')
+    .toBe('排序因子 · 全窗与留出段（2025-07 起）的 95% 区间下限都 > 0: 每笔超额 +0.07R（区间 +0.01R ~ +0.13R），620 笔')
   // 旧载荷没有 window: 不写月份
-  expect(candidateBadgeTitle('ranker', c)).toBe('排序因子 · 全窗与留出段的 95% 区间下限都 > 0: 每笔多 +0.07R（区间 +0.01R ~ +0.13R），620 笔')
+  expect(candidateBadgeTitle('ranker', c)).toBe('排序因子 · 全窗与留出段的 95% 区间下限都 > 0: 每笔超额 +0.07R（区间 +0.01R ~ +0.13R），620 笔')
   // 挖掘 / AI 策略的文案不变
-  expect(candidateBadgeTitle('custom', { ...c, excess_ci: null })).toBe('系统发现 · 按机会板卡回放赢过“4h 门内随便挑”: 每笔多 +0.07R（区间 —），620 笔')
+  expect(candidateBadgeTitle('custom', { ...c, excess_ci: null })).toBe('候选 · 回放超额为正（对比 4h 同向随机入场）: 每笔超额 +0.07R（区间 —），620 笔')
 })

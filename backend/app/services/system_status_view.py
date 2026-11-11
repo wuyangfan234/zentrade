@@ -17,15 +17,15 @@ IMPACT = {
     "execution_quotes": "撮合拿不到报价，盘中无法成交",
     "hot_quotes": "持仓页和分时图的实时价格不更新",
     "circuit_breaker": "今天不开新仓或降低仓位",
-    "earnings": "财报日历不可用，系统会拦住相关标的开新仓",
-    "corporate_actions": "公司行动不可用，系统会拦住相关标的开新仓",
-    "data_quality": "日K可能有缺失或错价，明天的信号和证据可能不准",
-    "daily_pipeline": "日K/4h/自选信号可能停在旧交易日，机会板硬门会用过期快照",
-    "data_freshness": "列出的自选票 4h 方向/打分基于旧 bar，这些票的机会卡可能缺失或过期",
+    "earnings": "财报日历不可用，相关个股暂停开仓",
+    "corporate_actions": "公司行动不可用，相关个股暂停开仓",
+    "data_quality": "日 K 可能有缺失或错价，次日信号与证据可能不准",
+    "daily_pipeline": "日 K、4h 与自选信号可能停留在上一交易日，机会板会使用过期数据",
+    "data_freshness": "所列自选的 4h 方向与评分基于旧数据，对应机会可能缺失或过期",
     "ops_watch": "当天该跑的定时任务没跑完，相关数据可能是旧的",
     "premarket_gap": "今天没有盘前跳空预警",
-    "notifications": "飞书可能收不到交易和异常提醒",
-    "alpaca_mirror": "Alpaca 镜像单可能和纸面台账对不上（不影响纸面交易本身）",
+    "notifications": "可能收不到交易与异常提醒",
+    "alpaca_mirror": "Alpaca 镜像单可能与模拟台账不一致（不影响模拟交易）",
     "news": "个股新闻不更新",
     "qveris": "财报预期等付费数据可能缺失",
     "decision_desk": "机会页的候选可能不是最新的",
@@ -33,17 +33,17 @@ IMPACT = {
     "realtime_source": "实时价格可能来自备用源",
 }
 ACTION = {
-    "data_freshness": "看列出的票：数据源是否有数据、是否新上市；盘后管道会补拉全部自选的 30m",
-    "paper_loop": "看容器日志里的交易环报错；盘中先不要重启，收盘后再处理",
-    "execution_quotes": "查看实时行情源设置和日志里的报价错误",
-    "hot_quotes": "查看日志里热报价的错误",
-    "data_quality": "打开 data/ops/data_quality.json 看哪几只标的有问题，对照行情源核实",
-    "daily_pipeline": "打开数据页看管道任务错误，或 data/job_store/ 最近 failed 记录；修好后可手动补跑 / 等开机 catchup",
-    "ops_watch": "看下面「今天的定时任务」里哪项缺跑或失败，再查对应日志",
-    "premarket_gap": "查看日志里 zen_premarket_gap 的运行记录",
-    "notifications": "失败原因在 data/notifications/outbox.sqlite3 的 last_error；到 设置 → 实时监控 → 飞书应用 点「发送测试」确认通道",
-    "earnings": "查看日志里财报日历的刷新错误",
-    "corporate_actions": "查看日志里公司行动的刷新错误",
+    "data_freshness": "检查所列个股的数据源是否有数据、是否新上市；盘后同步会补齐全部自选的 30 分钟数据",
+    "paper_loop": "查看运行日志中的交易循环报错；盘中不要重启，收盘后处理",
+    "execution_quotes": "检查实时行情源设置与日志中的报价错误",
+    "hot_quotes": "查看日志中的实时报价错误",
+    "data_quality": "查看数据质量报告中的问题个股，并与行情源核对",
+    "daily_pipeline": "在「数据」页查看同步任务的错误；修复后可手动补跑，或等待启动后自动补跑",
+    "ops_watch": "查看下方「今日定时任务」中未运行或失败的任务及对应日志",
+    "premarket_gap": "查看日志中盘前跳空预警的运行记录",
+    "notifications": "在「设置 › 实时监控」点「发送测试」确认通道；失败原因记录在通知发件箱（位置见本项入口的悬停）",
+    "earnings": "查看日志中财报日历的刷新错误",
+    "corporate_actions": "查看日志中公司行动的刷新错误",
     "alpaca_mirror": "在持仓页查看镜像的最近错误",
 }
 
@@ -103,7 +103,7 @@ def enrich(components: list[dict], jobs: list[dict], *, now: datetime, loop_stat
         c["since"] = last.isoformat(timespec="seconds") if last else None
         if sess and c["state"] != "error" and (last is None or now - last > LOOP_STALE):
             c["state"], c["stale"] = "error", True
-            c["summary"] = f"交易环已经 {int((now - last).total_seconds() // 60)} 分钟没运行" if last else "今天交易环还没运行过"
+            c["summary"] = f"交易循环已 {int((now - last).total_seconds() // 60)} 分钟未运行" if last else "今日交易循环尚未运行"
         elif not sess and c["state"] == "ok":
             c["state"], c["idle_kind"] = "idle", ("closed" if mk["phase"] in ("closed", "postmarket") else "waiting")
     # 盘中才需要的报价
@@ -126,10 +126,10 @@ def enrich(components: list[dict], jobs: list[dict], *, now: datetime, loop_stat
         if not has_today:
             if now.time() < PREMARKET_GAP_DUE:
                 c["state"], c["idle_kind"] = "idle", "waiting"
-                c["summary"] = "等待今天首次运行（09:00 ET）"
+                c["summary"] = "等待今日首次运行（09:00 ET）"
             elif mk["phase"] == "session" or now.time() < time(16, 0):
                 c["state"], c["stale"] = "error", True
-                c["summary"] = "今天 09:00 ET 的跳空预警没有产出"
+                c["summary"] = "今日 09:00 ET 的跳空预警未生成"
     # 日K数据质量: 报告日偏旧 → 注意
     if (c := by.get("data_quality")) is not None and dq and dq.get("day"):
         c["since"] = dq.get("at")
@@ -151,11 +151,11 @@ def enrich(components: list[dict], jobs: list[dict], *, now: datetime, loop_stat
             c["state"] = "error"
         elif not items:
             c["state"], c["idle_kind"] = "idle", "waiting"
-            c["summary"] = "等待今天第一个定时任务运行"
+            c["summary"] = "等待今日首个定时任务"
         else:
             c["state"] = "ok"
         if items:
-            c["summary"] = (f"今日已到点 {len(items)} 项：完成 {okn}"
+            c["summary"] = (f"今日已到运行时间 {len(items)} 项：完成 {okn}"
                             + (f"，进行中 {len(wait)}" if wait else "")
                             + "".join(f"；{i['label']}{'未运行' if i['state'] == 'missing' else '失败'}" for i in bad)
                             + "".join(f"；{REASON_LABEL.get(p['reason'], p['reason'])}" for p in probs))

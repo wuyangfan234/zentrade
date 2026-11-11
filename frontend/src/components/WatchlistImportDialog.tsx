@@ -102,7 +102,7 @@ function Dropzone({
         ) : (
           <Upload className="h-6 w-6 text-accent" />
         )}
-        <span className="text-xs">{busy ? label : '点击选择或拖拽券商自选 CSV / TXT'}</span>
+        <span className="text-xs">{busy ? label : '选择或拖入 CSV / TXT 文件'}</span>
       </button>
     </>
   )
@@ -259,7 +259,7 @@ export function WatchlistImportDialog({
 
   const runCodes = async () => {
     if (!codesText.trim()) {
-      toast('请粘贴或输入股票代码', 'error')
+      toast('请输入股票代码', 'error')
       return
     }
     await runCodesParse()
@@ -319,7 +319,7 @@ export function WatchlistImportDialog({
   const confirmAdd = async () => {
     const symbols = [...selected]
     if (symbols.length === 0) {
-      toast('请至少选择一只股票', 'error')
+      toast('请至少选择 1 只', 'error')
       return
     }
     const newCount = symbols.filter(sym => !membership.has(sym)).length
@@ -353,12 +353,12 @@ export function WatchlistImportDialog({
     const checked = !!sym && selected.has(sym)
     let status: ReactNode = null
     if (!c.matched || !sym) {
-      status = <span className="text-[10px] text-warning">{NO_MATCH_MSG}</span>
+      status = <span className="text-[11px] text-warning">{NO_MATCH_MSG}</span>
     } else if (state.inAllSelected) {
-      status = <span className="text-[10px] text-muted">已在所选分组</span>
+      status = <span className="text-[11px] text-muted">已在所选分组</span>
     } else if (state.inWatchlist) {
       status = (
-        <span className="text-[10px] text-muted">
+        <span className="text-[11px] text-muted">
           {targetGroupIds.length > 0 ? '已在自选 · 将并入所选分组' : '已在自选'}
         </span>
       )
@@ -406,7 +406,7 @@ export function WatchlistImportDialog({
             批量导入自选
           </h2>
           <p className="text-[11px] text-muted mt-0.5">
-            CSV / TXT / 粘贴代码均支持，解析后按证券主数据匹配，可多选分组导入
+            支持 CSV / TXT / 粘贴代码 · 自动匹配代码 · 可导入多个分组
           </p>
         </div>
         <button
@@ -458,7 +458,7 @@ export function WatchlistImportDialog({
                     type="button"
                     disabled={busy || !codesText.trim()}
                     onClick={() => void runCodes()}
-                    className="h-7 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent text-white hover:bg-accent/90 disabled:opacity-40"
+                    className="h-7 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
                   >
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Keyboard className="h-3.5 w-3.5" />}
                     解析
@@ -491,7 +491,7 @@ export function WatchlistImportDialog({
                   {allSelected ? '取消全选' : '全选可添加'}
                 </button>
               ) : matchedCount > 0 ? (
-                <span className="text-[11px] text-muted shrink-0">所选目标分组已包含这些标的，无需导入</span>
+                <span className="text-[11px] text-muted shrink-0">所选分组已包含这些个股</span>
               ) : null}
             </div>
 
@@ -525,10 +525,10 @@ export function WatchlistImportDialog({
                 aria-pressed={targetGroupIds.length === 0}
                 className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[11px] transition-colors ${
                   targetGroupIds.length === 0
-                    ? 'border-accent/40 bg-accent/10 text-accent'
+                    ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400'
                     : 'border-border bg-elevated text-secondary hover:text-foreground'
                 }`}
-                title="不加到任何分组，仅新增标的到自选"
+                title="仅加入自选，不分组"
               >
                 未分组
               </button>
@@ -592,7 +592,7 @@ export function WatchlistImportDialog({
                   onClick={() => void createGroup()}
                   disabled={creatingGroup || !newGroupName.trim()}
                   title="创建分组，并作为本次导入的目标分组"
-                  className="h-8 shrink-0 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent text-white hover:bg-accent/90 disabled:opacity-40"
+                  className="h-8 shrink-0 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
                 >
                   {creatingGroup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                   创建
@@ -633,7 +633,7 @@ export function WatchlistImportDialog({
             type="button"
             disabled={selected.size === 0 || batchAdd.isPending || busy}
             onClick={() => void confirmAdd()}
-            className="h-8 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent text-white hover:bg-accent/90 disabled:opacity-40"
+            className="h-8 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
           >
             {batchAdd.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

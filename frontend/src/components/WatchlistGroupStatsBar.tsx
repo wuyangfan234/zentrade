@@ -91,7 +91,7 @@ export function WatchlistGroupStatsBar({
   return (
     <div className="border-b border-border bg-surface/40 px-5 py-2">
       <div className="mb-1 flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-wider text-muted">分组涨跌 · {metricLabel}</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted">分组涨跌 · {metricLabel}</div>
         <GroupStatsSettings config={config} onChange={onConfigChange} />
       </div>
       <div className="flex flex-col gap-px">
@@ -121,7 +121,7 @@ export function WatchlistGroupStatsBar({
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${r.dot}`} />
                 <span className={`truncate text-xs ${r.selected ? 'text-foreground' : r.text}`}>{r.name}</span>
-                <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted">{r.count}</span>
+                <span className="shrink-0 tabular-nums text-[11px] text-muted">{r.count}</span>
               </span>
               <span className="relative h-3.5 rounded bg-elevated/40">
                 <span className="absolute inset-y-0 left-1/2 w-px bg-border" />
@@ -138,10 +138,10 @@ export function WatchlistGroupStatsBar({
                   />
                 )}
               </span>
-              <span className={`w-16 text-right font-mono text-xs font-semibold tabular-nums ${groupPctColor(signed)}`}>
+              <span className={`w-16 text-right tabular-nums text-xs font-semibold ${groupPctColor(signed)}`}>
                 {label}
               </span>
-              <span className="w-[72px] shrink-0 text-right text-[10px] tabular-nums">
+              <span className="w-[72px] shrink-0 text-right text-[11px] tabular-nums">
                 {info && info.sampled > 0 ? (
                   <>
                     <span className="text-bull">{info.up}涨</span>

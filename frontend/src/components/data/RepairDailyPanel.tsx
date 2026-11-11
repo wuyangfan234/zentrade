@@ -41,10 +41,10 @@ export function RepairDailyPanel({ hasCap, isRunning, latestDate, onStart }: {
     <div className="space-y-3">
       <div className="rounded-card bg-accent/8 border border-accent/20 p-3 space-y-1.5">
         <div className="text-xs text-foreground">
-          当数据出现缺口时(漏跑、停服),从这里重拉选定区间到今天的全部数据并重算。
+          数据有缺口时，重新同步所选日期至今的数据并重算指标
         </div>
-        <div className="text-[10px] text-muted leading-relaxed">
-          完整复用盘后管道流程 (美股日K · 除权因子 · 指标重算),新数据按 (个股，日期) 覆盖旧值，不会重复，也无需先清除。
+        <div className="text-[11px] text-muted leading-relaxed">
+          流程同盘后同步（日 K · 除权因子 · 指标重算）· 新数据覆盖旧值
         </div>
       </div>
 
@@ -56,14 +56,14 @@ export function RepairDailyPanel({ hasCap, isRunning, latestDate, onStart }: {
           onChange={setStartDate}
           max={today}
           align="right"
-          buttonClassName="font-mono text-xs"
+          buttonClassName="tabular-nums text-xs"
         />
       </div>
 
       {/* 本地最新数据 — 参考信息,放下面 */}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted">本地最新数据</span>
-        <span className="font-mono text-xs text-secondary">
+        <span className="tabular-nums text-xs text-secondary">
           {latestDate ?? '—'}
           {gapDays !== null && gapDays > 0 && (
             <span className="ml-2 text-warning">已落后 {gapDays} 天</span>
@@ -71,9 +71,9 @@ export function RepairDailyPanel({ hasCap, isRunning, latestDate, onStart }: {
         </span>
       </div>
 
-      <div className="text-[10px] text-muted -mt-1">
-        将重拉 <span className="font-mono text-secondary">{startDate}</span>
-        {' → '}<span className="font-mono text-secondary">{today}</span>(今天) 的美股日K · 除权并重算指标
+      <div className="text-[11px] text-muted -mt-1">
+        将重拉 <span className="tabular-nums text-secondary">{startDate}</span>
+        {' → '}<span className="tabular-nums text-secondary">{today}</span>(今天) 的美股日K · 除权并重算指标
       </div>
 
       <button

@@ -12,7 +12,7 @@ import { SwingSettlement } from './SwingSettlement'
  * 机会页 — 全系统决策台 (2026-10-02; 2026-10-05 按“能不能出手、卡在哪”重排)。
  *
  * 顶部状态条 = 全池状态; ① 可执行 = 来源当前可交易且仍在入场窗的卡 (跨日, 叠加当前许可/
- * 组合约束/账户现金); ② 最新扫描的新卡; ③ 只观察 (默认折叠, 按来源分组)。自选页 = 当前自选一票一行。
+ * 组合约束/账户现金); ② 最新扫描的新卡; ③ 仅观察 (默认折叠, 按来源分组)。自选页 = 当前自选一票一行。
  * 页面只读: 展示用的“可执行/卡在哪”不下单, 交易仍由交易环按同一规则逐帧判定。零机会日是合法产出,
  * 但接口失败不是零机会。
  */
@@ -62,6 +62,8 @@ const SETUP_LABEL: Record<string, string> = {
   pullback: 'S2 回踩',
 }
 
+/** 持仓来源码 → 中文 (后端未给 source_name 时) */
+const SOURCE_KIND: Record<string, string> = { swing: '机会板', intraday: '盘中强势' }
 const TIER_LABEL: Record<string, string> = { proven: '证据为正', explore: '探索单', negative: '证据为负' }
 
 // 事件类来源没进后端 names 映射时的中文兜底 (与 services/event_sources.py EVENT_SOURCES 一致; 只用于显示)
@@ -137,31 +139,31 @@ function CardView({ card, names = {}, news, exec }: { card: Card; names?: Record
           </span>
           <span className="text-xs text-secondary">{setupLabel(card.setup_type, names)}</span>
           <span className="text-xs text-muted">{STATE_LABEL[card.state] ?? card.state}</span>
-          {d?.tier && <span className={`rounded px-1.5 text-[10px] ${d.tier === 'proven' ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : d.tier === 'explore' ? 'bg-amber-500/10 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-elevated text-secondary'}`}>{TIER_LABEL[d.tier] ?? d.tier}</span>}
+          {d?.tier && <span className={`rounded px-1.5 text-[11px] ${d.tier === 'proven' ? 'bg-emerald-500/10 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300' : d.tier === 'explore' ? 'bg-amber-500/10 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' : 'bg-elevated text-secondary'}`}>{TIER_LABEL[d.tier] ?? d.tier}</span>}
         </div>
         <span className="text-xs text-secondary">
           RR {fmt(card.reward_risk, 1)}
-          {card.reward_risk > RR_SUSPECT && <span data-rr-suspect className="ml-1.5 rounded bg-rose-500/10 px-1 text-[10px] text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" title="RR 异常高通常是价位退化（分拆/并购钉价/复权），先核实再看">价位异常待核</span>}
+          {card.reward_risk > RR_SUSPECT && <span data-rr-suspect className="ml-1.5 rounded bg-rose-500/10 px-1 text-[11px] text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" title="RR 异常偏高，多为价位失真（拆股 / 并购 / 复权）· 请先核实">价位异常待核</span>}
         </span>
       </div>
       {exec && <ExecBlock x={exec} />}
       {sources.length > 0 && (
         <div className="mt-1 text-xs text-secondary">
           {`来源：${sources.map((s) => names[s] ?? SETUP_LABEL[s] ?? s).join('、')}`}
-          {disagreement ? <span className="ml-2 inline-block whitespace-nowrap text-warning">多空分歧 · 只观察</span> : sources.length > 1 && <span className="ml-2 text-emerald-700 dark:text-emerald-400">{`${d?.resonance ?? sources.length} 个来源共振`}</span>}
+          {disagreement ? <span className="ml-2 inline-block whitespace-nowrap text-warning">多空分歧 · 仅观察</span> : sources.length > 1 && <span className="ml-2 text-emerald-700 dark:text-emerald-400">{`${d?.resonance ?? sources.length} 个来源共振`}</span>}
           {d?.score != null && <span className="ml-2">{`综合分 ${d.score.toFixed(2)}`}</span>}
           {d?.risk_pct != null && d.risk_pct > 0 && <span className="ml-2">{`单笔风险 ${(d.risk_pct * 100).toFixed(2)}%`}</span>}
         </div>
       )}
       <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
         <div className="text-secondary">{card.side === 'short' ? '卖空区' : '入场区'} <span className="text-foreground">{fmt(card.entry_zone[0])} ~ {fmt(card.entry_zone[1])}</span></div>
-        <div className="text-secondary">{card.side === 'short' ? '失效点（收盘站上确认，下一交易日开盘回补）' : '失效点'} <span className="text-rose-700 dark:text-rose-400">{fmt(card.invalidation)}</span></div>
+        <div className="text-secondary">{card.side === 'short' ? '止损（收盘站上确认，下一交易日开盘回补）' : '止损'} <span className="text-rose-700 dark:text-rose-400">{fmt(card.invalidation)}</span></div>
         <div className="text-secondary">目标区 <span className="text-emerald-700 dark:text-emerald-400">{fmt(card.target_zone[0])} ~ {fmt(card.target_zone[1])}</span></div>
         <div className="text-secondary">最长持仓 <span className="text-foreground">{card.max_holding_days} 交易日</span></div>
       </div>
       {news && news.top.length > 0 && (
         <div data-card-catalyst className="mt-3 space-y-1 rounded border border-border/60 bg-elevated/40 px-2.5 py-1.5">
-          <div className="text-[10px] text-muted">近期催化（48 小时 · AI 判读，仅展示，不影响入选与排序）</div>
+          <div className="text-[11px] text-muted">近期催化（48 小时 · AI 判读，仅展示，不影响入选与排序）</div>
           {news.top.map(v => (
             <div key={v.id} className="flex flex-wrap items-center gap-1.5 text-xs">
               <NewsTag item={v} />
@@ -182,7 +184,7 @@ function CardView({ card, names = {}, news, exec }: { card: Card; names?: Record
   )
 }
 
-const STATUS_LABEL: Record<string, string> = { enabled: '启用', observe: '只观察', disabled: '停用' }
+const STATUS_LABEL: Record<string, string> = { enabled: '启用', observe: '仅观察', disabled: '停用' }
 
 function pctR(n: number | null | undefined): string {
   if (n === undefined || n === null) return '—'
@@ -193,7 +195,7 @@ function fmtR(n: number | null | undefined): string {
   return n == null ? '—' : `${n > 0 ? '+' : ''}${n.toFixed(3)}R`
 }
 
-/** 新闻催化来源: 固定只观察 (无状态下拉), 只展示影子证据进度 (2026-10-02 产品决策)。 */
+/** 新闻催化来源: 固定仅观察 (无状态下拉), 只展示观察证据进度 (2026-10-02 产品决策)。 */
 function NewsShadowRow({ s }: { s: DeskSource }) {
   const ev = s.news_shadow
   if (!ev) return null
@@ -205,8 +207,8 @@ function NewsShadowRow({ s }: { s: DeskSource }) {
     <div data-source={s.id} className="rounded border border-dashed border-border px-3 py-2 text-xs">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="text-sm text-foreground">{s.name}<span className="ml-2 text-[11px] text-muted">{s.id}</span></span>
-        <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] text-secondary" title="新闻催化不参与开仓；达标后需你拍板才会启用">
-          只观察 · 锁定
+        <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] text-secondary" title="新闻催化 · 启用需手动确认">
+          仅观察 · 锁定
         </span>
       </div>
       <div className="mt-1 text-secondary">{ev.verdict}</div>
@@ -287,7 +289,7 @@ function EvidenceCompare({ names }: { names: Record<string, string> }) {
         onSwitch={(to) => {
           const ok = d.v3!.sources.filter((r) => r.tier === 'proven' || r.forward?.promoted).map((r) => r.name ?? sourceName(names, r.source))
           const msg = to === 'v3'
-            ? `确认把可开仓判定切换到新尺子 v3.1？切换后可开仓来源：${ok.length ? ok.join('、') : '无（系统进入纯观察，前向确认通过后自动恢复）'}。已有持仓按原规则管理。`
+            ? `将可开仓判定切换为检验口径 v3.1？切换后可开仓来源：${ok.length ? ok.join('、') : '无（转为仅观察，前向验证通过后自动恢复）'}。现有持仓按原规则管理。`
             : '确认切回旧算法 v1？'
           if (window.confirm(msg)) sw3.mutate(to)
         }}
@@ -299,7 +301,7 @@ function EvidenceCompare({ names }: { names: Record<string, string> }) {
         {d.v2 ? ` · 新算法 v2 已算 ${rows.filter(([, r]) => r.v2).length} 个来源${d.permission_changes.length ? `，其中 ${d.permission_changes.length} 个可开仓会变` : '，可开仓不变'}` : ' · 新算法 v2 尚未计算'}
       </summary>
       <div className="mt-2 space-y-1.5">
-        <div>旧算法 v1：日线近似，目标近端全部卖出，成交日按信号日聚类。新算法 v2：目标近端卖一半、余仓保本，远端清仓；成交日开盘回落成交时不把成交前的高点算作触及目标；使用策略页保存的参数；按实际成交日聚类；带策略版本指纹。两者都是日线近似，不代表实际盈利。</div>
+        <div>旧算法 v1：日线近似，目标近端全部卖出，成交日按信号日聚类。新算法 v2：目标近端卖一半、余仓保本，远端清仓；成交日开盘回落成交时不把成交前的高点算作触及目标；使用策略页保存的参数；按实际成交日聚类；带策略版本指纹。两者均为日线近似，不代表实际收益。</div>
         <div className="flex flex-wrap items-center gap-2">
           <span>{`v1 生成 ${d.v1?.generated_at ?? '—'} · v2 生成 ${d.v2?.generated_at ?? '—'}`}</span>
           <button type="button" disabled={run.isPending || d.v2_job.running} onClick={() => run.mutate()} className="rounded border border-border px-2 py-0.5 hover:bg-elevated disabled:opacity-50">
@@ -313,7 +315,7 @@ function EvidenceCompare({ names }: { names: Record<string, string> }) {
               onClick={() => {
                 const to = d.mode === 'v2' ? 'v1' : 'v2'
                 const msg = to === 'v2'
-                  ? `确认把可开仓判定切换到新算法 v2？${d.permission_changes.length ? `以下来源的可开仓会改变：${d.permission_changes.map((s) => sourceName(names, s)).join('、')}。` : '当前没有来源的可开仓会改变。'}已有持仓按原规则管理。`
+                  ? `确认把可开仓判定切换到新算法 v2？${d.permission_changes.length ? `以下来源的可开仓会改变：${d.permission_changes.map((s) => sourceName(names, s)).join('、')}。` : '可开仓来源不变。'}现有持仓按原规则管理。`
                   : '确认切回旧算法 v1？'
                 if (window.confirm(msg)) sw.mutate(to)
               }}
@@ -367,7 +369,7 @@ function PositionsPanel({ rows }: { rows: DeskPositionAction[] }) {
         <div key={r.symbol} data-position={r.symbol} className={`rounded-lg border p-2.5 text-xs ${URGENCY_CLS[r.urgency] ?? URGENCY_CLS.low}`}>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <span className="text-sm font-semibold text-foreground">{r.symbol}</span>
-            <span className="text-secondary">{`${r.side === 'short' ? '做空' : '做多'} ${r.qty} 股 · ${r.source_name ?? r.source ?? '—'}`}</span>
+            <span className="text-secondary">{`${r.side === 'short' ? '做空' : '做多'} ${r.qty} 股 · ${r.source_name ?? SOURCE_KIND[r.source ?? ''] ?? r.source ?? '—'}`}</span>
             <span className="text-secondary">{`第 ${r.held_days ?? '—'}/${r.max_days ?? '—'} 天`}</span>
             <span data-r-now title="浮动盈亏，以止损距离为 1R" className={r.r_now == null || r.r_now === 0 ? 'text-muted' : r.r_now > 0 ? 'text-bull' : 'text-bear'}>{`浮动 ${signed(r.r_now)}R`}</span>
             <span className="text-secondary">{`距止损 ${signed(r.stop_dist_pct, 1, '%')} · 距目标 ${signed(r.target_dist_pct, 1, '%')}`}</span>
@@ -380,33 +382,74 @@ function PositionsPanel({ rows }: { rows: DeskPositionAction[] }) {
   )
 }
 
-/** 事件雷达: 盘前跳空 + 未来 7 天财报 (持仓/在窗卡/自选)。 */
+/** 角色词: 后端给的「在窗卡 / 机会卡」在界面上统一叫「机会」 */
+const ROLE_ZH: Record<string, string> = { 在窗卡: '机会', 机会卡: '机会' }
+const roleText = (roles?: string[]) => [...new Set((roles ?? []).map((r) => ROLE_ZH[r] ?? r))].join(' / ')
+const isMine = (roles?: string[]) => (roles ?? []).some((r) => r === '持仓' || r === '自选')
+const TIMING_ZH: Record<string, string> = { bmo: '盘前', amc: '盘后' }
+
+/** 事件雷达: 盘前跳空 + 未来 7 天财报 (持仓 / 机会 / 自选)。财报按「日期 · 时段」一行, 持仓与自选加重。 */
 function EventRadar({ ev }: { ev: DeskEventRadar | undefined }) {
   if (!ev) return null
   const pm = ev.premarket
   const alerts = pm?.alerts ?? []
   if (!alerts.length && !ev.earnings.length) return null
+  const groups = new Map<string, DeskEventRadar['earnings']>()
+  for (const e of ev.earnings) {
+    const k = `${e.date}|${e.timing ?? ''}`
+    groups.set(k, [...(groups.get(k) ?? []), e])
+  }
+  const rows = [...groups.entries()].sort(([x], [y]) => x.localeCompare(y))
+  const sym = (s: string, roles?: string[]) => (
+    <span key={s} title={roleText(roles) || undefined} className={`inline-block whitespace-nowrap ${isMine(roles) ? 'font-semibold text-foreground' : 'text-secondary'}`}>{s}</span>
+  )
   return (
-    <div data-event-radar className="mb-4 rounded-lg border border-border p-3 text-xs text-secondary space-y-1">
+    <div data-event-radar className="mb-4 rounded-lg border border-border p-3 text-xs text-secondary">
       <div className="text-sm font-medium text-foreground">事件雷达</div>
       {alerts.length > 0 && (
-        <div data-premarket>
-          {`盘前跳空（${pm?.date ?? '—'}，Hyperliquid 盘前价对比前收，仅提示）：`}
-          {alerts.map((a) => `${a.symbol} ${signed(a.gap_pct, 1, '%')}${a.roles?.length ? `（${a.roles.join('/')}）` : ''}`).join('；')}
+        <div data-premarket className="mt-2">
+          <div className="mb-1 text-[11px] text-muted">{`盘前跳空 · ${pm?.date ?? '—'} · Hyperliquid 盘前价对比前收 · 仅提示`}</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
+            {alerts.map((a) => (
+              <span key={a.symbol} data-premarket-item={a.symbol} title={roleText(a.roles) || undefined} className="inline-flex items-baseline gap-1.5 whitespace-nowrap">
+                <span className={isMine(a.roles) ? 'font-semibold text-foreground' : 'text-secondary'}>{a.symbol}</span>
+                <span className={(a.gap_pct ?? 0) > 0 ? 'text-bull' : (a.gap_pct ?? 0) < 0 ? 'text-bear' : 'text-muted'}>{signed(a.gap_pct, 1, '%')}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
-      {ev.earnings.length > 0 && (
-        <div data-earnings>
-          {'未来 7 天财报：'}
-          {ev.earnings.map((e) => `${e.symbol} ${e.date.slice(5)}${e.timing === 'bmo' ? ' 盘前' : e.timing === 'amc' ? ' 盘后' : ''}（${e.roles.join('/')}）`).join('；')}
-          <span className="text-muted">{' · 财报前一交易日不新开仓，持仓按规则减半'}</span>
+      {rows.length > 0 && (
+        <div data-earnings className="mt-2">
+          <div className="mb-1 text-[11px] text-muted">未来 7 天财报 · 财报前一交易日不新开仓，持仓按规则减半 · 加重 = 持仓或自选</div>
+          <table className="w-full tabular-nums">
+            <thead>
+              <tr className="text-left text-[11px] text-muted">
+                <th className="w-16 py-1 pr-3 font-medium">日期</th>
+                <th className="w-12 py-1 pr-3 font-medium">时段</th>
+                <th className="py-1 font-medium">代码</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(([k, list]) => {
+                const [date, timing] = k.split('|')
+                return (
+                  <tr key={k} data-earnings-row={k} className="border-t border-border/60 align-top">
+                    <td className="whitespace-nowrap py-1 pr-3 text-foreground">{date.slice(5)}</td>
+                    <td className="whitespace-nowrap py-1 pr-3">{TIMING_ZH[timing] ?? '—'}</td>
+                    <td className="py-1"><span className="flex flex-wrap gap-x-3 gap-y-0.5">{list.map((e) => sym(e.symbol, e.roles))}</span></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
   )
 }
 
-const V3_TIER: Record<string, string> = { proven: '可开仓', explore: '探索', negative: '只展示' }
+const V3_TIER: Record<string, string> = { proven: '可开仓', explore: '探索', negative: '仅观察' }
 
 function V3Row({ r, names }: { r: V3SourceRow; names: Record<string, string> }) {
   const f = r.forward
@@ -423,7 +466,7 @@ function V3Row({ r, names }: { r: V3SourceRow; names: Record<string, string> }) 
       </summary>
       <div className="mt-1.5 space-y-0.5 pl-1">
         <div>{r.reason}</div>
-        <div>{`三套成绩：历史回放 ${r.n} 笔 ${signed(r.mean, 3)}R（随机挑选 ${signed(r.baseline, 3)}R） · 影子前向 ${r.shadow ? `${r.shadow.closed}/${r.shadow.snapshots} 已结算${r.shadow.mean_r != null ? ` ${signed(r.shadow.mean_r, 3)}R` : ''}${r.shadow.excess != null ? `，比随机 ${signed(r.shadow.excess, 3)}R` : ''}` : '尚无'} · 真实纸面 ${r.real ? `开 ${r.real.opened} 平 ${r.real.closed}${r.real.mean_r != null ? ` ${signed(r.real.mean_r, 2)}R` : ''}` : '0 笔'}`}</div>
+        <div>{`三套成绩：历史回放 ${r.n} 笔 ${signed(r.mean, 3)}R（随机基准 ${signed(r.baseline, 3)}R） · 观察前向 ${r.shadow ? `${r.shadow.closed}/${r.shadow.snapshots} 已结算${r.shadow.mean_r != null ? ` ${signed(r.shadow.mean_r, 3)}R` : ''}${r.shadow.excess != null ? `，超额 ${signed(r.shadow.excess, 3)}R` : ''}` : '暂无'} · 模拟成交 ${r.real ? `开 ${r.real.opened} 平 ${r.real.closed}${r.real.mean_r != null ? ` ${signed(r.real.mean_r, 2)}R` : ''}` : '0 笔'}`}</div>
         <div>{`超额区间 ${signed(r.excess?.ci_low, 3)} ~ ${signed(r.excess?.ci_high, 3)}R，单侧 p=${r.excess?.p ?? '—'}${r.holm_pass ? '（过多重检验）' : '（未过多重检验）'} · 发现期 ${signed(r.discovery?.mean, 3)}R / 留出期 ${signed(r.holdout?.mean, 3)}R（${r.holdout?.n ?? 0} 笔）`}</div>
         {years.length > 0 && <div>{`逐年超额：${years.map(([y, v]) => `${y} ${signed(v.mean_excess, 3)}`).join(' · ')}`}</div>}
         {r.concentration?.drop_top_20 != null && <div>{`去掉最大 20 笔赢家后平均 ${signed(r.concentration.drop_top_20, 3)}R${r.delisted_trades ? ` · 含已退市股票 ${r.delisted_trades} 笔` : ''}`}</div>}
@@ -440,12 +483,12 @@ function SourceHealth({ v3, mode, names, running, onRun, onSwitch, busy }: {
   const ok = v3.sources.filter((r) => r.tier === 'proven' || r.forward?.promoted)
   return (
     <div data-source-health className="rounded-lg border border-border p-3 text-xs text-secondary space-y-2">
-      <div className="text-sm font-medium text-foreground">{`来源体检（新尺子 v3.1）· 可开仓 ${ok.length}/${v3.sources.length}`}</div>
+      <div className="text-sm font-medium text-foreground">{`策略检验 v3.1 · 可开仓 ${ok.length}/${v3.sources.length}`}</div>
       <div>
-        {`同一股票池、同一天、同一套 7 日规则下随机挑股票作为“零点”；2025 年起为留出期；${v3.with_delisted === false ? '本次未含已退市股票（研究数据未就绪）' : '含已退市股票'}；同时检验 ${v3.hypotheses_tested ?? v3.sources.length} 个来源，按多重检验校正。`}
+        {`随机基准：同一股票池、同日、同一套 7 日规则下随机选股；2025 年起为留出期；${v3.with_delisted === false ? '本次未含已退市股票（研究数据未就绪）' : '含已退市股票'}；同时检验 ${v3.hypotheses_tested ?? v3.sources.length} 个来源，按多重检验校正。`}
         {`生成于 ${v3.generated_at ?? '—'}，窗口 ${v3.window?.join(' ~ ')}。`}
       </div>
-      <div>{`前向确认：${v3.forward_rule.start} 起影子账本里信号产生时未来未知的样本，满 ${v3.forward_rule.min_n} 笔、${v3.forward_rule.min_months} 个月且显著跑赢随机，自动转为可开仓。候选：${v3.forward_rule.candidates.map((s) => sourceName(names, s)).join('、') || '无'}。`}</div>
+      <div>{`前向验证：${v3.forward_rule.start} 起观察账本中的样本，满 ${v3.forward_rule.min_n} 笔、${v3.forward_rule.min_months} 个月且显著优于随机基准后，自动转为可开仓。候选：${v3.forward_rule.candidates.map((s) => sourceName(names, s)).join('、') || '无'}。`}</div>
       <div className="flex flex-wrap items-center gap-2">
         <span>{`现行算法：${modeLabel(mode)}`}</span>
         <button type="button" disabled={running} onClick={onRun} className="rounded border border-border px-2 py-0.5 hover:bg-elevated disabled:opacity-50">
@@ -457,7 +500,7 @@ function SourceHealth({ v3, mode, names, running, onRun, onSwitch, busy }: {
           disabled={busy}
           onClick={() => onSwitch(mode === 'v3' ? 'v1' : 'v3')}
           className="rounded border border-emerald-600/60 px-2 py-0.5 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-300 disabled:opacity-50"
-        >{mode === 'v3' ? '切回旧算法 v1' : '切换到新尺子 v3.1'}</button>}
+        >{mode === 'v3' ? '切回旧算法 v1' : '切换至检验口径 v3.1'}</button>}
       </div>
       <div className="space-y-1">{v3.sources.map((r) => <V3Row key={r.source} r={r} names={names} />)}</div>
     </div>
@@ -505,7 +548,7 @@ function StatusBar({ q }: { q: { data?: DeskOverviewPayload; isLoading: boolean;
   if (q.isError || !q.data) {
     return (
       <div data-status-bar data-error className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 text-xs text-amber-800 dark:text-amber-300">
-        {`“能不能出手”总览读取失败${q.error instanceof Error ? `（${q.error.message}）` : ''}：下方卡片仍可看，但跨日可执行卡与账户容量暂不可见，不代表没有机会。`}
+        {`总览读取失败${q.error instanceof Error ? ` · ${q.error.message}` : ''} · 下方机会仍可查看，跨日可执行机会与账户容量暂不可用`}
       </div>
     )
   }
@@ -524,7 +567,7 @@ function StatusBar({ q }: { q: { data?: DeskOverviewPayload; isLoading: boolean;
         </span>
         <span>{'在窗可执行卡 '}<span className="text-foreground">{st.executable}</span>{st.executable > 0 ? `（无阻断 ${st.executable_clear}）` : ''}</span>
         <span>{`大盘 ${st.gate === 'green' ? '绿灯' : st.gate === 'yellow' ? '黄灯（减量）' : st.gate === 'unavailable' ? '数据不足（不开新仓）' : '—'}`}</span>
-        <span>{`熔断 ${cb == null ? '未评估（本次运行尚未进入交易时段）' : cb.block_new_entries ? '当日停开新仓' : (cb.risk_multiplier ?? 1) < 1 ? `半风险 ×${cb.risk_multiplier}` : '允许开仓'}`}</span>
+        <span>{`熔断 ${cb == null ? '未评估（尚未进入交易时段）' : cb.block_new_entries ? '当日停开新仓' : (cb.risk_multiplier ?? 1) < 1 ? `半风险 ×${cb.risk_multiplier}` : '允许开仓'}`}</span>
         <span>{st.in_session ? `报价 ${st.last_quote_at ? st.last_quote_at.slice(11, 19) + ' ET' : '尚无'}` : '非交易时段'}</span>
       </div>
       {acc && (
@@ -542,11 +585,11 @@ function StatusBar({ q }: { q: { data?: DeskOverviewPayload; isLoading: boolean;
       )}
       {q.data.evidence && (
         <div data-evidence-brief className="text-secondary">
-          {`算法 ${q.data.evidence.mode === 'v3' ? '新尺子 v3.1（随机基线 + 留出期 + 退市股 + 多重检验）' : modeLabel(q.data.evidence.mode)}`}
+          {`算法 ${q.data.evidence.mode === 'v3' ? '检验口径 v3.1（随机基准 + 留出期 + 退市股 + 多重检验）' : modeLabel(q.data.evidence.mode)}`}
           {q.data.evidence.forward.length > 0 && ` · 前向确认：${q.data.evidence.forward.map((f) => `${sourceName(q.data!.names, f.source)} ${f.n}/${q.data!.evidence!.forward_min_n ?? 300} 笔${f.promoted ? ' 已通过' : ''}`).join('，')}`}
         </div>
       )}
-      <div className="text-[11px] text-muted">{`最近扫描 ${st.latest_scan ?? '—'} · “可执行”仅表示按现行规则未被规则/约束挡住，是否成交由交易时段内的报价与保护逐帧判定`}</div>
+      <div className="text-[11px] text-muted">{`最近扫描 ${st.latest_scan ?? '—'} · 「可执行」指未被规则或约束拦截，是否成交取决于交易时段内的报价与保护规则`}</div>
     </div>
   )
 }
@@ -563,8 +606,8 @@ function hitText(h: DeskWatchRow['hits'][number], names: Record<string, string>)
 }
 
 function WatchlistTable({ data, names }: { data: DeskOverviewPayload['watchlist']; names: Record<string, string> }) {
-  if (!data.ok) return <div className="rounded border border-amber-500/40 p-3 text-xs text-amber-800 dark:text-amber-300">自选名单读取失败，无法列出逐票状态。</div>
-  if (data.count === 0) return <EmptyState icon={Leaf} title="自选为空" hint="在自选页添加股票后，这里逐票显示被哪些来源选中、卡在哪一步。" />
+  if (!data.ok) return <div className="rounded border border-amber-500/40 p-3 text-xs text-amber-800 dark:text-amber-300">自选读取失败</div>
+  if (data.count === 0) return <EmptyState icon={Leaf} title="自选为空" hint="暂无自选 · 添加后显示逐只状态" />
   return (
     <div data-watchlist-table className="space-y-1">
       <div className="text-xs text-muted">
@@ -586,7 +629,7 @@ function WatchlistTable({ data, names }: { data: DeskOverviewPayload['watchlist'
                 </td>
                 <td className="px-2 py-1.5 text-secondary">{r.hits.length ? r.hits.map((h) => hitText(h, names)).join('；') : <span className="text-muted">—</span>}</td>
                 <td className="px-2 py-1.5 text-secondary">
-                  <span className="mr-1 rounded bg-elevated px-1 text-[10px]">{STAGE_LABEL[r.stage ?? ''] ?? r.stage ?? '—'}</span>
+                  <span className="mr-1 rounded bg-elevated px-1 text-[11px]">{STAGE_LABEL[r.stage ?? ''] ?? r.stage ?? '—'}</span>
                   {r.card && r.stage === 'card' ? (r.card.state_reason || r.reason) : r.reason}
                 </td>
               </tr>
@@ -612,7 +655,7 @@ function WatchGroups({ watch, names, newsBy }: { watch: Card[]; names: Record<st
   const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length)
   return (
     <div data-watch-groups className="space-y-1.5">
-      <div className="pt-4 text-xs uppercase tracking-wider text-muted">{`只观察（${watch.length}）· 证据不足 / 组合约束 / 只观察来源，只展示不开仓`}</div>
+      <div className="pt-4 text-xs uppercase tracking-wider text-muted">{`仅观察（${watch.length}）· 证据不足 / 组合约束 / 仅观察来源`}</div>
       {ordered.map(([src, cs]) => {
         const tier = cs[0].evidence?.decision?.tier
         return (
@@ -630,7 +673,7 @@ const NEWS_BATCH = 100
 
 /** 许可算法的显示名。v4 = 自选机会 (规则集 + 同票基线前向确认)。 */
 export function modeLabel(mode?: string | null): string {
-  return mode === 'v4' ? '自选 v4（规则集 + 前向确认）' : mode === 'v3' ? '新尺子 v3.1' : mode === 'v2' ? '新算法 v2' : '旧算法 v1'
+  return mode === 'v4' ? '自选 v4（规则集 + 前向确认）' : mode === 'v3' ? '检验口径 v3.1' : mode === 'v2' ? '新算法 v2' : '旧算法 v1'
 }
 
 export function EvidenceDesk() {
@@ -705,7 +748,7 @@ export function EvidenceDesk() {
       <EventRadar ev={ov?.events} />
 
       <div role="tablist" className="mb-4 flex gap-1 border-b border-border text-sm">
-        {([['pool', `全股票池 (${executable.length})`], ['watchlist', `自选股 (${wlCount ?? '—'})`], ['sources', '来源管理'], ['settle', '卡结局']] as const).map(([id, label]) => (
+        {([['pool', `全市场（${executable.length}）`], ['watchlist', `自选（${wlCount ?? '—'}）`], ['sources', '来源管理'], ['settle', '结算']] as const).map(([id, label]) => (
           <button
             key={id}
             type="button"
@@ -721,7 +764,7 @@ export function EvidenceDesk() {
         <div className="space-y-4">
           <SwingSettlement />
           <details data-legacy-settle className="text-xs">
-            <summary className="cursor-pointer text-muted">旧卡结局（宽卡 7 日，只作参考）</summary>
+            <summary className="cursor-pointer text-muted">历史规则结算（7 日，仅供参考）</summary>
             <div className="mt-2"><EvidenceSettlement /></div>
           </details>
         </div>
@@ -737,7 +780,7 @@ export function EvidenceDesk() {
             <EmptyState
               icon={Leaf}
               title="暂无可入场机会"
-              hint={data?.note ?? (view === 'watchlist' ? '今天没有自选股处在可执行状态，逐票原因见上表。零机会是合法产出。' : '零机会是合法产出: 无即是有，不为出手而出手。')}
+              hint={data?.note ?? (view === 'watchlist' ? '今日自选无可执行机会 · 原因见上表' : '')}
             />
           )}
 
@@ -748,7 +791,7 @@ export function EvidenceDesk() {
             {cards.map((c) => <CardView key={c.id} card={c} names={names} news={newsBy[c.symbol]} />)}
           </div>
           {watch.length > 0 && <WatchGroups watch={watch} names={names} newsBy={newsBy} />}
-          {newsQ.isError && <div className="mt-3 text-xs text-muted">新闻摘要读取失败：卡片上的“近期催化”暂不显示，不代表没有新闻。</div>}
+          {newsQ.isError && <div className="mt-3 text-xs text-muted">新闻摘要读取失败 ·「近期催化」暂不显示</div>}
           {done.length > 0 && (
             <details data-terminal-history className="mt-5 text-sm text-muted">
               <summary className="cursor-pointer">已结束提案（{done.length}）· 不再参与入场</summary>

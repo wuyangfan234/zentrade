@@ -60,7 +60,7 @@ it('0.9.1 今天没卡: 已记录且激活 0 显示灰色「今天没有卡（�
 it('0.9.1 数据还没到: 无天数时不隐藏整块, 显示等待', async () => {
   await render({ as_of: '2026-10-12T16:00', days: [] })
   expect(host.querySelector('[data-funnel]')).not.toBeNull()
-  expect(host.querySelector('[data-funnel] [data-empty="pending"]')!.textContent).toContain('数据还没到')
+  expect(host.querySelector('[data-funnel] [data-empty="pending"]')!.textContent).toContain('暂无准入记录')
 })
 it('0.9.1 读取失败: 红色带重试', async () => {
   mocks.entryFunnel.mockRejectedValue(new Error('HTTP 500'))

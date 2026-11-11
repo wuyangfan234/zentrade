@@ -5,15 +5,15 @@ import { QK } from '@/lib/queryKeys'
 import { useDialogBackdrop } from '@/lib/useDialogBackdrop'
 
 const TABLE_TITLES: Record<string, string> = {
-  instruments: '个股维表',
+  instruments: '标的列表',
   daily: '日 K',
   adj_factor: '除权因子',
   enriched: '技术指标',
   minute: '分钟 K',
-  index_instruments: '指数维表',
+  index_instruments: '指数列表',
   index_daily: '指数日 K',
   index_enriched: '指数技术指标',
-  etf_instruments: 'ETF 维表',
+  etf_instruments: 'ETF 列表',
   etf_daily: 'ETF 日 K',
   etf_enriched: 'ETF 技术指标',
 }
@@ -75,7 +75,7 @@ export function EnrichedSchemaModal({ table, onClose }: { table: string | null; 
           >
             <div className="flex items-center justify-between px-5 py-3 border-b border-border">
               <h3 className="text-sm font-medium text-foreground">{title} 字段说明</h3>
-              <span className="text-[10px] text-muted font-mono">{fields.length} 个字段</span>
+              <span className="text-[11px] text-muted font-mono">{fields.length} 个字段</span>
             </div>
             <div className="px-5 py-3 overflow-y-auto max-h-[calc(70vh-48px)]">
               {schema.isLoading ? (
@@ -84,7 +84,7 @@ export function EnrichedSchemaModal({ table, onClose }: { table: string | null; 
                 <div className="space-y-3">
                   {Object.entries(groups).map(([cat, items]) => (
                     <div key={cat}>
-                      <div className="text-[10px] font-medium text-accent uppercase tracking-wider mb-1.5">{cat}</div>
+                      <div className="text-[11px] font-medium text-accent uppercase tracking-wider mb-1.5">{cat}</div>
                       <div className="space-y-1">
                         {items.map((f) => (
                           <div key={f.name} className="flex items-baseline gap-2 text-[11px]">

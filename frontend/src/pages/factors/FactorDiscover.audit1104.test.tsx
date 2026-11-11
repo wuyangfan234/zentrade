@@ -127,7 +127,7 @@ it('a late recalc response for A is dropped after switching to the engine', asyn
   await tick()
   await act(async () => { resolveA({ total_return: 9.99, annual_return: 0.777, yearly: {} }) })
   await tick()
-  expect(host.querySelector('[data-detail-name]')!.textContent).toBe('当前出卡引擎')
+  expect(host.querySelector('[data-detail-name]')!.textContent).toBe('现行策略组合')
   expect(host.querySelector('[data-detail]')!.textContent).not.toContain('+77.7%')
 })
 

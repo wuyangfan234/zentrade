@@ -77,7 +77,7 @@ export function Wordmark({
           ZEN<span style={{ color }}>TRADE</span>
         </div>
         {tagline && (
-          <div className="mt-1 whitespace-nowrap text-[9px] tracking-[0.08em] text-muted">{tagline}</div>
+          <div className="mt-1 whitespace-nowrap text-[11px] tracking-[0.08em] text-muted">{tagline}</div>
         )}
       </div>
     </div>

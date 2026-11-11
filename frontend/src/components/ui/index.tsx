@@ -5,13 +5,13 @@ import { cn } from '@/lib/cn'
 export type Tone = 'long' | 'short' | 'watch' | 'withdrawn' | 'ref' | 'warn' | 'accent' | 'neutral'
 
 const TONE: Record<Tone, string> = {
-  long: 'border-bull/40 bg-bull/10 text-bull',
-  short: 'border-bear/40 bg-bear/10 text-bear',
+  long: 'border-bull/40 bg-bull/10 text-bull dark:text-red-400',
+  short: 'border-bear/40 bg-bear/10 text-emerald-800 dark:text-bear',
   watch: 'border-border bg-elevated text-secondary',
   withdrawn: 'border-border bg-elevated text-muted line-through',
   ref: 'border-dashed border-border text-muted',
   warn: 'border-warning/40 bg-warning/10 text-warning',
-  accent: 'border-accent/40 bg-accent/10 text-accent',
+  accent: 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400',
   neutral: 'border-border text-secondary',
 }
 export const TONE_TEXT: Record<Tone, string> = {

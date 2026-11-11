@@ -111,14 +111,22 @@ it('shows held positions with the most urgent next action first', async () => {
 it('shows the event radar: premarket gaps and upcoming earnings with roles', async () => {
   await render()
   const radar = host.querySelector('[data-event-radar]')!
-  expect(radar.querySelector('[data-premarket]')!.textContent).toContain('COIN +3.5%（机会卡/自选）')
-  expect(radar.querySelector('[data-earnings]')!.textContent).toContain('CVE 10-08 盘前（持仓）')
+  // 盘前跳空: 一只一项 (代码 + 幅度), 角色放悬停; 「机会卡」在界面上叫「机会」
+  const coin = radar.querySelector('[data-premarket-item="COIN"]')!
+  expect(coin.textContent).toBe('COIN+3.5%')
+  expect(coin.getAttribute('title')).toBe('机会 / 自选')
+  // 财报: 表格一行 = 日期 + 时段, 代码列在同一行; 持仓 / 自选加重
+  const row = [...radar.querySelectorAll('[data-earnings-row]')].find((r) => r.textContent?.includes('CVE'))!
+  expect([...row.querySelectorAll('td')].slice(0, 2).map((td) => td.textContent)).toEqual(['10-08', '盘前'])
+  const cve = [...row.querySelectorAll('span[title]')].find((s) => s.textContent === 'CVE')!
+  expect(cve.getAttribute('title')).toBe('持仓')
+  expect(cve.className).toContain('font-semibold')
 })
 
 it('status bar states the permission ruler and forward-confirmation progress', async () => {
   await render()
   const brief = host.querySelector('[data-evidence-brief]')!
-  expect(brief.textContent).toContain('新尺子 v3.1')
+  expect(brief.textContent).toContain('检验口径 v3.1')
   expect(brief.textContent).toContain('长下影反击 0/300')
 })
 
@@ -131,8 +139,8 @@ it('source health board shows three sets of results vs random baseline and forwa
   expect(board.textContent).toContain('含已退市股票')
   const row = board.querySelector('[data-v3-row="long_lower_shadow_reversal"]')!
   expect(row.textContent).toContain('比随机 +0.078R')
-  expect(row.textContent).toContain('影子前向 尚无')
-  expect(row.textContent).toContain('真实纸面 0 笔')
+  expect(row.textContent).toContain('观察前向 暂无')
+  expect(row.textContent).toContain('模拟成交 0 笔')
   expect(row.querySelector('[data-forward]')!.textContent).toContain('0/300 笔')
   expect(board.querySelector('[data-v3-row="earnings_beat_drift"]')!.textContent).toContain('事件')
 })
@@ -143,7 +151,7 @@ it('switching to v3 asks for confirmation and names the sources that stay tradab
   await act(async () => { (host.querySelectorAll('[role=tab]')[2] as HTMLButtonElement).click() })
   for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
   await act(async () => { (host.querySelector('[data-switch-v3]') as HTMLButtonElement).click() })
-  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('无（系统进入纯观察，前向确认通过后自动恢复）'))
+  expect(confirm).toHaveBeenCalledWith(expect.stringContaining('无（转为仅观察，前向验证通过后自动恢复）'))
   expect(mocks.setDeskEvidenceMode).not.toHaveBeenCalled()
   confirm.mockReturnValue(true)
   await act(async () => { (host.querySelector('[data-switch-v3]') as HTMLButtonElement).click() })

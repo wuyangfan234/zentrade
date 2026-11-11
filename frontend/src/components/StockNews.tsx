@@ -6,8 +6,8 @@ import { QK } from '@/lib/queryKeys'
 
 /** 方向色与全站一致: 红=利好, 绿=利空, 灰=中性 (红涨绿跌口径)。 */
 const DIRECTION: Record<string, { label: string; cls: string }> = {
-  bullish: { label: '偏利好', cls: 'text-bull border-bull/40 bg-bull/10' },
-  bearish: { label: '偏利空', cls: 'text-bear border-bear/40 bg-bear/10' },
+  bullish: { label: '偏利好', cls: 'text-bull dark:text-red-400 border-bull/40 bg-bull/10' },
+  bearish: { label: '偏利空', cls: 'text-emerald-800 dark:text-bear border-bear/40 bg-bear/10' },
   neutral: { label: '中性', cls: 'text-secondary border-border bg-elevated' },
 }
 const IMPORTANCE: Record<string, string> = { high: '重要', medium: '一般', low: '次要' }
@@ -26,27 +26,27 @@ function etLabel(iso: string | null): string {
   if (Number.isNaN(d.getTime())) return ''
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'America/New_York', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-  }).format(d) + ' 美东'
+  }).format(d) + ' ET'
 }
 
 export function NewsTag({ item }: { item: NewsItem }) {
   if (item.translation_enabled === false) return null
   if (!item.tagged) {
-    return <span className="rounded border border-border px-1.5 py-px text-[10px] text-muted">未打标</span>
+    return <span className="rounded border border-border px-1.5 py-px text-[11px] text-muted">待标注</span>
   }
   const dir = DIRECTION[item.direction ?? 'neutral'] ?? DIRECTION.neutral
   return (
     <>
       {item.event_label && (
-        <span className="rounded border border-border bg-elevated px-1.5 py-px text-[10px] text-secondary">{item.event_label}</span>
+        <span className="rounded border border-border bg-elevated px-1.5 py-px text-[11px] text-secondary">{item.event_label}</span>
       )}
-      <span data-news-direction={item.direction} className={`rounded border px-1.5 py-px text-[10px] ${dir.cls}`}>{dir.label}</span>
+      <span data-news-direction={item.direction} className={`rounded border px-1.5 py-px text-[11px] ${dir.cls}`}>{dir.label}</span>
       {item.importance && item.importance !== 'low' && (
-        <span className={`rounded px-1.5 py-px text-[10px] ${item.importance === 'high' ? 'bg-warning/10 text-warning' : 'text-muted'}`}>
+        <span className={`rounded px-1.5 py-px text-[11px] ${item.importance === 'high' ? 'bg-warning/10 text-warning' : 'text-muted'}`}>
           {IMPORTANCE[item.importance]}
         </span>
       )}
-      {item.rehash && <span className="text-[10px] text-muted">旧闻</span>}
+      {item.rehash && <span className="text-[11px] text-muted">旧闻</span>}
     </>
   )
 }
@@ -56,7 +56,7 @@ export function NewsRow({ item, compact = false }: { item: NewsItem; compact?: b
   const hasDetail = !!item.summary || (!item.translated && !!item.original_headline)
   return (
     <li data-news-item={item.id} className="border-b border-border/60 py-2 last:border-0">
-      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted tabular-nums">
+      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted tabular-nums">
         <span title={etLabel(item.published_at)}>{ageLabel(item.age_hours)}</span>
         <span>·</span>
         <span>{item.sources.join('、')}</span>
@@ -68,7 +68,7 @@ export function NewsRow({ item, compact = false }: { item: NewsItem; compact?: b
         className={`mt-1 block w-full text-left text-[13px] leading-snug text-foreground ${hasDetail ? 'cursor-pointer hover:text-accent' : 'cursor-default'}`}
       >
         {item.headline}
-        {!item.translated && item.translation_enabled !== false && <span className="ml-1.5 text-[10px] text-muted">（未翻译）</span>}
+        {!item.translated && item.translation_enabled !== false && <span className="ml-1.5 text-[11px] text-muted">原文</span>}
       </button>
       {open && !compact && (
         <div className="mt-1 space-y-1 text-[12px] leading-relaxed text-secondary">
@@ -122,12 +122,12 @@ export function StockNewsPanel({ symbol, height }: { symbol: string; height?: nu
         {q.isError && <div className="py-6 text-xs text-danger">新闻读取失败，请稍后重试</div>}
         {!q.isLoading && !q.isError && shown.length === 0 && (
           <div className="py-6 text-xs text-muted">
-            {items.length === 0 ? '近 7 日没有点名该股的新闻（已过滤只挂标签、正文未提及的条目）' : '近 7 日没有以该股为主角的新闻'}
+            {items.length === 0 ? '近 7 日无相关新闻' : '近 7 日没有以该股为主角的新闻'}
           </div>
         )}
         <ul>{shown.map(v => <NewsRow key={v.id} item={v} />)}</ul>
       </div>
-      {q.data?.disclaimer && <div className="shrink-0 pt-1.5 text-[10px] text-muted">{q.data.disclaimer}</div>}
+      {q.data?.disclaimer && <div className="shrink-0 pt-1.5 text-[11px] text-muted">{q.data.disclaimer}</div>}
     </div>
   )
 }
@@ -139,8 +139,8 @@ export function NewsBadge({ count, highBearish }: { count: number; highBearish?:
     <span
       data-news-badge
       title={highBearish ? '48 小时内有重要利空新闻（AI 判读）' : '24 小时内主角新闻条数'}
-      className={`inline-flex items-center gap-0.5 rounded px-1 py-px text-[9px] leading-tight ${
-        highBearish ? 'border border-bear/50 bg-bear/10 text-bear' : 'bg-elevated text-secondary'
+      className={`inline-flex items-center gap-0.5 rounded px-1 py-px text-[11px] leading-tight ${
+        highBearish ? 'border border-bear/50 bg-bear/10 text-emerald-800 dark:text-bear' : 'bg-elevated text-secondary'
       }`}
     >
       <Newspaper className="h-2.5 w-2.5" />

@@ -72,7 +72,7 @@ it('a crashing page keeps the layout and shows the in-app error panel', async ()
   await act(async () => root.render(<RouterProvider router={router} />))
   console.error = origErr
   expect(host.querySelector('[data-nav]')).not.toBeNull()
-  expect(host.textContent).toContain('这个页面出错了')
+  expect(host.textContent).toContain('页面加载失败')
   expect(host.textContent).not.toContain('Unexpected Application Error')
 })
 

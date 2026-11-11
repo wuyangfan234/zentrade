@@ -270,7 +270,7 @@ def run_custom(req: CustomRequest, request: Request):
     as_of = req.as_of or svc.latest_date()
     if not as_of:
         raise HTTPException(status_code=400,
-                            detail="无可用数据日期 — enriched 表为空,请先运行盘后管道")
+                            detail="无可用数据日期 — enriched 表为空,请先运行盘后同步")
     result = svc.run(
         as_of=as_of,
         conditions=req.conditions,
@@ -292,7 +292,7 @@ def run_preset(req: PresetRequest, request: Request):
     svc = ScreenerService(repo, asset_type=req.asset_type)
     as_of = req.as_of or svc.latest_date()
     if not as_of:
-        raise HTTPException(status_code=400, detail="无可用数据日期 — enriched 表为空,请先运行盘后管道")
+        raise HTTPException(status_code=400, detail="无可用数据日期 — enriched 表为空,请先运行盘后同步")
 
     # 加载用户保存的策略配置
     data_dir = request.app.state.repo.store.data_dir

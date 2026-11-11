@@ -45,7 +45,7 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
   const applyDetectedFields = (detected: { name: string; dtype: string; label: string }[]) => {
     const rest = detected.filter(f => f.name !== 'symbol')
     setFields([
-      { name: 'symbol', dtype: 'string', label: '标的代码' },
+      { name: 'symbol', dtype: 'string', label: '股票代码' },
       ...rest,
     ])
   }
@@ -74,7 +74,7 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
     if (!symbolMapping) return
     setDetecting(true); setError('')
     const rest = fields.filter(f => f.name !== 'symbol')
-    setFields([{ name: 'symbol', dtype: 'string', label: '标的代码' }, ...rest])
+    setFields([{ name: 'symbol', dtype: 'string', label: '股票代码' }, ...rest])
     setSymbolMapping(null)
     setDetecting(false)
   }
@@ -99,13 +99,13 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           <div className="grid grid-cols-[1fr_1fr] gap-3">
             <div>
-              <label className="text-[10px] text-muted mb-1 block">标识符</label>
+              <label className="text-[11px] text-muted mb-1 block">标识符</label>
               <div className="h-8 px-3 rounded-btn bg-elevated/50 border border-border text-xs text-muted font-mono flex items-center">
                 {config.id}
               </div>
             </div>
             <div>
-              <label className="text-[10px] text-muted mb-1 block">数据类型</label>
+              <label className="text-[11px] text-muted mb-1 block">数据类型</label>
               <div className={`h-8 px-3 rounded-btn border text-xs flex items-center ${
                 config.mode === 'snapshot'
                   ? 'bg-blue-500/10 border-blue-500/30 text-blue-700 dark:text-blue-400'
@@ -117,27 +117,27 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
           </div>
 
           <div>
-            <label className="text-[10px] text-muted mb-1 block">显示名称</label>
+            <label className="text-[11px] text-muted mb-1 block">显示名称</label>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              className="w-full h-8 px-3 rounded-btn bg-base border border-border text-xs text-foreground placeholder:text-muted/40 focus:outline-none focus:border-accent/50"
+              className="w-full h-8 px-3 rounded-btn bg-base border border-border text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50"
             />
           </div>
 
           <div>
-            <label className="text-[10px] text-muted mb-1 block">描述</label>
+            <label className="text-[11px] text-muted mb-1 block">描述</label>
             <input
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="可选，简要说明数据的用途"
-              className="w-full h-8 px-3 rounded-btn bg-base border border-border text-xs text-foreground placeholder:text-muted/40 focus:outline-none focus:border-accent/50"
+              className="w-full h-8 px-3 rounded-btn bg-base border border-border text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[10px] text-muted">字段定义</label>
+              <label className="text-[11px] text-muted">字段定义</label>
               <div className="flex items-center gap-2">
                 <input
                   ref={detectFileRef}
@@ -149,30 +149,30 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
                 <button
                   onClick={() => detectFileRef.current?.click()}
                   disabled={detecting}
-                  className="text-[10px] text-accent hover:text-accent inline-flex items-center gap-0.5 disabled:opacity-40"
+                  className="text-[11px] text-accent hover:text-accent inline-flex items-center gap-0.5 disabled:opacity-40"
                 >
                   {detecting ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
                   从文件导入
                 </button>
-                <button onClick={addField} className="text-[10px] text-accent hover:text-accent/80">+ 添加字段</button>
+                <button onClick={addField} className="text-[11px] text-accent hover:text-accent/80">+ 添加字段</button>
               </div>
             </div>
             {symbolMapping && (
               <div className="mb-2 rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2 space-y-1.5">
-                <div className="text-[10px] text-amber-700 dark:text-amber-400">未找到 symbol 列，请选择哪一列作为标的代码：</div>
+                <div className="text-[11px] text-amber-700 dark:text-amber-400">未找到代码列 · 请选择：</div>
                 <div className="flex flex-wrap gap-1.5">
                   {symbolMapping.candidates.map(col => (
                     <button
                       key={col}
                       onClick={() => handleSymbolMap(col)}
-                      className="px-2 py-1 rounded-btn bg-accent/10 text-accent text-[10px] font-medium hover:bg-accent/20 transition-colors"
+                      className="px-2 py-1 rounded-btn bg-accent/10 text-accent dark:text-blue-400 text-[11px] font-medium hover:bg-accent/20 transition-colors"
                     >
                       {col}
                     </button>
                   ))}
                   <button
                     onClick={() => setSymbolMapping(null)}
-                    className="px-2 py-1 rounded-btn bg-elevated text-muted text-[10px] hover:text-secondary transition-colors"
+                    className="px-2 py-1 rounded-btn bg-elevated text-muted text-[11px] hover:text-secondary transition-colors"
                   >
                     取消
                   </button>
@@ -189,7 +189,7 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
                       onChange={(e) => updateField(i, 'label', e.target.value)}
                       placeholder="显示名"
                       disabled={isBuiltin}
-                      className={`w-20 h-7 px-2 rounded-btn border text-[11px] text-foreground placeholder:text-muted/40 focus:outline-none focus:border-accent/50 ${
+                      className={`w-20 h-7 px-2 rounded-btn border text-[11px] text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50 ${
                         isBuiltin
                           ? 'bg-elevated/50 border-border text-muted cursor-not-allowed'
                           : 'bg-base border-border'
@@ -198,9 +198,9 @@ export function EditExtDialog({ config, onClose }: { config: ExtDataConfig; onCl
                     <input
                       value={f.name}
                       onChange={(e) => updateField(i, 'name', e.target.value)}
-                      placeholder="字段名 (英文)"
+                      placeholder="字段名（英文）"
                       disabled={isBuiltin}
-                      className={`flex-1 h-7 px-2 rounded-btn border text-[11px] font-mono placeholder:text-muted/40 focus:outline-none focus:border-accent/50 ${
+                      className={`flex-1 h-7 px-2 rounded-btn border text-[11px] font-mono placeholder:text-muted focus:outline-none focus:border-accent/50 ${
                         isBuiltin
                           ? 'bg-elevated/50 border-border text-muted cursor-not-allowed'
                           : 'bg-base border-border'

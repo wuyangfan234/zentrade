@@ -11,8 +11,8 @@ const INPUT_CLS = 'rounded-input border border-border bg-surface px-2.5 py-1.5 t
 
 const KIND_META: Record<FactorLibraryItem['kind'], { label: string; cls: string; tip: string }> = {
   base: { label: '基础', cls: 'bg-elevated text-secondary', tip: '基础因子：预计算指标' },
-  virtual: { label: '虚拟', cls: 'bg-accent/10 text-accent', tip: '虚拟因子：按公式即时计算' },
-  composite: { label: '复合', cls: 'bg-bull/10 text-bull', tip: '复合因子：多个因子加权合成' },
+  virtual: { label: '派生', cls: 'bg-accent/10 text-accent dark:text-blue-400', tip: '派生因子：按公式即时计算' },
+  composite: { label: '复合', cls: 'bg-bull/10 text-bull dark:text-red-400', tip: '复合因子：多个因子加权合成' },
   custom: { label: '自定义', cls: 'bg-amber-400/10 text-amber-700 dark:text-amber-500', tip: '自定义因子：DSL 公式' },
 }
 
@@ -20,7 +20,7 @@ const KIND_META: Record<FactorLibraryItem['kind'], { label: string; cls: string;
 const ORIGIN_LABEL: Record<NonNullable<FactorLibraryItem['origin']>, string> = { builtin: '内置', mined: '挖掘', intake: '采集', custom: '自写' }
 const STATUS_META: Record<NonNullable<FactorLibraryItem['status']>, { label: string; cls: string }> = {
   active: { label: '在用', cls: 'bg-elevated text-foreground' },
-  watch: { label: '观察', cls: 'bg-accent/10 text-accent' },
+  watch: { label: '观察', cls: 'bg-accent/10 text-accent dark:text-blue-400' },
   draft: { label: '草稿', cls: 'bg-elevated text-secondary' },
   retired: { label: '停用', cls: 'bg-elevated text-muted' },
 }
@@ -69,14 +69,14 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
             type="text"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            placeholder="搜索因子 (id / 名称 / 公式)"
+            placeholder="搜索因子（ID / 名称 / 公式）"
             className={`${INPUT_CLS} w-56 pl-7`}
           />
         </div>
         <select value={kind} onChange={event => setKind(event.target.value)} className={`${INPUT_CLS} w-24`} aria-label="因子类型">
           <option value="all">全部类型</option>
           <option value="base">基础</option>
-          <option value="virtual">虚拟</option>
+          <option value="virtual">派生</option>
           <option value="composite">复合</option>
           <option value="custom">自定义</option>
         </select>
@@ -91,7 +91,7 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
           <option value="all">全部分组</option>
           {groups.map(name => <option key={name} value={name}>{name}</option>)}
         </select>
-        <span className="ml-auto text-[10px] text-muted">{lib.isLoading ? '加载中' : `${filtered.length} / ${factors.length} 个因子`}</span>
+        <span className="ml-auto text-[11px] text-muted">{lib.isLoading ? '加载中' : `${filtered.length} / ${factors.length} 个因子`}</span>
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto">
@@ -130,19 +130,19 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
                 >
                   <td className="px-3 py-2.5">
                     <div className="font-medium text-foreground">{item.label}</div>
-                    <div className="mt-0.5 font-mono text-[10px] text-muted">{item.id}</div>
+                    <div className="mt-0.5 font-mono text-[11px] text-muted">{item.id}</div>
                   </td>
                   <td className="px-3 py-2.5 text-secondary" data-origin={item.origin ?? 'builtin'}>{ORIGIN_LABEL[item.origin ?? 'builtin']}</td>
                   <td className="px-3 py-2.5">
-                    <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[10px] font-medium ${STATUS_META[item.status ?? 'active'].cls}`}>{STATUS_META[item.status ?? 'active'].label}</span>
+                    <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${STATUS_META[item.status ?? 'active'].cls}`}>{STATUS_META[item.status ?? 'active'].label}</span>
                   </td>
                   <td className="px-3 py-2.5 text-secondary">{item.group}</td>
                   <td className="px-3 py-2.5">
-                    <span title={KIND_META[item.kind].tip} className={`inline-flex rounded-btn px-1.5 py-0.5 text-[10px] font-medium ${KIND_META[item.kind].cls}`}>
+                    <span title={KIND_META[item.kind].tip} className={`inline-flex rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${KIND_META[item.kind].cls}`}>
                       {KIND_META[item.kind].label}
                     </span>
-                    {item.pit && <span className="ml-1 text-[10px] text-amber-700 dark:text-amber-500" title="点时数据: 仅使用公告日不晚于当日的财务数据">点时</span>}
-                    {item.available === false && <span className="ml-1 text-[10px] text-muted" title="当前数据源未接入">缺数据</span>}
+                    {item.pit && <span className="ml-1 text-[11px] text-amber-700 dark:text-amber-500" title="时点数据：仅使用公告日不晚于当日的财务数据">点时</span>}
+                    {item.available === false && <span className="ml-1 text-[11px] text-muted" title="当前数据源未接入">缺数据</span>}
                   </td>
                   <td className="max-w-[22rem] px-3 py-2.5">
                     <span className="block truncate text-secondary" title={item.formula}>{item.formula}</span>
@@ -156,7 +156,7 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
                       <button
                         type="button"
                         onClick={event => { event.stopPropagation(); onInspect(item.id) }}
-                        className="inline-flex items-center gap-1 rounded-btn px-2 py-1 text-[10px] text-accent transition-colors hover:bg-accent/10"
+                        className="inline-flex items-center gap-1 rounded-btn px-2 py-1 text-[11px] text-accent transition-colors hover:bg-accent/10"
                       >
                         检验 <ArrowRight className="h-3 w-3" />
                       </button>
@@ -247,7 +247,7 @@ function FactorDetailModal({
     ['预热', item.warmup_bars > 1 ? `${item.warmup_bars} 日` : '—'],
     ['点时数据', item.pit ? '是' : '否'],
     ['适用资产', assetText(item.asset_types)],
-    ['跨标的可比', item.scale_free ? '是' : '否'],
+    ['跨个股可比', item.scale_free ? '是' : '否'],
     ['依赖列', item.dependencies.length > 0 ? item.dependencies.join(', ') : '—'],
     ['状态', statusLabel(item.status)],
     ...(item.available === false ? [['数据', '当前数据源未接入'] as [string, string]]
@@ -256,7 +256,7 @@ function FactorDetailModal({
   ]
   const ROW_TITLE: Record<string, string> = {
     点时数据: '按公告日取数，不使用未公告数据',
-    跨标的可比: '是 = 可直接截面排序；否 = 原值受价格尺度影响',
+    跨个股可比: '是 = 可直接截面排序；否 = 原值受价格尺度影响',
   }
   return (
     <Modal
@@ -269,7 +269,7 @@ function FactorDetailModal({
           <div className="flex items-center gap-2">
             <FlaskConical className="h-4 w-4 shrink-0 text-accent" />
             <span id="factor-detail-title" className="truncate text-sm font-semibold text-foreground">{item.label}</span>
-            <span title={KIND_META[item.kind].tip} className={`inline-flex shrink-0 rounded-btn px-1.5 py-0.5 text-[10px] font-medium ${KIND_META[item.kind].cls}`}>
+            <span title={KIND_META[item.kind].tip} className={`inline-flex shrink-0 rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${KIND_META[item.kind].cls}`}>
               {KIND_META[item.kind].label}
             </span>
           </div>
@@ -304,7 +304,7 @@ function FactorDetailModal({
                       type="button"
                       onClick={() => setGroup.mutate()}
                       disabled={setGroup.isPending || !groupDraft.trim() || groupDraft.trim() === item.group}
-                      className="rounded-btn border border-border px-1.5 py-0.5 text-[10px] text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40"
+                      className="rounded-btn border border-border px-1.5 py-0.5 text-[11px] text-secondary transition-colors hover:border-accent/40 hover:text-accent disabled:opacity-40"
                     >
                       保存
                     </button>
@@ -318,7 +318,7 @@ function FactorDetailModal({
       <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
         {isDynamic && (
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[10px] text-muted">状态</span>
+            <span className="text-[11px] text-muted">状态</span>
             {STATUS_ORDER.map(status => {
               const current = (item.status ?? 'draft') === status
               return (
@@ -328,8 +328,8 @@ function FactorDetailModal({
                   onClick={() => setStatus.mutate(status)}
                   disabled={setStatus.isPending || current}
                   aria-pressed={current}
-                  className={`rounded-btn border px-2 py-0.5 text-[10px] transition-colors disabled:cursor-default ${current
-                    ? 'border-accent/60 bg-accent/10 text-accent'
+                  className={`rounded-btn border px-2 py-0.5 text-[11px] transition-colors disabled:cursor-default ${current
+                    ? 'border-accent/60 bg-accent/10 text-accent dark:text-blue-400'
                     : 'border-border text-secondary hover:border-accent/40 hover:text-accent disabled:opacity-40'}`}
                 >
                   {STATUS_META[status].label}
@@ -361,7 +361,7 @@ function FactorDetailModal({
             <button
               type="button"
               onClick={() => { onClose(); onInspect(item.id) }}
-              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-btn bg-accent px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent/90"
+              className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-2.5 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-accent/90"
             >
               检验 <ArrowRight className="h-3 w-3" />
             </button>
@@ -400,7 +400,7 @@ function FactorDetailModal({
         {blockedRefs && (
           <div className="w-full rounded-btn border border-danger/40 bg-danger/10 px-3 py-2 text-[11px] leading-relaxed text-danger">
             <div className="font-medium">引用 {blockedRefs.length} 处 · 删除后无法计算</div>
-            <div className="mt-1 font-mono text-[10px] break-all text-danger">{blockedRefs.join('、')}</div>
+            <div className="mt-1 font-mono text-[11px] break-all text-danger">{blockedRefs.join('、')}</div>
             <div className="mt-2 flex items-center gap-2">
               <button
                 type="button"

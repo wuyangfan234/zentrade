@@ -57,14 +57,14 @@ export function SignalPicker({ signals, onChange, kind, options }: Props) {
   // 配色: entry 蓝色 (accent), exit 橙色 (warning/amber)
   const isEntry = kind === 'entry'
   const active = isEntry
-    ? 'border-accent/50 bg-accent/10 text-accent'
+    ? 'border-accent/50 bg-accent/10 text-accent dark:text-blue-400'
     : 'border-warning/50 bg-warning/10 text-warning'
   const idle = variant === 'dialog'
     ? 'border-border bg-base text-muted hover:border-accent/40'
     : 'border-border bg-base text-muted hover:border-accent/40'
 
   const btnCls = variant === 'dialog'
-    ? 'rounded px-1.5 py-0.5 text-[10px] font-medium border transition-colors cursor-pointer'
+    ? 'rounded px-1.5 py-0.5 text-[11px] font-medium border transition-colors cursor-pointer'
     : 'rounded-btn border px-2.5 py-1.5 text-[11px] transition-colors cursor-pointer'
   const builtinOptions = builtinSignals ?? SIGNAL_OPTIONS.map(key => ({ key, label: cnSignal(key) }))
 

@@ -36,7 +36,7 @@ export function HistoryRow({ job, onClick }: { job: any; onClick: () => void }) 
           </div>
           <div className="text-[11px] text-muted">
             {job.duration_s != null ? `用时 ${formatDuration(job.duration_s)}` : '进行中'}
-            <span data-job-id title="任务编号（排查用）" className="ml-2 font-mono text-[10px] text-muted/70">{`#${job.id}`}</span>
+            <span data-job-id title="任务编号（排查用）" className="ml-2 tabular-nums text-[11px] text-muted">{`#${job.id}`}</span>
           </div>
         </div>
       </div>
@@ -54,7 +54,7 @@ export function HistoryRow({ job, onClick }: { job: any; onClick: () => void }) 
             parts.push(days <= 1 ? a : `${a}~${b}`)
           }
           return parts.length > 0 ? (
-            <div className="text-xs text-secondary font-mono">{parts.join(' · ')}</div>
+            <div className="text-xs text-secondary tabular-nums">{parts.join(' · ')}</div>
           ) : null
         })()}
         {job.error && (

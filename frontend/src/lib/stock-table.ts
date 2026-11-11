@@ -40,9 +40,9 @@ export function getSignals(r: Record<string, any>): Signal[] {
 
 /** 信号类型 → tailwind 颜色类 */
 export function signalCls(type: SignalType): string {
-  if (type === 'bull') return 'text-bull bg-bull/10'
-  if (type === 'bear') return 'text-bear bg-bear/10'
-  return 'text-accent bg-accent/10'
+  if (type === 'bull') return 'text-bull dark:text-red-400 bg-bull/10'
+  if (type === 'bear') return 'text-emerald-800 dark:text-bear bg-bear/10'
+  return 'text-accent dark:text-blue-400 bg-accent/10'
 }
 
 // ===== 排序 =====

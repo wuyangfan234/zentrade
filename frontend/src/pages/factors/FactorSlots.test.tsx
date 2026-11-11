@@ -144,7 +144,7 @@ it('slots view: board and stock share one stretched row, every slot has a ruler 
   expect([...row.children].map(c => c.getAttribute('data-slot'))).toEqual(['board', 'stock'])
   for (const slot of ['board', 'stock', 'scoring']) {
     const el = host.querySelector(`[data-slot="${slot}"]`)!
-    expect(el.querySelector('[data-ruler]')!.textContent).toMatch(/^尺子 · /)
+    expect(el.querySelector('[data-ruler]')!.textContent).toMatch(/^口径 · /)
     expect(el.querySelector('[data-slot-footer]')).not.toBeNull()
     // 卡片本身是 flex 列, 页脚 mt-auto 才能在同高时贴底
     expect(el.className).toContain('flex-col')

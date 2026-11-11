@@ -188,7 +188,7 @@ function DrawerHeader({
       <span className="shrink-0 text-sm font-semibold text-foreground">AI 助手</span>
       {status?.model && (
         <span
-          className="min-w-0 truncate rounded-btn bg-elevated px-1.5 py-0.5 font-mono text-[10px] text-muted"
+          className="min-w-0 truncate rounded-btn bg-elevated px-1.5 py-0.5 tabular-nums text-[11px] text-muted"
           title={`模型: ${status.model}\n供应商: ${status.provider ?? '-'}`}
         >
           {status.model}
@@ -358,11 +358,11 @@ function EmptyState({ status, suggests }: { status: AssistantStatus | null; sugg
           <Settings2 className="h-4 w-4" />
           AI 未配置
         </div>
-        <p className="mt-1.5 text-secondary">AI 助手需要先配置 AI 供应商和 API Key 才能对话。</p>
+        <p className="mt-1.5 text-secondary">未配置 AI 模型</p>
         <button
           type="button"
           onClick={() => navigate('/settings?tab=ai')}
-          className="mt-2 cursor-pointer rounded-btn bg-accent px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
+          className="mt-2 cursor-pointer rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
         >
           去设置页配置
         </button>
@@ -378,26 +378,26 @@ function EmptyState({ status, suggests }: { status: AssistantStatus | null; sugg
           当前供应商不支持工具调用
         </div>
         <p className="mt-1.5 text-secondary">
-          AI 助手依赖工具调用能力({status.provider} 不支持), 请在设置页切换为 OpenAI 兼容模型。
+          {status.provider} 不支持工具调用 · 请切换为 OpenAI 兼容模型
         </p>
         <button
           type="button"
           onClick={() => navigate('/settings?tab=ai')}
-          className="mt-2 cursor-pointer rounded-btn bg-accent px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
+          className="mt-2 cursor-pointer rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
         >
-          去设置页调整
+          前往设置
         </button>
       </div>
     )
   }
 
   if (!suggests.length) {
-    return <p className="pt-8 text-center text-xs text-muted">问我任何关于策略、因子、回测或数据能力的问题。</p>
+    return <p className="pt-8 text-center text-xs text-muted">可查询策略、因子、回测与数据</p>
   }
 
   return (
     <div className="space-y-3 pt-6">
-      <p className="text-center text-xs text-muted">试试这些:</p>
+      <p className="text-center text-xs text-muted">常用提问</p>
       <div className="grid grid-cols-1 gap-2">
         {suggests.map(suggest => (
           <button
@@ -449,7 +449,7 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
           value={text}
           rows={1}
           disabled={blocked}
-          placeholder={blocked ? '请先在设置页配置 AI' : '提问，Enter 发送 / Shift+Enter 换行'}
+          placeholder={blocked ? '未配置 AI 模型' : '提问，Enter 发送 / Shift+Enter 换行'}
           onChange={e => { setText(e.target.value); autoGrow() }}
           onKeyDown={onKeyDown}
           className="max-h-36 min-h-[38px] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted disabled:cursor-not-allowed"
@@ -471,14 +471,14 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
             disabled={!canSend}
             title="发送"
             aria-label="发送"
-            className="mr-1.5 mb-1.5 flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn bg-accent text-white transition-all duration-150 ease-smooth hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mr-1.5 mb-1.5 flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white transition-all duration-150 ease-smooth hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             <SendHorizontal className="h-4 w-4" />
           </button>
         )}
       </div>
-      <div className="mt-1.5 px-1 text-[10px] text-muted">
-        ⌘K / Ctrl+K 呼出 · 左缘可拖拽调宽 · 回答基于本地数据，不构成投资建议
+      <div className="mt-1.5 px-1 text-[11px] text-muted">
+        ⌘K / Ctrl+K 打开 · 回答基于本地数据，不构成投资建议
       </div>
     </div>
   )

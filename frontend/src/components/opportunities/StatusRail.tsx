@@ -19,19 +19,19 @@ function Clock({ view }: { view: OppRadarView }) {
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
       <div data-rail-clock className="flex items-baseline gap-1.5 tabular-nums">
-        <b className="font-mono text-[20px] font-semibold leading-[26px] tracking-tight text-foreground">{hmOf(ck.et)}</b>
+        <b className="tabular-nums text-[20px] font-semibold leading-[26px] tracking-tight text-foreground">{hmOf(ck.et)}</b>
         <span className="text-[12px] text-secondary">{`ET ${tag ? '' : ''}${weekdayOf(today)}`}</span>
         <span className="text-[12px] text-muted">{`北京 ${bjHm(ck.et)}`}</span>
       </div>
       <div data-rail-phase className="flex flex-wrap items-center gap-1.5">
-        <span className={`rounded-btn px-2 py-0.5 text-[13px] font-semibold ${ck.trading_day && ck.phase !== 'after' ? 'bg-accent text-white dark:bg-blue-700' : 'bg-zinc-700 text-white dark:bg-zinc-600'}`}>
+        <span data-rail-phase-badge className={`rounded-[4px] px-2 py-0.5 text-[13px] font-semibold ${ck.trading_day && ck.phase !== 'after' ? 'bg-accent/10 text-accent dark:text-blue-400' : 'bg-elevated text-secondary'}`}>
           {ck.entry_window ? `${phase} · 入场窗` : phase}
         </span>
-        <span data-rail-next className="whitespace-nowrap text-[12.5px] font-semibold text-secondary">
-          {'→ 下一 '}
-          <b className="font-mono text-accent">{`${tag ? `${tag} ` : ''}${nxt.at}`}</b>
+        <span data-rail-next className="whitespace-nowrap text-[13px] font-semibold text-secondary">
+          {'下一项 '}
+          <b className="tabular-nums text-accent">{`${tag ? `${tag} ` : ''}${nxt.at} ET`}</b>
           {` ${EVENT_ZH[nxt.code] ?? nxt.code}`}
-          <span className="ml-1 font-normal text-muted">{`北京 ${bjHm(nxt.ts)}`}</span>
+          <span className="ml-1 font-normal text-muted">{`（北京 ${bjHm(nxt.ts)}）`}</span>
         </span>
       </div>
     </div>
@@ -52,7 +52,7 @@ function CapCell({ k, used, cap, unit, sub, state, title, ratio, ...rest }: {
     <div {...rest} title={title} data-cap-state={state ?? 'ok'}
       className={`min-w-0 rounded-btn border px-2.5 py-1 md:min-w-[92px] max-md:px-1.5 ${state === 'full' ? 'border-warning/60 bg-warning/10' : warn ? 'border-warning/50 bg-surface' : 'border-border bg-surface'}`}>
       <div className="truncate whitespace-nowrap text-[11px] leading-[14px] text-secondary">{k}</div>
-      <div className={`whitespace-nowrap font-mono text-[14px] font-bold leading-[18px] tabular-nums max-md:text-[13px] ${state === 'full' ? 'text-warning' : 'text-foreground'}`}>
+      <div className={`whitespace-nowrap tabular-nums text-[14px] font-bold leading-[18px] max-md:text-[13px] ${state === 'full' ? 'text-warning' : 'text-foreground'}`}>
         {`${used}${unit ?? ''}`}<span className="font-medium text-muted">{cap === null ? '' : `/${cap}${unit ?? ''}`}</span>
       </div>
       <div className="mt-[3px] h-1 overflow-hidden rounded-sm bg-elevated">
@@ -77,7 +77,7 @@ function Caps({ view }: { view: OppRadarView }) {
       {top && <CapCell data-cap="slot" k={slotLabel(top)} used={top.used} cap={top.cap} state={top.state} sub={capSub(top)}
         title={`同板块同方向持仓上限 = 2% ÷ 每笔风险；占用 ${top.holders.join('、') || '无'}${top.waiting.length ? `；候选 ${top.waiting.join('、')}` : ''}`} />}
       <CapCell data-cap="opens" k={openTag} used={c.opens.used} cap={c.opens.cap} state={hit('daily_open_cap') ? 'full' : undefined}
-        sub={hit('daily_open_cap') ? `受限 ${hit('daily_open_cap')}` : undefined} title="单日新开总风险上限 5% ÷ 每笔风险（按美东当日开仓成交计）" />
+        sub={hit('daily_open_cap') ? `受限 ${hit('daily_open_cap')}` : undefined} title="单日新开总风险上限 5% ÷ 每笔风险（按 ET 当日开仓成交计）" />
       <CapCell data-cap="positions" k="持仓" used={c.positions.used} cap={c.positions.cap} state={hit('max_positions') ? 'full' : undefined}
         sub={hit('max_positions') ? `受限 ${hit('max_positions')}` : undefined} title="持仓数上限 = 账户设定与（组合风险上限 ÷ 每笔风险）取大" />
       <CapCell data-cap="risk" k="组合风险" used={pr.used === null ? '—' : (pr.used * 100).toFixed(1)} unit="%"
@@ -120,7 +120,7 @@ function Lanes({ view }: { view: OppRadarView }) {
   const boardTicks = [...new Set([...boardSched, ...L.board.ticks])].sort()
   return (
     <div data-rail-lanes className="mt-2">
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="引擎泳道" className="hidden h-auto w-full overflow-visible md:block">
+      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="时段日程" className="hidden h-auto w-full overflow-visible md:block">
         {phases.map(([a, b, l]) => {
           const on = now !== null && now >= a && now < b, past = now !== null && now >= b
           return (
@@ -134,7 +134,7 @@ function Lanes({ view }: { view: OppRadarView }) {
         {Array.from({ length: (T1 - T0) / 60 + 1 }, (_, i) => T0 + i * 60).map((m) => (
           <g key={m}>
             <line x1={X(m)} x2={X(m)} y1={top - 3} y2={top + rows.length * RH} className="stroke-border" strokeOpacity={0.6} />
-            <text x={X(m)} y={H - 2} textAnchor="middle" fontSize={11} className="fill-muted font-mono">{`${String(m / 60).padStart(2, '0')}:00`}</text>
+            <text x={X(m)} y={H - 2} textAnchor="middle" fontSize={11} className="fill-muted tabular-nums">{`${String(m / 60).padStart(2, '0')}:00`}</text>
           </g>
         ))}
         {rows.map(([lbl, key], i) => {

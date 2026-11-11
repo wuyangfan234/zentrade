@@ -3,17 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import type { CapabilityMatrix, CapabilityRoute } from './api'
 
 export const CAP_LABELS: Record<string, { name: string; hint: string }> = {
-  'quote.by_symbol':         { name: '自选股实时监控', hint: 'Free 可按标的查询实时行情，用于少量自选股监控' },
-  'quote.batch':             { name: '实时行情(批量)',   hint: '一次拿多只股票的价' },
-  'quote.pool':              { name: '标的池查询',        hint: '按标的池批量拿行情' },
-  'kline.daily.by_symbol':   { name: '日 K(按标的)',    hint: '单只股票历史日 K' },
-  'kline.daily.batch':       { name: '日 K(批量)',      hint: '一次拿多只股票的日 K — 选股 / 信号扫描 必需' },
-  'kline.minute.by_symbol':  { name: '分钟 K(按标的)',  hint: '单股 1m/5m/15m/30m/60m K 线' },
-  'kline.minute.batch':      { name: '分钟 K(批量)',    hint: '多股分钟 K' },
-  'intraday.universe':       { name: '全量分钟',        hint: '标的池单请求拉全市场当日分钟K (盘中增量落盘，Expert 专有)' },
+  'quote.by_symbol':         { name: '自选股实时监控', hint: '按代码查询实时行情 · 适合少量自选监控' },
+  'quote.batch':             { name: '实时行情（批量）',   hint: '批量查询实时价' },
+  'quote.pool':              { name: '标的池查询',        hint: '按标的范围批量查询' },
+  'kline.daily.by_symbol':   { name: '日 K（单只）',    hint: '单只历史日 K' },
+  'kline.daily.batch':       { name: '日 K（批量）',      hint: '批量查询日 K · 选股与信号扫描必需' },
+  'kline.minute.by_symbol':  { name: '分钟 K（单只）',  hint: '单股 1m/5m/15m/30m/60m K 线' },
+  'kline.minute.batch':      { name: '分钟 K（批量）',    hint: '多股分钟 K' },
+  'intraday.universe':       { name: '全量分钟',        hint: '单请求获取全市场当日分钟 K（盘中增量更新，Expert 档）' },
 
   'websocket':               { name: '实时推送(WS)',    hint: '免轮询的实时行情订阅' },
-  'financial':               { name: '财务数据',          hint: '利润表 / 资负表 / 现金流 / 关键指标 (SEC EDGAR · Finnhub 备源)' },
+  'financial':               { name: '财务数据',          hint: '利润表 / 资产负债表 / 现金流 / 关键指标（SEC EDGAR · Finnhub 备用）' },
   'adj_factor':              { name: '复权因子',          hint: '让 MA/MACD 等指标在分红送转日不失真' },
 }
 
@@ -25,7 +25,7 @@ export function capName(capKey: string): string {
   return CAP_LABELS[capKey]?.name ?? capKey
 }
 
-/** 数据不可用标准徽章: 「分钟 K(批量) · 不可用」, 通用状态陈述, 默认点击跳转 设置→数据源 (to=null 关闭跳转) */
+/** 数据不可用标准徽章: 「分钟 K（批量） · 不可用」, 通用状态陈述, 默认点击跳转 设置→数据源 (to=null 关闭跳转) */
 export function MissingCapChip({ capKey, label, to = '/settings?tab=data-sources', className = '' }: {
   capKey?: string
   label?: string
@@ -41,7 +41,7 @@ export function MissingCapChip({ capKey, label, to = '/settings?tab=data-sources
   )
   if (to == null) {
     return (
-      <span className={`text-[10px] text-warning bg-warning/8 rounded px-1.5 py-px font-medium ${className}`} title="该数据当前不可用">
+      <span className={`text-[11px] text-warning bg-warning/8 rounded px-1.5 py-px font-medium ${className}`} title="该数据当前不可用">
         {content}
       </span>
     )
@@ -50,8 +50,8 @@ export function MissingCapChip({ capKey, label, to = '/settings?tab=data-sources
     <button
       type="button"
       onClick={(e) => { e.stopPropagation(); navigate(to) }}
-      className={`text-[10px] text-warning bg-warning/8 rounded px-1.5 py-px font-medium hover:bg-warning/15 transition-colors ${className}`}
-      title="前往 设置 → 数据源"
+      className={`text-[11px] text-warning bg-warning/8 rounded px-1.5 py-px font-medium hover:bg-warning/15 transition-colors ${className}`}
+      title="前往「设置 › 数据源」"
     >
       {content}
     </button>
@@ -165,7 +165,7 @@ export function TierTag({ label, className = '' }: { label: string; className?: 
   const display = base === 'none' ? 'None' : base
   return (
     <span
-      className={`inline-flex h-[18px] max-w-[80px] shrink-0 items-center overflow-hidden rounded px-1.5 text-[10px] font-bold font-mono leading-none ${className}`}
+      className={`inline-flex h-[18px] max-w-[80px] shrink-0 items-center overflow-hidden rounded px-1.5 text-[11px] font-bold tabular-nums leading-none ${className}`}
       style={t.tagBg}
     >
       <span className="truncate capitalize" style={t.labelTextStyle}>{display}</span>

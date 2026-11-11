@@ -34,7 +34,7 @@ interface CardDef {
 
 /** 数据画像卡片定义 —— 默认顺序即此数组顺序 */
 export const DATA_CARD_DEFS: CardDef[] = [
-  { key: 'instruments', label: '个股维表', desc: '美股股票元数据',          defaultHiddenIfNoCap: false },
+  { key: 'instruments', label: '标的列表', desc: '美股代码与名称',          defaultHiddenIfNoCap: false },
   { key: 'daily',       label: '日 K',     desc: '美股日K线数据',          defaultHiddenIfNoCap: false },
   { key: 'adj_factor',  label: '除权因子', desc: '复权计算因子',           defaultHiddenIfNoCap: true },
   { key: 'enriched',    label: '技术指标', desc: '技术指标计算结果',       defaultHiddenIfNoCap: false },
@@ -146,7 +146,7 @@ export function PageSettingsModal({
   return (
     <div className="space-y-2.5">
       <p className="text-xs text-secondary leading-relaxed">
-        拖动手柄调整卡片顺序，勾选控制显隐。未勾选的卡片将隐藏，不影响数据本身。
+        拖动调整顺序 · 勾选控制显示 · 不影响数据
       </p>
       <DndContext
         sensors={sensors}
@@ -174,7 +174,7 @@ export function PageSettingsModal({
       <div className="flex items-center justify-end pt-1">
         <button
           onClick={reset}
-          className="px-2 py-0.5 rounded-btn text-[10px] text-secondary hover:text-foreground transition-colors"
+          className="px-2 py-0.5 rounded-btn text-[11px] text-secondary hover:text-foreground transition-colors"
         >
           恢复默认
         </button>
@@ -241,7 +241,7 @@ function SortableCardRow({
       </button>
       <div className="min-w-0 flex-1">
         <div className="text-xs font-medium text-foreground">{label}</div>
-        <div className="text-[10px] text-muted leading-snug">{desc}</div>
+        <div className="text-[11px] text-muted leading-snug">{desc}</div>
       </div>
     </div>
   )

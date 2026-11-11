@@ -116,23 +116,23 @@ export function JobTimeoutCard() {
           <div>
             <h2 className="text-sm font-medium text-foreground">超时设置</h2>
             <p className="text-[11px] text-muted mt-1 leading-relaxed">
-              后台任务超过对应时间<b>没有任何进度</b>才判定卡死并自动终止；只要任务仍在推进（如慢带宽下的冷启动全市场拉取），无论总时长多久都不会被中断。保存时自动换算为秒，修改后对新建任务生效。
+              后台任务超过对应时间<b>无进度</b>才判定卡死并自动终止；只要任务仍在推进（如慢带宽下的冷启动全市场拉取），无论总时长多久都不会被中断。保存时自动换算为秒，修改后对新建任务生效。
             </p>
           </div>
         </div>
         <button
           onClick={() => saveJobTimeouts.mutate()}
           disabled={!timeoutValuesValid || !timeoutValuesChanged || saveJobTimeouts.isPending}
-          className="shrink-0 px-3 py-1.5 rounded-btn bg-accent text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
+          className="shrink-0 px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors"
         >
-          {saveJobTimeouts.isPending ? '保存中...' : '保存'}
+          {saveJobTimeouts.isPending ? '保存中' : '保存'}
         </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className="rounded-lg border border-border/60 bg-elevated/20 px-3.5 py-3">
           <span className="block text-xs font-medium text-foreground mb-1">普通任务停滞超时</span>
-          <span className="block text-[10px] text-muted mb-2">日 K 管道、扩展、修正与重算任务</span>
+          <span className="block text-[11px] text-muted mb-2">日 K 同步、扩展、修正与重算任务</span>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -140,7 +140,7 @@ export function JobTimeoutCard() {
               step={regularTimeoutUnit === 'second' ? 60 : regularTimeoutUnit === 'minute' ? 1 : 0.5}
               value={regularTimeoutInput}
               onChange={e => setTimeoutDraft({ regular: e.target.value, long: longTimeoutInput })}
-              className="w-full rounded-btn border border-border bg-base px-2.5 py-1.5 text-sm text-foreground font-mono outline-none focus:border-accent"
+              className="w-full rounded-btn border border-border bg-base px-2.5 py-1.5 text-sm text-foreground tabular-nums outline-none focus:border-accent"
             />
             <select
               value={regularTimeoutUnit}
@@ -159,12 +159,12 @@ export function JobTimeoutCard() {
               <option value="hour">小时</option>
             </select>
           </div>
-          <span className="block text-[10px] text-muted mt-1.5">默认 20 分钟无进度，最小 1 分钟</span>
+          <span className="block text-[11px] text-muted mt-1.5">默认 20 分钟无进度，最小 1 分钟</span>
         </label>
 
         <label className="rounded-lg border border-border/60 bg-elevated/20 px-3.5 py-3">
           <span className="block text-xs font-medium text-foreground mb-1">长任务停滞超时</span>
-          <span className="block text-[10px] text-muted mb-2">分钟 K 全市场同步任务</span>
+          <span className="block text-[11px] text-muted mb-2">分钟 K 全市场同步任务</span>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -172,7 +172,7 @@ export function JobTimeoutCard() {
               step={longTimeoutUnit === 'second' ? 60 : longTimeoutUnit === 'minute' ? 1 : 0.5}
               value={longTimeoutInput}
               onChange={e => setTimeoutDraft({ regular: regularTimeoutInput, long: e.target.value })}
-              className="w-full rounded-btn border border-border bg-base px-2.5 py-1.5 text-sm text-foreground font-mono outline-none focus:border-accent"
+              className="w-full rounded-btn border border-border bg-base px-2.5 py-1.5 text-sm text-foreground tabular-nums outline-none focus:border-accent"
             />
             <select
               value={longTimeoutUnit}
@@ -191,7 +191,7 @@ export function JobTimeoutCard() {
               <option value="hour">小时</option>
             </select>
           </div>
-          <span className="block text-[10px] text-muted mt-1.5">默认 30 分钟无进度，最小 1 分钟</span>
+          <span className="block text-[11px] text-muted mt-1.5">默认 30 分钟无进度，最小 1 分钟</span>
         </label>
       </div>
 
@@ -199,8 +199,8 @@ export function JobTimeoutCard() {
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0">
             <span className="block text-xs font-medium text-foreground">数据传输压缩</span>
-            <span className="block text-[10px] text-muted mt-0.5 leading-relaxed">
-              大数据接口（分时、日K）启用 gzip 压缩，响应可缩至约 1/8，公网访问明显更快；本机或内网可关闭以节省服务端 CPU。任一子项开启时总开关为开，点击总开关一键全开/全关，子项可单独微调，立即生效。
+            <span className="block text-[11px] text-muted mt-0.5 leading-relaxed">
+              压缩分时与日 K 数据 · 公网访问建议开启
             </span>
           </div>
           <button
@@ -219,14 +219,14 @@ export function JobTimeoutCard() {
         <div className="ml-1 space-y-2 border-l-2 border-border/60 pl-3">
           <CompressToggleRow
             label="分时数据压缩"
-            desc="分时批量接口（自选/策略分时图，千只标的 MB 级响应）"
+            desc="自选与策略页的分时图数据"
             enabled={minuteBatchCompress}
             pending={toggleCompress.isPending}
             onToggle={() => toggleCompress.mutate(!minuteBatchCompress)}
           />
           <CompressToggleRow
             label="日K数据压缩"
-            desc="日K批量接口（自选/策略日K列，千只标的 MB 级响应）"
+            desc="自选与策略页的日 K 数据"
             enabled={dailyBatchCompress}
             pending={toggleDailyCompress.isPending}
             onToggle={() => toggleDailyCompress.mutate(!dailyBatchCompress)}
@@ -248,7 +248,7 @@ function CompressToggleRow({ label, desc, enabled, pending, onToggle }: {
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
         <span className="block text-[11px] font-medium text-secondary">{label}</span>
-        <span className="block text-[10px] text-muted mt-0.5 leading-relaxed">{desc}</span>
+        <span className="block text-[11px] text-muted mt-0.5 leading-relaxed">{desc}</span>
       </div>
       <button
         onClick={onToggle}
@@ -256,7 +256,7 @@ function CompressToggleRow({ label, desc, enabled, pending, onToggle }: {
         className={`shrink-0 relative h-4 w-7 rounded-full transition-colors disabled:opacity-40 ${
           enabled ? 'bg-accent' : 'bg-elevated'
         }`}
-        title={enabled ? '点击关闭' : '点击开启'}
+        title={enabled ? '已开启' : '已关闭'}
       >
         <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-all ${
           enabled ? 'left-[0.875rem]' : 'left-0.5'

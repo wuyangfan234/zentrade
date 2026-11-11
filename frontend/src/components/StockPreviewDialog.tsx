@@ -241,7 +241,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
             <div className="shrink-0 border-b border-border/60 bg-elevated/30">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 pb-2 pt-2.5 sm:px-5">
               <div className="flex min-w-0 items-center gap-2">
-                <span className="shrink-0 font-mono text-[15px] font-semibold tracking-tight text-foreground">{symbol}</span>
+                <span className="shrink-0 tabular-nums text-[14px] font-semibold tracking-tight text-foreground">{symbol}</span>
                 {name && <span className="truncate text-xs text-secondary">{name}</span>}
 
                 {/* 切股导航: 上一只 / n·N / 下一只 */}
@@ -258,7 +258,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                     aria-selected={view === 'daily'}
                     onClick={() => setView('daily')}
                     className={`inline-flex h-6 items-center gap-1 rounded px-2.5 text-[11px] transition-colors ${
-                      view === 'daily' ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
+                      view === 'daily' ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
                     }`}
                   >
                     <LineChart className="h-3 w-3" />
@@ -270,7 +270,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                     aria-selected={view === 'intraday'}
                     onClick={() => setView('intraday')}
                     className={`inline-flex h-6 items-center gap-1 rounded px-2.5 text-[11px] transition-colors ${
-                      view === 'intraday' ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
+                      view === 'intraday' ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
                     }`}
                   >
                     <Clock className="h-3 w-3" />
@@ -282,7 +282,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                     aria-selected={view === 'news'}
                     onClick={() => setView('news')}
                     className={`inline-flex h-6 items-center gap-1 rounded px-2.5 text-[11px] transition-colors ${
-                      view === 'news' ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
+                      view === 'news' ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
                     }`}
                   >
                     <Newspaper className="h-3 w-3" />
@@ -296,7 +296,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                       aria-selected={view === id}
                       onClick={() => setView(id)}
                       className={`inline-flex h-6 items-center gap-1 rounded px-2.5 text-[11px] transition-colors ${
-                        view === id ? 'bg-accent/20 text-accent font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
+                        view === id ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium' : 'text-muted hover:text-secondary hover:bg-elevated/60'
                       }`}
                     >
                       <Icon className="h-3 w-3" />
@@ -326,7 +326,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                           }}
                           className={`h-6 whitespace-nowrap rounded px-2.5 text-[11px] transition-colors cursor-pointer
                             ${isActive
-                              ? 'bg-accent/20 text-accent font-medium'
+                              ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium'
                               : 'text-muted hover:text-secondary hover:bg-elevated/60'
                             }`}
                         >
@@ -340,7 +340,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                       onChange={(v) => setDateRange(prev => ({ ...prev, start: v }))}
                       max={dateRange.end}
                     />
-                    <span className="text-muted text-[10px]">~</span>
+                    <span className="text-muted text-[11px]">~</span>
                     <DatePicker
                       value={dateRange.end}
                       onChange={(v) => setDateRange(prev => ({ ...prev, end: v }))}
@@ -358,7 +358,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                           onClick={() => selectIntradayDays(days)}
                           className={`h-6 rounded px-2.5 text-[11px] transition-colors ${
                             effectiveIntradayDays === days
-                              ? 'bg-accent/20 text-accent font-medium'
+                              ? 'bg-accent/20 text-accent dark:text-blue-400 font-medium'
                               : 'text-muted hover:text-secondary hover:bg-elevated/60'
                           }`}
                         >
@@ -437,9 +437,9 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
               <div className="flex items-center gap-4 border-b border-amber-400/20 bg-amber-400/[0.06] px-5 py-2 shrink-0">
                 {/* 左: 触发标记 + 时间 */}
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">⚡ 触发</span>
+                  <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400">触发</span>
                   {triggerInfo.ts && (
-                    <span className="text-[11px] text-secondary font-mono">
+                    <span className="text-[11px] text-secondary tabular-nums">
                       {new Date(triggerInfo.ts).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </span>
                   )}
@@ -448,10 +448,10 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                 {/* 中: 价格 + 涨跌幅 */}
                 <div className="flex items-center gap-2 shrink-0">
                   {triggerInfo.price != null && (
-                    <span className="text-[11px] font-mono text-foreground/80">{triggerInfo.price.toFixed(2)}</span>
+                    <span className="text-[11px] tabular-nums text-foreground/80">{triggerInfo.price.toFixed(2)}</span>
                   )}
                   {triggerInfo.changePct != null && (
-                    <span className={`text-[11px] font-mono font-medium ${triggerInfo.changePct >= 0 ? 'text-danger' : 'text-bear'}`}>
+                    <span className={`text-[11px] tabular-nums font-medium ${triggerInfo.changePct >= 0 ? 'text-danger' : 'text-bear'}`}>
                       {triggerInfo.changePct >= 0 ? '+' : ''}{(triggerInfo.changePct * 100).toFixed(2)}%
                     </span>
                   )}
@@ -465,7 +465,7 @@ export function StockPreviewDialog({ symbol, name, onClose, triggerInfo, navList
                   {triggerInfo.signals && triggerInfo.signals.length > 0 && (
                     <div className="flex items-center gap-1 flex-wrap">
                       {triggerInfo.signals.map((s, j) => (
-                        <span key={j} className="rounded bg-accent/10 px-1.5 py-0.5 text-[9px] text-accent">{cnSignal(s, customNames)}</span>
+                        <span key={j} className="rounded bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent dark:text-blue-400">{cnSignal(s, customNames)}</span>
                       ))}
                     </div>
                   )}

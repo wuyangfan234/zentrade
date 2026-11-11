@@ -65,14 +65,14 @@ export function Settings() {
     <>
       <PageHeader
         title="设置"
-        subtitle="管理账户、数据刷新策略和高级功能配置。"
+        subtitle="数据源 · AI · 推送 · 系统"
       />
 
       <div className="px-4 py-4 md:px-8 md:py-6">
         <div className="flex flex-col gap-4 md:flex-row md:gap-6 md:items-stretch">
           {/* ===== 竖向 Tab 侧栏 (桌面) / 顶部横滑标签条 (移动端) ===== */}
           <nav className={cn('shrink-0 transition-all duration-200 ease-smooth', collapsed ? 'md:w-10' : 'md:w-36')}>
-            <div className="flex flex-row gap-1 overflow-x-auto md:flex-col md:gap-0.5 md:justify-center md:min-h-[60vh] md:sticky md:top-6 md:overflow-visible">
+            <div className="flex flex-row gap-1 overflow-x-auto md:flex-col md:gap-0.5 md:sticky md:top-6 md:overflow-visible">
               {/* 收起/展开 按钮 (仅桌面) */}
               <button
                 onClick={toggleCollapsed}
@@ -100,14 +100,14 @@ export function Settings() {
                     collapsed ? 'md:justify-center md:px-0' : 'gap-2 text-left',
                     'px-3 py-2',
                     activeTab.key === key
-                      ? 'bg-accent/10 text-accent font-medium'
+                      ? 'bg-accent/10 text-accent dark:text-blue-400 font-medium'
                       : 'text-secondary hover:text-foreground hover:bg-elevated/60',
                   )}
                 >
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className={collapsed ? 'md:hidden' : ''}>{label}</span>
                   {!collapsed && badge && (
-                    <span className="ml-auto inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 shrink-0">
+                    <span className="ml-auto inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 shrink-0">
                       {badge}
                     </span>
                   )}

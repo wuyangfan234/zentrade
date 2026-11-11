@@ -22,7 +22,7 @@ function titleOf(chart: AssistantChart): ReactNode {
   return (
     <>
       {chart.name || chart.symbol}
-      {chart.name ? <span className="ml-1.5 font-mono text-muted">{chart.symbol}</span> : null}
+      {chart.name ? <span className="ml-1.5 tabular-nums text-muted">{chart.symbol}</span> : null}
       <span className="ml-1.5 text-muted">· {chart.kind === 'daily_kline' ? '日K' : '分时'}</span>
     </>
   )
@@ -48,7 +48,7 @@ function ChartShell({
     <div className="overflow-hidden rounded-card border border-border bg-base/60">
       <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-1.5 text-xs">
         <span className="truncate font-medium text-foreground">{titleOf(chart)}</span>
-        <span className="shrink-0 font-mono text-muted">{meta}</span>
+        <span className="shrink-0 tabular-nums text-muted">{meta}</span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -66,8 +66,8 @@ function ChartShell({
         {children}
       </svg>
       <div className="flex flex-wrap items-center justify-between gap-x-2 px-3 py-1.5 text-[11px]">
-        <span className="font-mono text-muted">{footerLeft}</span>
-        <span className="font-mono text-muted">{footerRight}</span>
+        <span className="tabular-nums text-muted">{footerLeft}</span>
+        <span className="tabular-nums text-muted">{footerRight}</span>
       </div>
     </div>
   )

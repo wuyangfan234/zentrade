@@ -27,7 +27,7 @@ it('同步历史行: 主行是状态, 任务编号降为小号灰字', () => {
   const id = host.querySelector('[data-job-id]')!
   expect(id.textContent).toContain('27843f912e')
   expect(id.className).toContain('text-muted')
-  expect(id.className).toContain('text-[10px]')
+  expect(id.className).toContain('text-[11px]')
   expect(id.getAttribute('title')).toContain('任务编号')
 })
 
@@ -40,7 +40,7 @@ it('进行中卡片: 编号不再与时长同等醒目', () => {
   const host = mount(<ActiveJobCard job={{ ...job, status: 'running', stage: 'daily', progress: 40, duration_s: null, log: [] } as never} />)
   const id = host.querySelector('[data-job-id]')!
   expect(id.textContent).toContain('27843f912e')
-  expect(id.className).toContain('text-[10px]')
+  expect(id.className).toContain('text-[11px]')
 })
 
 it('同步历史时间按美东显示并标 ET (与页面其余时间一致, 与浏览器时区无关)', () => {

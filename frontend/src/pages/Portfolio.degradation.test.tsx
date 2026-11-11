@@ -52,7 +52,7 @@ afterEach(async () => {
 
 it('shows a degraded setup with its evidence', () => {
   const text = container.textContent ?? ''
-  expect(text).toContain('突破 已降级为只观察')
+  expect(text).toContain('突破 已降级为仅观察')
   expect(text).toContain('12 笔')
   expect(text).toContain('-0.41R')
   expect(text).not.toContain('回踩 已降级')

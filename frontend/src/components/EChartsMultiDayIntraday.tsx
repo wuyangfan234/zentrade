@@ -412,7 +412,7 @@ export function EChartsMultiDayIntraday({
 
   return (
     <div className="w-full overflow-hidden">
-      <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 py-1 font-mono text-[11px]" style={{ backgroundColor: theme.infoBarBg }}>
+      <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-1 px-2 py-1 tabular-nums text-[11px]" style={{ backgroundColor: theme.infoBarBg }}>
         <div className="flex min-w-0 flex-wrap items-center gap-x-2">
           {info ? (
             <>
@@ -430,7 +430,7 @@ export function EChartsMultiDayIntraday({
             </>
           ) : <span className="text-muted">—</span>}
         </div>
-        <div className="shrink-0 text-[10px] text-muted">{sessions.length} 个交易日 · {rowCount} 分钟</div>
+        <div className="shrink-0 text-[11px] text-muted">{sessions.length} 个交易日 · {rowCount} 分钟</div>
       </div>
       <div ref={containerRef} className="w-full" style={{ height: height - 40, cursor: 'crosshair' }} />
     </div>

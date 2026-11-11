@@ -11,7 +11,7 @@ const r2 = (v: number | null | undefined) => (v == null ? '—' : `${v > 0 ? '+'
 const ci = (c: number[] | null | undefined, f: (v: number) => string) => (c && c.length === 2 ? `${f(c[0])} ~ ${f(c[1])}` : '—')
 
 const ROWS: ['fill' | 'win' | 'target' | 'stop' | 'time', string][] = [
-  ['fill', '回区'], ['win', '赢'], ['target', '目标'], ['stop', '止损'], ['time', '到期'],
+  ['fill', '成交'], ['win', '赢'], ['target', '目标'], ['stop', '止损'], ['time', '到期'],
 ]
 
 function Prop({ p }: { p?: SwingSettleProp | null }) {
@@ -59,22 +59,22 @@ function Side({ name, s }: { name: string; s: SwingSettleSide }) {
 }
 
 const SHADOW_ROWS: [string, string][] = [
-  ['cut:long', '被截掉 · 多'], ['cut:short', '被截掉 · 空'], ['gate_4h:long', '4h 门挡掉 · 多'], ['gate_4h:short', '4h 门挡掉 · 空'],
+  ['cut:long', '被截掉 · 多'], ['cut:short', '被截掉 · 空'], ['gate_4h:long', '4h 趋势过滤 · 多'], ['gate_4h:short', '4h 趋势过滤 · 空'],
 ]
 
-/** 影子对照 (2026-11-10): 没上板的同几何候选只结算不下单。每行 = 影子卡 vs 同一批信号日里上了板的卡。 */
+/** 观察对照 (2026-11-10): 没上板的同几何候选只结算不下单。每行 = 影子卡 vs 同一批信号日里上了板的卡。 */
 export function ShadowTable({ s }: { s: SwingShadowTable }) {
   const cell = (x: { cards: number; filled: number; mean_r: { v: number | null } }) => `${x.filled}/${x.cards} · ${r2(x.mean_r.v)}`
   return (
     <section data-swing-shadow className="mt-4">
       <div className="mb-1 flex items-baseline gap-2">
-        <h3 className="text-sm font-semibold">影子对照</h3>
-        <span className="text-muted" title="被每边前 5 张截掉、或 3+3 命中但 4h 门不同向的候选，按上板卡同一套价位只结算不下单">{`没上板的候选 · 已结算 ${s.n_total} 张 · 只记录`}</span>
+        <h3 className="text-sm font-semibold">观察对照</h3>
+        <span className="text-muted" title="排在每侧前 5 之外、或策略命中但 4h 不同向的候选 · 按机会板同一套价位结算，不下单">{`未入板候选 · 已结算 ${s.n_total} 条 · 仅观察`}</span>
       </div>
       <table className="w-full whitespace-nowrap">
         <thead className="text-muted">
           <tr className="border-b border-border">
-            {['', '信号日', '影子 成交/张 · 均 R', '区间', '同日上板 成交/张 · 均 R', '差'].map((h, i) => (
+            {['', '信号日', '观察 成交 / 条 · 平均 R', '区间', '同日上板 成交/张 · 均 R', '差'].map((h, i) => (
               <th key={`${h}-${i}`} className={`py-1 pr-3 font-normal ${i === 0 ? 'text-left' : 'text-right'}`}>{h}</th>
             ))}
           </tr>
@@ -109,9 +109,9 @@ const ISSUE: Record<string, string> = {
 
 /** 对账角标的悬停说明: 逐条列不一致 (规则 · 票 · 方向) */
 export function reconcileTitle(rec: SwingReconcileRow): string {
-  const head = rec.signal_check === 'unavailable' ? '信号层未核（回放不可用）' : '信号层：生产 vs 回放逐票'
+  const head = rec.signal_check === 'unavailable' ? '信号层未核（回放不可用）' : '信号层：实盘与回放逐只对照'
   const rows = rec.issues.slice(0, 12).map((x) => `${ISSUE[x.kind] ?? x.kind} ${x.rule ?? ''} ${x.symbol ?? ''}${x.side === 'short' ? ' 空' : ''}`.trim())
-  return [head, rec.board_day ? `板层：${rec.board_day} 的簿` : '板层：无已落盘的簿', ...rows].join('\n')
+  return [head, rec.board_day ? `板层：${rec.board_day} 的簿` : '机会板层：暂无记录', ...rows].join('\n')
 }
 
 export function SwingSettlement() {
@@ -133,7 +133,7 @@ export function SwingSettlement() {
           </span>
         )}
         {rec?.zero_hit_rules && Object.keys(rec.zero_hit_rules).length > 0 && (
-          <span data-zero-hit className="text-warning" title="连续 0 命中天数已超过这条规则在回放里的历史最长">
+          <span data-zero-hit className="text-warning" title="连续 0 命中天数已超过该规则回放中的历史最长">
             {Object.entries(rec.zero_hit_rules).map(([k, v]) => `${k} 连续 ${v.days} 天 0 命中（历史最长 ${v.history_max}）`).join(' · ')}
           </span>
         )}
@@ -148,7 +148,7 @@ export function SwingSettlement() {
           <table className="w-full whitespace-nowrap">
             <thead className="text-muted">
               <tr className="border-b border-border">
-                {['信号日', '', '票', '挂单区', '止损', '目标', '结局', 'R'].map((h, i) => (
+                {['信号日', '', '代码', '挂单区', '止损', '目标', '结局', 'R'].map((h, i) => (
                   <th key={`${h}-${i}`} className={`py-1 pr-3 font-normal ${i >= 3 ? 'text-right' : 'text-left'}`}>{h}</th>
                 ))}
               </tr>
@@ -162,7 +162,7 @@ export function SwingSettlement() {
                   <td className="pr-3 text-right">{`${r.zone[0].toFixed(2)}–${r.zone[1].toFixed(2)}`}</td>
                   <td className="pr-3 text-right">{r.stop.toFixed(2)}</td>
                   <td className="pr-3 text-right">{r.target.toFixed(2)}</td>
-                  <td className="pr-3 text-right">{r.status === 'no_fill' ? '未回区' : WHY[r.why ?? ''] ?? r.why}</td>
+                  <td className="pr-3 text-right">{r.status === 'no_fill' ? '未成交' : WHY[r.why ?? ''] ?? r.why}</td>
                   <td className="text-right">{r.status === 'closed' ? r2(r.r) : '—'}</td>
                 </tr>
               ))}

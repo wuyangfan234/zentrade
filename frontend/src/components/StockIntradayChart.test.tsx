@@ -89,25 +89,26 @@ it('does not label realtime TickFlow minutes as delayed and drops obsolete price
   } as any)
   const host = await mount()
   expect(chartProps.mock.calls.at(-1)![0]).not.toHaveProperty('priceLimit')
-  expect(host.textContent).toContain('实时 · TickFlow · 美东时间')
+  expect(host.textContent).toContain('实时 · TickFlow · ET')
   expect(host.textContent).not.toContain('延迟')
   expect(host.textContent).not.toContain('非实时')
 })
 
 it('intradayNotice: delay is only mentioned in session when no realtime source is available', () => {
-  expect(intradayNotice({ in_session: true, realtime_source: 'tickflow', data_delay_minutes: 16 })).toBe('实时 · TickFlow · 美东时间')
-  expect(intradayNotice({ in_session: true, realtime_tail: { source: 'tickflow' }, data_delay_minutes: 0 })).toBe('实时 · TickFlow · 美东时间')
-  expect(intradayNotice({ in_session: true, realtime_source: null, data_delay_minutes: 16 })).toBe('实时源暂不可用，最近约16分钟待补 · 美东时间')
+  expect(intradayNotice({ in_session: true, realtime_source: 'tickflow', data_delay_minutes: 16 })).toBe('实时 · TickFlow · ET')
+  expect(intradayNotice({ in_session: true, realtime_tail: { source: 'tickflow' }, data_delay_minutes: 0 })).toBe('实时 · TickFlow · ET')
+  expect(intradayNotice({ in_session: true, realtime_source: null, data_delay_minutes: 16 })).toBe('实时源不可用 · 最近约 16 分钟待补 · ET')
   // 收盘后 / 历史日 = 完整分钟K, 不提延迟
-  expect(intradayNotice({ in_session: false, realtime_source: null, data_delay_minutes: 16 })).toBe('美东时间')
-  expect(intradayNotice(undefined)).toBe('美东时间')
+  expect(intradayNotice({ in_session: false, realtime_source: null, data_delay_minutes: 16 })).toBe('ET')
+  expect(intradayNotice(undefined)).toBe('ET')
 })
 
 it('does not invent a 16-minute delay for a source that declares zero delay', async () => {
   vi.mocked(api.klineMinute).mockResolvedValue({ ...response, data_delay_minutes: 0 } as any)
   const host = await mount()
   expect(host.textContent).not.toContain('16分钟')
-  expect(host.textContent).toContain('美东时间')
+  expect(host.textContent).toContain('ET')
+  expect(host.textContent).not.toContain('美东时间')
 })
 
 it('does not schedule polling for an explicitly selected historical date with no data', async () => {

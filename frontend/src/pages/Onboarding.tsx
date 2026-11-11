@@ -35,11 +35,11 @@ const STEPS = ['声明', '欢迎', '数据源', '能力路由', '完成'] as con
 const BRAND = '#8B5CF6'
 
 const HIGHLIGHTS = [
-  { icon: LineChart,   title: '机会与自选', desc: '自选股出现交易信号即生成机会卡，盘前盘中跟踪是否触发', tint: 'text-accent' },
-  { icon: ScanSearch,  title: '策略选股',   desc: '内置多套选股策略，一键扫描全市场命中标的', tint: 'text-bull' },
+  { icon: LineChart,   title: '机会与自选', desc: '自选出现交易信号时生成机会 · 盘前盘中跟踪触发', tint: 'text-accent' },
+  { icon: ScanSearch,  title: '策略选股',   desc: '内置选股策略 · 全市场扫描', tint: 'text-bull' },
   { icon: TrendingUp,  title: '个股分析',   desc: 'AI 综合分析个股，关键价位、技术形态一目了然', tint: 'text-warning' },
 
-  { icon: FileText,    title: '纸面交易',   desc: '按规则纸面下单、逐笔记账复盘，不动真钱', tint: 'text-bear' },
+  { icon: FileText,    title: '模拟交易',   desc: '按规则模拟下单 · 逐笔记录与复盘 · 无真实下单', tint: 'text-bear' },
   { icon: ShieldCheck, title: '回测验证',   desc: '策略历史回测、因子分析，用数据验证逻辑', tint: 'text-accent' },
   { icon: Radar,       title: '实时监控',   desc: '自定义条件 / 策略监控，盘中触发即推送告警', tint: 'text-bear' },
   { icon: BellRing,    title: '本地优先',   desc: '数据本地存储，隐私可控，断网仍可查阅', tint: 'text-bull' },
@@ -178,7 +178,7 @@ function DisclaimerStep({ onNext }: { onNext: () => void }) {
               <span className="text-warning">无官方关联</span>。数据能力依赖第三方数据服务提供。
             </p>
             <p>
-              本项目用于学习、研究与纸面交易，不构成投资建议。股市有风险，使用者自行承担使用结果。
+              本项目用于学习、研究与模拟交易，不构成投资建议。股市有风险，使用者自行承担使用结果。
             </p>
             <p>
               原创代码采用 MIT 许可，第三方组件保留各自许可与使用限制。使用本项目时，请遵守第三方许可、数据源服务条款，并自行评估接口插件的合规责任。
@@ -190,7 +190,7 @@ function DisclaimerStep({ onNext }: { onNext: () => void }) {
       <div className="mt-6 flex items-center justify-center">
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
         >
           我已了解，继续
           <ArrowRight className="h-4 w-4" />
@@ -220,8 +220,8 @@ function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
         欢迎使用 ZenTrade
       </h1>
       <p className="mt-3 text-sm text-secondary leading-relaxed max-w-md mx-auto">
-        面向美股波段研究与纸面交易的本地分析面板，整合行情、策略、回测与监控。
-        请先配置数据源，再按可用能力同步和分析数据。
+        美股波段研究与模拟交易 · 行情 · 策略 · 回测 · 监控
+        第一步 · 配置数据源
       </p>
 
       {/* 特性卡片，横向布局压缩高度 */}
@@ -249,7 +249,7 @@ function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
       <div className="mt-8 flex items-center justify-center gap-3">
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
         >
           开始配置
           <ArrowRight className="h-4 w-4" />
@@ -330,7 +330,7 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
   const keyForms = [
     {
       name: 'alpaca', display: 'Alpaca (美股)', env: 'ZENTRADE_ALPACA_KEY', configured: alpacaConfigured, autoFocus: true,
-      copy: '格式 KEY_ID:SECRET。仅存本地 (secrets.json)，先验证后保存。行情来源、权限和延迟以当前插件配置及能力检测结果为准。',
+      copy: '格式 KEY_ID:SECRET · 验证通过后保存 · 仅保存在本机',
       register: { label: '前往 Alpaca 注册获取 Key', url: 'https://app.alpaca.markets/signup' },
     },
   ]
@@ -344,9 +344,8 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         <h2 className="text-xl font-bold text-foreground">配置数据源</h2>
       </div>
       <p className="mt-2.5 text-sm text-secondary leading-relaxed">
-        ZenTrade 使用内置 <span className="text-foreground font-medium">Alpaca</span> 美股数据源。填写 API Key (KEY_ID:SECRET) 即可启用;
-        数据源的切换与增删随时在
-        <span className="text-foreground font-medium"> 设置 → 数据源 </span>中进行。
+        内置 <span className="text-foreground font-medium">Alpaca</span> 美股数据源 · 填写 API Key（KEY_ID:SECRET）后启用 · 可在
+        <span className="text-foreground font-medium"> 设置 › 数据源 </span>切换或增删
       </p>
 
       {/* 数据源卡片 (只读展示): 不在向导中切换, 保留设置页完整能力 */}
@@ -379,26 +378,26 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                     {item.display_name.replace(/（.*?）|\(.*?\)/g, '').trim() || item.display_name}
                   </span>
                   {item.kind === 'builtin' ? (
-                    <span className="shrink-0 rounded bg-accent/15 px-1 py-0.5 text-[9px] font-medium leading-none text-accent">内置</span>
+                    <span className="shrink-0 rounded bg-accent/15 px-1 py-0.5 text-[11px] font-medium leading-none text-accent dark:text-blue-400">内置</span>
                   ) : item.kind === 'custom' ? (
-                    <span className="text-[9px] text-muted tracking-wider shrink-0">自有</span>
+                    <span className="text-[11px] text-muted tracking-wider shrink-0">自有</span>
                   ) : (
-                    <span className="shrink-0 rounded bg-warning/10 px-1 py-0.5 text-[9px] font-medium leading-none text-warning">第三方</span>
+                    <span className="shrink-0 rounded bg-warning/10 px-1 py-0.5 text-[11px] font-medium leading-none text-warning">第三方</span>
                   )}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1 pl-0.5">
                   {unavailable ? (
-                    <span className="text-[10px] text-muted">需安装依赖，见 设置 → 数据源</span>
+                    <span className="text-[11px] text-muted">需安装依赖 · 见「设置 › 数据源」</span>
                   ) : needsKey ? (
-                    <span className="text-[10px] text-warning">需配置 API Key,见下方表单</span>
+                    <span className="text-[11px] text-warning">需配置 API Key</span>
                   ) : item.datasets.length > 0 ? (
                     item.datasets.slice(0, 4).map(ds => (
-                      <span key={ds} className="rounded bg-elevated/60 px-1 py-0.5 text-[10px] text-muted">
+                      <span key={ds} className="rounded bg-elevated/60 px-1 py-0.5 text-[11px] text-muted">
                         {DATASET_LABELS[ds] ?? ds}
                       </span>
                     ))
                   ) : (
-                    <span className="text-[10px] text-muted">未声明数据集</span>
+                    <span className="text-[11px] text-muted">未声明数据集</span>
                   )}
                 </div>
               </div>
@@ -418,9 +417,9 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
             <div className="flex items-center gap-2">
               <KeyRound className="h-3.5 w-3.5 text-accent" />
               <span className="text-xs font-medium text-foreground">配置 {f.display} API Key</span>
-              <span className="rounded bg-elevated/70 px-1 py-px font-mono text-[9px] text-muted">{f.env}</span>
+              <span className="rounded bg-elevated/70 px-1 py-px font-mono text-[11px] text-muted">{f.env}</span>
               {f.configured && (
-                <span className="ml-auto inline-flex items-center gap-1 text-[10px] text-bull">
+                <span className="ml-auto inline-flex items-center gap-1 text-[11px] text-bull">
                   <CheckCircle2 className="h-3 w-3" />
                   已配置
                 </span>
@@ -451,12 +450,12 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
                 }}
                 placeholder={`粘贴 ${f.env}`}
                 autoFocus={f.autoFocus}
-                className="h-8 flex-1 rounded-input border border-border bg-surface px-3 font-mono text-xs text-foreground placeholder:text-muted/60 focus:border-accent/60 focus:outline-none"
+                className="h-8 flex-1 rounded-input border border-border bg-surface px-3 font-mono text-xs text-foreground placeholder:text-muted focus:border-accent/60 focus:outline-none"
               />
               <button
                 type="submit"
                 disabled={!val.trim() || saveKey.isPending}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 {pending ? '验证中…' : '验证并保存'}
@@ -482,14 +481,9 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
       <div className="mt-3 flex items-start gap-2 rounded-card border border-border/60 bg-surface/60 px-3 py-2.5">
         <Puzzle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />
         <div className="text-[11px] leading-relaxed text-muted">
-          <span className="text-secondary">数据源已插件化</span>
-          。接入自有行情或切换数据源请前往
-          <span className="mx-0.5 rounded bg-elevated/70 px-1 py-px font-mono text-[10px] text-secondary">设置 → 数据源</span>
-          ，方法详见
-          <span className="mx-0.5 rounded bg-elevated/70 px-1 py-px font-mono text-[10px] text-secondary">docs/custom-data-source.md</span>
-          与
-          <span className="mx-0.5 rounded bg-elevated/70 px-1 py-px font-mono text-[10px] text-secondary">docs/plugin-development.md</span>
-          。
+          <span className="text-secondary">支持自定义数据源</span>
+          {' · 在「设置 › 数据源」中切换或接入 · '}
+          <span className="cursor-help underline decoration-dotted underline-offset-2" title="docs/custom-data-source.md · docs/plugin-development.md">接入文档</span>
         </div>
       </div>
 
@@ -504,7 +498,7 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         </button>
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
         >
           下一步
           <ArrowRight className="h-4 w-4" />
@@ -580,10 +574,10 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
         <h2 className="text-xl font-bold text-foreground">能力路由检测</h2>
       </div>
       <p className="mt-2.5 text-sm text-secondary leading-relaxed">
-        进入本步时已按默认优先级
+        已按默认优先级
         <span className="text-foreground font-medium"> Alpaca </span>
-        自动设置各数据集的路由:前者可用的能力归前者，没有则顺延下一个可用源。后续可随时在
-        <span className="text-foreground font-medium"> 设置 → 数据源 </span>按数据集改选。
+        分配各数据集的来源 · 可在
+        <span className="text-foreground font-medium"> 设置 › 数据源 </span>调整
       </p>
 
       {/* 自动路由执行结果 */}
@@ -601,7 +595,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
               已按优先级自动路由:{appliedChanges.map(c => `${c.label} → ${c.to}`).join('、')}
             </span>
           ) : (
-            <span>当前能力路由已符合默认优先级，无需调整。</span>
+            <span>当前配置已符合默认优先级</span>
           )}
         </div>
       )}
@@ -613,7 +607,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
         </div>
       ) : routes.length === 0 ? (
         <div className="mt-5 rounded-card border border-border bg-surface/80 p-5 text-center text-xs text-muted">
-          暂未获取到能力路由矩阵，可稍后在 设置 → 数据源 中重新检测。
+          暂未获取到数据源能力 · 可稍后在「设置 › 数据源」重新检测
         </div>
       ) : (
         <>
@@ -632,20 +626,20 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
                     <AlertCircle className="h-3.5 w-3.5 shrink-0 text-warning" />
                   )}
                   <span className="text-sm font-medium text-foreground">{r.label}</span>
-                  <span className="ml-auto shrink-0 text-[10px] font-medium text-secondary">
+                  <span className="ml-auto shrink-0 text-[11px] font-medium text-secondary">
                     {r.usable ? '可用' : '不可用'}
                   </span>
                 </div>
-                <div className="mt-1 flex items-center gap-1.5 pl-5 text-[10px] text-muted">
+                <div className="mt-1 flex items-center gap-1.5 pl-5 text-[11px] text-muted">
                   <span className="truncate">生效源:{r.effective_display}</span>
                   <span className="shrink-0 text-muted">·</span>
                   <span className="shrink-0">{r.desc}</span>
                 </div>
                 {!r.usable && (
-                  <div className="mt-1 pl-5 text-[10px] text-warning leading-relaxed">
+                  <div className="mt-1 pl-5 text-[11px] text-warning leading-relaxed">
                     {r.candidates.length > 0
                       ? `可切换候选:${r.candidates.map(c => c.display).join(' / ')}`
-                      : '暂无可用候选，可在设置中排查该源'}
+                      : '暂无可用数据源'}
                   </div>
                 )}
               </div>
@@ -655,7 +649,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
           <div className="mt-3 flex items-center justify-between rounded-btn bg-elevated/50 px-3.5 py-2 text-[11px] text-muted">
             <span>
               {usableCount}/{routes.length} 个数据集可用
-              {!hasKey && ' · 未配置 Alpaca Key,请先配置后再拉取数据'}
+              {!hasKey && ' · 未配置 Alpaca Key'}
             </span>
             <LinkMark />
           </div>
@@ -673,7 +667,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
         </button>
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
         >
           下一步
           <ArrowRight className="h-4 w-4" />
@@ -685,7 +679,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
 
 /** 指向设置数据源的行内提示 (能力路由可随时调整) */
 function LinkMark() {
-  return <span className="shrink-0">调整: 设置 → 数据源</span>
+  return <span className="shrink-0">调整：设置 › 数据源</span>
 }
 
 // ===== Step 4: 完成 =====
@@ -713,7 +707,7 @@ function OnboardingChecklist() {
         </ul>
       )}
       {newsWarn && <p className="mt-2 text-xs leading-relaxed text-warning">新闻翻译：{newsWarn}</p>}
-      <p className="mt-2 text-[11px] text-muted">完整清单在「设置 → 数据源」顶部，随时可补。</p>
+      <p className="mt-2 text-[11px] text-muted">完整清单见「设置 › 数据源」</p>
     </div>
   )
 }
@@ -723,7 +717,7 @@ function FinishStep({ onNext, onBack, pending }: { onNext: () => void; onBack: (
   // 快速上手入口(精简为核心功能)
   const tips = [
     { icon: TrendingUp, text: '「个股分析」：输入代码，AI 综合分析 + 关键价位' },
-    { icon: ScanSearch, text: '「策略」页：内置多套策略，一键扫描全市场' },
+    { icon: ScanSearch, text: '「策略」页：内置选股策略 · 全市场扫描' },
     { icon: ShieldCheck, text: '「回测」页：用历史数据验证策略表现，用数据说话' },
   ]
 
@@ -751,7 +745,7 @@ function FinishStep({ onNext, onBack, pending }: { onNext: () => void; onBack: (
 
       <h1 className="mt-6 text-2xl font-bold text-foreground">向导完成</h1>
       <p className="mt-2.5 text-sm text-secondary leading-relaxed max-w-md mx-auto">
-        进入面板后，请在「数据」页确认可用数据源并同步美股行情。未配置或无权限的数据集不可用，可在「设置 → 数据源」中继续配置。
+        进入后请在「数据」页同步行情 · 未配置的数据集可在「设置 › 数据源」补充
       </p>
 
       {/* 首要行动:获取数据 */}
@@ -767,7 +761,7 @@ function FinishStep({ onNext, onBack, pending }: { onNext: () => void; onBack: (
         <div className="min-w-0">
           <div className="text-sm font-medium text-foreground">下一步:获取行情数据</div>
           <p className="mt-1 text-xs text-secondary leading-relaxed">
-            在「数据」页按已配置数据源同步美股日K。覆盖范围、历史长度与耗时取决于数据源权限、标的数量和限速；以实际同步结果为准。
+            在「数据」页同步日 K · 覆盖范围与耗时取决于数据源权限与限速
           </p>
         </div>
       </motion.div>
@@ -805,7 +799,7 @@ function FinishStep({ onNext, onBack, pending }: { onNext: () => void; onBack: (
         <button
           onClick={onNext}
           disabled={pending}
-          className="inline-flex items-center gap-2 px-6 h-10 rounded-xl bg-accent text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 disabled:opacity-60 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-10 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 disabled:opacity-60 transition-all"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {pending ? '正在进入…' : '进入面板'}

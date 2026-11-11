@@ -35,7 +35,7 @@ function StatCard({ label, value, highlight }: {
   return (
     <div>
       <div className="text-[11px] text-muted">{label}</div>
-      <div className={`mt-1 text-lg font-mono font-semibold tracking-tight num ${colorCls}`}>
+      <div className={`mt-1 text-lg tabular-nums font-semibold tracking-tight num ${colorCls}`}>
         {value ?? '—'}
       </div>
     </div>
@@ -70,7 +70,7 @@ function LoadingPanel({ symbolsText }: { symbolsText: string }) {
       <div className="rounded-card border border-border bg-surface p-4">
         <div className="flex items-center justify-between">
           <div className="text-xs font-medium text-secondary">分层净值预览</div>
-          <div className="text-[11px] text-muted">等待后端返回完整结果</div>
+          <div className="text-[11px] text-muted">等待结果</div>
         </div>
         <div className="mt-4 h-[260px] rounded-btn border border-border bg-base/60 p-4">
           <div className="flex h-full items-end gap-2 opacity-70">
@@ -188,7 +188,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
           ? '全部历史'
           : '自定义区间'
   const rangeButtonCls = (key: string) => `rounded-btn px-2 py-1 text-[11px] font-medium transition-colors ${rangeKey === key
-    ? 'bg-accent/15 text-accent'
+    ? 'bg-accent/15 text-accent dark:text-blue-400'
     : 'text-muted hover:bg-elevated/70 hover:text-secondary'
   }`
 
@@ -198,7 +198,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
       <section className="space-y-3 border-b xl:border-b-0 xl:border-r border-border bg-base/25 px-3 py-3 xl:overflow-y-auto">
         <div className="border-b border-border/70 pb-2">
           <div className="text-xs font-semibold text-foreground">因子配置</div>
-          <div className="mt-0.5 text-[10px] leading-4 text-muted">默认 3 个月</div>
+          <div className="mt-0.5 text-[11px] leading-4 text-muted">默认 3 个月</div>
         </div>
 
         <div>
@@ -230,21 +230,21 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
                 type="button"
                 onClick={() => { setAssetType(t); setSymbols('') }}
                 className={`h-full px-3 text-xs font-medium transition-colors cursor-pointer
-                  ${assetType === t ? 'bg-accent/10 text-accent' : 'text-muted hover:text-foreground'}`}
+                  ${assetType === t ? 'bg-accent/10 text-accent dark:text-blue-400' : 'text-muted hover:text-foreground'}`}
               >
                 {t === 'stock' ? '股票' : 'ETF'}
               </button>
             ))}
           </div>
           <label className="text-xs font-medium text-secondary block mb-1.5">
-            标的(逗号分隔，留空=全市场{assetType === 'etf' ? ' ETF' : ''})
+            代码（逗号分隔，留空 = 全市场{assetType === 'etf' ? ' ETF' : ''}）
           </label>
           <input
             type="text"
             value={symbols}
             onChange={e => setSymbols(e.target.value)}
             placeholder="留空则使用全市场，建议最近3个月"
-            className={`w-full px-2.5 py-1.5 rounded-input bg-surface border border-border text-xs font-mono
+            className={`w-full px-2.5 py-1.5 rounded-input bg-surface border border-border text-xs tabular-nums
               focus:outline-none focus:border-accent transition-colors duration-150 ease-smooth`}
           />
         </div>
@@ -252,7 +252,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
         <div className="rounded-btn border border-border bg-surface p-2.5">
           <div className="flex items-center justify-between gap-2">
             <div className="text-xs font-medium text-foreground">回测区间</div>
-            <span className="shrink-0 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[10px] font-medium text-accent">
+            <span className="shrink-0 rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent dark:text-blue-400">
               {rangeTitle}
             </span>
           </div>
@@ -363,7 +363,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
         )}
 
         {run.isPending && !result && (
-          <LoadingPanel symbolsText={symbols ? `${parseSymbols(symbols).length} 只标的` : '全市场 · 当前区间'} />
+          <LoadingPanel symbolsText={symbols ? `${parseSymbols(symbols).length} 只` : '全市场 · 当前区间'} />
         )}
 
         {result && !result.error && (
@@ -418,7 +418,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
                 </div>
               ) : (
                 <div className="rounded-btn border border-border bg-base/40 px-3 py-3 text-xs text-muted">
-                  {result.n_symbols < 2 ? '标的不足 · 至少 2 只' : '无有效 IC 截面'}
+                  {result.n_symbols < 2 ? '至少需要 2 只' : '无有效 IC 截面'}
                 </div>
               )}
             </div>
@@ -500,7 +500,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
 
             {/* 数据概要 */}
             <div className="flex items-center gap-4 text-[11px] text-muted">
-              <span>{result.n_symbols} 只标的</span>
+              <span>{result.n_symbols} 只</span>
               <span>{result.n_dates} 个交易日</span>
               <span>run_id: {result.run_id}</span>
             </div>

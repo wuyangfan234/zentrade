@@ -73,12 +73,12 @@ export function QuoteConfigCard({ enabled, running, isTrading, lastFetchMs, inte
             <span className="text-muted">状态</span>
             <div className="flex items-center gap-1.5">
               <span className={`inline-block h-1.5 w-1.5 rounded-full ${statusColor} ${running && isTrading ? 'animate-pulse' : ''}`} />
-              <span className="font-mono text-secondary">{statusText}</span>
+              <span className="tabular-nums text-secondary">{statusText}</span>
             </div>
           </div>
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted">交易时段</span>
-            <span className={`font-mono ${isTrading ? 'text-accent' : 'text-muted'}`}>{isTrading ? '交易中' : '休市'}</span>
+            <span className={`tabular-nums ${isTrading ? 'text-accent' : 'text-muted'}`}>{isTrading ? '交易中' : '休市'}</span>
           </div>
           <div className="flex items-center justify-between text-[11px]">
             <div className="flex items-center gap-1">
@@ -91,11 +91,11 @@ export function QuoteConfigCard({ enabled, running, isTrading, lastFetchMs, inte
                 <Settings className="h-3 w-3" />
               </button>
             </div>
-            <span className="font-mono text-secondary">{intervalS}s</span>
+            <span className="tabular-nums text-secondary">{intervalS}s</span>
           </div>
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-muted">最后获取</span>
-            <span className="font-mono text-secondary">{lastFetchTime ?? '—'}</span>
+            <span className="tabular-nums text-secondary">{lastFetchTime ?? '—'}</span>
           </div>
         </div>
       )}
@@ -132,7 +132,7 @@ function IntervalEditor({ min, max, value, onChange }: {
 
   return (
     <div className="mt-2 pt-2 border-t border-border/50">
-      <div className="text-[10px] text-muted mb-1.5">
+      <div className="text-[11px] text-muted mb-1.5">
         轮询间隔 <span className="text-muted">({min}s ~ {max}s)</span>
       </div>
       <div className="flex flex-wrap gap-1 mb-2">
@@ -140,9 +140,9 @@ function IntervalEditor({ min, max, value, onChange }: {
           <button
             key={p}
             onClick={() => { setDraft(p); onChange(p) }}
-            className={`px-1.5 py-0.5 rounded text-[10px] font-mono transition-colors ${
+            className={`px-1.5 py-0.5 rounded text-[11px] tabular-nums transition-colors ${
               Math.abs(clamped - p) < 0.01
-                ? 'bg-accent/15 text-accent border border-accent/30'
+                ? 'bg-accent/15 text-accent dark:text-blue-400 border border-accent/30'
                 : 'bg-elevated text-secondary hover:text-foreground border border-transparent'
             }`}
           >
@@ -158,7 +158,7 @@ function IntervalEditor({ min, max, value, onChange }: {
           onChange={e => { const v = parseFloat(e.target.value); setDraft(v); onChange(v) }}
           className="flex-1 h-1 accent-accent cursor-pointer"
         />
-        <span className="text-[10px] font-mono text-foreground w-8 text-right">
+        <span className="text-[11px] tabular-nums text-foreground w-8 text-right">
           {clamped < 1 ? clamped.toFixed(1) : clamped.toFixed(0)}s
         </span>
       </div>

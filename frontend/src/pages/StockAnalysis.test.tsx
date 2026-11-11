@@ -73,7 +73,7 @@ async function typeInto(input: HTMLInputElement, value: string) {
 it('renders a stock search box when no stock is selected', async () => {
   await render()
 
-  expect(container.textContent).toContain('选择一只股票开始分析')
+  expect(container.textContent).toContain('选择个股')
   expect(searchInput()).not.toBeNull()
 })
 
@@ -89,7 +89,7 @@ it('selecting a search result switches the analysis target', async () => {
 
   await act(async () => { option!.click() })
 
-  expect(container.textContent).not.toContain('选择一只股票开始分析')
+  expect(container.textContent).not.toContain('选择个股')
   expect(container.textContent).toContain('AI 个股分析')
   expect(JSON.parse(localStorage.getItem('last_stock:stock-analysis') ?? 'null')?.symbol ?? null)
     .toBe('NVDA')

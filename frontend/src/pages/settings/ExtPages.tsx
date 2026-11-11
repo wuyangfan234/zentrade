@@ -61,10 +61,10 @@ export function IntelPageCard() {
           <div className="flex items-center gap-2">
             <Gauge className="h-4 w-4 text-accent" />
             <h3 className="text-sm font-medium text-foreground">盘面情报</h3>
-            <span className="rounded bg-elevated px-1.5 py-0.5 text-[10px] text-secondary">内置</span>
+            <span className="rounded bg-elevated px-1.5 py-0.5 text-[11px] text-secondary">内置</span>
           </div>
           <p className="mt-1 text-xs leading-5 text-secondary">
-            当日温度 (指数 / 波动率 / 利率 / Put-Call / 全市场宽度 / 板块) · 宏观日历含实际值 · 自选财报 (一致预期 / 历史反应 / 期权隐含波动) · 自选新闻。只展示，不参与下单。
+            市场概览（指数 / 波动率 / 利率 / Put-Call / 市场宽度 / 板块）· 宏观日历 · 自选财报 · 自选新闻 · 仅观察
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -196,9 +196,9 @@ export function SettingsExtPagesPanel() {
         <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-[0.2em] text-accent">扩展页面</div>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">把扩展数据配置成左侧分析菜单</h2>
+            <h2 className="mt-2 text-lg font-semibold tracking-tight text-foreground">把扩展数据配置成左侧分析菜单</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary">
-              选择扩展数据源、分析模板、分组字段和列表列后，系统会生成一个可访问的动态分析页面。
+              选择扩展数据源、分析模板、分组字段与列，生成分析页面
             </p>
           </div>
           <button
@@ -218,7 +218,7 @@ export function SettingsExtPagesPanel() {
           <div className="flex items-center justify-between gap-3">
             <div>
               <h3 className="text-sm font-medium text-foreground">{editingMenu ? '编辑扩展页面' : '新建扩展页面'}</h3>
-              <p className="mt-1 text-[11px] text-muted">菜单标识保存后不可在此处直接修改，如需更换标识请新建页面。</p>
+              <p className="mt-1 text-[11px] text-muted">菜单标识保存后不可修改 · 需更换请新建页面</p>
             </div>
             <button onClick={() => { setShowForm(false); setError('') }} className="rounded p-1 text-muted hover:bg-elevated hover:text-foreground">
               <X className="h-4 w-4" />
@@ -292,7 +292,7 @@ export function SettingsExtPagesPanel() {
                   <button
                     key={f.name}
                     onClick={() => setSelectedColumns(cols => active ? cols.filter(c => c !== f.name) : [...cols, f.name])}
-                    className={`rounded-full border px-3 py-1 text-[11px] transition-colors ${active ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border bg-elevated/40 text-secondary hover:bg-elevated'}`}
+                    className={`rounded-full border px-3 py-1 text-[11px] transition-colors ${active ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400' : 'border-border bg-elevated/40 text-secondary hover:bg-elevated'}`}
                   >
                     {f.label || f.name}
                   </button>
@@ -319,8 +319,8 @@ export function SettingsExtPagesPanel() {
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-medium text-foreground">{menu.label}</h3>
-                  {menu.builtin && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] text-accent">默认</span>}
-                  {!menu.visible && <span className="rounded bg-muted/10 px-1.5 py-0.5 text-[10px] text-muted">已隐藏</span>}
+                  {menu.builtin && <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[11px] text-accent dark:text-blue-400">默认</span>}
+                  {!menu.visible && <span className="rounded bg-muted/10 px-1.5 py-0.5 text-[11px] text-muted">已隐藏</span>}
                 </div>
                 <p className="mt-1 text-[11px] text-muted font-mono">{menu.id}</p>
               </div>
@@ -356,7 +356,7 @@ export function SettingsExtPagesPanel() {
             </div>
           ))}
         {!menus.isLoading && menuItems.length === 0 && (
-          <div className="rounded-card border border-border bg-surface px-5 py-10 text-center text-sm text-muted md:col-span-2 xl:col-span-3">暂无扩展页面，点击右上角新建。</div>
+          <div className="rounded-card border border-border bg-surface px-5 py-10 text-center text-sm text-muted md:col-span-2 xl:col-span-3">暂无扩展页面</div>
         )}
       </section>
     </div>

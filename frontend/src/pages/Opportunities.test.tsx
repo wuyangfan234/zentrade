@@ -177,7 +177,7 @@ it('状态栏保留: 时钟 + 时段 + 下一事件 + 名额 + 泳道; 雷达图
   expect(text('[data-rail-clock]')).toContain('10:39')
   expect(text('[data-rail-clock]')).toContain('北京 22:39')
   expect(text('[data-rail-phase]')).toContain('盘中 · 入场窗')
-  expect(text('[data-rail-next]')).toContain('11:00 盘中检查')
+  expect(text('[data-rail-next]')).toContain('11:00 ET 盘中检查')
   expect(text('[data-cap="slot"]')).toContain('科技·空')
   expect(host.querySelector('[data-lane="board"]')).not.toBeNull()
   for (const sel of ['[data-sweep]', '[data-readout]', '[data-feed]', '[data-engine-details]', '[data-details-toggle]', '[data-stage-tab]', '[data-mark]']) {
@@ -216,11 +216,11 @@ it.each([
 it('共振: 同票多引擎; 影子标记; 栏内同票带圆点', async () => {
   await render()
   const r = host.querySelector('[data-res="TSLA"]')!
-  expect(r.textContent).toContain('3 引擎')
+  expect(r.textContent).toContain('3 个信号')
   expect(r.textContent).toContain('开盘放量 #3 1.2×')
   expect(r.textContent).toContain('盘中强势 10-22 +1.45R')
   expect(r.textContent).toContain('机会板 挂单')
-  expect(text('[data-res="TSLA"] [data-res-shadow]')).toBe('影子 10:05')
+  expect(text('[data-res="TSLA"] [data-res-shadow]')).toBe('观察 10:05')
   expect(host.querySelector('[data-intraday-row="TSLA"] [data-res-mark]')).not.toBeNull()
   expect(host.querySelector('[data-board-row="BABA"] [data-res-mark]')).toBeNull()
 })
@@ -233,9 +233,9 @@ it('四栏内容: 跳空现在涨幅 / 开盘点名 / 盘中在途与今日已�
   expect(text('[data-intraday-row="TSLA"]')).toContain('+0.46R')
   expect(text('[data-intraday-closed="AVGO"]')).toContain('10:15 止损')
   expect(text('[data-col="intraday"]')).toContain('已结算 4 · −4.11R')
-  expect(text('[data-strategy-board] thead')).toContain('回区')
+  expect(text('[data-strategy-board] thead')).toContain('成交率')
   expect(text('[data-board-row="TSLA"]')).toContain('8%')
-  expect(text('[data-board-row="TSLA"]')).toContain('距区 4.6%')
+  expect(text('[data-board-row="TSLA"]')).toContain('距入场 4.6%')
 })
 
 it('四栏同一高度上限, 跳空多时栏内滚动 (10-29)', async () => {
@@ -258,18 +258,19 @@ it('持仓表读台账: 当前止损 (原止损) + 浮动', async () => {
   mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
   await render()
   const row = text('[data-hold="IREN"]')
-  expect(row).toContain('27.68 (30.29)')
+  expect(row).toContain('27.68原 30.29')   // 原止损在第二行, 当前止损的小数点与其他行对齐
+  expect(host.querySelector('[data-hold="IREN"] [data-stop-initial]')!.className).toContain('block')
   expect(row).toContain('5/5')
 })
 
 it('某块失败只空那一块', async () => {
   mocks.oppPage.mockResolvedValue(page({ desk: null, radar: null, errors: { desk: 'KeyError', radar: 'KeyError' } }))
   await render()
-  expect(text('[data-section-error="大盘状态"]')).toBe('大盘状态读取失败（KeyError）')
+  expect(text('[data-section-error="市场宽度"]')).toBe('市场宽度读取失败 · KeyError')
   expect(text('[data-col="open"] [data-col-error]')).toBe('开盘放量读取失败')
   expect(host.querySelector('[data-intraday-row="TSLA"]')).not.toBeNull()
   expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(['intraday', 'open', 'gap', 'resonance'])
-  expect(text('[data-col="resonance"] [data-col-error]')).toBe('引擎共振读取失败')
+  expect(text('[data-col="resonance"] [data-col-error]')).toBe('多信号共振读取失败')
 })
 
 it('整页请求失败 = 错误, 不是“无机会”', async () => {
@@ -325,7 +326,7 @@ it('0.51.0 版面: 状态栏 → 盘前判断 → 今日多空 → 大盘状态�
 it('盘前判断: 非今日标出来; 没有判断显示下次生成时刻', async () => {
   mocks.oppPage.mockResolvedValue(page({ mood: mood({ is_today: false }) }))
   await render()
-  expect(text('[data-mood-old]')).toBe('非今日')
+  expect(text('[data-mood-old]')).toBe('非当日')
   act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
   mocks.oppPage.mockResolvedValue(page({ mood: mood({ judgment: null }) }))
   await render()
@@ -358,7 +359,7 @@ it('今日多空: 没有名单 = 一行空态; 段读取失败 = 只空这一块
   act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
   mocks.oppPage.mockResolvedValue(page({ ls_rank: null, errors: { ls_rank: 'ValueError' } }))
   await render()
-  expect(text('[data-section-error="今日多空"]')).toBe('今日多空读取失败（ValueError）')
+  expect(text('[data-section-error="今日多空"]')).toBe('今日多空读取失败 · ValueError')
   expect(host.querySelector('[data-col]')).not.toBeNull()
 })
 
@@ -411,17 +412,24 @@ it('今日多空: 风险读不到时结算明细不显示美元换算, 只显示
   expect(rules).not.toContain('1 ATR = $')
 })
 
-it('四栏表头标题不收缩、meta 截断 (0.48.0 在 1280/1440 宽「盘中强势」被挤成竖排)', async () => {
+it('四栏表头标题不收缩、meta 放不下换行不截断 (0.48.0 在 1280/1440 宽「盘中强势」被挤成竖排)', async () => {
   await render()
   for (const col of host.querySelectorAll('[data-col]')) {
     const h2 = col.querySelector('h2')!
     expect(h2.className).toContain('shrink-0')
     expect(h2.className).toContain('whitespace-nowrap')
+    // 标题行可换行: 副注放不下时落到下一行, 不挤标题、也不截成省略号
+    expect(h2.parentElement!.className).toContain('flex-wrap')
     const meta = h2.parentElement!.querySelector('span.ml-auto')
     if (meta) {
       expect(meta.className).toContain('min-w-0')
-      expect(meta.className).toContain('truncate')
+      expect(meta.className).not.toContain('truncate')
     }
+  }
+  // 行内第二行 (入场 / 止损 / 目标) 同样不截断
+  for (const sub of host.querySelectorAll('[data-row-sub]')) {
+    expect(sub.className).not.toContain('truncate')
+    expect(sub.className).toContain('col-span-2')
   }
 })
 
@@ -431,8 +439,8 @@ it('0.52.2 A 方案: 今日多空只呈现模型排名, 主区不混策略与交
   expect(model.getAttribute('data-source')).toBe('model')
   expect(model.textContent).toContain('模型观察')
   expect(model.textContent).toContain('模型评分')
-  expect(model.textContent).toContain('8 项日 K')
-  expect(model.textContent).toContain('只观察')
+  expect(model.textContent).toContain('8 个日线特征')
+  expect(model.textContent).toContain('仅观察')
   const row = text('[data-ls-row="AAOI"]')
   expect(row).toContain('−1.2%')
   expect(row).toContain('98.80')
@@ -452,11 +460,13 @@ it('0.52.2 A 方案: 模型观察 → 独立策略机会 → 盘面雷达, 机�
   expect(seq).toEqual(['model', 'strategy', 'radar'])
   expect(host.querySelector('[data-cols] [data-col="board"]')).toBeNull()
   expect(host.querySelector('[data-radar-section] [data-resonance]')).not.toBeNull()
-  expect(text('[data-radar-section]')).toContain('只记录')
-  expect(text('[data-radar-section]')).toContain('不含模型')
+  // 来源边界: 雷达区标「仅观察」, 悬停写明只记录不下单、不计入模型评分
+  expect(text('[data-radar-section]')).toContain('仅观察')
+  expect(host.querySelector('[data-radar-section] [title="只记录，不下单；不计入模型评分"]')).not.toBeNull()
   const board = text('[data-strategy-board]')
-  expect(board).toContain('3+3 策略命中')
-  expect(board).toContain('4h 方向门')
+  expect(board).toContain('策略命中')
+  expect(board).not.toContain('3+3')
+  expect(board).toContain('4h 趋势过滤')
   expect(text('[data-board-orders]')).toMatch(/^下单 \d+$/)
   expect(text('[data-strategy-board] [data-board-row="BABA"]')).toContain('MACD 金叉放量')
   expect(text('[data-strategy-board] [data-board-row="TSLA"]')).toContain('41')
@@ -477,9 +487,9 @@ it('机会板逐卡结论: 后端裁决不下单的卡写原因, 页头分别计
   expect(text('[data-board-orders]')).toBe('下单 1')
   expect(text('[data-board-skips]')).toBe('不下单 4')
   const heads = [...host.querySelectorAll('[data-strategy-board] thead th')].map((x) => x.textContent)
-  expect(heads).toEqual(['股票', '方向', '结论', '命中策略', '4h 门', '入场区', '止损', '目标', '股数', '回区', '现价'])   // 结论紧跟票和方向
+  expect(heads).toEqual(['代码', '方向', '结论', '命中策略', '4h 趋势', '入场区', '止损', '目标', '股数', '成交率', '现价'])   // 结论紧跟票和方向
   const v = (s: string) => text(`[data-board-row="${s}"] [data-board-verdict]`)
-  expect(v('BABA')).toBe('下单距区 1.0%')
+  expect(v('BABA')).toBe('下单距入场 1.0%')
   expect(v('TSLA')).toBe('不下单盘前越止损')                      // 以前和可下单行一样显示「距区 4.6%」
   expect(v('NVDA')).toBe('不下单入场截止')
   expect(v('AMD')).toBe('不下单同板块同向已满')
@@ -511,13 +521,13 @@ it('回放数字旁并排上线后的实际数: 机会板多空各一行, 盘中
   }))
   await render()
   const long = text('[data-board-live-side="long"]')
-  expect(long).toContain('实际回区 4/11')
+  expect(long).toContain('已成交 4/11')
   expect(long).toContain('回放 60%')
   expect(long).toContain('每笔 −1.68R')
   expect(long).toContain('回放 +0.27R')
   expect(host.querySelector('[data-board-live-side="long"] [data-diverged-badge]')).toBeNull()      // 出卡日不足, 不判背离
   const short = text('[data-board-live-side="short"]')
-  expect(short).toContain('实际回区 13/24')
+  expect(short).toContain('已成交 13/24')
   expect(short).toContain('−0.10R ~ +1.50R')
   expect(short).toContain('回放 —')                                                                 // 回放基础率不是现行 3+3
   const it = text('[data-engine-live="intraday"]')

@@ -96,16 +96,16 @@ const GroupCard = React.memo(function GroupCard({
         </span>
         {pctInfo && pctInfo.sampled > 0 && (
           <span
-            className={`shrink-0 font-mono text-xs font-semibold tabular-nums ${groupPctColor(signed)}`}
+            className={`shrink-0 tabular-nums text-xs font-semibold ${groupPctColor(signed)}`}
             title={groupMetricTitle(pctInfo, metric)}
           >
             {valueLabel}
           </span>
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1.5" title={groupMetricTitle(pctInfo, metric)}>
-          <span className="font-mono text-[10px] tabular-nums text-muted">{data.rows.length}</span>
+          <span className="tabular-nums text-[11px] text-muted">{data.rows.length}</span>
           {pctInfo && pctInfo.sampled > 0 && (
-            <span className="text-[10px] tabular-nums">
+            <span className="text-[11px] tabular-nums">
               <span className="text-bull">{pctInfo.up}涨</span>
               <span className="mx-0.5 text-muted">/</span>
               <span className="text-bear">{pctInfo.down}跌</span>
@@ -117,7 +117,7 @@ const GroupCard = React.memo(function GroupCard({
 
       {/* 组内榜单: 按涨跌幅降序 */}
       {data.rows.length === 0 ? (
-        <div className="px-3 py-4 text-center text-[11px] text-muted">暂无标的</div>
+        <div className="px-3 py-4 text-center text-[11px] text-muted">暂无个股</div>
       ) : (
         <div className="flex flex-col">
           {visible.map((r: any, i: number) => {
@@ -134,22 +134,22 @@ const GroupCard = React.memo(function GroupCard({
                 title={`${r.symbol} ${r.rt_name ?? r.name ?? ''}`}
               >
                 {showRank && (
-                  <span className="w-4 shrink-0 text-right font-mono text-[10px] leading-none tabular-nums text-muted">
+                  <span className="w-4 shrink-0 text-right tabular-nums text-[11px] leading-none text-muted">
                     {i + 1}
                   </span>
                 )}
                 <StockLogo symbol={r.symbol} version={logos[r.symbol]} size="md" className="h-6 w-6" />
-                <span className="w-[2.75rem] shrink-0 font-mono text-xs font-semibold text-foreground">{r.symbol}</span>
+                <span className="w-[2.75rem] shrink-0 tabular-nums text-xs font-semibold text-foreground">{r.symbol}</span>
                 <span className="flex min-w-0 flex-1 items-center gap-1">
                   <span className="min-w-0 truncate text-xs text-secondary">{r.rt_name ?? r.name}</span>
                   {board && (
-                    <span className={`shrink-0 inline-flex items-center justify-center px-1 h-[16px] rounded text-[9px] font-bold leading-none ${board.color}`}>
+                    <span className={`shrink-0 inline-flex items-center justify-center px-1 h-[16px] rounded text-[11px] font-bold leading-none ${board.color}`}>
                       {board.label}
                     </span>
                   )}
                 </span>
-                <span className={`shrink-0 font-mono text-xs tabular-nums ${cls}`}>{fmtPrice(price)}</span>
-                <span className={`w-[52px] shrink-0 text-right font-mono text-xs font-medium tabular-nums ${cls}`}>
+                <span className={`shrink-0 tabular-nums text-xs ${cls}`}>{fmtPrice(price)}</span>
+                <span className={`w-[52px] shrink-0 text-right tabular-nums text-xs font-medium ${cls}`}>
                   {fmtPct(pct)}
                 </span>
               </button>
@@ -163,7 +163,7 @@ const GroupCard = React.memo(function GroupCard({
         <button
           type="button"
           onClick={() => onToggle(data.key)}
-          className="flex items-center justify-center gap-1 border-t border-border/60 px-3 py-1.5 text-[10px] text-muted transition-colors hover:bg-elevated/60 hover:text-foreground"
+          className="flex items-center justify-center gap-1 border-t border-border/60 px-3 py-1.5 text-[11px] text-muted transition-colors hover:bg-elevated/60 hover:text-foreground"
         >
           {expanded ? '收起' : `显示全部 ${data.rows.length} 只`}
           <ChevronDown className={`h-3 w-3 transition-transform ${expanded ? '' : 'rotate-180'}`} />
@@ -265,7 +265,7 @@ export function WatchlistGroupCards({
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[10px] uppercase tracking-wider text-muted">分组卡片 · {metricLabel}</div>
+        <div className="text-[11px] uppercase tracking-wider text-muted">分组卡片 · {metricLabel}</div>
         <GroupStatsSettings config={config} onChange={onConfigChange} ariaLabel="分组卡片设置" showCardLimit />
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">

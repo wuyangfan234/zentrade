@@ -320,5 +320,12 @@ def test_manual_api_calls_post_success_hook(tmp_path, monkeypatch):
 
 def test_notifications_action_points_at_real_place():
     from app.services.system_status_view import ACTION
-    assert "outbox.sqlite3" in ACTION["notifications"] and "发送测试" in ACTION["notifications"]
+    # 处理建议指向真实位置: 设置页的「发送测试」+ 通知发件箱; 文件路径不写进页面正文 (在该项入口的悬停里, 即组件 source)
+    assert "发送测试" in ACTION["notifications"] and "通知发件箱" in ACTION["notifications"]
+    from app.services.system_status_view import IMPACT
+    for text in [*ACTION.values(), *IMPACT.values()]:
+        assert "data/" not in text and ".json" not in text and ".sqlite3" not in text and "zen_" not in text, text
+    import pathlib
+    src = pathlib.Path(__file__).resolve().parents[1].joinpath("app/api/trading.py").read_text(encoding="utf-8")
+    assert "'data/notifications/outbox.sqlite3')" in src
     assert json.dumps(ACTION, ensure_ascii=False).count("查看推送失败原因") == 0

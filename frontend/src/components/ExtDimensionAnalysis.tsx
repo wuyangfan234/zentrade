@@ -107,7 +107,7 @@ function StatCard({ label, value, hint, icon: Icon }: {
         <span className="text-xs text-muted">{label}</span>
         <Icon className="h-4 w-4 text-secondary" />
       </div>
-      <div className="mt-3 text-2xl font-semibold tracking-tight text-foreground">{value}</div>
+      <div className="mt-3 text-lg font-semibold tracking-tight text-foreground">{value}</div>
       <div className="mt-1 text-[11px] text-muted">{hint}</div>
     </div>
   )
@@ -150,7 +150,7 @@ export function ExtDimensionAnalysis({
   title,
   subtitle,
   kindLabel = '维度',
-  emptyHint = '还没有可用于分析的扩展数据。',
+  emptyHint = '暂无扩展数据',
   accentClass = 'bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.16),transparent_36%)]',
   keywords = [],
   fallbackFieldNames = [],
@@ -291,9 +291,9 @@ export function ExtDimensionAnalysis({
               <Layers3 className="h-3.5 w-3.5" />
               扩展数据驱动 · 菜单可配置 · 列动态渲染
             </div>
-            <h2 className="mt-4 text-2xl font-semibold tracking-tight text-foreground">{activeTitle}</h2>
+            <h2 className="mt-4 text-lg font-semibold tracking-tight text-foreground">{activeTitle}</h2>
             <p className="mt-2 text-sm leading-6 text-secondary">
-              页面按分析菜单配置读取扩展数据源，使用分组字段生成榜单，并严格按照 detail_columns 渲染明细列。
+              按分析菜单配置读取扩展数据，按分组字段生成榜单
             </p>
           </div>
           <div className="absolute right-8 top-6 hidden h-28 w-28 rounded-full border border-foreground/10 bg-foreground/[0.03] lg:flex items-center justify-center">
@@ -304,19 +304,19 @@ export function ExtDimensionAnalysis({
         {configs.isLoading || menuQuery.isLoading ? (
           <div className="rounded-card border border-border bg-surface px-5 py-10 text-center text-sm text-muted">加载配置中…</div>
         ) : menuQuery.isError ? (
-          <div className="rounded-card border border-border bg-surface px-5 py-10 text-center text-sm text-muted">分析菜单不存在或已删除。</div>
+          <div className="rounded-card border border-border bg-surface px-5 py-10 text-center text-sm text-muted">分析菜单不存在或已删除</div>
         ) : !activeConfig ? (
           <div className="rounded-card border border-border bg-surface px-5 py-10 text-center">
             <Database className="mx-auto h-8 w-8 text-muted" />
             <div className="mt-3 text-sm text-secondary">{emptyHint}</div>
-            <div className="mt-1 text-xs text-muted">请先在“数据”页面新增扩展数据，并在“扩展分析”中创建分析菜单。</div>
+            <div className="mt-1 text-xs text-muted">请先在「数据」页添加扩展数据，再创建分析菜单</div>
           </div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <StatCard label="数据源" value={activeConfig.label} hint={`${activeConfig.mode === 'snapshot' ? '快照' : '时序'} · ${activeConfig.id}`} icon={Database} />
               <StatCard label="分组数量" value={groups.length || '—'} hint={activeDimensionField ? `按 ${fieldLabel(fields, activeDimensionField)} 聚合` : '未配置分组字段'} icon={Tags} />
-              <StatCard label="覆盖标的" value={coveredSymbols || rows.length} hint={rowsQuery.data?.date ? `数据日期 ${rowsQuery.data.date}` : '当前快照'} icon={Users} />
+              <StatCard label="覆盖个股" value={coveredSymbols || rows.length} hint={rowsQuery.data?.date ? `数据日期 ${rowsQuery.data.date}` : '当前快照'} icon={Users} />
               <StatCard label="列表列数" value={displayColumns.length} hint={`配置列 ${displayColumns.length} 个`} icon={TrendingUp} />
             </div>
 
@@ -332,9 +332,9 @@ export function ExtDimensionAnalysis({
                   <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
                     <div>
                       <h3 className="text-sm font-medium text-foreground">分组榜单</h3>
-                      <p className="mt-0.5 text-[11px] text-muted">按覆盖标的数量排序</p>
+                      <p className="mt-0.5 text-[11px] text-muted">按覆盖个股数量排序</p>
                     </div>
-                    <span className="text-[10px] text-muted">Top {Math.min(filteredGroups.length, 100)}</span>
+                    <span className="text-[11px] text-muted">Top {Math.min(filteredGroups.length, 100)}</span>
                   </div>
                   <div className="p-3 border-b border-border/60">
                     <div className="relative">
@@ -343,7 +343,7 @@ export function ExtDimensionAnalysis({
                         value={search}
                         onChange={(e) => { setSearch(e.target.value); setSelectedGroup(null) }}
                         placeholder={`搜索${activeKindLabel}`}
-                        className="h-8 w-full rounded-btn border border-border bg-base pl-8 pr-3 text-xs text-foreground placeholder:text-muted/50 focus:outline-none focus:border-accent/50"
+                        className="h-8 w-full rounded-btn border border-border bg-base pl-8 pr-3 text-xs text-foreground placeholder:text-muted focus:outline-none focus:border-accent/50"
                       />
                     </div>
                   </div>
@@ -359,9 +359,9 @@ export function ExtDimensionAnalysis({
                           className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${active ? 'bg-accent/10 border border-accent/25' : 'border border-transparent hover:bg-elevated/60'}`}
                         >
                           <div className="flex items-center gap-2">
-                            <span className="w-5 text-[10px] font-mono text-muted">#{i + 1}</span>
+                            <span className="w-5 text-[11px] tabular-nums text-muted">#{i + 1}</span>
                             <span className="flex-1 truncate text-xs font-medium text-foreground">{group.key}</span>
-                            <span className="font-mono text-xs text-secondary">{group.count}</span>
+                            <span className="tabular-nums text-xs text-secondary">{group.count}</span>
                           </div>
                           <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-elevated">
                             <div
@@ -369,7 +369,7 @@ export function ExtDimensionAnalysis({
                               style={{ width: `${Math.max(6, (group.count / (filteredGroups[0]?.count || 1)) * 100)}%` }}
                             />
                           </div>
-                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted">
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted">
                             {groupColumns.filter(c => !['__dimension', '__count'].includes(c.field)).slice(0, 3).map(col => (
                               <span key={col.field}>{col.label || col.field}: {formatValue(group.metrics[col.field], col)}</span>
                             ))}
@@ -385,8 +385,8 @@ export function ExtDimensionAnalysis({
                 <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-4">
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="text-[16px] leading-6 font-semibold text-foreground">{menu?.template === 'table' || menu?.template === 'ranking' ? '明细列表' : currentGroup?.key ?? `选择${activeKindLabel}`}</h3>
-                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[10px] text-accent">{tableRows.length} 条</span>
+                      <h3 className="text-[14px] leading-6 font-semibold text-foreground">{menu?.template === 'table' || menu?.template === 'ranking' ? '明细列表' : currentGroup?.key ?? `选择${activeKindLabel}`}</h3>
+                      <span className="rounded-full bg-accent/10 px-2 py-0.5 text-[11px] text-accent dark:text-blue-400">{tableRows.length} 条</span>
                     </div>
                     <p className="mt-1 text-xs text-muted">列来自菜单 detail_columns：{displayColumns.map(f => f.label || f.field).join(' / ') || '暂无字段'}</p>
                   </div>
@@ -413,7 +413,7 @@ export function ExtDimensionAnalysis({
                       ) : tableRows.slice(0, 300).map((row, i) => (
                         <tr key={`${row.symbol ?? row.code ?? i}-${i}`} className="hover:bg-elevated/30">
                           {displayColumns.map(col => (
-                            <td key={col.field} className={`whitespace-nowrap px-4 py-2 ${col.field === activeDimensionField ? 'max-w-[18rem] truncate text-secondary' : col.field === 'symbol' || col.field === 'code' || col.field === '股票代码' ? 'font-mono text-secondary' : 'text-foreground'}`}>
+                            <td key={col.field} className={`whitespace-nowrap px-4 py-2 ${col.field === activeDimensionField ? 'max-w-[18rem] truncate text-secondary' : col.field === 'symbol' || col.field === 'code' || col.field === '股票代码' ? 'tabular-nums text-secondary' : 'text-foreground'}`}>
                               {formatValue(row[col.field], col)}
                             </td>
                           ))}

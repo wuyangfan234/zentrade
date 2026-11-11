@@ -153,7 +153,7 @@ function BubbleItem({ task, isLast, onPointerDown }: {
         onPointerDown={onPointerDown}
         role="button"
         tabIndex={0}
-        title={isWorking ? '个股分析中，点击恢复' : isError ? '分析失败，点击重试' : '点击查看个股分析报告'}
+        title={isWorking ? '个股分析中 · 点击查看' : isError ? '分析失败 · 点击重试' : '查看分析报告'}
         className={`group relative flex w-full cursor-pointer items-center gap-1.5 overflow-hidden rounded-lg border bg-gradient-to-br px-2 py-1.5 backdrop-blur-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.99] ${accent}`}
       >
         {isWorking && (
@@ -169,7 +169,7 @@ function BubbleItem({ task, isLast, onPointerDown }: {
         <span className="flex-1 min-w-0 text-[11px] font-medium text-foreground leading-none truncate">
           {task.name || task.symbol}
         </span>
-        <span className="shrink-0 text-[9px] leading-none">
+        <span className="shrink-0 text-[11px] leading-none">
           {isWorking ? <span className="text-sky-700 dark:text-sky-300/80">个股分析</span>
             : isError ? <span className="text-red-700 dark:text-red-300/80">失败</span>
             : <span className="text-emerald-700 dark:text-emerald-300/80">点击查看</span>}

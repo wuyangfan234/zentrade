@@ -60,7 +60,10 @@ it('清单卡: 分组、影响说明、新闻翻译用量提示、Finnhub / SEC 
   const sec = item({ id: 'sec_ua', group: 'news', label: 'SEC EDGAR 联系邮箱', level: 'recommended' })
   await render(<SetupChecklistCard />, data([alpaca, fh, sec, ai, news]))
   const text = host.textContent ?? ''
-  for (const s of ['行情数据', '新闻与基本面', 'AI 模型', '不配的影响', '低价、关思考', 'FINNHUB_API_KEY']) expect(text).toContain(s)
+  for (const s of ['行情数据', '新闻与基本面', 'AI 模型', '不配的影响', '低价、关思考']) expect(text).toContain(s)
+  // 环境变量名只放悬停, 不上屏; 文件路径也不上屏
+  expect(host.querySelector('[title*="FINNHUB_API_KEY"]')).not.toBeNull()
+  for (const s of ['FINNHUB_API_KEY', '.env', 'secrets.json']) expect(text).not.toContain(s)
   expect(host.querySelector('input[aria-label="Finnhub API Key"]')?.getAttribute('type')).toBe('password')
   expect(host.querySelector('input[aria-label="ZenTrade you@example.com"]')).not.toBeNull()
 })

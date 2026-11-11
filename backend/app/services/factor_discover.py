@@ -627,7 +627,7 @@ def _recalc_impl(data_dir: Path, repo, signature: str, *, symbols: list[str], st
     if signature == "engine":
         ref = engine_reference(service, Path(data_dir), symbols, start, end)
         if ref is None:
-            return {"_error": "当前出卡引擎没有可回测的做多规则"}
+            return {"_error": "现行策略组合没有可回测的做多规则"}
         # same flat shape as a candidate recalc (the page reads DiscoverStats fields directly)
         # 带上曲线 / 最近成交 / 检查项: 旧响应只有指标, 页面重算后曲线和成交仍是原回测, 新旧混显。
         checks = _checks({**ref["stats"], "yearly": ref["yearly"]}, None, None, None)

@@ -101,7 +101,7 @@ export function Auth() {
           <div className="mb-5 flex items-center gap-2.5">
             <div className={cn(
               'grid h-9 w-9 place-items-center rounded-lg',
-              isSetup ? 'bg-accent/15 text-accent' : 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
+              isSetup ? 'bg-accent/15 text-accent dark:text-blue-400' : 'bg-purple-500/15 text-purple-700 dark:text-purple-400',
             )}>
               {isSetup ? <ShieldCheck className="h-5 w-5" /> : <Lock className="h-5 w-5" />}
             </div>
@@ -110,7 +110,7 @@ export function Auth() {
                 {isSetup ? '设置访问密码' : '登录访问'}
               </div>
               <div className="text-[11px] text-muted">
-                {isSetup ? '首次使用，请为面板设置访问密码' : '请输入访问密码以继续'}
+                {isSetup ? '首次使用 · 设置访问密码' : '输入访问密码'}
               </div>
             </div>
           </div>
@@ -158,10 +158,10 @@ export function Auth() {
             <button
               type="submit"
               disabled={submitMut.isPending || !password}
-              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-btn bg-accent text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
             >
               {submitMut.isPending ? (
-                <><Loader2 className="h-4 w-4 animate-spin" />处理中…</>
+                <><Loader2 className="h-4 w-4 animate-spin" />处理中</>
               ) : (
                 <>{isSetup ? '设置并进入' : '登录'}</>
               )}
@@ -170,21 +170,20 @@ export function Auth() {
 
           {/* 提示: 设密码模式告知本机限制 */}
           {isSetup && (
-            <div className="mt-3 space-y-1.5 text-[10px] leading-relaxed text-muted">
+            <div className="mt-3 space-y-1.5 text-[11px] leading-relaxed text-muted">
               <p>
-                出于安全考虑，首次设置密码需在服务器本机或内网访问时操作。公网环境下仅可登录。
+                首次设置密码仅限本机或内网 · 公网仅可登录
               </p>
               <p>
-                详细配置说明见项目内文档{' '}
-                <code className="font-mono text-secondary">docs/deployment.md</code>
+                <span className="cursor-help underline decoration-dotted underline-offset-2" title="docs/deployment.md">配置说明见部署文档</span>
               </p>
             </div>
           )}
         </div>
 
-        <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-muted">
+        <div className="mt-4 flex items-center justify-center gap-1.5 text-[11px] text-muted">
           <Sparkles className="h-3 w-3" />
-          美股波段纸面交易 · 数据完全掌握在自己手里
+          美股波段研究与模拟交易 · 数据本地存储
         </div>
       </motion.div>
     </div>

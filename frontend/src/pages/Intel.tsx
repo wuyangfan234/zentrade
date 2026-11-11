@@ -1,5 +1,5 @@
 /**
- * 盘面情报 (0.40.0, 10-26 产品决策 B 档): 当日盘面温度 + 宏观日历 (含实际值) + 自选财报 + 自选新闻。
+ * 盘面情报 (0.40.0, 10-26 产品决策 B 档): 当日市场概览 + 宏观日历 (含实际值) + 自选财报 + 自选新闻。
  * 只读展示, 不参与打分 / 裁决 / 下单。数据一次取齐 (GET /api/intel/today, 只读缓存);
  * 盘前 / 盘中 60 秒刷新, 其余 5 分钟。每格标来源与时点, 不是今天的数据标「非今日」。
  */
@@ -16,6 +16,8 @@ import { SectionTitle } from '@/components/data/SectionTitle'
 import { NewsRow } from '@/components/StockNews'
 import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { etToday } from '@/lib/etTime'
+import { corpActionLabel } from '@/lib/reasonLabels'
+import { eventTitleZh } from '@/lib/macroEvents'
 
 const ACTIVE = new Set(['premarket', 'open_wait', 'session'])
 const WRAP = 'mx-auto max-w-6xl space-y-6 px-4 pb-24 pt-4 md:px-8 md:pt-6'
@@ -56,10 +58,10 @@ export function Intel() {
   const errs = d?.errors ?? {}
 
   return (
-    <div className="overflow-x-hidden">
+    <div data-page="intel" className="overflow-x-hidden">
       <PageHeader
-        title="盘面情报"
-        subtitle={d ? `${d.phase?.label ?? ''} · 美东 ${d.generated_at.slice(5, 16).replace('T', ' ')} · 自选 ${d.watch_count} 只 · 只展示 · 不参与下单` : '加载中…'}
+        title="情报"
+        subtitle={d ? `${d.phase?.label ?? ''} · ${d.generated_at.slice(5, 16).replace('T', ' ')} ET · 自选 ${d.watch_count} 只 · 仅观察` : '加载中'}
         right={(
           <button type="button" data-intel-refresh disabled={refresh.isPending} onClick={() => refresh.mutate()}
             className="inline-flex items-center gap-1.5 rounded-btn border border-border px-2.5 py-1 text-xs text-secondary hover:bg-elevated disabled:opacity-60">
@@ -73,7 +75,7 @@ export function Intel() {
         {d && (
           <>
             <section data-intel="tape" className="space-y-3">
-              <SectionTitle icon={Thermometer}>盘面温度</SectionTitle>
+              <SectionTitle icon={Thermometer}>市场概览</SectionTitle>
               <Tape d={d} />
             </section>
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -91,7 +93,7 @@ export function Intel() {
               {errs.earnings ? <Failed /> : <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} />}
               {(d.actions?.length ?? 0) > 0 && (
                 <div data-intel-actions className="text-xs text-secondary">
-                  公司行动 · {d.actions!.map((a) => `${a.symbol} ${md(a.date)} ${a.type === 'cash_dividend' ? `除息 $${a.rate != null ? a.rate.toFixed(2) : ''}/股` : a.type}`).join(' · ')}
+                  公司行动 · {d.actions!.map((a) => `${a.symbol} ${md(a.date)} ${a.type === 'cash_dividend' ? `除息 $${a.rate != null ? a.rate.toFixed(2) : ''}/股` : corpActionLabel(a.type)}`).join(' · ')}
                 </div>
               )}
               <p className="text-[11px] text-muted">{d.earnings?.source}{d.earnings?.fetched_at ? ` · 预期取于 ${md(d.earnings.fetched_at)} ${d.earnings.fetched_at.slice(11, 16)} ET` : ''}</p>
@@ -115,7 +117,7 @@ function Cell({ label, children, sub, k, warn }: { label: string; children: Reac
   return (
     <div data-intel-cell={k} className={`${CARD} min-w-0 px-3 py-2`}>
       <div className="text-[11px] text-secondary">{label}</div>
-      <div className="mt-0.5 text-[15px] font-semibold tabular-nums text-foreground">{children}</div>
+      <div className="mt-0.5 text-[14px] font-semibold tabular-nums text-foreground">{children}</div>
       {sub && <div className={`mt-0.5 text-[11px] leading-snug tabular-nums ${warn ? 'text-warning' : 'text-muted'}`}>{sub}</div>}
     </div>
   )
@@ -129,7 +131,7 @@ export function quoteSub(r: IntelQuote, today: string) {
     const seg = r.session ? `${SESSION_ZH[r.session] ?? ''}${r.time_et ? ` ${r.time_et}` : ''} · ` : ''
     return `${seg}对官方前收`
   }
-  return r.day && r.day !== today ? `${md(r.day)} 收盘 · 非今日` : `${md(r.day)} 收盘`
+  return r.day && r.day !== today ? `${md(r.day)} 收盘 · 非当日` : `${md(r.day)} 收盘`
 }
 
 function Tape({ d }: { d: IntelPayload }) {
@@ -151,23 +153,23 @@ function Tape({ d }: { d: IntelPayload }) {
       </div>
       <div data-intel-gauges className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         <Cell k="vix" label="VIX / VIX3M" warn={ratioWarn}
-          sub={v ? `${v.ratio != null ? `比 ${v.ratio.toFixed(2)}${ratioWarn ? ' 倒挂' : ''} · ` : ''}延迟 15 分` : '缺数据'}>
+          sub={v ? `${v.ratio != null ? `比 ${v.ratio.toFixed(2)}${ratioWarn ? ' 倒挂' : ''} · ` : ''}延迟 15 分` : '—'}>
           {v ? <>{v.vix.value.toFixed(2)} <span className={`text-xs ${sgnCls(v.vix.chg_pct)}`}>{fmtPct(v.vix.chg_pct)}</span></> : '—'}
         </Cell>
         <Cell k="rates" label="美债 10Y"
-          sub={d.rates ? `${md(d.rates.as_of)}${d.rates.us10y_chg_bp != null ? ` · ${d.rates.us10y_chg_bp > 0 ? '+' : ''}${d.rates.us10y_chg_bp}bp` : ''}` : '缺数据'}>
+          sub={d.rates ? `${md(d.rates.as_of)}${d.rates.us10y_chg_bp != null ? ` · ${d.rates.us10y_chg_bp > 0 ? '+' : ''}${d.rates.us10y_chg_bp}bp` : ''}` : '—'}>
           {d.rates?.us10y != null ? `${d.rates.us10y.toFixed(2)}%` : '—'}
         </Cell>
         <Cell k="hy" label="高收益债利差"
-          sub={d.rates?.hy_as_of ? `${md(d.rates.hy_as_of)}${d.rates.hy_chg_bp != null ? ` · ${d.rates.hy_chg_bp > 0 ? '+' : ''}${d.rates.hy_chg_bp}bp` : ''}` : '缺数据'}>
+          sub={d.rates?.hy_as_of ? `${md(d.rates.hy_as_of)}${d.rates.hy_chg_bp != null ? ` · ${d.rates.hy_chg_bp > 0 ? '+' : ''}${d.rates.hy_chg_bp}bp` : ''}` : '—'}>
           {d.rates?.hy_oas != null ? `${d.rates.hy_oas.toFixed(2)}%` : '—'}
         </Cell>
         <Cell k="pcr" label="个股 Put/Call"
-          sub={d.pcr ? `${md(d.pcr.day)} · 20日均 ${d.pcr.equity_avg20?.toFixed(2) ?? '—'}` : '缺数据'}>
+          sub={d.pcr ? `${md(d.pcr.day)} · 20日均 ${d.pcr.equity_avg20?.toFixed(2) ?? '—'}` : '—'}>
           {d.pcr?.equity != null ? d.pcr.equity.toFixed(2) : '—'}
         </Cell>
         <Cell k="mood" label="08:35 大盘判断"
-          sub={d.mood ? `${mood ? md(mood.day) : ''}${d.mood.is_today ? '' : ' 非今日'} · 近 ${d.mood.stats.n} 日中 ${d.mood.stats.hit}` : '缺数据'}
+          sub={d.mood ? `${mood ? md(mood.day) : ''}${d.mood.is_today ? '' : ' 非当日'} · 近 ${d.mood.stats.n} 日中 ${d.mood.stats.hit}` : '—'}
           warn={!!d.mood && !d.mood.is_today && ACTIVE.has(d.phase?.phase ?? '')}>
           {mood ? <span className={mood.stance === 'up' ? 'text-bull' : mood.stance === 'down' ? 'text-bear' : 'text-secondary'}>{STANCE[mood.stance]}</span> : '—'}
         </Cell>
@@ -210,7 +212,7 @@ function Heat({ r }: { r: IntelQuote }) {
         <span className="truncate font-medium">{r.name}</span>
         <span className="font-semibold">{fmtPct(r.chg_pct, 1)}</span>
       </div>
-      <div className="mt-0.5 flex items-baseline justify-between gap-1 text-[10px]">
+      <div className="mt-0.5 flex items-baseline justify-between gap-1 text-[11px]">
         <span>{r.symbol}</span>
         {r.d5 != null && <span data-d5>{`5日 ${fmtPct(r.d5, 1)}`}</span>}
       </div>
@@ -274,7 +276,7 @@ export function surpriseLabel(e: IntelEvent) {
   if (e.actual) return e.surprise === 'above' ? '高于预期' : e.surprise === 'below' ? '低于预期' : e.surprise === 'inline' ? '符合预期' : e.surprise === 'near' ? '接近预期' : ''
   if (e.actual_status === 'pending') return '实际待同步'
   if (e.actual_status === 'mismatch') return '已公布 · 推算口径未对齐，不显示'
-  if (e.actual_status === 'unmapped') return '已公布 · 无实际值源'
+  if (e.actual_status === 'unmapped') return '已公布'
   return ''
 }
 
@@ -315,7 +317,7 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
             </button>
           ))}
         </div>
-        <span className="text-[11px] text-muted">美东时间 · {cal.source}</span>
+        <span className="text-[11px] text-muted">ET · {cal.source}</span>
       </div>
       {cal.error && <div className="mb-2 shrink-0 text-[11px] text-warning">日历源上次刷新失败，显示的是上一份</div>}
       <div ref={bodyRef} data-pair-body="calendar" className={`${PAIR_BODY} space-y-3`}>
@@ -338,7 +340,7 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
                 <li key={`${e.at}-${e.title}-${i}`} data-cal-event="ahead" className="flex items-baseline gap-2 py-1 text-xs">
                   <span className="w-[4.75rem] shrink-0 whitespace-nowrap tabular-nums text-muted">{`${md(e.day)} ${weekday(e.day)}`}</span>
                   <span className="w-10 shrink-0 whitespace-nowrap tabular-nums text-muted">{e.time || '全天'}</span>
-                  <span className="min-w-0 truncate font-medium text-foreground" title={e.title}>{e.title_zh ?? e.title}</span>
+                  <span className="min-w-0 truncate font-medium text-foreground" title={e.title}>{e.title_zh ?? eventTitleZh(e.title)}</span>
                   {(e.forecast || e.previous) && (
                     <span className="ml-auto shrink-0 tabular-nums text-[11px] text-secondary">
                       {[e.forecast && `预期 ${e.forecast}`, e.previous && `前值 ${e.previous}`].filter(Boolean).join(' · ')}
@@ -353,7 +355,7 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
       </div>
       {groups.length > visible.length || showAll ? (
         <button type="button" data-cal-more onClick={() => setShowAll((x) => !x)} className="mt-2 shrink-0 self-start text-[11px] text-accent hover:underline">
-          {showAll ? '收起' : `全部 ${groups.length} 天 (含已过与前瞻)`}
+          {showAll ? '收起' : `全部 ${groups.length} 天（含已过与未来）`}
         </button>
       ) : null}
     </div>
@@ -366,10 +368,10 @@ function EventRow({ e, onSymbol }: { e: IntelEvent; onSymbol: (s: string) => voi
     return (
       <li data-cal-event="earnings" className="flex items-baseline gap-2 py-1 text-xs">
         <span className="w-10 shrink-0 tabular-nums text-muted">{e.time || '—'}</span>
-        <span className="inline-block w-5 shrink-0 rounded border border-accent/40 text-center text-[10px] text-accent">财</span>
+        <span className="inline-block w-5 shrink-0 rounded border border-accent/40 text-center text-[11px] text-accent">财</span>
         <button type="button" onClick={() => e.symbol && onSymbol(e.symbol)} className="font-medium text-foreground hover:text-accent">{e.symbol}</button>
         <span className="text-secondary">{`财报 · ${TIMING_ZH[e.timing ?? 'unknown'] ?? '时间未定'}`}</span>
-        {e.role === '持仓' && <span className="rounded bg-accent/10 px-1 text-[10px] text-accent">持仓</span>}
+        {e.role === '持仓' && <span className="rounded bg-accent/10 px-1 text-[11px] text-accent dark:text-blue-400">持仓</span>}
       </li>
     )
   }
@@ -387,8 +389,8 @@ function EventRow({ e, onSymbol }: { e: IntelEvent; onSymbol: (s: string) => voi
       <span className="tabular-nums text-muted">{e.time || '全天'}</span>
       <div className="min-w-0">
         <div className="flex items-baseline gap-x-2">
-          <span className={`inline-block w-5 shrink-0 rounded border text-center text-[10px] ${e.impact === 'high' ? 'border-warning/60 text-warning' : 'border-border text-secondary'}`}>{IMPACT_ZH[e.impact ?? 'low']}</span>
-          <span className={`${dim} ${e.impact === 'high' ? 'font-medium' : ''}`} title={e.title}>{e.title_zh ?? e.title}</span>
+          <span className={`inline-block w-5 shrink-0 rounded border text-center text-[11px] ${e.impact === 'high' ? 'border-warning/60 text-warning' : 'border-border text-secondary'}`}>{IMPACT_ZH[e.impact ?? 'low']}</span>
+          <span className={`${dim} ${e.impact === 'high' ? 'font-medium' : ''}`} title={e.title}>{e.title_zh ?? eventTitleZh(e.title)}</span>
         </div>
         {(e.forecast || e.previous || e.actual || sl) && (
           <div className="mt-0.5 flex flex-wrap gap-x-3 tabular-nums text-[11px] text-secondary">
@@ -421,10 +423,10 @@ function Earnings({ rows, onSymbol }: { rows: IntelEarningsRow[]; onSymbol: (s: 
             <th className="px-3 py-2 font-normal">股票</th>
             <th className="px-2 py-2 font-normal">公布</th>
             <th className="px-2 py-2 text-right font-normal" title="华尔街调整后口径: QVeris > Finnhub > Nasdaq">EPS 预期</th>
-            <th className="px-2 py-2 text-right font-normal" title="QVeris 一致预期近 30 天变化 (只读缓存)">30 日修正</th>
+            <th className="px-2 py-2 text-right font-normal" title="一致预期近 30 天变化">30 日修正</th>
             <th className="px-2 py-2 text-right font-normal" title="近几次财报反应日涨跌幅绝对值的中位数 / 最大">历史反应 中位 / 最大</th>
             <th className="px-2 py-2 text-right font-normal" title="财报后第一个到期日的平值跨式 / 现价；「×历史」= 隐含波幅 ÷ 历史反应中位数">期权隐含波幅</th>
-            <th className="px-2 py-2 text-right font-normal" title="Nasdaq 历史库: 实际高于其预期的次数 / 有数据的次数 (与其自身口径对比)">EPS 超预期</th>
+            <th className="px-2 py-2 text-right font-normal" title="Nasdaq 历史库：实际高于预期的次数 / 有数据的次数">EPS 超预期</th>
             <th className="px-3 py-2 text-right font-normal" title="上一次财报的反应日涨跌">上次反应</th>
           </tr>
         </thead>
@@ -437,7 +439,7 @@ function Earnings({ rows, onSymbol }: { rows: IntelEarningsRow[]; onSymbol: (s: 
               <tr key={r.symbol} data-earn={r.symbol} className="border-b border-border/60 last:border-0">
                 <td className="px-3 py-1.5">
                   <button type="button" onClick={() => onSymbol(r.symbol)} className="font-medium text-foreground hover:text-accent">{r.symbol}</button>
-                  {r.role === '持仓' && <span className="ml-1 rounded bg-accent/10 px-1 text-[10px] text-accent">持仓</span>}
+                  {r.role === '持仓' && <span className="ml-1 rounded bg-accent/10 px-1 text-[11px] text-accent dark:text-blue-400">持仓</span>}
                 </td>
                 <td className="whitespace-nowrap px-2 py-1.5 text-secondary">
                   {`${md(r.date)} ${weekday(r.date)} ${TIMING_ZH[r.timing] ?? ''}`}
@@ -445,13 +447,13 @@ function Earnings({ rows, onSymbol }: { rows: IntelEarningsRow[]; onSymbol: (s: 
                   {r.date_conflict && <span data-date-conflict className="ml-1 text-warning" title={`Finnhub 为 ${r.date_conflict}`}>日期待确认</span>}
                 </td>
                 <td className="px-2 py-1.5 text-right" title={r.eps_source ? `来源 ${r.eps_source}${r.eps_source !== 'Nasdaq' && r.eps_nasdaq != null ? `；Nasdaq ${fmtUsd(r.eps_nasdaq)}（部分公司为 GAAP 口径）` : ''}` : ''}>
-                  {fmtUsd(r.eps_consensus ?? r.eps_forecast)}<span data-eps-src className="ml-1 inline-block w-12 text-left text-[10px] text-muted">{r.eps_source ?? ''}</span>
+                  {fmtUsd(r.eps_consensus ?? r.eps_forecast)}<span data-eps-src className="ml-1 inline-block w-12 text-left text-[11px] text-muted">{r.eps_source ?? ''}</span>
                 </td>
                 <td className={`px-2 py-1.5 text-right ${sgnCls(rev30(r))}`} title="QVeris 一致预期 EPS 近 30 天变化；预期为负时不算百分比">
                   {rev30(r) != null ? fmtPct(rev30(r)! * 100, 1) : '—'}
                 </td>
                 <td className="px-2 py-1.5 text-right">{h?.median_abs_move != null ? `±${h.median_abs_move.toFixed(1)}% / ±${h.max_abs_move?.toFixed(1)}%` : '—'}<span className="ml-1 inline-block w-7 text-left text-muted">{h ? `${h.n}次` : ''}</span></td>
-                <td data-implied className="px-2 py-1.5 text-right" title={imp == null ? '今天的期权链还没缓存 (盘中 09:35 后自动预热)' : `到期 ${r.implied?.expiration} · 跨式价格 ÷ 现价`}>
+                <td data-implied className="px-2 py-1.5 text-right" title={imp == null ? '期权链未更新 · 09:35 ET 后可用' : `到期 ${r.implied?.expiration} · 跨式价格 ÷ 现价`}>
                   {imp != null ? `±${imp.toFixed(1)}%` : '—'}
                   <span className={`ml-1 inline-block w-14 text-left ${cmp != null && cmp >= 1.25 ? 'text-warning' : 'text-muted'}`}>{cmp != null ? `${cmp.toFixed(1)}×历史` : ''}</span>
                 </td>
@@ -493,7 +495,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
       <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5">
         {NEWS_FILTERS.map((x) => (
           <button key={x.k} type="button" data-news-filter={x.k} aria-pressed={f === x.k} onClick={() => setF(x.k)}
-            className={`rounded-btn border px-2 py-0.5 text-[11px] ${f === x.k ? 'border-accent/40 bg-accent/10 text-accent' : 'border-border text-secondary hover:text-foreground'}`}>
+            className={`rounded-btn border px-2 py-0.5 text-[11px] ${f === x.k ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400' : 'border-border text-secondary hover:text-foreground'}`}>
             {x.label}{news.counts?.[x.k] != null ? ` ${news.counts[x.k]}` : ''}
           </button>
         ))}
@@ -519,7 +521,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
         ))}
         {items.length === 0 && <div className="py-3 text-xs text-muted">无</div>}
       </div>
-      <p className="mt-1 shrink-0 text-[10px] text-muted">{news.disclaimer}</p>
+      <p className="mt-1 shrink-0 text-[11px] text-muted">{news.disclaimer}</p>
     </div>
   )
 }

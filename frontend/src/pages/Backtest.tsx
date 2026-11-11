@@ -13,17 +13,17 @@ type Tab = 'strategy' | 'robustness' | 'evidence'
 const MODES: Record<Tab, { title: string; subtitle: string; icon: typeof FlaskConical }> = {
   strategy: {
     title: '策略',
-    subtitle: '现有策略评估与候选沉淀',
+    subtitle: '策略回测 · 仓位模拟',
     icon: FlaskConical,
   },
   robustness: {
     title: '验证',
-    subtitle: '参数敏感性与滚动样本外',
+    subtitle: '参数优化 · 滚动样本外',
     icon: ShieldCheck,
   },
   evidence: {
     title: '证据',
-    subtitle: '全市场扫描 · 来源体检 · 影子账本（只记录不下单）',
+    subtitle: '全市场扫描 · 策略检验 · 观察账本',
     icon: Scale,
   },
 }
@@ -102,7 +102,7 @@ export function Backtest() {
                       onClick={() => changeTab(tab)}
                       aria-current={active ? 'page' : undefined}
                       className={`inline-flex h-7 items-center gap-1 rounded-[5px] px-1.5 text-[11px] font-medium transition-colors sm:gap-1.5 sm:px-2.5 sm:text-xs ${active
-                        ? 'bg-accent text-white shadow-sm'
+                        ? 'bg-accent dark:bg-blue-700 text-white shadow-sm'
                         : 'text-secondary hover:bg-elevated hover:text-foreground'
                       }`}
                     >

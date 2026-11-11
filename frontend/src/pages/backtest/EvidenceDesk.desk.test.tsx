@@ -62,7 +62,7 @@ it('splits cards into 全股票池 and 自选股 tabs', async () => {
   await render()
   const tabs = [...host.querySelectorAll('[role="tab"]')].map((t) => t.textContent)
   // 2026-10-05: 页签计数 = 跨日可执行卡数 / 当前自选只数 (来自总览); 总览不可用时显示 0 / —
-  expect(tabs).toEqual(['全股票池 (0)', '自选股 (—)', '来源管理', '卡结局'])
+  expect(tabs).toEqual(['全市场（0）', '自选（—）', '来源管理', '结算'])
   expect(host.textContent).toContain('AAA')
   expect(host.textContent).not.toContain('NVDA')
   await act(async () => { (host.querySelectorAll('[role="tab"]')[1] as HTMLButtonElement).click() })
@@ -129,7 +129,7 @@ it('renders the news catalyst source as locked observe-only with shadow evidence
   await act(async () => { tab.click() })
   for (let i = 0; i < 3; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
   const row = host.querySelector('[data-source="news_catalyst"]') as HTMLElement
-  expect(row.textContent).toContain('只观察 · 锁定')
+  expect(row.textContent).toContain('仅观察 · 锁定')
   expect(row.textContent).toContain('已记录 12 个候选快照')
   expect(row.textContent).toContain('未到 30 例门槛')
   expect(row.querySelector('select')).toBeNull()

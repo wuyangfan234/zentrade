@@ -106,7 +106,7 @@ function ChartPill({
       type="button"
       onClick={onClick}
       title={title}
-      className={`whitespace-nowrap px-2 py-0.5 rounded text-[10px] font-mono cursor-pointer transition-colors ${
+      className={`whitespace-nowrap px-2 py-0.5 rounded text-[11px] tabular-nums cursor-pointer transition-colors ${
         active ? activeClass : 'bg-elevated text-muted hover:text-secondary'
       }`}
     >
@@ -180,7 +180,7 @@ export function StockDailyKChart({
               key={ind.key}
               active={activeIndicators.includes(ind.key)}
               label={ind.label}
-              activeClass="bg-accent/20 text-accent"
+              activeClass="bg-accent/20 text-accent dark:text-blue-400"
               onClick={() => toggleIndicator(ind.key)}
             />
           ))}
@@ -189,13 +189,13 @@ export function StockDailyKChart({
               key={ind.key}
               active={activeIndicators.includes(ind.key)}
               label={ind.label}
-              activeClass="bg-accent/20 text-accent"
+              activeClass="bg-accent/20 text-accent dark:text-blue-400"
               onClick={() => toggleIndicator(ind.key)}
             />
           ))}
           {activeIndicators.includes('vol') && (
             <div className="ml-0.5 flex h-5 items-center gap-1.5 border-l border-border/70 pl-2">
-              <span className="text-[10px] text-muted">量比</span>
+              <span className="text-[11px] text-muted">量比</span>
               <button
                 type="button"
                 role="switch"
@@ -216,7 +216,7 @@ export function StockDailyKChart({
                 value={volumeCompare.days}
                 disabled={!volumeCompare.enabled}
                 onChange={event => updateVolumeCompare({ days: Number(event.target.value) })}
-                className="h-5 rounded border border-border bg-base px-1 text-[10px] text-secondary outline-none disabled:opacity-40"
+                className="h-5 rounded border border-border bg-base px-1 text-[11px] text-secondary outline-none disabled:opacity-40"
               >
                 {Array.from({ length: 20 }, (_, index) => index + 1).map(days => (
                   <option key={days} value={days}>前{days}日均量</option>

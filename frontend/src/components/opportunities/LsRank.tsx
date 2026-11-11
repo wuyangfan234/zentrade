@@ -7,6 +7,7 @@ import { useLayoutEffect, useRef, useState, type ReactNode, type RefObject } fro
 import type { LsRankPayload, LsRankRow, LsSettleSeries } from '@/lib/api'
 import { Sheet } from '@/components/opportunities/Sheet'
 import { p2, weekday } from '@/components/opportunities/terms'
+import { badge } from '@/components/ui/badge'
 
 type Side = 'long' | 'short'
 const SIDE_ZH: Record<Side, string> = { long: '看多', short: '看空' }
@@ -48,8 +49,8 @@ function Spark({ xs }: { xs?: number[] | null }) {
   const pts = xs.map((v, i) => `${((i / (xs.length - 1)) * (w - 2) + 1).toFixed(1)},${(h - 2 - (v - lo) * k).toFixed(1)}`).join(' ')
   const chg = (xs[xs.length - 1] / xs[0] - 1) * 100
   return (
-    <svg data-ls-spark width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`20日 ${pc1(chg)}`} className={`block ${chg >= 0 ? 'text-bull' : 'text-bear'}`}>
-      <title>{`20日 ${pc1(chg)}`}</title>
+    <svg data-ls-spark width={w} height={h} viewBox={`0 0 ${w} ${h}`} role="img" aria-label={`20 日 ${pc1(chg)}`} className={`block ${chg >= 0 ? 'text-bull' : 'text-bear'}`}>
+      <title>{`20 日 ${pc1(chg)}`}</title>
       <polyline points={pts} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )
@@ -57,13 +58,11 @@ function Spark({ xs }: { xs?: number[] | null }) {
 
 function Chip({ children, warn, ...rest }: { children: ReactNode; warn?: boolean } & Record<`data-${string}`, string | undefined>) {
   return (
-    <span {...rest} className={`shrink-0 whitespace-nowrap rounded-[4px] border px-[5px] text-[11px] font-medium leading-[18px] ${warn
-      ? 'border-warning/50 bg-warning/10 text-warning'
-      : 'border-border bg-elevated text-secondary'}`}>{children}</span>
+    <span {...rest} className={`${badge(warn ? 'warn' : 'limit')} !px-[5px] !leading-[18px]`}>{children}</span>
   )
 }
 
-const BTN = 'whitespace-nowrap rounded-btn border border-border px-2.5 py-1 text-[12.5px] font-medium text-secondary hover:bg-elevated hover:text-foreground max-md:py-1.5'
+const BTN = 'whitespace-nowrap rounded-btn border border-border px-2.5 py-1 text-[13px] font-medium text-secondary hover:bg-elevated hover:text-foreground max-md:py-1.5'
 
 // 列随每侧实际宽度分档 (两侧同宽 → 同档 → 列对齐)。主区只呈现模型排名与行情:
 // 6/7 = 序 · 票与财报 · 排名 · 盘前 · 参考价; 8/9 加 20 日走势。策略标签 / 止损 / 股数不进主区。
@@ -142,7 +141,7 @@ function Marks({ earn, tags }: { earn: string | null; tags: string[] }) {
 /** 排名: 方向写在列头 (排名前 / 排名后), 格内只放百分数 */
 const rankPct = (r: Pick<LsRankRow, 'pct'>, side: Side) => rankTag(r, side).slice(2)
 
-const TAG_EARN = 'shrink-0 rounded-[3px] bg-warning/15 px-[3px] text-[10.5px] font-semibold not-italic leading-4 text-warning'
+const TAG_EARN = 'shrink-0 rounded-[3px] bg-warning/15 px-[3px] text-[11px] font-semibold not-italic leading-4 text-warning'
 
 function LsRow({ r, i, side, d, tier, onOpen }: { r: LsRankRow; i: number; side: Side; d: LsRankPayload; tier: Tier; onOpen: (s: string) => void }) {
   const earn = earnTag(r.earnings, d.day, d.hold_until)
@@ -176,10 +175,10 @@ function SidePanel({ side, rows, d, onOpen }: { side: Side; rows: LsRankRow[]; d
       <div className="flex items-baseline gap-2 px-3 pb-1.5 pt-2.5">
         <h3 className={`text-[14px] font-semibold ${side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[side]}</h3>
         <span className="text-[13px] font-semibold tabular-nums text-secondary">{rows.length}</span>
-        <span className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{`回放 ${atrS(bt.mean_atr)}/笔 · 随机 ${num2(bt.rand)}`}</span>
+        <span className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{`回放 ${atrS(bt.mean_atr)}/笔 · 随机基准 ${num2(bt.rand)}`}</span>
       </div>
-      <div data-ls-colhead style={{ gridTemplateColumns: TPL[tier] }} className={`${ROW} h-7 border-t border-border/70 text-[11.5px] text-muted`}>
-        <span>#</span><span>票</span>{tier >= 8 && <span className="text-right">20日</span>}
+      <div data-ls-colhead style={{ gridTemplateColumns: TPL[tier] }} className={`${ROW} h-7 border-t border-border/70 text-[12px] text-muted`}>
+        <span>#</span><span>代码</span>{tier >= 8 && <span className="text-right">20 日</span>}
         <span className="whitespace-nowrap text-right">{side === 'long' ? '排名前' : '排名后'}</span>
         <span className="text-right" title={d.pre?.open ? '开盘价对昨收' : '盘前价对昨收'}>{d.pre?.open ? '开盘' : '盘前'}</span>
         <span className="text-right" title="盘前最新价 · 开盘后为开盘价">参考价</span>
@@ -193,14 +192,14 @@ function Stat({ k, v, unit, sub, cls, bar, ...rest }: { k: string; v: string; un
   & Record<`data-${string}`, string | undefined>) {
   return (
     <div {...rest} className="min-w-0 bg-surface px-3 py-1.5">
-      <div className="h-4 truncate text-[11.5px] leading-4 text-secondary">{k}</div>
+      <div className="h-4 truncate text-[12px] leading-4 text-secondary">{k}</div>
       <div className="flex h-6 items-baseline gap-1 whitespace-nowrap leading-6">
-        <b className={`text-[16px] font-semibold tabular-nums ${cls ?? 'text-foreground'}`}>{v}</b>
-        {unit && <span className="text-[11.5px] text-muted">{unit}</span>}
+        <b className={`text-[14px] font-semibold tabular-nums ${cls ?? 'text-foreground'}`}>{v}</b>
+        {unit && <span className="text-[12px] text-muted">{unit}</span>}
       </div>
       {bar !== undefined
         ? <div className="flex h-4 items-center"><div className="h-1 w-full overflow-hidden rounded-sm bg-zinc-300 dark:bg-zinc-700"><i className="block h-full bg-accent" style={{ width: `${Math.round(Math.min(Math.max(bar, 0), 1) * 100)}%` }} /></div></div>
-        : <div className="h-4 truncate text-[11.5px] leading-4 tabular-nums text-muted">{sub ?? '—'}</div>}
+        : <div className="h-4 truncate text-[12px] leading-4 tabular-nums text-muted">{sub ?? (v === '—' ? '' : '—')}</div>}
     </div>
   )
 }
@@ -211,7 +210,7 @@ function settleCells(d: LsRankPayload): { k: string; v: string; unit?: string; s
   const u = atrUsd(d)
   const a = (v?: number | null) => ({ v: num2(v), unit: fin(v) ? 'ATR' : undefined, cls: sgnCls(v) })
   return [
-    { key: 'progress', k: '前向结算', v: `${s.days}/${s.check_days}`, unit: '日', bar: s.days / s.check_days },
+    { key: 'progress', k: '前向验证', v: `${s.days}/${s.check_days}`, unit: '日', bar: s.days / s.check_days },
     { key: 'long', k: '看多每笔', ...a(t?.long), sub: t ? `${usdOf(t.long, u)} · 胜率 ${pctW(t.win_long)}` : undefined },
     { key: 'edge', k: '看多超额', ...a(t?.long_minus_all), sub: t ? `自选全体 ${num2(t.all)} · 判据 ≥0` : undefined },
     { key: 'short', k: '看空每笔', ...a(t?.short), sub: t ? `${usdOf(t.short, u)} · 胜率 ${pctW(t.win_short)}` : undefined },
@@ -224,7 +223,7 @@ function settleCells(d: LsRankPayload): { k: string; v: string; unit?: string; s
 // 跟榜口径: 前 5 进 · 掉出前 10 换 → 6-10 名 = 保留区
 const BOOK_ZH: Record<string, string> = { keep_long: '保留多', keep_short: '保留空', out_long: '换出多', out_short: '换出空' }
 function AllSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: string) => void; onClose: () => void }) {
-  const head: [string, string][] = [['#', 'w-7 text-right'], ['票', 'pl-3 text-left'], ['排名', 'text-right'], ['较昨日', 'text-right'], [d.pre?.open ? '开盘' : '盘前', 'text-right'],
+  const head: [string, string][] = [['#', 'w-7 text-right'], ['代码', 'pl-3 text-left'], ['排名', 'text-right'], ['较昨日', 'text-right'], [d.pre?.open ? '开盘' : '盘前', 'text-right'],
     ['收盘', 'text-right'], ['ATR', 'text-right'], ['财报', 'text-right'], ['名单', 'text-right']]
   return (
     <Sheet attr={{ 'data-ls-all': '' }} onClose={onClose} title={`全部 ${d.all.length} · ${md(d.day)} 名单`}>
@@ -316,15 +315,15 @@ function SettleSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: str
                   <div className="flex items-baseline gap-2 bg-elevated px-3 py-1.5">
                     <b className={`text-[13px] ${side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[side]}</b>
                     <span className="text-[12px] text-secondary">{xs.length}</span>
-                    {miss.length > 0 && <span data-ls-missing={side} title="持有期内缺 K 线 (停牌 / 退市), 不计入成绩" className="text-[11.5px] font-semibold text-warning">{`缺 ${miss.join(' ')}`}</span>}
-                    <span className={`ml-auto text-[12.5px] font-semibold tabular-nums ${sgnCls(sum)}`}>{u === null ? `${num2(sum)} ATR` : `${num2(sum)} ATR · ${usdS(sum * u)}`}</span>
+                    {miss.length > 0 && <span data-ls-missing={side} title="持有期内缺 K 线（停牌 / 退市）· 不计入成绩" className="text-[12px] font-semibold text-warning">{`缺 ${miss.join(' ')}`}</span>}
+                    <span className={`ml-auto text-[13px] font-semibold tabular-nums ${sgnCls(sum)}`}>{u === null ? `${num2(sum)} ATR` : `${num2(sum)} ATR · ${usdS(sum * u)}`}</span>
                   </div>
                   {xs.map((x) => (
                     <div key={x.symbol} role="button" tabIndex={0} onClick={() => onOpen(x.symbol)}
                       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(x.symbol) } }}
                       className="grid h-8 cursor-pointer grid-cols-[64px_minmax(0,1fr)_56px_60px] items-center gap-2 border-t border-border/70 px-3 text-[13px] tabular-nums hover:bg-elevated">
                       <b className="text-foreground">{x.symbol}</b>
-                      <span className={`text-[11.5px] ${x.exit === 'stop' ? 'font-semibold text-warning' : 'text-muted'}`}>{x.exit === 'stop' ? '止损' : '到期'}</span>
+                      <span className={`text-[12px] ${x.exit === 'stop' ? 'font-semibold text-warning' : 'text-muted'}`}>{x.exit === 'stop' ? '止损' : '到期'}</span>
                       <span className={`text-right font-semibold ${sgnCls(x.r)}`}>{num2(x.r)}</span>
                       <span className={`text-right ${sgnCls(x.r)}`}>{usdOf(x.r, u)}</span>
                     </div>
@@ -364,12 +363,12 @@ export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) =>
     <section data-ls-rank data-source="model" className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 px-3 py-2.5">
         <span className="shrink-0 text-[11px] font-medium tracking-wide text-muted">模型观察</span>
-        <h2 className="shrink-0 text-[15px] font-semibold text-foreground">今日多空</h2>
-        <span className="shrink-0 rounded-[4px] border border-accent/40 px-1.5 text-[11px] leading-5 text-accent">模型评分</span>
-        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">8 项日 K</span>
-        <span className="shrink-0 rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只观察</span>
-        {d.demo && <span data-ls-demo className="shrink-0 rounded-btn bg-warning px-1.5 text-[11px] font-semibold leading-5 text-white dark:text-zinc-950">虚拟数据</span>}
-        {d.late && <span data-ls-late title="名单日开盘后才生成 · 照常结算 · 不计入前向成绩" className="shrink-0 rounded-btn border border-warning/60 bg-warning/10 px-1.5 text-[11px] font-semibold leading-5 text-warning">盘中补出</span>}
+        <h2 className="shrink-0 text-[14px] font-semibold text-foreground">今日多空</h2>
+        <span className={badge('limit')}>模型评分</span>
+        <span className={badge('limit')}>8 个日线特征</span>
+        <span className={badge('limit')}>仅观察</span>
+        {d.demo && <span data-ls-demo className="shrink-0 rounded-btn bg-warning px-1.5 text-[11px] font-semibold leading-5 text-white dark:text-zinc-950">示例数据</span>}
+        {d.late && <span data-ls-late title="名单日开盘后才生成 · 照常结算 · 不计入前向成绩" className={badge('warn')}>盘中补出</span>}
         <span data-ls-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto xl:truncate max-xl:order-last max-xl:basis-full">
           {meta.map((t, i) => <span key={t}>{i > 0 && ' '}<span className="whitespace-nowrap">{i < meta.length - 1 ? `${t} ·` : t}</span></span>)}
         </span>
@@ -396,9 +395,9 @@ export function LsRankEmpty() {
   return (
     <section data-ls-rank-empty data-source="model" className="mb-3 flex flex-wrap items-center gap-2 rounded-card border border-border bg-surface px-3 py-2.5">
       <span className="text-[11px] font-medium tracking-wide text-muted">模型观察</span>
-      <h2 className="text-[15px] font-semibold text-foreground">今日多空</h2>
-      <span className="rounded-[4px] border border-border bg-elevated px-1.5 text-[11px] leading-5 text-secondary">只观察</span>
-      <span className="ml-auto text-[12px] tabular-nums text-muted">16:35 ET 出名单</span>
+      <h2 className="text-[14px] font-semibold text-foreground">今日多空</h2>
+      <span className={badge('limit')}>仅观察</span>
+      <span className="ml-auto text-[12px] tabular-nums text-muted">16:35 ET 生成名单</span>
     </section>
   )
 }

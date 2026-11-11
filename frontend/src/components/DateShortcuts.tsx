@@ -36,9 +36,9 @@ export function DateShortcuts({ value, onChange, options, base }: Props) {
             title={target}
             onClick={() => onChange(active ? '' : target)}
             className={cn(
-              'rounded-md px-2 py-1 text-[10px] leading-none transition-colors cursor-pointer',
+              'rounded-md px-2 py-1 text-[11px] leading-none transition-colors cursor-pointer',
               active
-                ? 'bg-accent/15 text-accent border border-accent/30'
+                ? 'bg-accent/15 text-accent dark:text-blue-400 border border-accent/30'
                 : 'bg-elevated text-muted border border-transparent hover:text-foreground',
             )}
           >
