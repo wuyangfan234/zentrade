@@ -4234,9 +4234,36 @@ export interface IntelPayload {
     /** 0.42.4: 各筛选的总条数 / 每个筛选最多显示条数 (items = 各筛选最新 limit 条的并集) */
     counts?: Partial<Record<'all' | 'hold' | 'bullish' | 'bearish' | 'macro', number>>; limit?: number
   } | null
+  /** 舆情异动: 只读 board.json (采集线程每轮写); 仅观察, 不参与下单 */
+  sentiment?: IntelSentiment | null
   watch_count: number
   state: Record<string, { last_attempt_at?: string; last_ok_at?: string; error?: string | null }>
   errors: Record<string, string>
+}
+
+// ===== 舆情异动 (GET /api/intel/today 的 sentiment 段; 仅观察, 不参与下单) =====
+/** 内部码: A = 重点, B = 异动 (界面不显示字母) */
+export type SentimentGrade = 'A' | 'B'
+export type SentimentDirection = 'bullish' | 'bearish' | 'mixed' | 'none'
+export type SentimentFamily = 'news' | 'social' | 'attention'
+export type SentimentSourceStatus = 'ok' | 'missing' | 'breaker' | 'pending'
+export interface SentimentSourceStat {
+  x: number; med: number; mad: number; z: number; n: number; anom: boolean; article?: string; day?: string
+}
+export interface SentimentFamilyStat { z: number; heat: number; anom: boolean; sources: Record<string, SentimentSourceStat> }
+export interface SentimentHeadline {
+  at: string | null; zh: string | null; en: string | null; importance: string | null; direction: string | null; event_type: string | null
+}
+export interface SentimentPost { at: string; title: string; sub: string | null; id: string | null }
+export interface SentimentRow {
+  symbol: string; role?: string | null; grade: SentimentGrade; heat: number; direction: SentimentDirection
+  event_type: string | null; hard: boolean; first_at: string | null; n_families: number
+  families_ok: SentimentFamily[]; families?: Partial<Record<SentimentFamily, SentimentFamilyStat>>
+  headlines?: SentimentHeadline[]; posts?: SentimentPost[]
+}
+export interface IntelSentiment {
+  as_of: string | null; age_min: number | null; rows: SentimentRow[]; total: number; symbols: number
+  sources: Record<string, SentimentSourceStatus>; board_error?: string | null
 }
 
 export interface NewsTone {

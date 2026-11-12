@@ -1,0 +1,43 @@
+{
+  "_doc": "舆情异动: 默认关注池 (名单 = 自选 + 持仓 + 本池) + Reddit 匹配词 (公司名 / 管理层名, 小写; 常见英文词的公司名按新闻库规则只认首字母大写) + 维基条目 + 评级阈值。改阈值或匹配词必须重跑回放, 文件 sha256 记在回放报告。",
+  "pool": ["SNDK", "SPCX", "MU", "DELL", "NVDA", "TSLA", "CRCL", "INTC", "MRVL", "PLTR", "AMD", "AAPL", "META", "RKLB",
+           "ORCL", "LITE", "MSTR", "AAOI", "AVGO", "ARM", "COIN", "AMZN", "TSM", "MSFT"],
+  "names": {
+    "SNDK": {"aliases": ["sandisk"], "wiki": ["Sandisk"]},
+    "SPCX": {"aliases": ["spacex"], "wiki": ["SpaceX", "Elon_Musk"]},
+    "MU": {"aliases": ["micron"], "wiki": ["Micron_Technology", "Sanjay_Mehrotra"]},
+    "DELL": {"aliases": ["dell"], "wiki": ["Dell_Technologies", "Michael_Dell"]},
+    "NVDA": {"aliases": ["nvidia", "jensen"], "wiki": ["Nvidia", "Jensen_Huang"]},
+    "TSLA": {"aliases": ["tesla", "elon", "musk"], "wiki": ["Tesla,_Inc.", "Elon_Musk"]},
+    "CRCL": {"aliases": ["circle internet", "circle"], "wiki": ["Circle_Internet_Group", "Jeremy_Allaire"]},
+    "INTC": {"aliases": ["intel", "lip-bu tan"], "wiki": ["Intel", "Lip-Bu_Tan"]},
+    "MRVL": {"aliases": ["marvell"], "wiki": ["Marvell_Technology"]},
+    "PLTR": {"aliases": ["palantir", "alex karp"], "wiki": ["Palantir", "Alex_Karp"]},
+    "AMD": {"aliases": ["advanced micro devices", "lisa su"], "wiki": ["AMD", "Lisa_Su"]},
+    "AAPL": {"aliases": ["apple", "tim cook"], "wiki": ["Apple_Inc.", "Tim_Cook"]},
+    "META": {"aliases": ["meta", "facebook", "zuckerberg"], "wiki": ["Meta_Platforms", "Mark_Zuckerberg"]},
+    "RKLB": {"aliases": ["rocket lab"], "wiki": ["Rocket_Lab"]},
+    "ORCL": {"aliases": ["oracle", "larry ellison"], "wiki": ["Oracle_Corporation", "Larry_Ellison"]},
+    "LITE": {"aliases": ["lumentum"], "wiki": ["Lumentum"]},
+    "MSTR": {"aliases": ["microstrategy", "saylor"], "wiki": ["MicroStrategy", "Michael_J._Saylor"]},
+    "AAOI": {"aliases": ["applied optoelectronics"], "wiki": []},
+    "AVGO": {"aliases": ["broadcom", "hock tan"], "wiki": ["Broadcom", "Hock_Tan"]},
+    "ARM": {"aliases": ["arm holdings"], "wiki": ["Arm_Holdings", "Rene_Haas"]},
+    "COIN": {"aliases": ["coinbase"], "wiki": ["Coinbase", "Brian_Armstrong_(businessman)"]},
+    "AMZN": {"aliases": ["amazon", "jassy"], "wiki": ["Amazon_(company)", "Andy_Jassy"]},
+    "TSM": {"aliases": ["tsmc", "taiwan semiconductor"], "wiki": ["TSMC", "C._C._Wei"]},
+    "MSFT": {"aliases": ["microsoft", "nadella"], "wiki": ["Microsoft", "Satya_Nadella"]}
+  },
+  "thresholds": {
+    "window_h": 24,
+    "baseline_days": 20,
+    "min_baseline": 10,
+    "z_anom": 3.0,
+    "min_count": 3,
+    "z_scale": 4.0,
+    "heat_line": 40,
+    "dir_min_weight": 3,
+    "dir_ratio": 2.0,
+    "episode_gap_h": 24
+  }
+}

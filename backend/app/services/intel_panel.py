@@ -362,6 +362,26 @@ def news_view(data_dir: Path, now: datetime, roles: dict[str, str]) -> dict:
                            else "新闻翻译与 AI 打标已关闭，显示英文原文")}  # noqa: RUF001
 
 
+SENTIMENT_ROWS = 12
+
+
+def sentiment_view(data_dir: Path, now: datetime) -> dict:
+    """舆情异动: 只读 data/sentiment/board.json + state.json (采集线程每轮写)。
+    不出网、不计算、不建目录; board.json 损坏就抛, 由 _section 只空这一段。"""
+    import json
+
+    from app.services import sentiment_sources as ss
+    base = data_dir / "sentiment"
+    st = (ss.read_json(base / "state.json") if base.is_dir() else None) or {}
+    board_p = base / "board.json"
+    board = json.loads(board_p.read_text(encoding="utf-8")) if board_p.is_file() else {}
+    return {"as_of": board.get("as_of"), "age_min": _age_min(board.get("as_of"), now),
+            "rows": (board.get("rows") or [])[:SENTIMENT_ROWS], "total": len(board.get("rows") or []),
+            "symbols": board.get("symbols") or 0,
+            "sources": {s: (st.get(s) or {}).get("status") or "pending" for s in ss.SOURCES},
+            "board_error": (st.get("_board") or {}).get("error")}
+
+
 def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) -> dict:
     from app.services import card_volume as cv
     from app.services import market_mood
@@ -385,6 +405,7 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
         "earnings": _section("earnings", lambda: earnings_view(data_dir, repo, now, roles), errors),
         "actions": _section("actions", lambda: corp_actions_view(data_dir, now, roles), errors),
         "news": _section("news", lambda: news_view(data_dir, now, roles) if (data_dir / "news").is_dir() else None, errors),
+        "sentiment": _section("sentiment", lambda: sentiment_view(data_dir, now), errors),
         "watch_count": len(roles), "state": src.read_cache(data_dir, "state") or {},
     }
     out["errors"] = errors
@@ -402,7 +423,9 @@ def _active(now: datetime) -> bool:
 DUE = {"etfs": (60, 1800), "vol": (120, 1800), "rates": (1800, 3600), "macro_calendar": (900, 1800),
        "macro_lookahead": (6 * 3600, 6 * 3600),
        "macro_actuals": (60, 300), "pcr": (3600, 3600), "breadth": (300, 1800), "etf_daily": (1800, 3600),
-       "earnings_upcoming": (6 * 3600, 6 * 3600), "earnings_history": (6 * 3600, 6 * 3600), "options_warm": (1800, 3 * 3600)}
+       "earnings_upcoming": (6 * 3600, 6 * 3600), "earnings_history": (6 * 3600, 6 * 3600), "options_warm": (1800, 3 * 3600),
+       # 舆情采集: 盘前盘中每 5 分钟, 其余 (含周末) 每 15 分钟起一轮后台单飞线程 (sentiment_sources.kick)
+       "sentiment": (300, 900)}
 
 
 # 「立即刷新」只强制跑快源 (实测全量强制 162 秒, 其中 Nasdaq 10 天 + Finnhub 逐票 145 秒,
@@ -565,6 +588,13 @@ def _tick(data_dir: Path, repo, loop, *, now: datetime, force: bool, only: set[s
     run("earnings_upcoming", earnings_upcoming)
     run("earnings_history", earnings_history)
     run("options_warm", options_warm)
+
+    def sentiment():
+        """舆情采集 + 评级: 后台线程 (GDELT 单次十几秒, 不能占住 tick 锁)。"""
+        from app.services import sentiment_sources
+        sentiment_sources.kick(data_dir, loop=loop, repo=repo)
+
+    run("sentiment", sentiment)
     if ran:
         logger.info("intel tick: %s", ran)
     return ran

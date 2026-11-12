@@ -18,6 +18,7 @@ import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { etToday } from '@/lib/etTime'
 import { corpActionLabel } from '@/lib/reasonLabels'
 import { eventTitleZh } from '@/lib/macroEvents'
+import { SentimentBoard } from '@/components/intel/SentimentBoard'
 
 const ACTIVE = new Set(['premarket', 'open_wait', 'session'])
 const WRAP = 'mx-auto max-w-6xl space-y-6 px-4 pb-24 pt-4 md:px-8 md:pt-6'
@@ -88,6 +89,7 @@ export function Intel() {
                 {errs.news ? <Failed /> : <News news={d.news} onSymbol={setPreview} />}
               </section>
             </div>
+            <SentimentBoard data={d.sentiment} failed={'sentiment' in errs} onSymbol={setPreview} />
             <section data-intel="earnings" className="space-y-3">
               <SectionTitle icon={FileBarChart2}>{`自选财报 · 未来 10 个交易日 · ${d.earnings?.rows.length ?? 0} 只`}</SectionTitle>
               {errs.earnings ? <Failed /> : <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} />}
@@ -531,6 +533,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
 const SRC_ZH: Record<string, string> = {
   etfs: 'ETF 快照', vol: '波动率', rates: '利率', macro_calendar: '宏观日历', macro_lookahead: '前瞻日历', macro_actuals: '宏观实际值', pcr: '期权 Put/Call',
   breadth: '全市场宽度', etf_daily: 'ETF 官方日K', earnings_upcoming: '财报预期', earnings_history: '财报历史', options_warm: '期权链预热',
+  sentiment: '舆情采集',
 }
 
 function SourceState({ d }: { d: IntelPayload }) {
