@@ -22,7 +22,6 @@ from pathlib import Path
 
 from app.services import sentiment_sources as ss
 
-
 # ── 回填 ─────────────────────────────────────────────────────────────
 
 def _log(msg: str) -> None:
@@ -46,7 +45,7 @@ def backfill(data_dir, start: date, end: date, *, symbols: list[str] | None = No
                 try:
                     per[a] = ss.parse_wiki(ss._http_get(ss.wiki_url(a, start, end)))
                     break
-                except Exception as e:  # noqa: BLE001
+                except Exception as e:
                     log(f"wiki {s} {a} try {tries} failed: {type(e).__name__} {getattr(e, 'code', '')}")
         ss.write_json(ss.root(data_dir) / "series" / "wiki" / f"{s}.json", {"articles": per, "backfill": True})
         stats["wiki"] += 1
@@ -85,7 +84,7 @@ BENCH = "QQQ"
 
 
 def fetch_prices(path: Path, symbols: list[str] | None = None, start: str = "2026-07-15", end: str | None = None) -> dict:
-    """SIP 右端必须早于 now − 16 分钟 (免费档近端 403)。"""
+    """SIP 右端必须早于 now - 16 分钟 (免费档近端 403)。"""
     import urllib.parse
     end = end or ss.iso(datetime.now(UTC) - timedelta(minutes=20))
     from app import credentials
@@ -256,41 +255,41 @@ def _stat(vals: list[float]) -> str:
 
 def render(rep: dict) -> str:
     s = rep["summary"]
-    L = ["# 舆情评级回放报告（24 池，逐小时 as-of；A = 重点，B = 异动）", "",
-         f"- 区间交易日 {s['trading_days']} 个；评估步 {s['steps']} 个 × {s['symbols']} 只",
-         f"- 重点（A）{s['A']} 个，平均每交易日 **{s['A_per_tday']}**；异动（B）{s['B']} 个，平均每交易日 {s['B_per_tday']}",
+    lines = ["# 舆情评级回放报告（24 池，逐小时 as-of；A = 重点，B = 异动）", "",  # noqa: RUF001
+         f"- 区间交易日 {s['trading_days']} 个；评估步 {s['steps']} 个 × {s['symbols']} 只",  # noqa: RUF001
+         f"- 重点（A）{s['A']} 个，平均每交易日 **{s['A_per_tday']}**；异动（B）{s['B']} 个，平均每交易日 {s['B_per_tday']}",  # noqa: RUF001
          f"- 阈值 `{json.dumps(s['thresholds'], ensure_ascii=False)}`",
          f"- 配置 sha256 `{s['config_sha']}`",
-         f"- 行情：{rep.get('prices_source')}（取数 {rep.get('prices_fetched_at')}）；相对 QQQ = 个股涨跌 − QQQ 涨跌，锚 = 事件之前最后一个收盘",
-         f"- 各类来源覆盖（有数据的评估步）：{json.dumps(rep['family_cover'], ensure_ascii=False)}", "",
+         f"- 行情：{rep.get('prices_source')}（取数 {rep.get('prices_fetched_at')}）；相对 QQQ = 个股涨跌 - QQQ 涨跌，锚 = 事件之前最后一个收盘",  # noqa: RUF001
+         f"- 各类来源覆盖（有数据的评估步）：{json.dumps(rep['family_cover'], ensure_ascii=False)}", "",  # noqa: RUF001
          "## NVDA 案例", "",
-         f"- as-of 2026-11-08T22:00Z：`{json.dumps(rep['nvda_probe'], ensure_ascii=False)}`",
-         f"- 回放中首次 A：{rep['nvda_first_a']}", "",
+         f"- as-of 2026-11-08T22:00Z：`{json.dumps(rep['nvda_probe'], ensure_ascii=False)}`",  # noqa: RUF001
+         f"- 回放中首次 A：{rep['nvda_first_a']}", "",  # noqa: RUF001
          "| as-of (UTC) | 评级 | 热度 | 方向 | 异常类数 | 有数据的类 | 类型 |", "|---|---|---|---|---|---|---|"]
     for t, r in rep["nvda_timeline"]:
-        L.append(f"| {t} | {r['grade'] or '—'} | {r['heat']} | {r['direction']} | {r['n_families']} | "
+        lines.append(f"| {t} | {r['grade'] or '—'} | {r['heat']} | {r['direction']} | {r['n_families']} | "
                  f"{','.join(r['families_ok'])} | {r['event_type'] or '—'} |")
-    L += ["", "## A/B 事件之后相对 QQQ（只统计，不进交易）", ""]
+    lines += ["", "## A/B 事件之后相对 QQQ（只统计，不进交易）", ""]  # noqa: RUF001
     for g in ("A", "B"):
         for dirn in ("bearish", "bullish", "mixed", "none"):
             ev = [e for e in rep["events"] if e["grade"] == g and e["direction"] == dirn]
             if not ev:
                 continue
-            L.append(f"- {g} · {dirn}（{len(ev)} 个）：T+1 {_stat([e['fwd'][1] for e in ev])}；"
-                     f"T+3 {_stat([e['fwd'][3] for e in ev])}；T+5 {_stat([e['fwd'][5] for e in ev])}")
-    L += ["", "## 每日 A/B 数（美东日期）", "", "| 日期 | 交易日 | A | B |", "|---|---|---|---|"]
+            lines.append(f"- {g} · {dirn}（{len(ev)} 个）：T+1 {_stat([e['fwd'][1] for e in ev])}；"  # noqa: RUF001
+                     f"T+3 {_stat([e['fwd'][3] for e in ev])}；T+5 {_stat([e['fwd'][5] for e in ev])}")  # noqa: RUF001
+    lines += ["", "## 每日 A/B 数（美东日期）", "", "| 日期 | 交易日 | A | B |", "|---|---|---|---|"]  # noqa: RUF001
     days = sorted(set(rep["per_day"]) | set(rep["tdays"]))
     for d in days:
         x = rep["per_day"].get(d) or {"A": [], "B": []}
-        L.append(f"| {d} | {'是' if d in rep['tdays'] else '否'} | {len(x['A'])} {' '.join(x['A'])} | "
+        lines.append(f"| {d} | {'是' if d in rep['tdays'] else '否'} | {len(x['A'])} {' '.join(x['A'])} | "
                  f"{len(x['B'])} {' '.join(x['B'])} |")
-    L += ["", "## 事件明细", "", "| 级 | 代码 | as-of | 热度 | 方向 | 类型 | 异常类数 | T+1 | T+3 | T+5 |",
+    lines += ["", "## 事件明细", "", "| 级 | 代码 | as-of | 热度 | 方向 | 类型 | 异常类数 | T+1 | T+3 | T+5 |",
           "|---|---|---|---|---|---|---|---|---|---|"]
     for e in rep["events"]:
         f = e["fwd"]
-        L.append(f"| {e['grade']} | {e['symbol']} | {e['at']} | {e['heat']} | {e['direction']} | {e['event_type'] or '—'} | "
+        lines.append(f"| {e['grade']} | {e['symbol']} | {e['at']} | {e['heat']} | {e['direction']} | {e['event_type'] or '—'} | "
                  f"{e['n_families']} | {f[1]} | {f[3]} | {f[5]} |")
-    return "\n".join(L) + "\n"
+    return "\n".join(lines) + "\n"
 
 
 # ── 命令行 ───────────────────────────────────────────────────────────

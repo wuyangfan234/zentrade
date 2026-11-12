@@ -101,7 +101,7 @@ def load_config(path: Path | None = None) -> dict:
 def _http_get(url: str, headers: dict | None = None, timeout: float = HTTP_TIMEOUT) -> bytes:
     """唯一的出网口 (测试按这个名字换桩)。"""
     req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
-    with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 - 固定 https 域名
+    with urllib.request.urlopen(req, timeout=timeout) as r:  # 固定 https 域名
         return r.read()
 
 
@@ -116,14 +116,14 @@ def roles(loop=None, config: dict | None = None) -> dict[str, str]:
         for r in watchlist.list_symbols():
             if r.get("symbol"):
                 out[str(r["symbol"]).upper()] = "自选"
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         logger.debug("sentiment: watchlist unavailable: %s", type(e).__name__)
     if loop is not None:
         try:
             for p in loop.ledger.open_positions:
                 if p.symbol:
                     out[str(p.symbol).upper()] = "持仓"
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("sentiment: positions unavailable: %s", type(e).__name__)
     return out
 
@@ -138,7 +138,7 @@ def query_names(symbols: list[str], config: dict, repo=None) -> dict[str, dict]:
     if missing and repo is not None:
         try:
             nm = repo.get_name_map(missing) or {}
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.debug("sentiment: name map unavailable: %s", type(e).__name__)
     for s in missing:
         names[s] = {"aliases": derive_aliases(s, nm.get(s)), "wiki": []}
@@ -404,7 +404,7 @@ def fetch_wiki(data_dir, symbols: list[str], names: dict, now: datetime, *, hist
     todo.sort(key=lambda x: x[0])
     done = calls = 0
     start = end - timedelta(days=history_d)
-    for _, s, arts, p, cur in todo[:per_round]:
+    for _, _sym, arts, p, cur in todo[:per_round]:
         per = dict(cur.get("articles") or {})
         try:
             for a in arts:
@@ -439,7 +439,7 @@ def collect_round(data_dir, symbols: list[str], names: dict, now: datetime, *, s
             continue
         try:
             mark(state, source, now, ok=True, n=int(jobs[source]() or 0))
-        except Exception as e:  # noqa: BLE001 - 一个源坏了只记失败, 不拖其他源
+        except Exception as e:  # 一个源坏了只记失败, 不拖其他源
             logger.info("sentiment: %s failed: %s", source, type(e).__name__)
             mark(state, source, now, ok=False, error=f"{type(e).__name__}: {e}")
     state["_round"] = {"at": iso(now), "symbols": len(symbols)}
@@ -462,7 +462,7 @@ def run_round(data_dir, *, loop=None, repo=None, now: datetime | None = None, sl
             board = sentiment_score.build_board(data_dir, rl, now, config=cfg, state=state, names=names)
             write_json(root(data_dir) / "board.json", board)
             state.pop("_board", None)
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             logger.warning("sentiment: board failed: %s", type(e).__name__)
             state["_board"] = {"error": f"{type(e).__name__}: {e}"[:200], "at": iso(now)}
         write_json(root(data_dir) / "state.json", state)

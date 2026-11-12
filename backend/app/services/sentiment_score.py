@@ -1,11 +1,11 @@
 """舆情异动 · 评级。只展示: 不进打分、裁决、下单, 不推送; 不调 AI, 不调付费接口。
 
 三类来源, 每类和该票自身近 20 个交易日「同一时刻」的基线比 (中位数 + MAD 异常度
-z = (x − 中位数) / max(1.4826·MAD, √max(中位数, 1))):
+z = (x - 中位数) / max(1.4826·MAD, √max(中位数, 1))):
   news 新闻       新闻库 24 小时条数 (news) 与其中高重要度条数 (news_hi), 取较大的 z
   social Reddit   wallstreetbets + stocks 24 小时提到该股的帖子数
   attention 维基  公司 / 管理层条目前一天浏览量
-每类换算 0–100 (100·(1 − e^(−z/z_scale))), 对「有数据的类」取平均 = 热度; 没数据 / 基线不足的类不计入分母。
+每类换算 0-100 (100·(1 - e^(-z/z_scale))), 对「有数据的类」取平均 = 热度; 没数据 / 基线不足的类不计入分母。
 上榜: 重点 (内部码 A) = 热度过线 + ≥2 类异常 + 新闻方向明确 + 含硬事件 (监管/诉讼/管理层/指引/财报/并购/增发)
       异动 (内部码 B) = 热度过线;  C = 有类异常但热度未过线 (不展示, 只计数)。
 
@@ -21,10 +21,11 @@ import hashlib
 import json
 import math
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from statistics import median
-from typing import Any, Callable
+from typing import Any
 
 from app.services import sentiment_sources as ss
 
