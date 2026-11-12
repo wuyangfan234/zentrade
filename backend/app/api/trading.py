@@ -405,7 +405,7 @@ def system_status(request: Request):
             else f"；本轮翻译 {tr.get('failed_batches')} 批失败，下一轮自动重译"
             if tr.get('failed_batches') and not news_disabled else ''))
         if nw.get('last_run_at') else '首次采集后显示（每分钟唤醒，盘前盘中每 5 分钟）', '/api/news/status')
-    # 舆情作战中心第一期: 只展示, 不进交易链。一行 = 五个外部源状态 + 最近一轮 + 评级计数。
+    # 舆情异动: 只展示, 不进交易链。一行 = 两个外部源状态 (Reddit / 维基) + 最近一轮 + 上榜数。
     try:
         _sentiment_row(add, safe, data_dir)
     except Exception as exc:  # 单行拼装失败不能让整页 500
