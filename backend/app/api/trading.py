@@ -247,7 +247,7 @@ def _pipeline_session_finalized(done: dict, now=None) -> bool:
     return started >= _dt.combine(due, _t(16, 0), tzinfo=us_clock.tz) - _tdl(seconds=1)
 
 
-_SENTIMENT_SRC_ZH = {'gdelt': 'GDELT', 'stocktwits': 'StockTwits', 'apewisdom': 'ApeWisdom', 'reddit': 'Reddit', 'wiki': '维基'}
+_SENTIMENT_SRC_ZH = {'reddit': 'Reddit', 'wiki': '维基浏览量'}
 
 
 def _sentiment_row(add, safe, data_dir) -> None:
@@ -257,24 +257,19 @@ def _sentiment_row(add, safe, data_dir) -> None:
     if sm.get('_error'):
         add('sentiment', '舆情采集', 'error', f"读取失败 {sm['_error']}", 'data/sentiment/')
         return
-    per = sm.get('sources') or {}
     if not sm.get('round_at'):
         add('sentiment', '舆情采集', 'idle', '首轮采集后显示（盘前盘中每 5 分钟，其余每 15 分钟）', 'data/sentiment/')
         return
-    missing = [_SENTIMENT_SRC_ZH.get(k, k) for k, v in per.items() if v in ('missing', 'breaker')]
-    unconf = [_SENTIMENT_SRC_ZH.get(k, k) for k, v in per.items() if v == 'unconfigured']
+    failed = [_SENTIMENT_SRC_ZH.get(k, k) for k, v in (sm.get('sources') or {}).items() if v in ('missing', 'breaker')]
     at = ss.parse_iso(sm['round_at'])
     when = at.astimezone(us_clock.tz).strftime('%m-%d %H:%M ET') if at else '—'
     c = sm.get('counts') or {}
-    parts = [f"A {c.get('A', 0)} · B {c.get('B', 0)} · C {c.get('C', 0)}", f"最近一轮 {when}"]
-    if missing:
-        parts.append(f"缺源 {'、'.join(missing)}")
-    if unconf:
-        parts.append(f"{'、'.join(unconf)} 未配置")
+    parts = [f"重点 {c.get('A', 0)} 只 · 异动 {c.get('B', 0)} 只", f"最近一轮 {when}"]
+    if failed:
+        parts.append(f"{'、'.join(failed)} 暂时取不到")
     if sm.get('board_error'):
         parts.append('评级计算失败')
-    state = 'warn' if missing or sm.get('board_error') else 'ok'
-    add('sentiment', '舆情采集', state, '；'.join(parts), 'data/sentiment/')
+    add('sentiment', '舆情采集', 'warn' if failed or sm.get('board_error') else 'ok', '；'.join(parts), 'data/sentiment/')
 
 
 @router.get('/system-status')

@@ -1,11 +1,13 @@
-"""舆情评级回放 (第一期校准用)。逻辑全在 app/ 里, 命令行只是薄壳:
+"""舆情评级回放 (校准用)。逻辑全在 app/ 里, 命令行只是薄壳:
 
-  python -m app.services.sentiment_replay backfill --data <目录> --start 2026-08-25 --end 2026-11-12
-      回填 GDELT 小时文章数 / 维基日浏览量到 <目录>/sentiment/series/ (研究用目录, 不碰生产 data)。
+  python -m app.services.sentiment_replay backfill --data <目录> --start 2026-07-15 --end 2026-11-12
+      回填维基日浏览量到 <目录>/sentiment/series/wiki/ (研究用目录, 不碰生产 data)。
+  python -m app.services.sentiment_replay import-reddit --data <目录> --src <原始帖目录> --from 2026-10-06T00:00:00Z
+      把按版块整版拉下的 Arctic Shift 帖子 (<版块>.jsonl) 导成线上同一格式 (sentiment/reddit/<版块>/<日期>.jsonl + coverage.json)。
   python -m app.services.sentiment_replay run --data <目录> --start 2026-09-28 --end 2026-11-11 --out <报告.md>
-      24 池逐小时 as-of 回放: 每日 A/B 数、NVDA 案例、A/B 事件之后 1/3/5 日相对 QQQ 涨跌 (只统计)。
+      24 池逐小时 as-of 回放: 每日重点/异动数、NVDA 案例、事件之后 1/3/5 日相对 QQQ 涨跌 (只统计)。
   python -m app.services.sentiment_replay asof --data <目录> --symbol NVDA --at 2026-11-08T22:00Z [--expect A] [--set k=v]
-      单点评级; --expect 不符时退出码 1 (反向验证用)。
+      单点评级; --expect 不符时退出码 1 (反向验证用)。内部码 A = 重点, B = 异动。
 
 只用 as-of 时刻之前已入库的数据 (见 sentiment_score 的可得时刻规则)。行情 = Alpaca SIP 日K, key 只从凭据模块读, 不打印。
 """
@@ -13,9 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import queue
 import sys
-import threading
 import time
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -25,31 +25,17 @@ from app.services import sentiment_sources as ss
 
 # ── 回填 ─────────────────────────────────────────────────────────────
 
-def _chunks(start: datetime, end: datetime, days: int) -> list[tuple[datetime, datetime]]:
-    out, a = [], start
-    while a < end:
-        b = min(a + timedelta(days=days), end)
-        out.append((a, b))
-        a = b
-    return out
-
-
 def _log(msg: str) -> None:
     print(msg, flush=True)
 
 
-def backfill(data_dir, start: date, end: date, *, symbols: list[str] | None = None, workers: int = 3,
-             gap_s: float = ss.GDELT_GAP_S, chunk_d: int = 7, log=_log, skip_wiki: bool = False,
-             skip_gdelt: bool = False) -> dict:
-    """GDELT 按 7 天一块 (返回日粒度就对半再拆), 多线程但请求发起间隔 ≥ gap_s (守官方限速); 维基一票一次。
-    可断点续跑: 已完成的块记在序列文件 chunks 里。"""
+def backfill(data_dir, start: date, end: date, *, symbols: list[str] | None = None, log=_log) -> dict:
+    """维基一票一次 (公司 + 管理层条目), 429 退避重试。"""
     cfg = ss.load_config()
     names = cfg.get("names") or {}
     syms = symbols or list(cfg.get("pool") or [])
-    s_dt = datetime(start.year, start.month, start.day, tzinfo=UTC)
-    e_dt = datetime(end.year, end.month, end.day, tzinfo=UTC)
-    stats = {"wiki": 0, "gdelt_ok": 0, "gdelt_fail": 0, "split": 0}
-    for s in ([] if skip_wiki else syms):
+    stats = {"wiki": 0}
+    for s in syms:
         arts = (names.get(s) or {}).get("wiki") or []
         if not arts:
             continue
@@ -64,70 +50,32 @@ def backfill(data_dir, start: date, end: date, *, symbols: list[str] | None = No
                     log(f"wiki {s} {a} try {tries} failed: {type(e).__name__} {getattr(e, 'code', '')}")
         ss.write_json(ss.root(data_dir) / "series" / "wiki" / f"{s}.json", {"articles": per, "backfill": True})
         stats["wiki"] += 1
-    q: queue.Queue = queue.Queue()
-    locks = {s: threading.Lock() for s in syms}
-    for s in ([] if skip_gdelt else syms):
-        term = (names.get(s) or {}).get("gdelt")
-        if not term:
-            continue
-        done = set((ss.read_json(ss.root(data_dir) / "series" / "gdelt" / f"{s}.json") or {}).get("chunks") or [])
-        for a, b in _chunks(s_dt, e_dt, chunk_d):
-            if f"{ss.iso(a)}/{ss.iso(b)}" not in done:
-                q.put((s, term, a, b, 0))
-    gate = {"next": 0.0}
-    gate_lock = threading.Lock()
-
-    def worker():
-        while True:
-            try:
-                s, term, a, b, tries = q.get_nowait()
-            except queue.Empty:
-                return
-            with gate_lock:
-                wait = gate["next"] - time.monotonic()
-                if wait > 0:
-                    time.sleep(wait)
-                gate["next"] = time.monotonic() + gap_s
-            try:
-                try:
-                    hours = ss.parse_gdelt(ss._http_get(ss.gdelt_url(term, a, b), timeout=90))
-                finally:   # GDELT 的 5 秒按上一次请求结束算 (11-12 实测: 按发起算会连续 429)
-                    with gate_lock:
-                        gate["next"] = max(gate["next"], time.monotonic() + gap_s)
-            except ValueError as e:
-                if "day resolution" in str(e) and (b - a) > timedelta(hours=48):
-                    mid = a + (b - a) / 2
-                    q.put((s, term, a, mid, 0))
-                    q.put((s, term, mid, b, 0))
-                    stats["split"] += 1
-                    continue
-                err = e
-            except Exception as e:  # noqa: BLE001
-                err = e
-                log(f"gdelt {s} {ss.iso(a)} try {tries}: {type(e).__name__} {getattr(e, 'code', '')}")
-            else:
-                with locks[s]:
-                    p = ss.root(data_dir) / "series" / "gdelt" / f"{s}.json"
-                    cur = ss.read_json(p) or {}
-                    out = ss.merge_hours(cur, hours, a, b, term=term)
-                    out["chunks"] = sorted(set(cur.get("chunks") or []) | {f"{ss.iso(a)}/{ss.iso(b)}"})
-                    ss.write_json(p, out)
-                stats["gdelt_ok"] += 1
-                continue
-            if tries < 3:
-                time.sleep(20 * (tries + 1))
-                q.put((s, term, a, b, tries + 1))
-            else:
-                stats["gdelt_fail"] += 1
-                log(f"gdelt {s} {ss.iso(a)} failed: {type(err).__name__}: {str(err)[:80]}")
-
-    threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, workers))]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
     log(f"backfill done: {stats}")
     return stats
+
+
+def import_reddit(data_dir, src: Path, cover_from: datetime, *, subs: tuple[str, ...] = ss.REDDIT_SUBS) -> dict:
+    """<src>/<版块>.jsonl → 线上格式。覆盖 = [cover_from, 该版块最新一帖]; 没拉完 (cursor 不是 DONE) 的版块拒收。"""
+    out = {}
+    for sub in subs:
+        f = Path(src) / f"{sub}.jsonl"
+        cur = Path(src) / f"{sub}.cursor"
+        if not f.exists() or not cur.exists() or cur.read_text().strip() != "DONE":
+            raise SystemExit(f"{sub}: 原始帖子没拉完, 不导入")
+        rows = []
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            rows.append({"id": str(r["id"]), "created_utc": int(r["created_utc"]), "title": r.get("title") or "",
+                         "selftext": (r.get("selftext") or "")[:ss.REDDIT_TEXT_MAX]})
+        added = ss.append_posts(data_dir, sub, rows)
+        newest = max(r["created_utc"] for r in rows)
+        ss.write_json(ss.reddit_dir(data_dir, sub) / "coverage.json",
+                      {"from": ss.iso(cover_from), "to": ss.iso(datetime.fromtimestamp(newest, UTC)), "import": True})
+        out[sub] = {"posts": len(rows), "added": added}
+    return out
 
 
 # ── 行情 (Alpaca SIP 日K; key 只经凭据模块读, 不打印) ───────────────
@@ -308,17 +256,17 @@ def _stat(vals: list[float]) -> str:
 
 def render(rep: dict) -> str:
     s = rep["summary"]
-    L = ["# 舆情评级回放报告（24 池，逐小时 as-of）", "",
+    L = ["# 舆情评级回放报告（24 池，逐小时 as-of；A = 重点，B = 异动）", "",
          f"- 区间交易日 {s['trading_days']} 个；评估步 {s['steps']} 个 × {s['symbols']} 只",
-         f"- A 事件 {s['A']} 个，平均每交易日 **{s['A_per_tday']}**；B 事件 {s['B']} 个，平均每交易日 {s['B_per_tday']}",
+         f"- 重点（A）{s['A']} 个，平均每交易日 **{s['A_per_tday']}**；异动（B）{s['B']} 个，平均每交易日 {s['B_per_tday']}",
          f"- 阈值 `{json.dumps(s['thresholds'], ensure_ascii=False)}`",
          f"- 配置 sha256 `{s['config_sha']}`",
          f"- 行情：{rep.get('prices_source')}（取数 {rep.get('prices_fetched_at')}）；相对 QQQ = 个股涨跌 − QQQ 涨跌，锚 = 事件之前最后一个收盘",
-         f"- 族覆盖（有数据的评估步）：{json.dumps(rep['family_cover'], ensure_ascii=False)}", "",
+         f"- 各类来源覆盖（有数据的评估步）：{json.dumps(rep['family_cover'], ensure_ascii=False)}", "",
          "## NVDA 案例", "",
          f"- as-of 2026-11-08T22:00Z：`{json.dumps(rep['nvda_probe'], ensure_ascii=False)}`",
          f"- 回放中首次 A：{rep['nvda_first_a']}", "",
-         "| as-of (UTC) | 评级 | 热度 | 方向 | 异常族 | 有数据的族 | 类型 |", "|---|---|---|---|---|---|---|"]
+         "| as-of (UTC) | 评级 | 热度 | 方向 | 异常类数 | 有数据的类 | 类型 |", "|---|---|---|---|---|---|---|"]
     for t, r in rep["nvda_timeline"]:
         L.append(f"| {t} | {r['grade'] or '—'} | {r['heat']} | {r['direction']} | {r['n_families']} | "
                  f"{','.join(r['families_ok'])} | {r['event_type'] or '—'} |")
@@ -336,7 +284,7 @@ def render(rep: dict) -> str:
         x = rep["per_day"].get(d) or {"A": [], "B": []}
         L.append(f"| {d} | {'是' if d in rep['tdays'] else '否'} | {len(x['A'])} {' '.join(x['A'])} | "
                  f"{len(x['B'])} {' '.join(x['B'])} |")
-    L += ["", "## 事件明细", "", "| 级 | 代码 | as-of | 热度 | 方向 | 类型 | 异常族 | T+1 | T+3 | T+5 |",
+    L += ["", "## 事件明细", "", "| 级 | 代码 | as-of | 热度 | 方向 | 类型 | 异常类数 | T+1 | T+3 | T+5 |",
           "|---|---|---|---|---|---|---|---|---|---|"]
     for e in rep["events"]:
         f = e["fwd"]
@@ -359,10 +307,10 @@ def main(argv: list[str] | None = None) -> int:
     b.add_argument("--start", required=True)
     b.add_argument("--end", required=True)
     b.add_argument("--symbols", default="")
-    b.add_argument("--workers", type=int, default=2)
-    b.add_argument("--skip-wiki", action="store_true")
-    b.add_argument("--skip-gdelt", action="store_true")
-    b.add_argument("--gap", type=float, default=ss.GDELT_GAP_S)
+    i = sub.add_parser("import-reddit")
+    i.add_argument("--data", required=True)
+    i.add_argument("--src", required=True)
+    i.add_argument("--from", dest="cover_from", required=True)
     r = sub.add_parser("run")
     r.add_argument("--data", required=True)
     r.add_argument("--start", required=True)
@@ -380,8 +328,10 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     if args.cmd == "backfill":
         syms = [x.strip().upper() for x in args.symbols.split(",") if x.strip()] or None
-        backfill(Path(args.data), _d(args.start), _d(args.end), symbols=syms, workers=args.workers,
-                 skip_wiki=args.skip_wiki, skip_gdelt=args.skip_gdelt, gap_s=args.gap)
+        backfill(Path(args.data), _d(args.start), _d(args.end), symbols=syms)
+        return 0
+    if args.cmd == "import-reddit":
+        print(json.dumps(import_reddit(Path(args.data), Path(args.src), ss.parse_iso(args.cover_from)), ensure_ascii=False))
         return 0
     overrides = _overrides(args.set)
     data = Path(args.data)

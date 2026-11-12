@@ -1,19 +1,18 @@
-"""舆情作战中心 · 评级 (第一期)。只展示: 不进打分、裁决、下单, 不推送。
+"""舆情异动 · 评级。只展示: 不进打分、裁决、下单, 不推送; 不调 AI, 不调付费接口。
 
-热度: 每个源的当前值 与 该票自身近 20 个交易日「同一时刻」的基线比 (中位数 + MAD 异常度
-z = (x − 中位数) / max(1.4826·MAD, √max(中位数, 1))), 源 → 族取最大 z, 每族换算 0–100
-(100·(1 − e^(−z/z_scale))), 再对「有数据的族」取平均 —— 缺源 / 基线不足的族不计入分母。
-  族: news 财经新闻 (新闻库条数 news + 高重要度条数 news_hi) / media 全球媒体 (GDELT)
-      social 社交 (StockTwits / ApeWisdom / Reddit) / attention 关注 (维基浏览量)
-评级: A = 热度过线 + ≥2 族异常 + 方向明确 + 含硬事件 (监管/诉讼/管理层/指引/财报/并购/增发)
-      B = 热度过线;  C = 有源异常但热度未过线 (只计数)。
+三类来源, 每类和该票自身近 20 个交易日「同一时刻」的基线比 (中位数 + MAD 异常度
+z = (x − 中位数) / max(1.4826·MAD, √max(中位数, 1))):
+  news 新闻       新闻库 24 小时条数 (news) 与其中高重要度条数 (news_hi), 取较大的 z
+  social Reddit   wallstreetbets + stocks 24 小时提到该股的帖子数
+  attention 维基  公司 / 管理层条目前一天浏览量
+每类换算 0–100 (100·(1 − e^(−z/z_scale))), 对「有数据的类」取平均 = 热度; 没数据 / 基线不足的类不计入分母。
+上榜: 重点 (内部码 A) = 热度过线 + ≥2 类异常 + 新闻方向明确 + 含硬事件 (监管/诉讼/管理层/指引/财报/并购/增发)
+      异动 (内部码 B) = 热度过线;  C = 有类异常但热度未过线 (不展示, 只计数)。
 
 不偷看未来 —— 每条数据有「可得时刻」, as-of 求值只用可得时刻 ≤ as-of 的:
-  新闻库   max(发布时刻, 打标时刻 tagged_by.at) (打标随采集批次写入, 是可核验的入库上界)
-  GDELT    小时桶结束 + 15 分钟 (官方 15 分钟更新一次; 只用完整小时)
-  Reddit   小时桶结束 (只用完整小时)
-  快照源   快照时刻 (StockTwits / ApeWisdom)
-  维基     当日结束 + 12 小时 (日粒度, 次日才完整; 取保守值)
+  新闻   max(发布时刻, 打标时刻 tagged_by.at) (打标随采集批次写入, 是可核验的入库上界)
+  Reddit 发帖时刻 + 30 分钟 (Arctic Shift 入档延迟实测约 15 分钟); 且时间窗必须落在已完整覆盖的区间内
+  维基   当日结束 + 12 小时 (日粒度, 次日才完整; 取保守值)
 """
 from __future__ import annotations
 
@@ -29,18 +28,16 @@ from typing import Any, Callable
 
 from app.services import sentiment_sources as ss
 
-FAMILY_OF = {"news": "news", "news_hi": "news", "gdelt": "media", "stocktwits": "social", "apewisdom": "social",
-             "reddit": "social", "wiki": "attention"}
-FAMILIES = ("news", "media", "social", "attention")
+FAMILY_OF = {"news": "news", "news_hi": "news", "reddit": "social", "wiki": "attention"}
+FAMILIES = ("news", "social", "attention")
 HARD_EVENTS = ("regulatory", "litigation", "management", "guidance", "earnings", "mna", "dilution")
 IMP_W = {"high": 3, "medium": 1}
-GDELT_LAG = timedelta(minutes=15)
 WIKI_LAG = timedelta(hours=12)
-SNAP_STALE = timedelta(minutes=45)
-SNAP_TOL = timedelta(minutes=30)
+REDDIT_STALE = timedelta(hours=2)      # 最近一次成功拉取超过 2 小时: 当前窗口不完整, Reddit 这类不计
 DEFAULT_TH = {"window_h": 24, "baseline_days": 20, "min_baseline": 10, "z_anom": 3.0, "min_count": 3,
               "z_scale": 4.0, "heat_line": 40, "dir_min_weight": 3, "dir_ratio": 2.0, "episode_gap_h": 24}
 _RELEVANT = ("primary", "secondary")
+DETAIL_ITEMS = 8
 
 
 def thresholds(config: dict | None = None, overrides: dict | None = None) -> dict:
@@ -87,20 +84,25 @@ def _tz():
 
 # ── 输入 (一次加载, 多次 as-of 求值) ─────────────────────────────────
 
-class NewsSeries:
+class Series:
+    """按发布时刻排序的条目; items = (created_ts, avail_ts, importance, direction, event_type, row)。"""
     __slots__ = ("created", "items")
 
     def __init__(self):
         self.created: list[float] = []
-        self.items: list[tuple] = []   # (created_ts, avail_ts, importance, direction, event_type, row)
+        self.items: list[tuple] = []
+
+    def finish(self) -> None:
+        self.items.sort(key=lambda x: x[0])
+        self.created = [x[0] for x in self.items]
 
 
 class Inputs:
     def __init__(self):
-        self.news: dict[str, NewsSeries] = {}
+        self.news: dict[str, Series] = {}
         self.news_from: float | None = None          # 新闻库覆盖起点 (更早的基线窗口不算)
-        self.hourly: dict[str, dict[str, dict]] = {"gdelt": {}, "reddit": {}}
-        self.snaps: dict[str, dict[str, list[tuple[float, dict]]]] = {"stocktwits": {}, "apewisdom": {}}
+        self.reddit: dict[str, Series] = {}
+        self.reddit_span: tuple[float, float] | None = None
         self.wiki: dict[str, dict[str, dict[str, int]]] = {}
 
 
@@ -126,7 +128,11 @@ def _read_news(data_dir: Path, start: datetime, end: datetime) -> list[dict]:
     return list(rows.values())
 
 
-def load_inputs(data_dir, symbols: list[str], start: datetime, end: datetime) -> Inputs:
+def _default_names(symbols: list[str]) -> dict[str, dict]:
+    return ss.query_names(symbols, ss.load_config(), None)
+
+
+def load_inputs(data_dir, symbols: list[str], start: datetime, end: datetime, *, names: dict | None = None) -> Inputs:
     data_dir = Path(data_dir)
     want = set(symbols)
     inp = Inputs()
@@ -135,8 +141,7 @@ def load_inputs(data_dir, symbols: list[str], start: datetime, end: datetime) ->
         created = ss.parse_iso(r.get("created_at"))
         if created is None:
             continue
-        tb = r.get("tagged_by") or {}
-        tagged = ss.parse_iso(tb.get("at"))
+        tagged = ss.parse_iso((r.get("tagged_by") or {}).get("at"))
         avail = max(created, tagged) if tagged else created
         first = avail if first is None or avail < first else first
         tags = r.get("tags") or {}
@@ -146,28 +151,30 @@ def load_inputs(data_dir, symbols: list[str], start: datetime, end: datetime) ->
             if s not in want:
                 continue
             t = (tags.get(s) or {}) if tags else {}
-            item = (_ts(created), _ts(avail), t.get("importance"), t.get("direction"), t.get("event_type"), r)
-            inp.news.setdefault(s, NewsSeries()).items.append(item)
-    for ns in inp.news.values():
-        ns.items.sort(key=lambda x: x[0])
-        ns.created = [x[0] for x in ns.items]
+            inp.news.setdefault(s, Series()).items.append(
+                (_ts(created), _ts(avail), t.get("importance"), t.get("direction"), t.get("event_type"), r))
+    for sr in inp.news.values():
+        sr.finish()
     inp.news_from = _ts(first) if first else None
+
+    span = ss.reddit_span(data_dir)
+    if span:
+        inp.reddit_span = (_ts(span[0]), _ts(span[1]))
+        names = names or _default_names(symbols)
+        pre = {s: (ss.prefilter_words(s, (names.get(s) or {}).get("aliases") or []),
+                   (names.get(s) or {}).get("aliases") or []) for s in symbols}
+        lag = ss.REDDIT_LAG.total_seconds()
+        for p in ss.read_posts(data_dir, start, end):
+            title, body = p.get("title") or "", p.get("selftext") or ""
+            low = f"{title} {body}".lower()
+            for s, (words, aliases) in pre.items():
+                if any(w in low for w in words) and (ss.mentions(title, s, aliases) or ss.mentions(body, s, aliases)):
+                    c = float(p["created_utc"])
+                    inp.reddit.setdefault(s, Series()).items.append((c, c + lag, None, None, None, p))
+        for sr in inp.reddit.values():
+            sr.finish()
+
     base = ss.root(data_dir)
-    for src in ("gdelt", "reddit"):
-        for s in symbols:
-            cur = ss.read_json(base / "series" / src / f"{s}.json")
-            if cur and cur.get("from") and cur.get("to"):
-                inp.hourly[src][s] = cur
-    for src in ("stocktwits", "apewisdom"):
-        per: dict[str, list] = defaultdict(list)
-        for snap in ss.read_snaps(data_dir, src, start, end):
-            t = ss.parse_iso(snap.get("at"))
-            for s, v in (snap.get("rows") or {}).items():
-                if s in want and isinstance(v, dict):
-                    per[s].append((_ts(t), v))
-        for s, lst in per.items():
-            lst.sort(key=lambda x: x[0])
-            inp.snaps[src][s] = lst
     for s in symbols:
         cur = ss.read_json(base / "series" / "wiki" / f"{s}.json")
         if cur and cur.get("articles"):
@@ -177,49 +184,12 @@ def load_inputs(data_dir, symbols: list[str], start: datetime, end: datetime) ->
 
 # ── 单源取值 ─────────────────────────────────────────────────────────
 
-def _news_window(ns: NewsSeries | None, end_ts: float, w_s: float, *, hi: bool = False) -> int:
-    if ns is None:
-        return 0
-    i = bisect.bisect_right(ns.created, end_ts - w_s)
-    j = bisect.bisect_right(ns.created, end_ts)
-    return sum(1 for x in ns.items[i:j] if x[1] <= end_ts and (not hi or x[2] == "high"))
-
-
-def _floor_hour(dt: datetime) -> datetime:
-    return dt.replace(minute=0, second=0, microsecond=0)
-
-
-def _hourly_window(cur: dict | None, t: datetime, w_h: int, lag: timedelta) -> int | None:
-    if not cur:
-        return None
-    end = _floor_hour(t - lag)
-    start = end - timedelta(hours=w_h)
-    if ss.hour_key(start) < cur["from"] or ss.hour_key(end) > cur["to"]:
-        return None
-    hours = cur.get("hours") or {}
-    total, k = 0, start
-    while k < end:
-        total += int(hours.get(ss.hour_key(k), 0))
-        k += timedelta(hours=1)
-    return total
-
-
-def _snap_at(lst: list | None, t: datetime, *, tol: timedelta, exact: bool) -> dict | None:
-    """exact=False: t 之前最近一张且不超过 tol; exact=True: 离 t 最近 (前后 tol 内, 但不晚于调用方的 as-of)。"""
-    if not lst:
-        return None
-    ts = _ts(t)
-    keys = [x[0] for x in lst]
-    i = bisect.bisect_right(keys, ts)
-    cands = []
-    if i > 0:
-        cands.append(lst[i - 1])
-    if exact and i < len(lst):
-        cands.append(lst[i])
-    best = min(cands, key=lambda x: abs(x[0] - ts), default=None)
-    if best is None or abs(best[0] - ts) > tol.total_seconds():
-        return None
-    return best[1]
+def _window(sr: Series | None, end_ts: float, w_s: float, *, hi: bool = False) -> list[tuple]:
+    if sr is None:
+        return []
+    i = bisect.bisect_right(sr.created, end_ts - w_s)
+    j = bisect.bisect_right(sr.created, end_ts)
+    return [x for x in sr.items[i:j] if x[1] <= end_ts and (not hi or x[2] == "high")]
 
 
 def robust_z(x: float, base: list[float], min_baseline: int) -> dict | None:
@@ -232,51 +202,31 @@ def robust_z(x: float, base: list[float], min_baseline: int) -> dict | None:
             "z": round((x - med) / scale, 2), "n": len(base)}
 
 
-# ── as-of 求值 ───────────────────────────────────────────────────────
-
 def _same_clock(t: datetime, days: list[date]) -> list[datetime]:
     tz = _tz()
     lt = t.astimezone(tz)
-    out = []
-    for d in days:
-        out.append(datetime(d.year, d.month, d.day, lt.hour, lt.minute, lt.second, tzinfo=tz).astimezone(UTC))
-    return out
+    return [datetime(d.year, d.month, d.day, lt.hour, lt.minute, lt.second, tzinfo=tz).astimezone(UTC) for d in days]
 
 
 def _sources(inp: Inputs, sym: str, t: datetime, th: dict, prev_days: Callable[[date, int], list[date]]) -> dict:
-    w_h = int(th["window_h"])
-    w_s = w_h * 3600.0
+    w_s = float(th["window_h"]) * 3600.0
     n_base = int(th["baseline_days"])
     minb = int(th["min_baseline"])
-    t_et = t.astimezone(_tz())
-    base_t = _same_clock(t, prev_days(t_et.date(), n_base))
+    base_t = _same_clock(t, prev_days(t.astimezone(_tz()).date(), n_base))
     out: dict[str, dict | None] = {}
-    ns = inp.news.get(sym)
     if inp.news_from is not None:
+        ns = inp.news.get(sym)
         ok = [b for b in base_t if _ts(b) - w_s >= inp.news_from]
         for key, hi in (("news", False), ("news_hi", True)):
-            x = _news_window(ns, _ts(t), w_s, hi=hi)
-            out[key] = robust_z(x, [_news_window(ns, _ts(b), w_s, hi=hi) for b in ok], minb)
-    for src, lag in (("gdelt", GDELT_LAG), ("reddit", timedelta(0))):
-        cur = inp.hourly[src].get(sym)
-        x = _hourly_window(cur, t, w_h, lag)
-        if x is None:
-            out[src] = None
-            continue
-        base = [v for b in base_t if (v := _hourly_window(cur, b, w_h, lag)) is not None]
-        out[src] = robust_z(x, base, minb)
-    for src, field in (("stocktwits", "rate_h"), ("apewisdom", "mentions")):
-        lst = inp.snaps[src].get(sym)
-        cur = _snap_at(lst, t, tol=SNAP_STALE, exact=False)
-        if cur is None or cur.get(field) is None:
-            out[src] = None
-            continue
-        base = [float(v[field]) for b in base_t
-                if (v := _snap_at(lst, b, tol=SNAP_TOL, exact=True)) is not None and v.get(field) is not None]
-        r = robust_z(float(cur[field]), base, minb)
-        if r is not None and src == "stocktwits":
-            r["bull"], r["bear"] = cur.get("bull"), cur.get("bear")
-        out[src] = r
+            x = len(_window(ns, _ts(t), w_s, hi=hi))
+            out[key] = robust_z(x, [len(_window(ns, _ts(b), w_s, hi=hi)) for b in ok], minb)
+    out["reddit"] = None
+    if inp.reddit_span:
+        lo, hi_ts = inp.reddit_span
+        if _ts(t) - w_s >= lo and _ts(t) <= hi_ts + REDDIT_STALE.total_seconds():
+            rs = inp.reddit.get(sym)
+            ok = [b for b in base_t if _ts(b) - w_s >= lo]
+            out["reddit"] = robust_z(len(_window(rs, _ts(t), w_s)), [len(_window(rs, _ts(b), w_s)) for b in ok], minb)
     arts = inp.wiki.get(sym) or {}
     day = (t - WIKI_LAG).date() - timedelta(days=1)
     best = None
@@ -296,19 +246,10 @@ def _h(z: float, z_scale: float) -> float:
     return 100.0 * (1.0 - math.exp(-max(z, 0.0) / z_scale))
 
 
-def _window_items(inp: Inputs, sym: str, t: datetime, w_s: float) -> list[tuple]:
-    ns = inp.news.get(sym)
-    if ns is None:
-        return []
-    end = _ts(t)
-    i = bisect.bisect_right(ns.created, end - w_s)
-    j = bisect.bisect_right(ns.created, end)
-    return [x for x in ns.items[i:j] if x[1] <= end]
-
-
 def evaluate(inp: Inputs, sym: str, t: datetime, th: dict, *,
              prev_days: Callable[[date, int], list[date]] = us_prev_trading_days, detail: bool = True) -> dict:
     t = t.astimezone(UTC)
+    w_s = float(th["window_h"]) * 3600
     srcs = _sources(inp, sym, t, th, prev_days)
     fam: dict[str, dict] = {}
     for key, r in srcs.items():
@@ -323,7 +264,7 @@ def evaluate(inp: Inputs, sym: str, t: datetime, th: dict, *,
         f["heat"] = round(_h(f["z"], float(th["z_scale"])))
     heat = round(sum(f["heat"] for f in fam.values()) / len(fam)) if fam else 0
     n_anom = sum(1 for f in fam.values() if f["anom"])
-    items = _window_items(inp, sym, t, float(th["window_h"]) * 3600)
+    items = _window(inp.news.get(sym), _ts(t), w_s)
     bull = sum(IMP_W.get(x[2], 0) for x in items if x[3] == "bullish")
     bear = sum(IMP_W.get(x[2], 0) for x in items if x[3] == "bearish")
     hi, lo = max(bull, bear), min(bull, bear)
@@ -339,10 +280,10 @@ def evaluate(inp: Inputs, sym: str, t: datetime, th: dict, *,
             weights[x[4]] += IMP_W[x[2]]
     hard = sorted((k for k in weights if k in HARD_EVENTS), key=lambda k: -weights[k])
     other = sorted((k for k in weights if k not in HARD_EVENTS and k != "other"), key=lambda k: -weights[k])
-    line = heat >= th["heat_line"]
-    if line and n_anom >= 2 and direction in ("bullish", "bearish") and hard:
+    over = heat >= th["heat_line"]
+    if over and n_anom >= 2 and direction in ("bullish", "bearish") and hard:
         grade = "A"
-    elif line:
+    elif over:
         grade = "B"
     elif n_anom >= 1:
         grade = "C"
@@ -350,34 +291,36 @@ def evaluate(inp: Inputs, sym: str, t: datetime, th: dict, *,
         grade = None
     row: dict[str, Any] = {"symbol": sym, "grade": grade, "heat": heat, "direction": direction,
                            "event_type": (hard or other or [None])[0], "hard": bool(hard),
-                           "n_sources": sum(1 for f in fam.values() for r in f["sources"].values() if r["anom"]),
                            "n_families": n_anom, "families_ok": sorted(fam), "bull_w": bull, "bear_w": bear}
     key_items = [x for x in items if x[2] == "high"] or [x for x in items if x[2] == "medium"]
     row["first_at"] = ss.iso(datetime.fromtimestamp(key_items[0][0], UTC)) if key_items else None
     if detail:
         row["families"] = fam
         row["missing"] = [f for f in FAMILIES if f not in fam]
-        top = sorted(items, key=lambda x: (-IMP_W.get(x[2], 0), -x[0]))[:5]
+        top = sorted(items, key=lambda x: (-IMP_W.get(x[2], 0), -x[0]))[:DETAIL_ITEMS]
         row["headlines"] = [{"at": x[5].get("created_at"), "zh": x[5].get("zh_headline") or None,
                              "en": x[5].get("headline"), "importance": x[2], "direction": x[3],
                              "event_type": x[4]} for x in top]
+        posts = sorted(_window(inp.reddit.get(sym), _ts(t), w_s), key=lambda x: -x[0])[:DETAIL_ITEMS]
+        row["posts"] = [{"at": ss.iso(datetime.fromtimestamp(x[0], UTC)), "title": x[5].get("title") or "",
+                         "sub": x[5].get("sub"), "id": x[5].get("id")} for x in posts]
     return row
 
 
 # ── 看板 (采集线程每轮写 board.json; 页面只读) ───────────────────────
 
-LINE_HOURS = 48
 ROLE_ORDER = {"持仓": 0, "自选": 1, "池": 2}
 
 
 def build_board(data_dir, roles: dict[str, str], now: datetime, *, config: dict | None = None,
                 state: dict | None = None, prev_days: Callable[[date, int], list[date]] = us_prev_trading_days,
-                overrides: dict | None = None) -> dict:
+                overrides: dict | None = None, names: dict | None = None) -> dict:
     cfg = config or ss.load_config()
     th = thresholds(cfg, overrides)
     now = now.astimezone(UTC)
     syms = sorted(roles)
-    inp = load_inputs(data_dir, syms, now - timedelta(days=45), now)
+    names = names or ss.query_names(syms, cfg, None)
+    inp = load_inputs(data_dir, syms, now - timedelta(days=45), now, names=names)
     rows, counts = [], {"A": 0, "B": 0, "C": 0}
     fam_ok: dict[str, int] = defaultdict(int)
     for s in syms:
@@ -388,12 +331,10 @@ def build_board(data_dir, roles: dict[str, str], now: datetime, *, config: dict 
             counts[r["grade"]] += 1
         if r["grade"] in ("A", "B"):
             r["role"] = roles.get(s)
-            steps = [_floor_hour(now) - timedelta(hours=h) for h in range(LINE_HOURS, 0, -1)] + [now]
-            r["line"] = [[ss.iso(x), evaluate(inp, s, x, th, prev_days=prev_days, detail=False)["heat"]] for x in steps]
             rows.append(r)
     rows.sort(key=lambda r: (r["grade"], -r["heat"], ROLE_ORDER.get(r.get("role") or "", 9), r["symbol"]))
     st = state if state is not None else ss.read_state(data_dir)
-    return {"contract": "sentiment-v1", "as_of": ss.iso(now), "rows": rows, "counts": counts, "symbols": len(syms),
+    return {"contract": "sentiment-v2", "as_of": ss.iso(now), "rows": rows, "counts": counts, "symbols": len(syms),
             "families": {f: fam_ok.get(f, 0) for f in FAMILIES},
             "sources": {s: (st.get(s) or {}).get("status") or "pending" for s in ss.SOURCES},
             "window_h": th["window_h"], "heat_line": th["heat_line"], "config_sha": config_sha()}

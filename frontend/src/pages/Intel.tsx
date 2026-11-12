@@ -75,7 +75,6 @@ export function Intel() {
         {q.isError && <div className={`${CARD} p-4 text-sm text-warning`}>读取失败 · {String((q.error as Error)?.message ?? '')}</div>}
         {d && (
           <>
-            <SentimentBoard data={d.sentiment} failed={'sentiment' in errs} onSymbol={setPreview} />
             <section data-intel="tape" className="space-y-3">
               <SectionTitle icon={Thermometer}>市场概览</SectionTitle>
               <Tape d={d} />
@@ -90,6 +89,7 @@ export function Intel() {
                 {errs.news ? <Failed /> : <News news={d.news} onSymbol={setPreview} />}
               </section>
             </div>
+            <SentimentBoard data={d.sentiment} failed={'sentiment' in errs} onSymbol={setPreview} />
             <section data-intel="earnings" className="space-y-3">
               <SectionTitle icon={FileBarChart2}>{`自选财报 · 未来 10 个交易日 · ${d.earnings?.rows.length ?? 0} 只`}</SectionTitle>
               {errs.earnings ? <Failed /> : <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} />}

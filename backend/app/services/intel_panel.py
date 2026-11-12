@@ -362,26 +362,23 @@ def news_view(data_dir: Path, now: datetime, roles: dict[str, str]) -> dict:
                            else "新闻翻译与 AI 打标已关闭，显示英文原文")}  # noqa: RUF001
 
 
-SENTIMENT_ROWS = 30
+SENTIMENT_ROWS = 12
 
 
 def sentiment_view(data_dir: Path, now: datetime) -> dict:
-    """舆情作战中心 (第一期): 只读 data/sentiment/board.json + state.json (采集线程每轮写)。
+    """舆情异动: 只读 data/sentiment/board.json + state.json (采集线程每轮写)。
     不出网、不计算、不建目录; board.json 损坏就抛, 由 _section 只空这一段。"""
     import json
 
     from app.services import sentiment_sources as ss
     base = data_dir / "sentiment"
-    st = ss.read_json(base / "state.json") if base.is_dir() else None
-    st = st or {}
+    st = (ss.read_json(base / "state.json") if base.is_dir() else None) or {}
     board_p = base / "board.json"
     board = json.loads(board_p.read_text(encoding="utf-8")) if board_p.is_file() else {}
-    sources = {s: {"status": (st.get(s) or {}).get("status") or "pending", "last_ok_at": (st.get(s) or {}).get("last_ok_at"),
-                   "n": (st.get(s) or {}).get("n")} for s in ss.SOURCES}
     return {"as_of": board.get("as_of"), "age_min": _age_min(board.get("as_of"), now),
-            "rows": (board.get("rows") or [])[:SENTIMENT_ROWS], "counts": board.get("counts") or {"A": 0, "B": 0, "C": 0},
-            "symbols": board.get("symbols") or 0, "families": board.get("families") or {}, "sources": sources,
-            "heat_line": board.get("heat_line"), "window_h": board.get("window_h"),
+            "rows": (board.get("rows") or [])[:SENTIMENT_ROWS], "total": len(board.get("rows") or []),
+            "symbols": board.get("symbols") or 0,
+            "sources": {s: (st.get(s) or {}).get("status") or "pending" for s in ss.SOURCES},
             "board_error": (st.get("_board") or {}).get("error")}
 
 
