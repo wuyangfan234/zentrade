@@ -108,7 +108,7 @@ def _http_get(url: str, headers: dict | None = None, timeout: float = HTTP_TIMEO
 # ── 名单 / 匹配词 ────────────────────────────────────────────────────
 
 def roles(loop=None, config: dict | None = None) -> dict[str, str]:
-    """用户拍板: 只盯 自选 + 持仓 + 24 池。持仓 > 自选 > 池。"""
+    """名单 = 自选 + 持仓 + 配置里的默认关注池。持仓 > 自选 > 池。"""
     cfg = config or load_config()
     out = {s: "池" for s in cfg.get("pool") or []}
     try:
