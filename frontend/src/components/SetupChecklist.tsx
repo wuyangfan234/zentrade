@@ -18,9 +18,10 @@ import { badge } from '@/components/ui/badge'
 const LEVEL_LABEL: Record<SetupItem['level'], string> = { required: '必需', recommended: '建议', optional: '可选' }
 const GROUP_LABEL: Record<SetupItem['group'], string> = { market: '行情数据', news: '新闻与基本面', ai: 'AI 模型', notify: '推送' }
 const GROUP_ORDER: SetupItem['group'][] = ['market', 'news', 'ai', 'notify']
-const INLINE_EDIT: Partial<Record<string, { name: 'finnhub' | 'sec_user_agent'; placeholder: string; secret: boolean }>> = {
+const INLINE_EDIT: Partial<Record<string, { name: 'finnhub' | 'sec_user_agent' | 'reddit'; placeholder: string; secret: boolean }>> = {
   finnhub: { name: 'finnhub', placeholder: 'Finnhub API Key', secret: true },
   sec_ua: { name: 'sec_user_agent', placeholder: 'ZenTrade you@example.com', secret: false },
+  reddit: { name: 'reddit', placeholder: 'CLIENT_ID:SECRET', secret: true },
 }
 
 export function useSetupChecklist() {

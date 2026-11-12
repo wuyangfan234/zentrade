@@ -2567,7 +2567,7 @@ export const api = {
     request<{ ok: boolean; dismissed: boolean }>('/api/settings/setup-checklist/banner', {
       method: 'POST', body: JSON.stringify({ dismissed }),
     }),
-  saveServiceSecret: (name: 'finnhub' | 'sec_user_agent', value: string) =>
+  saveServiceSecret: (name: 'finnhub' | 'sec_user_agent' | 'reddit', value: string) =>
     request<{ ok: boolean; configured: boolean; masked: string }>(`/api/settings/service-secret/${name}`, {
       method: 'PUT', body: JSON.stringify({ value }),
     }),
@@ -4234,9 +4234,37 @@ export interface IntelPayload {
     /** 0.42.4: 各筛选的总条数 / 每个筛选最多显示条数 (items = 各筛选最新 limit 条的并集) */
     counts?: Partial<Record<'all' | 'hold' | 'bullish' | 'bearish' | 'macro', number>>; limit?: number
   } | null
+  /** 舆情作战中心第一期: 只读 board.json (采集线程每轮写); 只展示不参与下单 */
+  sentiment?: IntelSentiment | null
   watch_count: number
   state: Record<string, { last_attempt_at?: string; last_ok_at?: string; error?: string | null }>
   errors: Record<string, string>
+}
+
+// ===== 舆情作战中心第一期 (GET /api/intel/today 的 sentiment 段) =====
+export type SentimentGrade = 'A' | 'B' | 'C'
+export type SentimentDirection = 'bullish' | 'bearish' | 'mixed' | 'none'
+export type SentimentFamily = 'news' | 'media' | 'social' | 'attention'
+export type SentimentSourceStatus = 'ok' | 'missing' | 'breaker' | 'unconfigured' | 'pending'
+export interface SentimentSourceStat {
+  x: number; med: number; mad: number; z: number; n: number; anom: boolean
+  article?: string; day?: string; bull?: number | null; bear?: number | null
+}
+export interface SentimentFamilyStat { z: number; heat: number; anom: boolean; sources: Record<string, SentimentSourceStat> }
+export interface SentimentHeadline {
+  at: string | null; zh: string | null; en: string | null; importance: string | null; direction: string | null; event_type: string | null
+}
+export interface SentimentRow {
+  symbol: string; role?: string | null; grade: SentimentGrade; heat: number; direction: SentimentDirection
+  event_type: string | null; hard: boolean; first_at: string | null; n_sources: number; n_families: number
+  families_ok: SentimentFamily[]; families?: Partial<Record<SentimentFamily, SentimentFamilyStat>>; missing?: SentimentFamily[]
+  headlines?: SentimentHeadline[]; line?: [string, number][]
+}
+export interface IntelSentiment {
+  as_of: string | null; age_min: number | null; rows: SentimentRow[]; counts: Partial<Record<SentimentGrade, number>>
+  symbols: number; families: Partial<Record<SentimentFamily, number>>
+  sources: Record<string, { status: SentimentSourceStatus; last_ok_at?: string | null; n?: number | null }>
+  heat_line?: number | null; window_h?: number | null; board_error?: string | null
 }
 
 export interface NewsTone {

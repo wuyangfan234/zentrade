@@ -138,6 +138,14 @@ def build() -> dict:
         where="settings?tab=data-sources&highlight=setup-sec_ua", env=["SEC_USER_AGENT"],
         link="https://www.sec.gov/os/accessing-edgar-data",
         note="格式示例：ZenTrade your-name@example.com"))
+    rd, _ = credentials.reddit()
+    items.append(_item(
+        "reddit", "news", "Reddit（官方 API）", "optional", bool(rd),
+        source=_src_label(credentials.lookup(credentials.REDDIT)[1]),
+        purpose="舆情采集的社交来源之一：按代码统计 wallstreetbets 等版块的小时发帖数。",
+        impact="不配：舆情社交族只用 StockTwits 与 ApeWisdom，Reddit 显示「未配置」。",
+        where="settings?tab=data-sources&highlight=setup-reddit", env=["REDDIT_API_KEY"],
+        link="https://www.reddit.com/prefs/apps", note="格式 CLIENT_ID:SECRET。"))
     qv = _plugin_status("qveris")
     items.append(_item(
         "qveris", "news", "QVeris（付费）", "optional", bool(qv.get("available")),

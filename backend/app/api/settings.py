@@ -86,7 +86,7 @@ class ServiceSecretIn(BaseModel):
 
 
 # 没有插件卡片的外部服务: 在设置页单独填写, 写 secrets.json (优先于 .env)。值不回显。
-_SERVICE_SECRETS = {"finnhub": "finnhub_api_key", "sec_user_agent": "sec_user_agent"}
+_SERVICE_SECRETS = {"finnhub": "finnhub_api_key", "sec_user_agent": "sec_user_agent", "reddit": "reddit_api_key"}
 
 
 def _probe_finnhub(key: str) -> tuple[bool, str]:
@@ -106,6 +106,11 @@ def _probe_finnhub(key: str) -> tuple[bool, str]:
     return (True, "ok") if isinstance(body, dict) and body.get("ticker") else (False, "Finnhub 未返回数据, Key 可能无效")
 
 
+def _valid_reddit(value: str) -> bool:
+    cid, _, sec = value.partition(":")
+    return bool(cid.strip() and sec.strip()) and all(32 < ord(ch) < 127 for ch in value)
+
+
 def _valid_user_agent(value: str) -> bool:
     return "@" in value and all(32 <= ord(ch) < 127 for ch in value)
 
@@ -119,6 +124,8 @@ def save_service_secret(name: str, req: ServiceSecretIn) -> dict:
     value = (req.value or "").strip()
     if name == "sec_user_agent" and value and not _valid_user_agent(value):
         raise HTTPException(status_code=400, detail="SEC 要求包含联系邮箱且只用英文字符, 例如 ZenTrade you@example.com")
+    if name == "reddit" and value and not _valid_reddit(value):
+        raise HTTPException(status_code=400, detail="Reddit 格式为 CLIENT_ID:SECRET（英文字符）")
     if name == "finnhub" and value:
         ok, msg = _probe_finnhub(value)
         if not ok:
@@ -127,11 +134,11 @@ def save_service_secret(name: str, req: ServiceSecretIn) -> dict:
         secrets_store.save({field: value})
     else:
         secrets_store.clear(field)
-    spec = credentials.FINNHUB if name == "finnhub" else credentials.SEC_UA
+    spec = {"finnhub": credentials.FINNHUB, "reddit": credentials.REDDIT}.get(name, credentials.SEC_UA)
     effective, source = credentials.lookup(spec)
     # configured / source 反映清除后实际生效的值 (清掉页面值后 .env 里的仍生效)
     return {"ok": True, "configured": bool(effective), "source": source,
-            "masked": (secrets_store.mask(effective) if name == "finnhub" else effective) if effective else ""}
+            "masked": (secrets_store.mask(effective) if name in ("finnhub", "reddit") else effective) if effective else ""}
 
 
 @router.post("/onboarding/complete")

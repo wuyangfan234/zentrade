@@ -30,6 +30,7 @@ FINNHUB = SecretSpec("FINNHUB_API_KEY", "finnhub_api_key", "finnhub.env")
 MASSIVE = SecretSpec("MASSIVE_API_KEY", "massive_api_key", "polygon.env")
 POLYGON = SecretSpec("POLYGON_API_KEY", "", "polygon.env")
 SEC_UA = SecretSpec("SEC_USER_AGENT", "sec_user_agent")
+REDDIT = SecretSpec("REDDIT_API_KEY", "reddit_api_key", "reddit.env")   # CLIENT_ID:SECRET (官方 API, 舆情采集)
 
 
 def _from_env_dir(spec: SecretSpec) -> str:
@@ -81,6 +82,16 @@ def alpaca() -> tuple[str, str, str]:
 
 def finnhub() -> str | None:
     return get(FINNHUB) or None
+
+
+def reddit() -> tuple[str, str]:
+    """(client_id, secret)。设置页填 CLIENT_ID:SECRET; 没配 = ("", "") → 舆情采集显示「未配置」, 不发请求。"""
+    packed = get(REDDIT)
+    if packed and ":" in packed:
+        cid, sec = packed.split(":", 1)
+        if cid.strip() and sec.strip():
+            return cid.strip(), sec.strip()
+    return "", ""
 
 
 def massive() -> str | None:

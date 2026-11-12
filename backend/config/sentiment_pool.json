@@ -1,0 +1,43 @@
+{
+  "_doc": "舆情作战中心第一期: 24 池 (用户拍板「只盯自选 + 持仓 + 24 池」) + 各源查询名 + 评级阈值。阈值经 9-28~11-11 回放后冻结, 文件 sha256 记在回放报告; 改阈值必须重跑回放。",
+  "pool": ["SNDK", "SPCX", "MU", "DELL", "NVDA", "TSLA", "CRCL", "INTC", "MRVL", "PLTR", "AMD", "AAPL", "META", "RKLB",
+           "ORCL", "LITE", "MSTR", "AAOI", "AVGO", "ARM", "COIN", "AMZN", "TSM", "MSFT"],
+  "names": {
+    "SNDK": {"gdelt": "sandisk", "wiki": ["Sandisk"]},
+    "SPCX": {"gdelt": "spacex", "wiki": ["SpaceX", "Elon_Musk"]},
+    "MU": {"gdelt": "\"micron technology\"", "wiki": ["Micron_Technology", "Sanjay_Mehrotra"]},
+    "DELL": {"gdelt": "\"dell technologies\"", "wiki": ["Dell_Technologies", "Michael_Dell"]},
+    "NVDA": {"gdelt": "nvidia", "wiki": ["Nvidia", "Jensen_Huang"]},
+    "TSLA": {"gdelt": "tesla", "wiki": ["Tesla,_Inc.", "Elon_Musk"]},
+    "CRCL": {"gdelt": "\"circle internet\"", "wiki": ["Circle_Internet_Group", "Jeremy_Allaire"]},
+    "INTC": {"gdelt": "intel", "wiki": ["Intel", "Lip-Bu_Tan"]},
+    "MRVL": {"gdelt": "marvell", "wiki": ["Marvell_Technology"]},
+    "PLTR": {"gdelt": "palantir", "wiki": ["Palantir", "Alex_Karp"]},
+    "AMD": {"gdelt": "\"advanced micro devices\"", "wiki": ["AMD", "Lisa_Su"]},
+    "AAPL": {"gdelt": "\"apple inc\"", "wiki": ["Apple_Inc.", "Tim_Cook"]},
+    "META": {"gdelt": "\"meta platforms\"", "wiki": ["Meta_Platforms", "Mark_Zuckerberg"]},
+    "RKLB": {"gdelt": "\"rocket lab\"", "wiki": ["Rocket_Lab"]},
+    "ORCL": {"gdelt": "oracle", "wiki": ["Oracle_Corporation", "Larry_Ellison"]},
+    "LITE": {"gdelt": "lumentum", "wiki": ["Lumentum"]},
+    "MSTR": {"gdelt": "microstrategy", "wiki": ["MicroStrategy", "Michael_J._Saylor"]},
+    "AAOI": {"gdelt": "\"applied optoelectronics\"", "wiki": []},
+    "AVGO": {"gdelt": "broadcom", "wiki": ["Broadcom", "Hock_Tan"]},
+    "ARM": {"gdelt": "\"arm holdings\"", "wiki": ["Arm_Holdings", "Rene_Haas"]},
+    "COIN": {"gdelt": "coinbase", "wiki": ["Coinbase", "Brian_Armstrong_(businessman)"]},
+    "AMZN": {"gdelt": "amazon", "wiki": ["Amazon_(company)", "Andy_Jassy"]},
+    "TSM": {"gdelt": "tsmc", "wiki": ["TSMC", "C._C._Wei"]},
+    "MSFT": {"gdelt": "microsoft", "wiki": ["Microsoft", "Satya_Nadella"]}
+  },
+  "thresholds": {
+    "window_h": 24,
+    "baseline_days": 20,
+    "min_baseline": 10,
+    "z_anom": 3.0,
+    "min_count": 3,
+    "z_scale": 4.0,
+    "heat_line": 40,
+    "dir_min_weight": 3,
+    "dir_ratio": 2.0,
+    "episode_gap_h": 24
+  }
+}
