@@ -201,6 +201,16 @@ def test_page_build_reads_board_offline_and_read_only(tmp_path, monkeypatch):
     assert s["sources"] == {"reddit": "missing", "wiki": "ok"} and "sentiment" not in out["errors"]
 
 
+def test_page_sends_every_listed_row_so_title_matches_expand(tmp_path):
+    _seed_board(tmp_path)
+    p = tmp_path / "sentiment" / "board.json"
+    b = json.loads(p.read_text())
+    b["rows"] = [{**b["rows"][0], "symbol": f"S{i}"} for i in range(15)]
+    p.write_text(json.dumps(b))
+    s = panel.build(tmp_path, repo=None, loop=None, now=datetime(2026, 11, 9, 7, 5, tzinfo=UTC))["sentiment"]
+    assert s["total"] == len(s["rows"]) == 15
+
+
 def test_page_build_without_sentiment_dir_creates_nothing(tmp_path):
     before = _digest(tmp_path)
     out = panel.build(tmp_path, repo=None, loop=None, now=datetime(2026, 11, 9, 7, 5, tzinfo=UTC))
