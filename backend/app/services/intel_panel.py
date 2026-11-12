@@ -362,7 +362,7 @@ def news_view(data_dir: Path, now: datetime, roles: dict[str, str]) -> dict:
                            else "新闻翻译与 AI 打标已关闭，显示英文原文")}  # noqa: RUF001
 
 
-SENTIMENT_ROWS = 12
+SENTIMENT_ROWS = 80   # 名单 = 自选 + 持仓 + 关注池, 上榜的全部下发: 标题「N 只」与「展开全部 N 只」必须一致
 
 
 def sentiment_view(data_dir: Path, now: datetime) -> dict:
