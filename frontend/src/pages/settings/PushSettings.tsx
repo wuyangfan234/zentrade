@@ -602,10 +602,14 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   title="开启后建立长连接保活，关闭则断开"
                   className="h-3 w-3 accent-accent cursor-pointer disabled:opacity-40"
                 />
-                <span className="text-[11px] font-medium text-foreground">企业微信</span>
-                <span className="text-[11px] text-muted">智能机器人</span>
-                <span className="rounded bg-elevated px-1 py-px text-[11px] text-muted">只收消息，不参与推送</span>
-                <span className={`ml-auto text-[11px] ${wecomBotId ? (botStatus?.connected ? 'text-emerald-700 dark:text-emerald-500' : 'text-warning') : 'text-muted'}`}>
+                <span className="shrink-0 whitespace-nowrap text-[11px] font-medium text-foreground">企业微信</span>
+                <span className="shrink-0 whitespace-nowrap text-[11px] text-muted">智能机器人</span>
+                {/* 手机宽度放不下长标签 (会挤成两行): 窄屏用短说法 */}
+                <span className="min-w-0 truncate rounded bg-elevated px-1 py-px text-[11px] text-muted">
+                  <span className="sm:hidden">不参与推送</span>
+                  <span className="hidden sm:inline">只收消息，不参与推送</span>
+                </span>
+                <span className={`ml-auto shrink-0 whitespace-nowrap text-[11px] ${wecomBotId ? (botStatus?.connected ? 'text-emerald-700 dark:text-emerald-500' : 'text-warning') : 'text-muted'}`}>
                   {wecomBotId ? (botStatus?.connected ? '已连接' : (wecomBotEnabled ? '连接中' : '已配置')) : '未配置'}
                 </span>
                 <ChevronDown className={`h-3 w-3 text-muted transition-transform ${botOpen ? 'rotate-180' : ''}`} />
@@ -754,103 +758,134 @@ const ERROR_LABEL: Record<string, string> = {
 const errText = (e: string | null) => (e ? ERROR_LABEL[e] ?? e : '')
 
 export function PushLogSection() {
+  // 默认折叠: 推送日志很长, 需要看时再点开; 每次进页面都从折叠开始, 不记忆展开状态
+  const [expanded, setExpanded] = useState(false)
   const [onlyFailed, setOnlyFailed] = useState(false)
   const [open, setOpen] = useState<string | null>(null)
+  // 折叠时只取条数 (limit=1), 不拉 100 条原文; 点开后才加载列表
+  const summary = useQuery({
+    queryKey: [...QK.pushLog, 'summary'],
+    queryFn: () => api.pushLog({ limit: 1 }),
+    refetchInterval: 60_000,
+    enabled: !expanded,
+  })
   const log = useQuery({
-    queryKey: [...QK.pushLog, onlyFailed],
+    queryKey: [...QK.pushLog, 'list', onlyFailed],
     queryFn: () => api.pushLog({ limit: 100, failed: onlyFailed }),
     refetchInterval: 30_000,
+    enabled: expanded,
   })
+  const counts = expanded && log.data ? log.data : summary.data
   const items = log.data?.items ?? []
   return (
     <section className="rounded-card border border-border bg-surface p-5 mt-6" data-push-log>
-      <div className="flex flex-wrap items-center gap-2 mb-2">
-        <ScrollText className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-medium text-foreground">推送日志</h3>
-        {log.data && (
-          <span className="text-[11px] text-muted">共 {log.data.total} 条 · 失败 {log.data.failed}</span>
-        )}
-        <div className="ml-auto flex items-center gap-1.5">
-          {([false, true] as const).map(v => (
-            <button
-              key={String(v)}
-              type="button"
-              aria-pressed={onlyFailed === v}
-              onClick={() => { setOnlyFailed(v); setOpen(null) }}
-              className={`px-2 py-1 rounded-btn text-[11px] ${onlyFailed === v ? 'bg-accent/15 text-accent dark:text-blue-400' : 'text-secondary hover:text-foreground'}`}
-            >
-              {v ? '只看未成功' : '全部'}
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-label="刷新推送日志"
-            onClick={() => void log.refetch()}
-            className="p-1 rounded-btn text-secondary hover:text-foreground"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${log.isFetching ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-      <p className="mb-3 text-[11px] text-muted leading-relaxed">
-        每条推送一行，最新在前（最多 100 条）；时间为美东，点开看北京时间、各渠道结果和原文。「✓」= 渠道接口已受理。
-      </p>
-      {log.isError && <div className="text-[11px] text-danger">推送日志读取失败</div>}
-      {!log.isLoading && !log.isError && items.length === 0 && (
-        <div className="py-6 text-center text-[11px] text-muted">{onlyFailed ? '没有未成功的推送' : '还没有推送记录'}</div>
-      )}
-      <ul className="divide-y divide-border/60 rounded-btn border border-border/60">
-        {items.map(it => (
-          <li key={it.key} data-push-log-row={it.key}>
+      <h3 className="text-sm font-medium text-foreground">
+        <button
+          type="button"
+          data-push-log-toggle=""
+          aria-expanded={expanded}
+          aria-controls="push-log-body"
+          onClick={() => { setExpanded(v => !v); setOpen(null) }}
+          className="group flex w-full min-w-0 cursor-pointer items-center gap-2 text-left"
+        >
+          <ScrollText className="h-4 w-4 shrink-0 text-accent" />
+          <span className="shrink-0">推送日志</span>
+          {counts && (
+            <span className="min-w-0 truncate text-[11px] font-normal text-muted">共 {counts.total} 条 · 失败 {counts.failed}</span>
+          )}
+          <span className="ml-auto flex shrink-0 items-center gap-0.5 rounded-btn px-1.5 py-0.5 text-[11px] font-normal text-accent group-hover:bg-accent/10 dark:text-blue-400">
+            {expanded ? '收起' : '展开'}
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </span>
+        </button>
+      </h3>
+      {expanded && (
+        <div id="push-log-body" className="mt-3">
+          <div className="mb-2 flex items-center gap-1.5">
+            {([false, true] as const).map(v => (
+              <button
+                key={String(v)}
+                type="button"
+                aria-pressed={onlyFailed === v}
+                onClick={() => { setOnlyFailed(v); setOpen(null) }}
+                className={`px-2 py-1 rounded-btn text-[11px] ${onlyFailed === v ? 'bg-accent/15 text-accent dark:text-blue-400' : 'text-secondary hover:text-foreground'}`}
+              >
+                {v ? '只看未成功' : '全部'}
+              </button>
+            ))}
             <button
               type="button"
-              onClick={() => setOpen(o => (o === it.key ? null : it.key))}
-              aria-expanded={open === it.key}
-              className="grid w-full grid-cols-[4.75rem_4.5rem_minmax(0,1fr)] sm:grid-cols-[4.75rem_5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-1.5 text-left hover:bg-base/60"
+              aria-label="刷新推送日志"
+              onClick={() => void log.refetch()}
+              className="p-1 rounded-btn text-secondary hover:text-foreground"
             >
-              <span className="font-mono text-[11px] text-muted tabular-nums">{fmtTs(ET_FMT, it.created_at)}</span>
-              <span className="truncate text-[11px] text-secondary">{it.kind_label}</span>
-              <span className="min-w-0 truncate text-xs text-foreground">
-                {it.title.replace(/^ZenTrade · /, '')}
-                {it.subtitle && <span className="text-muted"> · {it.subtitle}</span>}
-              </span>
-              <span className="col-span-3 sm:col-span-1 flex flex-wrap items-center gap-1 sm:justify-end">
-                {it.channels.map(c => (
-                  <span
-                    key={c.channel}
-                    title={c.ok ? '已受理' : errText(c.error)}
-                    className={`rounded px-1 py-px text-[11px] ${c.ok ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-500' : 'bg-danger/10 text-danger'}`}
-                  >
-                    {c.ok ? '✓' : '✗'} {c.label}
-                  </span>
-                ))}
-                {/* 已有渠道结果时 ✓/✗ 已说明一切, 只在没有渠道结果或已停止重试时再标状态 */}
-                {it.status !== 'sent' && (it.channels.length === 0 || it.exhausted) && (
-                  <span className={`rounded px-1 py-px text-[11px] ${STATUS_TONE[it.status]}`}>
-                    {it.status === 'unconfigured' ? '未发送 · 无可用渠道' : it.exhausted ? '失败 · 已停止重试' : it.label}
-                  </span>
-                )}
-                <ChevronDown className={`h-3 w-3 shrink-0 text-muted transition-transform ${open === it.key ? 'rotate-180' : ''}`} />
-              </span>
+              <RefreshCw className={`h-3.5 w-3.5 ${log.isFetching ? 'animate-spin' : ''}`} />
             </button>
-            {open === it.key && (
-              <div className="mx-2.5 mb-2.5 space-y-1 rounded-btn bg-base/50 p-2.5 text-[11px] text-secondary">
-                <div>
-                  美东 {fmtTs(ET_FMT, it.created_at)} · 北京 {fmtTs(BJ_FMT, it.created_at)} · {it.label} · 发送 {it.attempts} 次
-                </div>
-                {it.channels.map(c => (
-                  <div key={c.channel}>
-                    {c.label}：{c.ok ? '已受理' : `失败（${errText(c.error)}）`} · 北京 {fmtTs(BJ_FMT, c.at)}
-                    {c.tries > 1 ? ` · 共 ${c.tries} 次` : ''}
-                    {c.legacy ? ' · 推送日志上线前的记录' : ''}
+          </div>
+          <p className="mb-3 text-[11px] text-muted leading-relaxed">
+            每条推送一行，最新在前（最多 100 条）；时间为美东，点开看北京时间、各渠道结果和原文。「✓」= 渠道接口已受理。
+          </p>
+          {log.isLoading && <div className="py-6 text-center text-[11px] text-muted">读取中…</div>}
+          {log.isError && <div className="text-[11px] text-danger">推送日志读取失败</div>}
+          {!log.isLoading && !log.isError && items.length === 0 && (
+            <div className="py-6 text-center text-[11px] text-muted">{onlyFailed ? '没有未成功的推送' : '还没有推送记录'}</div>
+          )}
+          {items.length > 0 && (
+            <ul className="divide-y divide-border/60 rounded-btn border border-border/60">
+            {items.map(it => (
+              <li key={it.key} data-push-log-row={it.key}>
+                <button
+                  type="button"
+                  onClick={() => setOpen(o => (o === it.key ? null : it.key))}
+                  aria-expanded={open === it.key}
+                  className="grid w-full grid-cols-[4.75rem_4.5rem_minmax(0,1fr)] sm:grid-cols-[4.75rem_5rem_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1 px-2.5 py-1.5 text-left hover:bg-base/60"
+                >
+                  <span className="font-mono text-[11px] text-muted tabular-nums">{fmtTs(ET_FMT, it.created_at)}</span>
+                  <span className="truncate text-[11px] text-secondary">{it.kind_label}</span>
+                  <span className="min-w-0 truncate text-xs text-foreground">
+                    {it.title.replace(/^ZenTrade · /, '')}
+                    {it.subtitle && <span className="text-muted"> · {it.subtitle}</span>}
+                  </span>
+                  <span className="col-span-3 sm:col-span-1 flex flex-wrap items-center gap-1 sm:justify-end">
+                    {it.channels.map(c => (
+                      <span
+                        key={c.channel}
+                        title={c.ok ? '已受理' : errText(c.error)}
+                        className={`rounded px-1 py-px text-[11px] ${c.ok ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-500' : 'bg-danger/10 text-danger'}`}
+                      >
+                        {c.ok ? '✓' : '✗'} {c.label}
+                      </span>
+                    ))}
+                    {/* 已有渠道结果时 ✓/✗ 已说明一切, 只在没有渠道结果或已停止重试时再标状态 */}
+                    {it.status !== 'sent' && (it.channels.length === 0 || it.exhausted) && (
+                      <span className={`rounded px-1 py-px text-[11px] ${STATUS_TONE[it.status]}`}>
+                        {it.status === 'unconfigured' ? '未发送 · 无可用渠道' : it.exhausted ? '失败 · 已停止重试' : it.label}
+                      </span>
+                    )}
+                    <ChevronDown className={`h-3 w-3 shrink-0 text-muted transition-transform ${open === it.key ? 'rotate-180' : ''}`} />
+                  </span>
+                </button>
+                {open === it.key && (
+                  <div className="mx-2.5 mb-2.5 space-y-1 rounded-btn bg-base/50 p-2.5 text-[11px] text-secondary">
+                    <div>
+                      美东 {fmtTs(ET_FMT, it.created_at)} · 北京 {fmtTs(BJ_FMT, it.created_at)} · {it.label} · 发送 {it.attempts} 次
+                    </div>
+                    {it.channels.map(c => (
+                      <div key={c.channel}>
+                        {c.label}：{c.ok ? '已受理' : `失败（${errText(c.error)}）`} · 北京 {fmtTs(BJ_FMT, c.at)}
+                        {c.tries > 1 ? ` · 共 ${c.tries} 次` : ''}
+                        {c.legacy ? ' · 推送日志上线前的记录' : ''}
+                      </div>
+                    ))}
+                    <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-base/60 p-2 text-[11px] text-secondary">{it.body}</pre>
                   </div>
-                ))}
-                <pre className="mt-1 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded bg-base/60 p-2 text-[11px] text-secondary">{it.body}</pre>
-              </div>
-            )}
-          </li>
-        ))}
-      </ul>
+                )}
+              </li>
+            ))}
+            </ul>
+          )}
+        </div>
+      )}
     </section>
   )
 }

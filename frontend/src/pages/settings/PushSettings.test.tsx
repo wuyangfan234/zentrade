@@ -79,7 +79,7 @@ it('warns when no channel can send', async () => {
   expect(host.querySelector('[data-push-active]')?.textContent).toContain('当前没有可用渠道')
 })
 
-it('push log lists each message with per-channel results and opens the original text', async () => {
+it('push log is collapsed by default; opened, it lists each message with per-channel results and the original text', async () => {
   mocks.pushLog.mockResolvedValue({
     total: 2, failed: 1, active_channels: ['feishu', 'wecom'],
     items: [
@@ -97,6 +97,20 @@ it('push log lists each message with per-channel results and opens the original 
     ],
   })
   await render(<PushLogSection />)
+  // collapsed by default: header shows counts only, the list is neither rendered nor fetched
+  const toggle = host.querySelector('[data-push-log-toggle]') as HTMLButtonElement
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  expect(toggle.textContent).toContain('共 2 条 · 失败 1')
+  expect(toggle.textContent).toContain('展开')
+  expect(host.querySelector('[data-push-log-row]')).toBeNull()
+  expect(host.textContent).not.toContain('只看未成功')
+  expect(mocks.pushLog).toHaveBeenCalledWith({ limit: 1 })
+  expect(mocks.pushLog).not.toHaveBeenCalledWith({ limit: 100, failed: false })
+
+  await act(async () => { toggle.click() })
+  await flush()
+  expect(toggle.getAttribute('aria-expanded')).toBe('true')
+  expect(toggle.textContent).toContain('收起')
   expect(mocks.pushLog).toHaveBeenCalledWith({ limit: 100, failed: false })
   expect(host.textContent).toContain('共 2 条 · 失败 1')
   const row = host.querySelector('[data-push-log-row="trade:7:c1:2026-11-12"]')!
@@ -115,4 +129,10 @@ it('push log lists each message with per-channel results and opens the original 
   await act(async () => { onlyFailed.click() })
   await flush()
   expect(mocks.pushLog).toHaveBeenLastCalledWith({ limit: 100, failed: true })
+
+  // collapsing again hides the list
+  await act(async () => { toggle.click() })
+  await flush()
+  expect(toggle.getAttribute('aria-expanded')).toBe('false')
+  expect(host.querySelector('[data-push-log-row]')).toBeNull()
 })
