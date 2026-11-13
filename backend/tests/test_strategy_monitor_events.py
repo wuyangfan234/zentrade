@@ -114,7 +114,7 @@ def test_strategy_rule_compatibility_and_validation(tmp_path):
         "pool_entry",
         webhook_channels=["feishu", "custom", "email", "unsupported"],
     ))
-    assert normalized["webhook_channels"] == ["feishu", "custom", "email"]
+    assert normalized["webhook_channels"] == ["all"]  # 2026-11-13: per-rule on/off, channels from settings
 
 
 def test_strategy_score_range_filters_pool_and_buy_signals_but_not_sell_signals():

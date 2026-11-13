@@ -52,7 +52,7 @@ def _lot_path(tmp_path: Path, lot_id: str) -> Path:
 
 
 def _patch_channels(monkeypatch) -> None:
-    monkeypatch.setattr("app.services.preferences.get_webhook_default_channels", lambda: [])
+    """Lot rules no longer read channel preferences (channels live in system settings)."""
 
 
 # ── 纯映射: 批次 → 规则 ────────────────────────────────
@@ -141,6 +141,7 @@ def test_sync_lot_writes_lot_rules_and_reloads_once(tmp_path, monkeypatch):
     price = monitor_rules.load_one(tmp_path, "lot_test1_p")
     date_rule = monitor_rules.load_one(tmp_path, "lot_test1_d")
     assert price is not None and price["lot_id"] == "lot_test1"
+    assert price["webhook_channels"] == ["all"]  # lot alerts push; channels = system settings
     assert price["conditions"][0] == {"field": "close", "op": ">=", "value": 1650.0}
     assert date_rule is not None and date_rule["remind_date"] == "2026-09-01"
     assert len(reloaded) == 1

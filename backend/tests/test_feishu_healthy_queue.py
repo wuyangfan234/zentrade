@@ -20,17 +20,8 @@ def offline_bot(monkeypatch):
     monkeypatch.setattr(app, "_cleanup_failed", False)
 
 
-def test_quote_service_two_healthy_notifications_are_both_sent(monkeypatch):
-    from app import secrets_store
-    from app.services import email_adapter, preferences, quote_service
-
-    for name in ("get_feishu_webhook_url", "get_feishu_webhook_secret",
-                 "get_wecom_webhook_url", "get_custom_webhook_url"):
-        monkeypatch.setattr(preferences, name, lambda: "")
-    monkeypatch.setattr(preferences, "get_email_smtp_config", lambda: {})
-    monkeypatch.setattr(secrets_store, "get_custom_webhook_secret", lambda: "")
-    monkeypatch.setattr(secrets_store, "get_email_smtp_password", lambda: "")
-    monkeypatch.setattr(email_adapter, "is_configured", lambda config: False)
+def test_two_healthy_concurrent_feishu_sends_are_both_sent(monkeypatch):
+    """Two healthy sends racing on two pool threads (flush job + monitor-alert flush) both succeed."""
     first_entered, second_submitted = threading.Event(), threading.Event()
     sent, stopped, futures, workers = [], [], [], []
 
@@ -52,23 +43,10 @@ def test_quote_service_two_healthy_notifications_are_both_sent(monkeypatch):
 
     monkeypatch.setattr(app, "_channel", lambda *args: Channel())
     with ThreadPoolExecutor(max_workers=2) as pool:
-        class Executor:
-            def submit(self, fn, *args):
-                future = pool.submit(fn, *args)
-                futures.append(future)
-                if len(futures) == 1:
-                    assert first_entered.wait(0.8)
-                else:
-                    second_submitted.set()
-                return future
-
-        monkeypatch.setattr(quote_service, "_WEBHOOK_EXECUTOR", Executor())
-        service = object.__new__(quote_service.QuoteService)
-        engine = SimpleNamespace(rules={"rule": {"webhook_channels": ["feishu"]}})
-        service._maybe_send_webhook([
-            {"rule_id": "rule", "message": "first"},
-            {"rule_id": "rule", "message": "second"},
-        ], engine)
+        futures.append(pool.submit(app.send_text, "放量", "first"))
+        assert first_entered.wait(0.8)
+        futures.append(pool.submit(app.send_text, "放量", "second"))
+        second_submitted.set()
         results = [future.result(timeout=2) for future in futures]
     assert results == [True, True], results
     assert sent == ["first", "second"]

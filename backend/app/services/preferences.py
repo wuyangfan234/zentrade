@@ -416,9 +416,9 @@ def set_index_daily_batch_size(size: int) -> int:
     return size
 
 
-# 监控外部推送渠道白名单。
-# 多选: 不推送 = 空数组, 而非 'none'
-PUSH_CHANNELS = {"feishu", "wecom", "custom", "email"}
+# External push channel whitelist (multi-select; empty list = push nowhere, never 'none').
+PUSH_CHANNEL_ORDER = ("feishu", "wecom", "custom", "email")
+PUSH_CHANNELS = set(PUSH_CHANNEL_ORDER)
 
 
 MINING_BUDGET_PROFILES = frozenset({"balanced", "strict"})
@@ -674,51 +674,23 @@ def set_wecom_bot_enabled(enabled: bool) -> bool:
 
 
 
-def get_webhook_enabled_default() -> bool:
-    """新建监控规则时是否默认勾选推送 (老布尔, 已由 webhook_default_channels 取代)。
+def get_push_channels() -> list[str] | None:
+    """System-wide push channels (settings > system > push). None = never saved.
 
-    保留向后兼容: 读取 webhook_default_channels 非空时返回 True。
+    Never saved means every configured channel is on (see services/push_channels.py).
+    The old per-feature list webhook_default_channels is retired and ignored.
     """
-    return bool(get_webhook_default_channels())
+    raw = load().get("push_channels")
+    if not isinstance(raw, list):
+        return None
+    return [c for c in PUSH_CHANNEL_ORDER if c in raw]
 
 
-def set_webhook_enabled_default(enabled: bool) -> bool:
-    """保存推送默认勾选态 (老布尔兼容入口)。
-
-    新数据模型为渠道数组; 此处把老布尔转译: True→['feishu','wecom'], False→[]。
-    """
-    set_webhook_default_channels(["feishu", "wecom"] if enabled else [])
-    return get_webhook_enabled_default()
-
-
-def get_webhook_default_channels() -> list[str]:
-    """新建监控规则的默认渠道 + 机会页开盘放量提醒渠道 (多选)。
-
-    监控规则只把它作为新建时的预填, 单条规则仍可独立修改; 开盘放量提醒在发送时直接跟随这里的当前勾选。
-    空列表 = 新建规则默认不推送, 且开盘放量不进入外部推送队列。
-
-    向后兼容: 老版本只有布尔 webhook_enabled_default (勾选即飞书+企业微信双推),
-    这里把 True 迁移为 ['feishu','wecom'], 还原当时的实际行为。
-    """
-    d = load()
-    raw = d.get("webhook_default_channels")
-    if isinstance(raw, list):
-        return [c for c in raw if c in PUSH_CHANNELS]
-    # 兼容老布尔开关 (勾选即双推)
-    if d.get("webhook_enabled_default") is True:
-        return ["feishu", "wecom"]
-    return []
-
-
-def set_webhook_default_channels(channels: list[str]) -> list[str]:
-    """保存新建规则默认推送渠道 (多选)。过滤白名单外、去重、保序。空列表 = 不推送。"""
-    seen: set[str] = set()
-    cleaned: list[str] = []
-    for c in channels or []:
-        if c in PUSH_CHANNELS and c not in seen:
-            seen.add(c)
-            cleaned.append(c)
-    save({"webhook_default_channels": cleaned})
+def set_push_channels(channels: list[str]) -> list[str]:
+    """Save the ticked channels: whitelist, de-duplicate, fixed order. Empty list = push nowhere."""
+    wanted = set(channels or [])
+    cleaned = [c for c in PUSH_CHANNEL_ORDER if c in wanted]
+    save({"push_channels": cleaned})
     return cleaned
 
 

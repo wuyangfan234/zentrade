@@ -13,6 +13,7 @@ export const QK = {
   settings:       ['settings'] as const,
   version:        ['version'] as const,
   preferences:    ['preferences'] as const,
+  pushLog:        ['push-log'] as const,
   dataSources:    ['data-sources'] as const,
   capabilityMatrix: ['capability-matrix'] as const,
   setupChecklist: ['setup-checklist'] as const,

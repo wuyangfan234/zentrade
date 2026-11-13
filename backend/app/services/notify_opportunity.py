@@ -4,8 +4,9 @@
 撮合只调用 enqueue_trade_event(data_dir, event)，启动可重扫不可变台账补漏。
 独立 scheduler 每 60 秒调用 flush_notifications(data_dir, limit=10)，max_instances=1。
 enqueue 的 True 仅表示持久化/去重成功，送达以 notification_status 为准。
-发送通道: 旧纸面通知仍走飞书应用机器人 / 群 Webhook; 显式带 channel 的消息按全局勾选渠道
-分别入队与投递。飞书应用机器人优先于群 Webhook; 未配置时留存 unconfigured, 不丢事件、不假报成功。
+发送通道 (2026-11-13 统一): 每条消息一行, 按「系统设置 → 推送通道」里勾选且已配置的渠道
+逐个投递 (services/push_channels.py); 已收到的渠道不重发, 每次投递写推送日志。飞书应用机器人优先于
+群 Webhook; 没有可用渠道时留存 unconfigured, 不丢事件、不假报成功。
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from pathlib import Path
 
 from app import secrets_store
 from app.opportunity.engine import ScanResult
-from app.services import email_adapter, feishu_app, preferences, webhook_adapter
+from app.services import email_adapter, feishu_app, preferences, push_channels, webhook_adapter
 from app.services.notification_outbox import NotificationOutbox
 from app.services.webhook_adapter import send_feishu_card
 
@@ -36,14 +37,11 @@ def _send_feishu(payload: dict) -> bool:
                             payload["body"], preferences.get_feishu_webhook_secret())
 
 
-def _send_payload(payload: dict) -> bool:
-    """旧消息仍走飞书; 带 channel 的消息按当前全局渠道设置投递。"""
-    channel = payload.get("channel")
-    if channel is not None and channel not in preferences.get_webhook_default_channels():
-        return False
-    if channel in (None, "feishu"):
-        return _send_feishu(payload)
+def send_to_channel(payload: dict, channel: str) -> bool:
+    """Deliver one message to one channel with that channel's adapter."""
     title, body = payload["title"], payload["body"]
+    if channel == "feishu":
+        return _send_feishu(payload)
     if channel == "wecom":
         return webhook_adapter.send_wecom(preferences.get_wecom_webhook_url(), title, body)
     if channel == "custom":
@@ -59,34 +57,20 @@ def _send_payload(payload: dict) -> bool:
     return False
 
 
+def _targets(payload: dict) -> list[str]:
+    """Where this message goes now: ticked + configured channels (a legacy row pinned to one
+    channel by the 0.42.5 per-channel queue keeps only that channel)."""
+    active = push_channels.active_channels()
+    pinned = payload.get("channel")
+    return active if pinned is None else [c for c in active if c == pinned]
+
+
 def _configured() -> bool:
-    return feishu_app.is_configured() or bool(preferences.get_feishu_webhook_url())
-
-
-def _channel_configured(channel: str) -> bool:
-    if channel == "feishu":
-        return _configured()
-    if channel == "wecom":
-        return bool(preferences.get_wecom_webhook_url())
-    if channel == "custom":
-        return bool(preferences.get_custom_webhook_url())
-    if channel == "email":
-        return email_adapter.is_configured(preferences.get_email_smtp_config())
-    return False
-
-
-def _payload_configured(payload: dict) -> bool:
-    channel = payload.get("channel")
-    if channel is None:
-        return _configured()
-    return channel in preferences.get_webhook_default_channels() and _channel_configured(channel)
+    return bool(push_channels.active_channels())
 
 
 def _queue(data_dir: Path) -> NotificationOutbox:
-    return NotificationOutbox(
-        data_dir, sender=_send_payload, configured=_configured,
-        configured_for_payload=_payload_configured,
-    )
+    return NotificationOutbox(data_dir, sender=send_to_channel, configured=_configured, targets=_targets)
 
 
 def _enqueue(data_dir: Path, key: str, payload: dict) -> bool:
@@ -100,18 +84,50 @@ def _enqueue(data_dir: Path, key: str, payload: dict) -> bool:
 
 
 def enqueue_global(data_dir: Path, key: str, payload: dict, *,
-                   event_type: str = "notification", data: dict | None = None,
-                   channels: list[str] | None = None) -> dict:
-    """按当前全局勾选渠道分别入队; channels 可限定为本次仍需补入队的子集。"""
-    current = preferences.get_webhook_default_channels()
-    selected = current if channels is None else [channel for channel in channels if channel in current]
-    queued = []
-    for channel in selected:
-        item = {**payload, "channel": channel, "event_type": event_type, "data": data or {}}
-        if _enqueue(data_dir, f"{key}:{channel}", item):
-            queued.append(channel)
-    return {"selected": selected, "queued": queued,
-            "ok": bool(selected) and len(queued) == len(selected)}
+                   event_type: str = "notification", data: dict | None = None) -> bool:
+    """Same queue as every other push; event_type/data are for the third-party JSON webhook."""
+    return _enqueue(data_dir, key, {**payload, "event_type": event_type, "data": data or {}})
+
+
+def _json_safe(value):
+    if isinstance(value, float):
+        return value if value == value and value not in (float("inf"), float("-inf")) else None
+    if isinstance(value, (str, int, bool)) or value is None:
+        return value
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    try:
+        return _json_safe(float(value))
+    except (TypeError, ValueError):
+        return str(value)
+
+
+_MONITOR_FIELDS = ("rule_id", "source", "type", "symbol", "name", "message", "price", "change_pct",
+                   "severity", "ts")
+
+
+def enqueue_monitor_alert(data_dir: Path, event: dict, title: str, body: str) -> bool:
+    """Monitor-rule alert -> the same queue (was fire-and-forget threads per channel before 2026-11-13)."""
+    stamp = event.get("ts") or hashlib.sha256(
+        json.dumps(_json_safe(event), sort_keys=True).encode()).hexdigest()[:16]
+    key = f"monitor:{event.get('rule_id', '')}:{event.get('symbol') or ''}:{stamp}"
+    data = {k: _json_safe(event.get(k)) for k in _MONITOR_FIELDS if k in event}
+    return enqueue_global(data_dir, key, {"title": title, "subtitle": "", "body": body},
+                          event_type="monitor_alert", data=data)
+
+
+def push_log(data_dir: Path, *, limit: int = 100, only_failed: bool = False) -> dict:
+    """Push log for settings > system: each message, what it was, and each channel's result."""
+    out = _queue(data_dir).log(limit=limit, only_failed=only_failed)
+    for item in out["items"]:
+        kind = item["key"].split(":", 1)[0]
+        item["kind"], item["kind_label"] = kind, push_channels.KIND_LABELS.get(kind, kind)
+        for ch in item["channels"]:
+            ch["label"] = push_channels.label(ch["channel"])
+    out["active_channels"] = push_channels.active_channels()
+    return out
 
 
 def notification_status(data_dir: Path) -> dict:

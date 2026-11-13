@@ -61,13 +61,10 @@ def _reload_engine(request: Request) -> None:
 def sync_lot(request: Request, lot: dict) -> None:
     """写批次文件 + 同步其两条派生监控规则 + 重载引擎。
 
-    派生规则继承用户默认推送渠道 (webhook_default_channels), 否则批次告警会静默只走应用内。
+    派生规则默认推送 (渠道 = 系统设置 → 推送通道), 否则批次告警会静默只走应用内。
     """
-    from app.services import preferences
-
     data_dir = _data_dir(request)
     with _write_lock:
-        default_channels = preferences.get_webhook_default_channels()
         # ETF/指数等资产类型解析 (止盈止损价格规则须走对应资产监控轮才会触发)
         asset_type = _resolve_asset_type(request, lot["symbol"])
         price_rule, date_rule = lots_domain.lot_to_rules(lot)
@@ -78,7 +75,7 @@ def sync_lot(request: Request, lot: dict) -> None:
                 rules_to_delete.append(rid)
                 continue
             rule["asset_type"] = asset_type
-            rule.setdefault("webhook_channels", list(default_channels))
+            rule.setdefault("webhook_channels", ["all"])
             # 保留旧 created_at, 避免编辑批次后派生规则在监控中心列表跳位
             existing = monitor_rules.load_one(data_dir, rid)
             if existing and existing.get("created_at"):

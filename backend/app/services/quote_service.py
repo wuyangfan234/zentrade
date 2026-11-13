@@ -1527,91 +1527,48 @@ class QuoteService:
             logger.debug("快照差值注入失败 (volume_delta 规则将不触发): %s", e)
             return enriched_today
 
-    def _maybe_send_webhook(self, rule_events: list[dict], engine) -> None:
-        """把告警通过 Webhook 推送到外部 IM (由规则 webhook_channels 指定渠道)。
+    def _push_data_dir(self):
+        try:
+            return self._app_state.repo.store.data_dir
+        except Exception:
+            from app.config import settings
+            return settings.data_dir
 
-        - 飞书 / 企业微信 / 第三方 Webhook / 邮件均按规则独立选择
-        - 仅推送 webhook_channels 非空的规则触发的告警, 且只投递被勾选的渠道
-        - 失败静默, 不阻断主流程
-        - 去重: 复用 MonitorRuleEngine 的 cooldown, 此处不重复去重
+    def _maybe_send_webhook(self, rule_events: list[dict], engine) -> None:
+        """把告警送进统一推送队列 (2026-11-13: 渠道统一在系统设置)。
+
+        - 规则只决定推不推 (webhook_channels 非空 = 推); 推到哪 = 系统设置 → 推送通道
+        - 入队后立刻在独立线程池触发一次发送, 不阻塞行情轮询; 发件箱逐渠道投递并记推送日志
+        - 去重: 复用 MonitorRuleEngine 的 cooldown; 失败静默, 不阻断主流程
 
         注意: 用 rule_events (含 rule_id) 而非重建后的 all_alerts,
         以便反查引擎规则判断是否启用推送。
         """
         try:
-            from app import secrets_store
-            from app.services import email_adapter, preferences, webhook_adapter
+            from app.services import notify_opportunity
 
-            from app.services import feishu_app
-
-            feishu_app_ready = feishu_app.is_configured()
-            feishu_url = preferences.get_feishu_webhook_url()
-            feishu_secret = preferences.get_feishu_webhook_secret()
-            wecom_url = preferences.get_wecom_webhook_url()
-            custom_url = preferences.get_custom_webhook_url()
-            custom_secret = secrets_store.get_custom_webhook_secret()
-            email_config = preferences.get_email_smtp_config()
-            email_password = secrets_store.get_email_smtp_password()
-            if not any((feishu_app_ready, feishu_url, wecom_url, custom_url, email_adapter.is_configured(email_config))):
-                return
-
-            # 反查规则, 过滤出启用推送的事件
             rules = engine.rules if engine is not None else {}
+            data_dir = self._push_data_dir()
             enqueued = 0
             for ev in rule_events:
                 rule = rules.get(ev.get("rule_id"))
-                # webhook_channels 指定本规则需要投递的外部渠道。
-                # 空列表 = 该规则不推送。仅推送「渠道已选 + 对应地址已配置」的组合。
-                channels = rule.get("webhook_channels") if rule else None
-                if not channels:
+                if not (rule and rule.get("webhook_channels")):
                     continue
                 source = ev.get("source", "")
-                source_label = SOURCE_LABELS.get(source, source or "通知")
+                title = SOURCE_LABELS.get(source, source or "通知")
                 symbol = ev.get("symbol") or ""
                 name = ev.get("name") or ""
                 message = ev.get("message") or ""
-                title = source_label
                 body = f"{symbol} {name} {message}".strip() if symbol else (message or name)
                 # 补上触发时的现价/涨跌幅, 让推送可执行 (止损到底触发在哪个价位)
                 body = _body_with_quote(body, ev)
-                # 提交到独立线程池, 不阻塞行情轮询线程 (webhook 慢/重试不拖累实时行情+告警)。
-                # 按渠道独立投递: 只投递同时“已勾选 + 已配置”的渠道。
-                # 应用内 alerts.jsonl 记录与 SSE 已在前面完成, 不依赖 webhook 成败,
-                # 失败由 webhook_adapter 记 WARNING(可见)。
-                if "feishu" in channels and feishu_app_ready:
-                    # 应用机器人优先 (群 Webhook 不稳定, 用户 2026-10-01)
-                    _WEBHOOK_EXECUTOR.submit(feishu_app.send_text, title, body)
-                    enqueued += 1
-                elif feishu_url and "feishu" in channels:
-                    _WEBHOOK_EXECUTOR.submit(webhook_adapter.send_feishu, feishu_url, title, body, feishu_secret)
-                    enqueued += 1
-                if wecom_url and "wecom" in channels:
-                    _WEBHOOK_EXECUTOR.submit(webhook_adapter.send_wecom, wecom_url, title, body)
-                    enqueued += 1
-                if custom_url and "custom" in channels:
-                    _WEBHOOK_EXECUTOR.submit(
-                        webhook_adapter.send_custom,
-                        custom_url,
-                        title,
-                        body,
-                        "monitor_alert",
-                        ev,
-                        custom_secret,
-                    )
-                    enqueued += 1
-                if email_adapter.is_configured(email_config) and "email" in channels:
-                    _WEBHOOK_EXECUTOR.submit(
-                        email_adapter.send_email,
-                        email_config,
-                        email_password,
-                        title,
-                        body,
-                    )
+                if notify_opportunity.enqueue_monitor_alert(data_dir, ev, title, body):
                     enqueued += 1
             if enqueued:
-                logger.info("Webhook 已提交 %d 条 (异步投递, 按渠道独立投递, 失败记 WARNING)", enqueued)
+                _WEBHOOK_EXECUTOR.submit(notify_opportunity.flush_notifications, data_dir, 10)
+                logger.info("监控告警已入推送队列 %d 条", enqueued)
         except Exception as e:  # noqa: BLE001
-            logger.warning("Webhook 提交异常 (不影响告警主流程): %s", e)
+            logger.warning("监控告警入队异常 (不影响告警主流程): %s", e)
 
     def _maybe_send_system_notifications(self, all_alerts: list[dict]) -> None:
         """把告警转发到操作系统通知中心 (由 preferences 开关控制)。

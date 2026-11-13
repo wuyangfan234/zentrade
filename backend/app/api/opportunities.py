@@ -385,7 +385,7 @@ def opportunities_page(request: Request) -> dict:
 
 
 class RadarPushIn(BaseModel):
-    """0.35.0 开盘放量榜飞书推送: 开关 + 门槛 (只收档位 1 / 2 / 3 / 5)。strict: 不把 "true" / "3" 宽松转换。"""
+    """0.35.0 开盘放量榜推送 (渠道 = 系统设置 → 推送通道): 开关 + 门槛 (只收档位 1 / 2 / 3 / 5)。strict: 不把 "true" / "3" 宽松转换。"""
     enabled: bool = Field(..., strict=True)
     min_rvol: float = Field(..., strict=True)
 

@@ -19,7 +19,7 @@ afterEach(() => {
   host.remove()
 })
 
-it('describes global channel routing instead of Feishu-only delivery', async () => {
+it('points to the unified push channels in system settings instead of Feishu-only delivery', async () => {
   await act(async () => {
     root.render(<RadarPushEditor
       cur={{ enabled: true, min_rvol: 3, levels: [], period: '', other: 0 }}
@@ -32,7 +32,8 @@ it('describes global channel routing instead of Feishu-only delivery', async () 
 
   const description = host.querySelector('[data-radar-push]')?.textContent ?? ''
   expect(description).toContain('09:51 ET 发布后推送')
-  expect(description).toContain('每渠道每日 1 条')
+  expect(description).toContain('每日 1 条')
+  expect(description).toContain('渠道见系统设置')
   expect(description).not.toContain('出榜后推送飞书')
 })
 

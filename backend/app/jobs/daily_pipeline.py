@@ -1515,7 +1515,7 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
 
     # 0.34.0 开盘放量榜 (10-22 产品决策 「机会页按时段换主角」): 09:30 那根 SIP 5 分钟K 09:50 后才完整可见,
     # 09:51 ET 出榜 (北京夏令时 21:51 / 冬令时 22:51), 09:56 再试一次 (当天已出榜就跳过); 16:40 ET 记收盘, 17:40 补缺。
-    # 不写台账、不进交易环。0.35.0: 出榜后按齿轮开关 / 门槛与全局渠道推一条提醒 (每天每渠道最多一条, 推送失败不影响出榜)。
+    # 不写台账、不进交易环。0.35.0: 出榜后按齿轮开关 / 门槛推一条提醒 (每天最多一条, 渠道 = 系统设置 → 推送通道; 推送失败不影响出榜)。
     def _open_radar():
         from app.services import open_radar
         st = _get_app_state()

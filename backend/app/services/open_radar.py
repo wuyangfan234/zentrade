@@ -15,8 +15,8 @@
 数据: 复用盘中强势的 30 日 5 分钟K 缓存 (data/opportunities/intraday/m5/), 同一把跨进程文件锁。
 记录: data/opportunities/radar/<美东日>.json (原子整写)。不写台账、不进交易环、不进下单簿。
 推送 (0.35.0, 10-22 产品决策「开盘榜推送到飞书, 开关我手动决定」): 出榜后把相对量 >= 门槛的点名票合成一条提醒。
-  开关与门槛在机会页齿轮 (data/opportunities/radar_push.json; 缺 = 开 / >= 3x); 渠道跟随设置页全局勾选。
-  每个美东日每渠道最多一条 (outbox 键 open_radar:<日>:<渠道>),
+  开关与门槛在机会页齿轮 (data/opportunities/radar_push.json; 缺 = 开 / >= 3x); 渠道 = 设置 → 系统设置 → 推送通道 (与全部推送同一组)。
+  每个美东日最多一条 (outbox 键 open_radar:<日>; 发往哪些渠道、各渠道结果见推送日志),
   没有票达门槛不推; 10:30 ET 后不推 (重启补跑出榜若已过 10:30 也不推)。只提醒, 不触发任何交易动作。
 """
 from __future__ import annotations
@@ -319,7 +319,7 @@ def backfill_days(data_dir: Path, days: list[date], *, symbols: list[str] | None
     return out
 
 
-# ── 全局渠道推送 (0.35.0) ────────────────────────────────
+# ── 推送 (0.35.0; 渠道统一在系统设置 2026-11-13) ─────────────
 def push_path(data_dir: Path) -> Path:
     return Path(data_dir) / "opportunities" / "radar_push.json"
 
@@ -384,13 +384,13 @@ def push_message(day: date, at: datetime, picks: list[dict], live: dict[str, dic
         lines.append(f"回放 {REPLAY['period']}：本档约 {rp['days']:.0%} 交易日有推送，推送票当日收涨 ≥5% 占 "
                      f"{rp['up5']:.0%}，其余开盘收阳 {REPLAY['other']:.0%}")
     lines.append(f"回放：点名票 09:35 后平均再涨 {REPLAY['after_0935_mean_pct']}%，追入无统计优势")
-    lines.append("观察，不给价位、不下单；渠道：设置 → 监控；开关与门槛：机会页规则设置")
+    lines.append("观察，不给价位、不下单；渠道：设置 → 系统设置 → 推送通道；开关与门槛：机会页规则设置")
     return {"title": "ZenTrade · 开盘放量", "subtitle": day.isoformat(), "body": "\n".join(lines)}
 
 
 def push(data_dir: Path, *, repo=None, now: datetime | None = None, enqueue=None) -> dict:
-    """09:51 / 09:56 ET 出榜后: 开关开、有点名票达门槛、10:30 ET 前 -> 按全局渠道分别入队。
-    幂等: 已入队的日子不再推 (outbox 按 日+渠道 去重); 没票达门槛只记一笔, 之后调低门槛, 下一次任务还会再看。不抛。"""
+    """09:51 / 09:56 ET 出榜后: 开关开、有点名票达门槛、10:30 ET 前 -> 入统一推送队列 (渠道 = 系统设置里的推送通道)。
+    幂等: 已入队的日子不再推 (outbox 按日去重); 没票达门槛只记一笔, 之后调低门槛, 下一次任务还会再看。不抛。"""
     from app.market_clock import us_clock
     data_dir = Path(data_dir)
     now = us_clock.market_datetime(now or us_clock.now())
@@ -403,21 +403,8 @@ def push(data_dir: Path, *, repo=None, now: datetime | None = None, enqueue=None
     rec = load_day(data_dir, day)
     if not rec or not rec.get("at") or rec.get("backfill"):
         return {"skipped": "no_board"}
-    selected = None
-    if enqueue is None:
-        from app.services import notify_opportunity
-        selected = notify_opportunity.preferences.get_webhook_default_channels()
-        if not selected:
-            return {"skipped": "no_channels"}
-    previous_channels = []
-    pending_channels = list(selected or [])
     if ((rec.get("push") or {}).get("symbols")):
-        if enqueue is not None:
-            return {"skipped": "sent", "symbols": rec["push"]["symbols"]}
-        previous_channels = rec["push"].get("channels") or ["feishu"]
-        pending_channels = [channel for channel in pending_channels if channel not in previous_channels]
-        if not pending_channels:
-            return {"skipped": "sent", "symbols": rec["push"]["symbols"]}
+        return {"skipped": "sent", "symbols": rec["push"]["symbols"]}
     th = cfg["min_rvol"]
     picks = [r for r in rec["rows"] if r.get("pick") and _fin(r.get("rvol")) and r["rvol"] >= th]
     stamp = {"at": now.isoformat(timespec="seconds"), "min_rvol": th, "symbols": [r["symbol"] for r in picks]}
@@ -440,27 +427,19 @@ def push(data_dir: Path, *, repo=None, now: datetime | None = None, enqueue=None
     except Exception as e:
         logger.warning("open radar push: context unavailable: %s", type(e).__name__)
     msg = push_message(day, now, picks, live, ctx, th)
-    channels = None
     if enqueue is None:
         from app.services import notify_opportunity
-        routed = notify_opportunity.enqueue_global(
+        ok = notify_opportunity.enqueue_global(
             data_dir, f"open_radar:{day.isoformat()}", msg, event_type="open_radar",
             data={"day": day.isoformat(), "symbols": stamp["symbols"], "min_rvol": th},
-            channels=pending_channels,
         )
-        ok, channels = routed["ok"], routed["queued"]
     else:
         ok = bool(enqueue(data_dir, f"open_radar:{day.isoformat()}", msg))
     if ok:
-        rec["push"] = stamp if channels is None else {
-            **stamp, "channels": sorted(set(previous_channels) | set(channels)),
-        }
+        rec["push"] = stamp
         _save_day(data_dir, rec)
     logger.info("open radar push %s: %s (>= %s, queued=%s)", day, stamp["symbols"], th, ok)
-    result = {"pushed": stamp["symbols"], "min_rvol": th, "queued": ok}
-    if channels is not None:
-        result["channels"] = channels
-    return result
+    return {"pushed": stamp["symbols"], "min_rvol": th, "queued": ok}
 
 
 # ── 页面 ─────────────────────────────────────────────────

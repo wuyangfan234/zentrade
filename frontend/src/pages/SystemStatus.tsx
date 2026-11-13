@@ -174,7 +174,7 @@ const SOURCE_LINK: Record<string, { label: string; to: string }> = {
   execution_quotes: { label: '设置 › 数据源', to: '/settings?tab=data-sources' },
   realtime_source: { label: '设置 › 数据源', to: '/settings?tab=data-sources' },
   qveris: { label: '设置 › 数据源', to: '/settings?tab=data-sources' },
-  notifications: { label: '设置 › 实时监控', to: '/settings?tab=monitoring' },
+  notifications: { label: '设置 › 系统设置 › 推送', to: '/settings?tab=system&highlight=push' },
   hot_quotes: { label: '持仓', to: '/paper' },
   paper_loop: { label: '持仓', to: '/paper' },
   circuit_breaker: { label: '持仓', to: '/paper' },

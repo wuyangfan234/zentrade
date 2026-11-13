@@ -104,25 +104,19 @@ def test_apply_scope_sector_fails_closed():
     assert picked.height == 1
 
 
-def test_monitor_webhook_uses_chinese_title_without_brand(monkeypatch):
-    calls = []
+def test_monitor_webhook_uses_chinese_title_without_brand(monkeypatch, tmp_path):
+    from app.services import notify_opportunity
 
-    class CaptureExecutor:
+    class Executor:
         def submit(self, fn, *args):
-            calls.append((fn, args))
+            return None
 
-    monkeypatch.setattr(quote_service, "_WEBHOOK_EXECUTOR", CaptureExecutor())
-    monkeypatch.setattr("app.services.preferences.get_feishu_webhook_url", lambda: "https://open.feishu.cn/open-apis/bot/v2/hook/test")
-    monkeypatch.setattr("app.services.preferences.get_feishu_webhook_secret", lambda: "secret")
-    monkeypatch.setattr("app.services.preferences.get_wecom_webhook_url", lambda: "wecom-key")
-    monkeypatch.setattr("app.services.preferences.get_custom_webhook_url", lambda: "")
-    monkeypatch.setattr("app.services.preferences.get_email_smtp_config", lambda: {})
-    monkeypatch.setattr("app.secrets_store.get_custom_webhook_secret", lambda: "")
-    monkeypatch.setattr("app.secrets_store.get_email_smtp_password", lambda: "")
-
-    engine = type("Engine", (), {
-        "rules": {"r_vd": {"webhook_channels": ["feishu", "wecom"]}},
-    })()
+    queued = []
+    monkeypatch.setattr(quote_service, "_WEBHOOK_EXECUTOR", Executor())
+    monkeypatch.setattr(QuoteService, "_push_data_dir", lambda self: tmp_path)
+    monkeypatch.setattr(notify_opportunity, "enqueue_global",
+                        lambda data_dir, key, payload, **kw: queued.append((key, payload, kw)) or True)
+    engine = type("Engine", (), {"rules": {"r_vd": {"webhook_channels": ["all"]}}})()
     QuoteService._maybe_send_webhook(
         object.__new__(QuoteService),
         [{
@@ -135,16 +129,20 @@ def test_monitor_webhook_uses_chinese_title_without_brand(monkeypatch):
         engine,
     )
 
-    assert [args[1] for _, args in calls] == ["放量", "放量"]
-    assert all("TickFlow" not in args[1] for _, args in calls)
+    assert [payload["title"] for _, payload, _ in queued] == ["放量"]
+    assert "TickFlow" not in queued[0][1]["title"]
+    assert queued[0][2]["event_type"] == "monitor_alert"
 
 
-def test_monitor_dispatches_custom_webhook_and_email(monkeypatch):
+def test_monitor_alert_reaches_custom_webhook_and_email_through_the_queue(monkeypatch, tmp_path):
+    """Channels come from system settings (never saved = every configured channel)."""
+    from app.services import email_adapter, webhook_adapter
+
     calls = []
 
-    class CaptureExecutor:
+    class Executor:
         def submit(self, fn, *args):
-            calls.append((fn.__name__, args))
+            return fn(*args)
 
     email_config = {
         "host": "smtp.example.com",
@@ -152,18 +150,21 @@ def test_monitor_dispatches_custom_webhook_and_email(monkeypatch):
         "from_address": "bot@example.com",
         "to_addresses": ["alerts@example.com"],
     }
-    monkeypatch.setattr(quote_service, "_WEBHOOK_EXECUTOR", CaptureExecutor())
+    monkeypatch.setattr(quote_service, "_WEBHOOK_EXECUTOR", Executor())
+    monkeypatch.setattr(QuoteService, "_push_data_dir", lambda self: tmp_path)
+    monkeypatch.setattr("app.services.preferences.get_push_channels", lambda: None)
+    monkeypatch.setattr("app.services.feishu_app.is_configured", lambda: False)
     monkeypatch.setattr("app.services.preferences.get_feishu_webhook_url", lambda: "")
-    monkeypatch.setattr("app.services.preferences.get_feishu_webhook_secret", lambda: "")
     monkeypatch.setattr("app.services.preferences.get_wecom_webhook_url", lambda: "")
     monkeypatch.setattr("app.services.preferences.get_custom_webhook_url", lambda: "https://example.com/hook")
     monkeypatch.setattr("app.services.preferences.get_email_smtp_config", lambda: email_config)
     monkeypatch.setattr("app.secrets_store.get_custom_webhook_secret", lambda: "hook-secret")
     monkeypatch.setattr("app.secrets_store.get_email_smtp_password", lambda: "smtp-password")
+    monkeypatch.setattr(webhook_adapter, "send_custom",
+                        lambda *a, **kw: calls.append(("send_custom", a, kw)) or True)
+    monkeypatch.setattr(email_adapter, "send_email", lambda *a: calls.append(("send_email", a, {})) or True)
 
-    engine = type("Engine", (), {
-        "rules": {"r_vd": {"webhook_channels": ["custom", "email"]}},
-    })()
+    engine = type("Engine", (), {"rules": {"r_vd": {"webhook_channels": ["all"]}}})()
     event = {
         "rule_id": "r_vd",
         "source": "volume_delta",
@@ -173,6 +174,8 @@ def test_monitor_dispatches_custom_webhook_and_email(monkeypatch):
     }
     QuoteService._maybe_send_webhook(object.__new__(QuoteService), [event], engine)
 
-    assert [name for name, _ in calls] == ["send_custom", "send_email"]
-    assert calls[0][1][3:] == ("monitor_alert", event, "hook-secret")
+    assert [name for name, _, _ in calls] == ["send_custom", "send_email"]
+    assert calls[0][1][3] == "monitor_alert"
+    assert calls[0][1][4]["rule_id"] == "r_vd" and calls[0][1][4]["symbol"] == "NVDA"
+    assert calls[0][2] == {"secret": "hook-secret"}
     assert calls[1][1][:2] == (email_config, "smtp-password")

@@ -338,17 +338,15 @@ def normalize(rule: dict) -> dict:
     r.setdefault("message", "")
     r.setdefault("webhook_url", "")
     r.setdefault("webhook_enabled", False)
-    # webhook_channels: 命中时推送的外部渠道。
-    # 向后兼容: 老规则只有 webhook_enabled 布尔 (当时勾选即飞书+企业微信双推),
-    # 这里把 webhook_enabled=True 但未带 webhook_channels 的老规则迁移为 ['feishu','wecom'],
-    # 还原其当时的实际行为, 用户无感知。
-    if r.get("webhook_channels") is None:
-        r["webhook_channels"] = ["feishu", "wecom"] if r.get("webhook_enabled") else []
+    # webhook_channels: 命中时是否推送到外部渠道 (2026-11-13: 渠道统一在系统设置)。
+    # 规则只存开关: ["all"] = 推, [] = 不推; 推到哪由系统设置 → 推送通道决定。
+    # 向后兼容: 老规则的渠道列表 (feishu/wecom/custom/email) 或 webhook_enabled=True 一律视为「推」。
+    raw = r.get("webhook_channels")
+    if raw is None:
+        on = bool(r.get("webhook_enabled"))
     else:
-        # 防御性过滤, 只保留合法渠道
-        r["webhook_channels"] = [
-            c for c in r["webhook_channels"] if c in ("feishu", "wecom", "custom", "email")
-        ]
+        on = any(c in ("all", "feishu", "wecom", "custom", "email") for c in raw)
+    r["webhook_channels"] = ["all"] if on else []
     r.setdefault("created_at", datetime.now(timezone.utc).isoformat())
     return r
 

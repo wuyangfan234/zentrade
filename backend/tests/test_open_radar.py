@@ -519,55 +519,19 @@ def test_push_failures_in_prices_or_context_still_push(tmp_path, monkeypatch):
     assert "现在" not in sent[0][1]["body"] and "**NVDA** 相对量 4.0x" in sent[0][1]["body"]
 
 
-def test_push_real_outbox_dedupes_by_day_and_channel(tmp_path, monkeypatch):
-    """真 outbox: 全局选择飞书时按 日+渠道 唯一; 未配置 = unconfigured 留存。"""
+def test_push_real_outbox_one_row_per_day_and_visible_without_channels(tmp_path, monkeypatch):
+    """真 outbox: 渠道统一在系统设置 (2026-11-13), 开盘放量按日一行; 没有可用渠道也入队,
+    在推送日志里显示「未配置」, 不再静默跳过 (旧实现没选渠道时直接跳过, 提醒会无声丢失)。"""
     from app.services import notify_opportunity as notify
     _board(tmp_path)
     _nolive(monkeypatch)
-    monkeypatch.setattr(notify.preferences, "get_webhook_default_channels", lambda: ["feishu"])
-    monkeypatch.setattr(notify, "_configured", lambda: False)
+    monkeypatch.setattr(notify.push_channels, "active_channels", lambda: [])
     assert orr.push(tmp_path, now=et(D0, 9, 51))["queued"] is True
-    st = notify.notification_status(tmp_path)
-    assert st["counts"]["unconfigured"] == 1
-    assert notify._queue(tmp_path).status(f"open_radar:{D0.isoformat()}:feishu")["status"] == "unconfigured"
-
-
-def test_push_without_global_channels_does_not_mark_sent(tmp_path, monkeypatch):
-    from app.services import notify_opportunity as notify
-    _board(tmp_path)
-    _nolive(monkeypatch)
-    monkeypatch.setattr(notify.preferences, "get_webhook_default_channels", lambda: [])
-
-    assert orr.push(tmp_path, now=et(D0, 9, 51)) == {"skipped": "no_channels"}
-    rec = orr.load_day(tmp_path, D0)
-    assert rec is not None
-    assert "push" not in rec
-    assert orr.push(tmp_path, now=et(D0, 9, 56)) == {"skipped": "no_channels"}
-
-
-def test_push_rechecks_new_global_channels_on_retry(tmp_path, monkeypatch):
-    from app.services import notify_opportunity as notify
-    _board(tmp_path)
-    _nolive(monkeypatch)
-    selected = [["feishu"]]
-    monkeypatch.setattr(notify.preferences, "get_webhook_default_channels", lambda: selected[0])
-    calls = []
-
-    def route(data_dir, key, payload, **kwargs):
-        channels = list(kwargs.get("channels") or selected[0])
-        calls.append((key, channels))
-        return {"selected": channels, "queued": channels, "ok": True}
-
-    monkeypatch.setattr(notify, "enqueue_global", route)
-    assert orr.push(tmp_path, now=et(D0, 9, 51))["channels"] == ["feishu"]
-    selected[0] = ["wecom"]
-    assert orr.push(tmp_path, now=et(D0, 9, 56))["channels"] == ["wecom"]
-    assert len(calls) == 2
-    rec = orr.load_day(tmp_path, D0)
-    assert rec is not None
-    assert rec["push"]["channels"] == ["feishu", "wecom"]
-    assert orr.push(tmp_path, now=et(D0, 9, 57))["skipped"] == "sent"
-    assert len(calls) == 2
+    assert notify.notification_status(tmp_path)["counts"]["unconfigured"] == 1
+    assert notify._queue(tmp_path).status(f"open_radar:{D0.isoformat()}")["status"] == "unconfigured"
+    item = notify.push_log(tmp_path)["items"][0]
+    assert item["kind_label"] == "开盘放量" and item["status"] == "unconfigured"
+    assert orr.push(tmp_path, now=et(D0, 9, 56))["skipped"] == "sent"
 
 
 def test_view_and_status_show_push_state(tmp_path, monkeypatch):

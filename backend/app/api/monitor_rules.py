@@ -88,7 +88,7 @@ class RuleModel(BaseModel):
     severity: str = "info"    # info | warn | critical
     webhook_url: str = ""     # Webhook 推送地址 (推送到 QMT 等外部软件, 待定)
     webhook_enabled: bool = False  # 兼容老规则 (已由 webhook_channels 取代, 仅做向后兼容读)
-    webhook_channels: list[str] = []  # 合法值: feishu | wecom | custom | email
+    webhook_channels: list[str] = []  # ["all"] = 推到系统设置里的推送通道; [] = 不推 (旧渠道名按「推」读)
     message: str = ""
     # volume_delta 专属: metric=volume 按股数 / amount 按成交额 (USD)
     metric: str = "volume"
