@@ -320,8 +320,9 @@ def test_manual_api_calls_post_success_hook(tmp_path, monkeypatch):
 
 def test_notifications_action_points_at_real_place():
     from app.services.system_status_view import ACTION
-    # 处理建议指向真实位置: 设置页的「发送测试」+ 通知发件箱; 文件路径不写进页面正文 (在该项入口的悬停里, 即组件 source)
-    assert "发送测试" in ACTION["notifications"] and "通知发件箱" in ACTION["notifications"]
+    # 处理建议指向真实位置: 系统设置的推送通道「发送测试」+ 同页推送日志 (2026-11-13 渠道统一后失败原因在推送日志);
+    # 文件路径不写进页面正文 (在该项入口的悬停里, 即组件 source)
+    assert all(w in ACTION["notifications"] for w in ("推送通道", "发送测试", "推送日志"))
     from app.services.system_status_view import IMPACT
     for text in [*ACTION.values(), *IMPACT.values()]:
         assert "data/" not in text and ".json" not in text and ".sqlite3" not in text and "zen_" not in text, text

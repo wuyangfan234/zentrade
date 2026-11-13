@@ -962,7 +962,7 @@ export type OppCardCtx = {
   pcr?: number
   iv?: number
 }
-/** 0.35.0 开盘放量榜推送: 开关 + 门槛档位; 渠道跟随全局推送设置 (levels = 各档回放频率, 后端单一来源) */
+/** 0.35.0 开盘放量榜推送: 开关 + 门槛档位; 渠道 = 系统设置 → 推送通道 (levels = 各档回放频率, 后端单一来源) */
 export type RadarPushLevel = { v: number; days: number; per_day: number; up5: number }
 export type RadarPushSettings = { enabled: boolean; min_rvol: number; period?: string; other?: number; levels?: RadarPushLevel[] }
 export type OppSettings = { long: string[]; short: string[]; risk_per_trade_pct: number | null; ruleset_version: number | null; evo: boolean; radar_push?: RadarPushSettings
@@ -2349,8 +2349,10 @@ export interface Preferences {
   wecom_bot_secret?: string
   wecom_bot_secret_set?: boolean
   wecom_bot_enabled?: boolean
-  webhook_enabled_default?: boolean
-  webhook_default_channels?: string[]
+  /** 系统设置 → 推送通道: 勾选的渠道 (从未保存 = 全部已配置渠道), 全部推送都发到这里 */
+  push_channels?: PushChannel[]
+  /** 勾选且已配置 = 现在真正会发的渠道 */
+  push_channels_active?: PushChannel[]
   nav_order: string[]
   nav_hidden: string[]
   screener_auto_run: boolean
@@ -2358,6 +2360,37 @@ export interface Preferences {
   minute_intraday_refresh_interval: number
   monitor_ext_fields: { concept: MonitorExtFieldItem | null; industry: MonitorExtFieldItem | null }
 }
+
+/** 外部推送渠道 (2026-11-13 统一在系统设置) */
+export type PushChannel = 'feishu' | 'wecom' | 'custom' | 'email'
+export type PushLogChannel = {
+  channel: string
+  label: string
+  ok: boolean
+  tries: number
+  at: number | null
+  error: string | null
+  /** 推送日志上线前已发送的消息: 没有逐渠道记录, 按当时唯一渠道 (飞书) 显示 */
+  legacy: boolean
+}
+export type PushLogItem = {
+  key: string
+  kind: string
+  kind_label: string
+  title: string
+  subtitle: string
+  body: string
+  status: 'unconfigured' | 'pending' | 'sent' | 'failed'
+  label: string
+  attempts: number
+  exhausted: boolean
+  created_at: number
+  sent_at: number | null
+  last_error: string | null
+  delivered: string[]
+  channels: PushLogChannel[]
+}
+export type PushLog = { items: PushLogItem[]; total: number; failed: number; active_channels: PushChannel[] }
 
 export interface EmailSmtpConfig {
   host: string
@@ -2808,11 +2841,13 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
-  updateWebhookDefaultChannels: (channels: string[]) =>
-    request<{ webhook_default_channels: string[] }>('/api/settings/preferences/webhook-default-channels', {
+  updatePushChannels: (channels: PushChannel[]) =>
+    request<{ push_channels: PushChannel[]; push_channels_active: PushChannel[] }>('/api/settings/preferences/push-channels', {
       method: 'PUT',
       body: JSON.stringify({ channels }),
     }),
+  pushLog: (opts: { limit?: number; failed?: boolean } = {}) =>
+    request<PushLog>(`/api/settings/push-log?limit=${opts.limit ?? 100}&failed=${opts.failed ? 'true' : 'false'}`),
   updatePipelineSchedule: (hour: number, minute: number) =>
     request<{ hour: number; minute: number }>('/api/settings/preferences/pipeline-schedule', {
       method: 'PUT',

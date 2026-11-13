@@ -12,7 +12,7 @@
  *    (月份读复核结果自带的起止日, 分段改了不用改这里)。
  *
  * 0.35.0: 面板底部「开盘放量推送」= 开关 + 门槛档位,
- *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道跟随全局推送设置。 */
+ *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道 = 系统设置 → 推送通道。 */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, type OppSettings, type RadarPushSettings, type SwingCandidatesStatus, type WatchlistRuleCatalogItem, type WatchlistRuleHistory, type WatchlistRulesPayload } from '@/lib/api'
@@ -184,7 +184,7 @@ export function RadarPushEditor({ cur, enabled, minRvol, onEnabled, onMinRvol }:
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold leading-5 text-foreground">开盘放量推送</div>
-          <div className="text-[11px] leading-4 text-muted">09:51 ET 发布后推送 · 每渠道每日 1 条 · 仅观察</div>
+          <div className="text-[11px] leading-4 text-muted">09:51 ET 发布后推送 · 每日 1 条 · 渠道见系统设置 · 仅观察</div>
         </div>
         <button type="button" role="switch" aria-checked={enabled} aria-label="开盘放量推送" data-radar-push-toggle=""
           onClick={() => onEnabled(!enabled)}

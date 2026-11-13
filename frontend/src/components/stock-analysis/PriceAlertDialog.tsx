@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useInRouterContext } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDown, ArrowUp, Bell, Check, ExternalLink, Loader2, Trash2, X } from 'lucide-react'
 import { toast } from '@/components/Toast'
@@ -13,6 +13,7 @@ import {
 } from '@/lib/price-alerts'
 import { QK } from '@/lib/queryKeys'
 import { usePreferences } from '@/lib/useSharedQueries'
+import { pushChannelText } from '@/lib/pushChannels'
 import { useDialogBackdrop } from '@/lib/useDialogBackdrop'
 
 interface Props {
@@ -65,7 +66,9 @@ export function PriceAlertDialog({
     ? ''
     : buildPriceAlertMessage(name, symbol, initialDirection, initialTargetValue))
   const [messageEdited, setMessageEdited] = useState(false)
-  const [channels, setChannels] = useState<string[]>([])
+  // 推送开关 (渠道统一在系统设置): 有可用渠道时默认推
+  const [pushOn, setPushOn] = useState(false)
+  const inRouter = useInRouterContext()
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const channelsInitialized = useRef(false)
 
@@ -103,12 +106,7 @@ export function PriceAlertDialog({
   useEffect(() => {
     if (channelsInitialized.current || !prefs) return
     channelsInitialized.current = true
-    const configured = new Set<string>()
-    if (prefs.feishu_app_configured || prefs.feishu_webhook_url) configured.add('feishu')
-    if (prefs.wecom_webhook_url) configured.add('wecom')
-    if (prefs.custom_webhook_url) configured.add('custom')
-    if (prefs.email_smtp_config?.host && prefs.email_smtp_config.from_address && prefs.email_smtp_config.to_addresses.length && (!prefs.email_smtp_config.username || prefs.email_smtp_password_set)) configured.add('email')
-    setChannels((prefs.webhook_default_channels ?? []).filter(channel => configured.has(channel)))
+    setPushOn((prefs.push_channels_active ?? []).length > 0)
   }, [prefs])
 
   useEffect(() => {
@@ -155,7 +153,7 @@ export function PriceAlertDialog({
       cooldown_seconds: cooldown,
       severity: 'warn',
       message: message.trim(),
-      webhook_channels: channels,
+      webhook_channels: pushOn ? ['all'] : [],
     }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.monitorRules })
@@ -202,12 +200,6 @@ export function PriceAlertDialog({
   const updateMessage = (value: string) => {
     setMessage(value)
     setMessageEdited(true)
-  }
-
-  const toggleChannel = (channel: string) => {
-    setChannels(current => current.includes(channel)
-      ? current.filter(item => item !== channel)
-      : [...current, channel])
   }
 
   return (
@@ -328,18 +320,14 @@ export function PriceAlertDialog({
                 <label className="inline-flex items-center gap-2 text-xs text-foreground">
                   <input type="checkbox" checked disabled className="h-3.5 w-3.5 accent-sky-500" />站内
                 </label>
-                {([
-                  { key: 'feishu', label: '飞书', configured: !!(prefs?.feishu_app_configured || prefs?.feishu_webhook_url) },
-                  { key: 'wecom', label: '企业微信', configured: !!prefs?.wecom_webhook_url },
-                  { key: 'custom', label: '第三方系统', configured: !!prefs?.custom_webhook_url },
-                  { key: 'email', label: '邮件', configured: !!(prefs?.email_smtp_config?.host && prefs.email_smtp_config.from_address && prefs.email_smtp_config.to_addresses.length && (!prefs.email_smtp_config.username || prefs.email_smtp_password_set)) },
-                ]).map(channel => (
-                  <label key={channel.key} className={`inline-flex items-center gap-2 text-xs ${channel.configured ? 'text-foreground' : 'text-muted'}`}>
-                    <input type="checkbox" checked={channels.includes(channel.key)} disabled={!channel.configured} onChange={() => toggleChannel(channel.key)} className="h-3.5 w-3.5 accent-sky-500" />
-                    {channel.label}
-                    {!channel.configured && <span className="text-[11px]">未配置</span>}
-                  </label>
-                ))}
+                <label className="inline-flex items-center gap-2 text-xs text-foreground">
+                  <input type="checkbox" checked={pushOn} onChange={() => setPushOn(v => !v)} aria-label="外部推送" className="h-3.5 w-3.5 accent-sky-500" />外部推送
+                </label>
+                <span className="text-[11px] text-muted">
+                  {(prefs?.push_channels_active ?? []).length ? pushChannelText(prefs?.push_channels_active ?? []) : '无可用渠道'}
+                  {' · 渠道见'}
+                  {inRouter ? <Link to="/settings?tab=system&highlight=push" className="text-sky-700 dark:text-sky-400 hover:underline">系统设置</Link> : '系统设置'}
+                </span>
               </div>
             </div>
 

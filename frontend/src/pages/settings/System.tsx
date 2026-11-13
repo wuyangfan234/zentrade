@@ -17,8 +17,9 @@ import {
 } from '@/lib/voiceBroadcast'
 import { loadStockExternalTemplate, saveStockExternalTemplate } from '@/lib/stock-external-link'
 import { useUpdateCheck } from '@/lib/updateCheck'
+import { PushChannelsSection, PushLogSection } from './PushSettings'
 
-export function SettingsSystemPanel() {
+export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) {
   const qc = useQueryClient()
   const { data: prefs } = usePreferences()
   const { data: versionData } = useVersion()
@@ -113,7 +114,7 @@ export function SettingsSystemPanel() {
     <>
       <PageHeader
         title="系统设置"
-        subtitle="页面行为 · 通知 · 版本"
+        subtitle="页面行为 · 通知与推送 · 版本"
       />
 
       <section className="rounded-card border border-border bg-surface p-5">
@@ -213,6 +214,10 @@ export function SettingsSystemPanel() {
           </div>
         </div>
       </section>
+
+      {/* 推送通道 + 推送日志 (2026-11-13 从「实时监控」移来: 所有推送渠道统一在这里) */}
+      <PushChannelsSection highlight={highlight} />
+      <PushLogSection />
 
       <section className="rounded-card border border-border bg-surface p-5 mt-6">
         <div className="flex items-center gap-2 mb-4">

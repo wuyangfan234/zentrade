@@ -124,7 +124,7 @@ def test_mining_schedule_setter_rejects_invalid_profile():
 
 
 def test_external_push_channel_whitelists_include_custom_and_email(_isolated):
-    assert preferences.set_webhook_default_channels([
+    assert preferences.set_push_channels([
         "custom", "email", "custom", "unsupported",
     ]) == ["custom", "email"]
 

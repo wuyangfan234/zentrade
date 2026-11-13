@@ -157,16 +157,15 @@ def build() -> dict:
 
     # ── 推送 ──
     try:
-        from app.services import email_adapter, feishu_app
-        push = any((feishu_app.is_configured(), preferences.get_feishu_webhook_url(), preferences.get_wecom_webhook_url(),
-                    preferences.get_custom_webhook_url(), email_adapter.is_configured(preferences.get_email_smtp_config())))
+        from app.services import push_channels
+        push = bool(push_channels.active_channels())
     except Exception:
         push = False
     items.append(_item(
         "notify", "notify", "消息推送", "optional", push, source="已配置" if push else "",
-        purpose="盘前机会板、开仓/平仓、持仓新闻、监控规则触发推送到飞书 / 企业微信 / Webhook / 邮件。",
+        purpose="成交、收盘与盘前机会板、持仓新闻、系统告警、开盘放量、监控规则推送到飞书 / 企业微信 / Webhook / 邮件 (系统设置里统一勾选)。",
         impact="不配：所有提醒只在页面上看，不会主动推送。",
-        where="settings?tab=monitoring&highlight=webhooks"))
+        where="settings?tab=system&highlight=push"))
 
     req_missing = [i["id"] for i in items if i["level"] == "required" and not i["configured"]]
     rec_missing = [i["id"] for i in items if i["level"] == "recommended" and not i["configured"]]

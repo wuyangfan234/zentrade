@@ -653,7 +653,7 @@ class MiningSchedulePrefs(BaseModel):
 @router.get("/preferences")
 def get_preferences() -> dict:
     """返回用户偏好设置。"""
-    from app.services import preferences
+    from app.services import preferences, push_channels
     return {
         "realtime_quotes_enabled": preferences.get_realtime_quotes_enabled(),
         "realtime_allowed": _realtime_allowed(),
@@ -706,8 +706,8 @@ def get_preferences() -> dict:
         "wecom_bot_secret": "",
         "wecom_bot_secret_set": bool(preferences.get_wecom_bot_secret()),
         "wecom_bot_enabled": preferences.get_wecom_bot_enabled(),
-        "webhook_enabled_default": preferences.get_webhook_enabled_default(),
-        "webhook_default_channels": preferences.get_webhook_default_channels(),
+        "push_channels": push_channels.enabled_channels(),
+        "push_channels_active": push_channels.active_channels(),
         "minute_intraday_refresh": preferences.get_minute_intraday_refresh(),
         "minute_intraday_refresh_interval": preferences.get_minute_intraday_refresh_interval(),
         "monitor_ext_fields": preferences.get_monitor_ext_fields(),
@@ -1299,7 +1299,10 @@ def update_feishu_app(req: FeishuAppPrefsIn) -> dict:
     chat_id = (req.chat_id or "").strip()
     if chat_id and not chat_id.startswith("oc_"):
         raise HTTPException(status_code=400, detail="群 ID 需以 oc_ 开头 (在下拉框里选择机器人所在的群)")
+    from app.services import push_channels
+    was = push_channels.channel_configured("feishu")
     saved = preferences.set_feishu_app_chat_id(chat_id)
+    push_channels.note_configured("feishu", was)
     return {"feishu_app_chat_id": saved, "feishu_app_configured": _feishu_app().is_configured()}
 
 
@@ -1356,11 +1359,14 @@ def update_feishu_webhook(req: FeishuWebhookPrefsIn) -> dict:
             detail="Webhook 地址非法, 需为飞书自定义机器人地址 "
                    "(https://open.feishu.cn/open-apis/bot/v2/hook/...)",
         )
+    from app.services import push_channels
+    was = push_channels.channel_configured("feishu")
     saved_url = preferences.set_feishu_webhook_url(url)
     if not saved_url:
         preferences.set_feishu_webhook_secret("")
     elif req.secret is not None:
         preferences.set_feishu_webhook_secret(req.secret.strip())
+    push_channels.note_configured("feishu", was)
     return {"feishu_webhook_url": mask_webhook_url(saved_url), "feishu_webhook_secret": "",
             "feishu_webhook_secret_set": bool(preferences.get_feishu_webhook_secret())}
 
@@ -1385,7 +1391,10 @@ def update_wecom_webhook(req: WecomWebhookPrefsIn) -> dict:
             detail="Webhook 地址非法, 需为企业微信群推送 Webhook 地址 "
                    "(https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=... 或纯 key)",
         )
+    from app.services import push_channels
+    was = push_channels.channel_configured("wecom")
     saved_url = preferences.set_wecom_webhook_url(url)
+    push_channels.note_configured("wecom", was)
     return {"wecom_webhook_url": mask_webhook_url(saved_url)}
 
 
@@ -1403,11 +1412,14 @@ def update_custom_webhook(req: CustomWebhookPrefsIn) -> dict:
     url = resolve_masked_url(req.url, preferences.get_custom_webhook_url())
     if url and not webhook_adapter.is_valid_custom_url(url):
         raise HTTPException(status_code=400, detail="Webhook 地址必须是完整的 HTTP(S) URL")
+    from app.services import push_channels
+    was = push_channels.channel_configured("custom")
     saved_url = preferences.set_custom_webhook_url(url)
     if not saved_url:
         secrets_store.set_custom_webhook_secret("")
     elif req.secret is not None:
         secrets_store.set_custom_webhook_secret(req.secret)
+    push_channels.note_configured("custom", was)
     return {
         "custom_webhook_url": mask_webhook_url(saved_url),
         "custom_webhook_secret_set": bool(secrets_store.get_custom_webhook_secret()),
@@ -1451,6 +1463,8 @@ def update_email_smtp(req: EmailSmtpPrefsIn) -> dict:
         from_address = ""
         recipients = []
 
+    from app.services import push_channels
+    was = push_channels.channel_configured("email")
     config = preferences.set_email_smtp_config({
         "host": host,
         "port": req.port,
@@ -1463,6 +1477,7 @@ def update_email_smtp(req: EmailSmtpPrefsIn) -> dict:
         secrets_store.set_email_smtp_password("")
     elif req.password is not None:
         secrets_store.set_email_smtp_password(req.password)
+    push_channels.note_configured("email", was)
     return {
         "email_smtp_config": config,
         "email_smtp_password_set": bool(secrets_store.get_email_smtp_password()),
@@ -1609,38 +1624,31 @@ def toggle_wecom_bot(req: WecomBotToggleIn, request: Request) -> dict:
     return {"wecom_bot_enabled": enabled, "wecom_bot_status": status}
 
 
-class WebhookEnabledDefaultIn(BaseModel):
-    enabled: bool
+class PushChannelsIn(BaseModel):
+    channels: list[str]  # feishu / wecom / custom / email; empty = push nowhere
 
 
-@router.put("/preferences/webhook-enabled-default")
-def update_webhook_enabled_default(req: WebhookEnabledDefaultIn) -> dict:
-    """新建监控规则时是否默认勾选推送 (老布尔接口, 兼容旧前端)。
+@router.put("/preferences/push-channels")
+def update_push_channels(req: PushChannelsIn) -> dict:
+    """系统设置 → 推送通道: 勾选的渠道接收全部推送 (成交 / 收盘 / 盘前 / 情绪 / 周报 / 新闻 /
+    系统告警 / 对账 / 开盘放量 / 监控规则)。白名单外的值丢弃; 空数组 = 全部不推。"""
+    from app.services import push_channels
 
-    新数据模型为渠道数组 (webhook_default_channels); 此处转译为
-    True→['feishu','wecom'], False→[]。新前端请改用 webhook-default-channels 接口。
-    """
-    from app.services import preferences
-
-    saved = preferences.set_webhook_enabled_default(req.enabled)
-    return {"webhook_enabled_default": saved}
+    saved = push_channels.set_enabled(req.channels)
+    return {"push_channels": saved, "push_channels_active": push_channels.active_channels()}
 
 
-class WebhookDefaultChannelsIn(BaseModel):
-    channels: list[str]  # 多选: feishu / wecom / custom / email; 空数组=不推送
+def _push_data_dir():
+    from app.config import settings as app_settings
+    return app_settings.data_dir
 
 
-@router.put("/preferences/webhook-default-channels")
-def update_webhook_default_channels(req: WebhookDefaultChannelsIn) -> dict:
-    """新建监控规则默认渠道 + 机会页开盘放量提醒渠道 (多选)。
+@router.get("/push-log")
+def get_push_log(limit: int = 100, failed: bool = False) -> dict:
+    """推送日志: 每条推送 (最新在前) + 每个渠道的投递结果。正文是推送原文, 不含任何凭据。"""
+    from app.services import notify_opportunity
 
-    监控规则仅把它作为新建预填, 单条规则仍可独立修改; 开盘放量提醒跟随当前勾选。
-    空数组=默认不推送且开盘放量不入队。白名单外的渠道会被过滤掉。
-    """
-    from app.services import preferences
-
-    saved = preferences.set_webhook_default_channels(req.channels)
-    return {"webhook_default_channels": saved}
+    return notify_opportunity.push_log(_push_data_dir(), limit=limit, only_failed=failed)
 
 
 @router.put("/preferences/quote-interval")

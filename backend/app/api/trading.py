@@ -372,8 +372,10 @@ def system_status(request: Request):
     # 0.35.3: 以「最近一次成功发送之后还有没有失败」判通道 (unresolved_failed); 更早的失败只在摘要里留痕
     _unres = ns.get('unresolved_failed', _nc.get('failed', 0))
     _old_failed = (_nc.get('failed') or 0) - (_unres or 0)
-    add('notifications', '飞书推送', 'ok' if ns.get('configured') and not _unres else 'warn',
-        f"{ns.get('label', '—')} · " + ' · '.join(f"{(ns.get('labels') or {}).get(k, k)} {v}" for k, v in _nc.items())
+    from app.services import push_channels as _pc
+    _act = safe(lambda: _pc.active_channels(), []) or []
+    add('notifications', '外部推送', 'ok' if ns.get('configured') and not _unres else 'warn',
+        f"渠道 {'、'.join(_pc.label(c) for c in _act) or '无'} · {ns.get('label', '—')} · " + ' · '.join(f"{(ns.get('labels') or {}).get(k, k)} {v}" for k, v in _nc.items())
         + (f"（其中 {_old_failed} 条失败早于最近一次成功发送 {_et_epoch(ns.get('last_sent_at'))}，通道已恢复；过期提醒不补发）"
            if _old_failed > 0 and not _unres else ''),
         'data/notifications/outbox.sqlite3')

@@ -26,7 +26,7 @@ ZenTrade 用到的外部数据源、AI 模型和推送渠道，统一按本文�
 | TickFlow | 可选 | `TICKFLOW_API_KEY` | 数据源 → TickFlow | 实时行情用 Alpaca IEX（单一交易所，成交量偏小） |
 | QVeris | 可选 | `QVERIS_API_KEY` | 数据源 → QVeris | 个股弹窗无期权全链、财报预期、电话会；按积分计费，可设每日上限 |
 | Massive / Polygon | 可选 | `MASSIVE_API_KEY` 或 `POLYGON_API_KEY` | — | 证据研究的退市股名单不更新（只影响研究数据，不影响交易） |
-| 推送 | 可选 | `ZENTRADE_FEISHU_APP_ID` / `ZENTRADE_FEISHU_APP_SECRET`（飞书应用机器人） | 实时监控 → 推送渠道（飞书群 Webhook / 企业微信 / 自定义 Webhook / 邮件） | 提醒只在页面显示 |
+| 推送 | 可选 | `ZENTRADE_FEISHU_APP_ID` / `ZENTRADE_FEISHU_APP_SECRET`（飞书应用机器人） | 系统设置 → 推送通道（飞书 / 企业微信 / 自定义 Webhook / 邮件；勾选的渠道接收全部推送）＋ 推送日志 | 提醒只在页面显示 |
 | 访问密码 | 公网必需 | `AUTH_PASSWORD` | 系统设置 → 修改密码 | 仅首次启动生效；之后以页面修改为准 |
 
 免 Key 的公开数据源（Nasdaq 财报日历、CBOE、FRED、ForexFactory、Hyperliquid）无需配置，单个源失败只影响对应卡片。请求统一使用如实标识本项目的 User-Agent（`Mozilla/5.0 (ZenTrade self-hosted)`），不伪装成具体浏览器。部分端点并非官方 API，可用性与使用条款以提供方为准，见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)。
