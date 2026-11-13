@@ -16,6 +16,17 @@ from __future__ import annotations
 from app.services import email_adapter, feishu_app, preferences
 
 CHANNELS = preferences.PUSH_CHANNEL_ORDER
+BRAND = "ZenTrade"
+SCOPE = "成交、收盘与盘前机会板、盘前情绪、周报、持仓新闻、系统告警、对账、开盘放量、监控规则"
+# Settings-page test button: one title for every channel, the channel name as subtitle.
+TEST_TITLE = f"{BRAND} · 推送测试"
+TEST_LABELS = {"feishu_app": "飞书应用机器人", "feishu": "飞书群 Webhook", "wecom": "企业微信",
+               "custom": "第三方系统", "email": "邮件"}
+TEST_HINT_DEFAULT = f"勾选这个渠道后，{SCOPE}都会发到这里。"
+TEST_HINTS = {
+    "feishu_app": f"勾选「飞书」后，{SCOPE}都会经应用机器人发到这个群。",
+    "feishu": "飞书应用机器人未配置时，飞书推送改走这个群 Webhook。",
+}
 LABELS = {"feishu": "飞书", "wecom": "企业微信", "custom": "第三方系统", "email": "邮件"}
 # Push log: outbox key prefix -> what the message is.
 KIND_LABELS = {
@@ -69,3 +80,9 @@ def note_configured(channel: str, was_configured: bool) -> None:
 
 def label(channel: str | None) -> str:
     return LABELS.get(channel or "", channel or "-")
+
+
+def brand_title(title: str) -> str:
+    """Every push title reads "ZenTrade · <what>" (never the upstream product name)."""
+    title = (title or "").strip() or "通知"
+    return title if title.startswith(BRAND) else f"{BRAND} · {title}"

@@ -1555,7 +1555,7 @@ class QuoteService:
                 if not (rule and rule.get("webhook_channels")):
                     continue
                 source = ev.get("source", "")
-                title = SOURCE_LABELS.get(source, source or "通知")
+                title = SOURCE_LABELS.get(source, source or "通知")  # enqueue_monitor_alert adds "ZenTrade · "
                 symbol = ev.get("symbol") or ""
                 name = ev.get("name") or ""
                 message = ev.get("message") or ""
@@ -1602,8 +1602,8 @@ class QuoteService:
                 # 补上触发时的现价/涨跌幅 (日期提醒无行情, 自然为空)
                 body = _body_with_quote(body, ev)
 
-                title = f"TickFlow · {source_label}"
-                notify_adapter.notify(title, body)
+                from app.services import push_channels
+                notify_adapter.notify(push_channels.brand_title(source_label), body)
         except Exception as e:  # noqa: BLE001
             logger.debug("系统通知发送异常 (不影响告警主流程): %s", e)
 

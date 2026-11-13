@@ -129,7 +129,7 @@ def test_monitor_webhook_uses_chinese_title_without_brand(monkeypatch, tmp_path)
         engine,
     )
 
-    assert [payload["title"] for _, payload, _ in queued] == ["放量"]
+    assert [payload["title"] for _, payload, _ in queued] == ["ZenTrade · 放量"]
     assert "TickFlow" not in queued[0][1]["title"]
     assert queued[0][2]["event_type"] == "monitor_alert"
 
@@ -177,5 +177,5 @@ def test_monitor_alert_reaches_custom_webhook_and_email_through_the_queue(monkey
     assert [name for name, _, _ in calls] == ["send_custom", "send_email"]
     assert calls[0][1][3] == "monitor_alert"
     assert calls[0][1][4]["rule_id"] == "r_vd" and calls[0][1][4]["symbol"] == "NVDA"
-    assert calls[0][2] == {"secret": "hook-secret"}
+    assert calls[0][2] == {"secret": "hook-secret", "subtitle": ""}
     assert calls[1][1][:2] == (email_config, "smtp-password")

@@ -26,33 +26,52 @@ logger = logging.getLogger(__name__)
 _SETUP_LABEL = {"breakout": "突破", "pullback": "回踩"}
 
 
-def _send_feishu(payload: dict) -> bool:
+def _send_feishu(payload: dict, **retry) -> bool:
     """应用机器人 (Channel SDK) 优先; 只配了旧群 Webhook 时才走 Webhook。"""
     if feishu_app.is_configured():
         return feishu_app.send_card(payload["title"], payload.get("subtitle", ""), payload["body"])
+    return send_feishu_webhook(payload, **retry)
+
+
+def send_feishu_webhook(payload: dict, **retry) -> bool:
+    """飞书群 Webhook 卡片 (生产回落与设置页「测试」同一格式)。"""
     url = preferences.get_feishu_webhook_url()
     if not url:
         return False
-    return send_feishu_card(url, payload["title"], payload.get("subtitle", ""),
-                            payload["body"], preferences.get_feishu_webhook_secret())
+    return send_feishu_card(url, push_channels.brand_title(payload["title"]), payload.get("subtitle", ""),
+                            payload["body"], preferences.get_feishu_webhook_secret(), **retry)
 
 
-def send_to_channel(payload: dict, channel: str) -> bool:
-    """Deliver one message to one channel with that channel's adapter."""
-    title, body = payload["title"], payload["body"]
+EMAIL_FOOTER = "\n\n——\nZenTrade 推送 · 渠道在「设置 → 系统设置 → 推送通道」管理"
+
+
+def email_subject(title: str, subtitle: str = "") -> str:
+    return f"{title} · {subtitle}" if subtitle else title
+
+
+def send_to_channel(payload: dict, channel: str, *, attempts: int | None = None) -> bool:
+    """Deliver one message to one channel with that channel's adapter.
+
+    Same format for production pushes and the settings-page test button (attempts=1 there).
+    Every channel carries the title ("ZenTrade · ...") and the subtitle (usually the date).
+    """
+    title, body = push_channels.brand_title(payload["title"]), payload["body"]
+    subtitle = str(payload.get("subtitle") or "")
+    retry = {} if attempts is None else {"max_attempts": attempts}
     if channel == "feishu":
-        return _send_feishu(payload)
+        return _send_feishu({**payload, "title": title}, **retry)
     if channel == "wecom":
-        return webhook_adapter.send_wecom(preferences.get_wecom_webhook_url(), title, body)
+        return webhook_adapter.send_wecom(preferences.get_wecom_webhook_url(), title, body, subtitle)
     if channel == "custom":
         return webhook_adapter.send_custom(
             preferences.get_custom_webhook_url(), title, body,
             payload.get("event_type") or "notification", payload.get("data") or {},
-            secret=secrets_store.get_custom_webhook_secret(),
+            secret=secrets_store.get_custom_webhook_secret(), subtitle=subtitle, **retry,
         )
     if channel == "email":
         return email_adapter.send_email(
-            preferences.get_email_smtp_config(), secrets_store.get_email_smtp_password(), title, body,
+            preferences.get_email_smtp_config(), secrets_store.get_email_smtp_password(),
+            email_subject(title, subtitle), webhook_adapter.plain_text(body) + EMAIL_FOOTER, **retry,
         )
     return False
 
@@ -114,7 +133,7 @@ def enqueue_monitor_alert(data_dir: Path, event: dict, title: str, body: str) ->
         json.dumps(_json_safe(event), sort_keys=True).encode()).hexdigest()[:16]
     key = f"monitor:{event.get('rule_id', '')}:{event.get('symbol') or ''}:{stamp}"
     data = {k: _json_safe(event.get(k)) for k in _MONITOR_FIELDS if k in event}
-    return enqueue_global(data_dir, key, {"title": title, "subtitle": "", "body": body},
+    return enqueue_global(data_dir, key, {"title": push_channels.brand_title(title), "subtitle": "", "body": body},
                           event_type="monitor_alert", data=data)
 
 

@@ -476,7 +476,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <input
                       value={customDraft}
                       onChange={e => { setCustomDraft(e.target.value); if (!testCustom.isPending) testCustom.reset() }}
-                      placeholder="https://example.com/webhooks/tickflow"
+                      placeholder="https://example.com/webhooks/zentrade"
                       className="h-9 w-full rounded-btn border border-border bg-base px-3 text-xs font-mono text-foreground focus:outline-none focus:border-accent/50"
                     />
                   </label>
@@ -505,8 +505,8 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   <details className="mt-3 text-[11px] text-muted">
                     <summary className="cursor-pointer hover:text-secondary">请求格式</summary>
                     <p className="mt-1.5 leading-relaxed">
-                      POST JSON 包含 event、timestamp、title、body、data。配置密钥后会附带
-                      X-TickFlow-Timestamp 和 X-TickFlow-Signature 请求头。
+                      POST JSON 包含 event、timestamp、title、subtitle、body、data；User-Agent 为 ZenTrade-Webhook/1.0。
+                      配置密钥后会附带 X-ZenTrade-Timestamp 和 X-ZenTrade-Signature（sha256=HMAC 十六进制）请求头。
                     </p>
                   </details>
                 </div>

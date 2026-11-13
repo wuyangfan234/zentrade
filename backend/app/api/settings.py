@@ -1492,14 +1492,19 @@ class WebhookTestIn(BaseModel):
 def test_webhook(req: WebhookTestIn) -> dict:
     """向已保存的 Webhook 地址发送一条测试消息，验证配置是否正确。
 
-    只测试已保存的配置（与生产推送同源），不测试未保存草稿。
+    只测试已保存的配置，不测试未保存草稿；消息格式与生产推送同一个发送函数
+    (notify_opportunity.send_to_channel / send_feishu_webhook)，标题「ZenTrade · 推送测试」。
     未配置 / 地址非法 / 发送失败均返回 HTTP 200 + {ok: False}，
     前端统一读 detail 渲染绿/红，不抛 400。
     """
-    from app.services import preferences, webhook_adapter
+    from app.services import notify_opportunity, preferences, push_channels, webhook_adapter
 
-    title = "TickFlow Stock Panel 推送测试"
-    body = "如果你看到这条消息，说明推送配置正确 🎉"
+    label = push_channels.TEST_LABELS[req.channel]
+    payload = {
+        "title": push_channels.TEST_TITLE, "subtitle": label,
+        "body": f"如果你看到这条消息，说明「{label}」推送配置正确 🎉\n{push_channels.TEST_HINTS.get(req.channel, push_channels.TEST_HINT_DEFAULT)}",
+        "event_type": "test", "data": {},
+    }
 
     if req.channel == "feishu_app":
         app = _feishu_app()
@@ -1507,7 +1512,7 @@ def test_webhook(req: WebhookTestIn) -> dict:
             return {"ok": False, "detail": "服务端未配置飞书应用凭据"}
         if not app.is_configured():
             return {"ok": False, "detail": "尚未选择推送目标群，请先保存"}
-        ok = app.send_card("ZenTrade · 推送测试", "", "如果你看到这条消息，说明飞书应用机器人推送配置正确 🎉")
+        ok = app.send_card(payload["title"], payload["subtitle"], payload["body"])
         return {"ok": bool(ok), "detail": "发送成功" if ok else "发送失败，请检查机器人是否仍在该群、应用是否有发消息权限"}
     if req.channel == "feishu":
         url = preferences.get_feishu_webhook_url()
@@ -1515,43 +1520,29 @@ def test_webhook(req: WebhookTestIn) -> dict:
             return {"ok": False, "detail": "尚未配置飞书 Webhook，请先保存"}
         if not webhook_adapter.is_valid_feishu_url(url):
             return {"ok": False, "detail": "已保存的飞书 Webhook 地址非法，请重新保存"}
-        secret = preferences.get_feishu_webhook_secret()
-        # 诊断用途单次尝试: 失败即返回, 不等生产退避重试 (~17s)
-        ok = webhook_adapter.send_feishu(url, title, body, secret, max_attempts=1)
+        # 与生产回落同一张卡片; 诊断用途单次尝试: 失败即返回, 不等生产退避重试 (~17s)
+        ok = notify_opportunity.send_feishu_webhook(payload, max_attempts=1)
     elif req.channel == "wecom":
         url = preferences.get_wecom_webhook_url()
         if not url:
             return {"ok": False, "detail": "尚未配置企业微信 Webhook，请先保存"}
         if not webhook_adapter.is_valid_wecom_url(url):
             return {"ok": False, "detail": "已保存的企业微信 Webhook 地址非法，请重新保存"}
-        ok = webhook_adapter.send_wecom(url, title, body)
+        ok = notify_opportunity.send_to_channel(payload, "wecom", attempts=1)
     elif req.channel == "custom":
         url = preferences.get_custom_webhook_url()
         if not url:
             return {"ok": False, "detail": "尚未配置第三方 Webhook, 请先保存"}
         if not webhook_adapter.is_valid_custom_url(url):
             return {"ok": False, "detail": "已保存的第三方 Webhook 地址非法, 请重新保存"}
-        ok = webhook_adapter.send_custom(
-            url,
-            title,
-            body,
-            event_type="test",
-            secret=secrets_store.get_custom_webhook_secret(),
-            max_attempts=1,
-        )
+        ok = notify_opportunity.send_to_channel(payload, "custom", attempts=1)
     else:  # email
         from app.services import email_adapter
 
         config = preferences.get_email_smtp_config()
         if not email_adapter.is_configured(config):
             return {"ok": False, "detail": "尚未完整配置邮件 SMTP, 请先保存"}
-        ok = email_adapter.send_email(
-            config,
-            secrets_store.get_email_smtp_password(),
-            title,
-            body,
-            max_attempts=1,
-        )
+        ok = notify_opportunity.send_to_channel(payload, "email", attempts=1)
 
     if ok:
         return {"ok": True, "detail": "测试消息已发送, 请检查对应接收端"}

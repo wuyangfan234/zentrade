@@ -22,9 +22,10 @@ def test_feishu_sends_saved_url_and_secret(monkeypatch):
     calls = {}
     monkeypatch.setattr("app.services.preferences.get_feishu_webhook_url", lambda: FEISHU_URL)
     monkeypatch.setattr("app.services.preferences.get_feishu_webhook_secret", lambda: "my-secret")
+    # 与生产回落同一张卡片 (notify_opportunity.send_feishu_webhook -> send_feishu_card)
     monkeypatch.setattr(
-        "app.services.webhook_adapter.send_feishu",
-        lambda url, title, body, secret="", max_attempts=3: calls.update(
+        "app.services.notify_opportunity.send_feishu_card",
+        lambda url, title, subtitle, body, secret="", max_attempts=3: calls.update(
             url=url, title=title, body=body, secret=secret, max_attempts=max_attempts,
         ) or True,
     )
@@ -36,14 +37,14 @@ def test_feishu_sends_saved_url_and_secret(monkeypatch):
     assert calls["secret"] == "my-secret"
     # 诊断路径单次尝试, 不等生产退避重试
     assert calls["max_attempts"] == 1
-    assert calls["title"] == "TickFlow Stock Panel 推送测试"
+    assert calls["title"] == "ZenTrade · 推送测试"
     assert "推送配置正确" in calls["body"]
 
 
 def test_feishu_send_failure_returns_ok_false(monkeypatch):
     monkeypatch.setattr("app.services.preferences.get_feishu_webhook_url", lambda: FEISHU_URL)
     monkeypatch.setattr("app.services.preferences.get_feishu_webhook_secret", lambda: "")
-    monkeypatch.setattr("app.services.webhook_adapter.send_feishu", lambda *a, **k: False)
+    monkeypatch.setattr("app.services.notify_opportunity.send_feishu_card", lambda *a, **k: False)
 
     result = run_webhook_test(WebhookTestIn(channel="feishu"))
 
@@ -78,14 +79,14 @@ def test_wecom_sends_saved_url(monkeypatch):
     monkeypatch.setattr("app.services.preferences.get_wecom_webhook_url", lambda: WECOM_URL)
     monkeypatch.setattr(
         "app.services.webhook_adapter.send_wecom",
-        lambda url, title, body: calls.update(url=url, title=title, body=body) or True,
+        lambda url, title, body, subtitle="": calls.update(url=url, title=title, body=body) or True,
     )
 
     result = run_webhook_test(WebhookTestIn(channel="wecom"))
 
     assert result["ok"] is True
     assert calls["url"] == WECOM_URL
-    assert calls["title"] == "TickFlow Stock Panel 推送测试"
+    assert calls["title"] == "ZenTrade · 推送测试"
     assert "推送配置正确" in calls["body"]
 
 
@@ -98,7 +99,7 @@ def test_custom_webhook_sends_saved_url_and_secret(monkeypatch):
     monkeypatch.setattr("app.secrets_store.get_custom_webhook_secret", lambda: "secret")
     monkeypatch.setattr(
         "app.services.webhook_adapter.send_custom",
-        lambda url, title, body, event_type, data=None, secret="", max_attempts=3:
+        lambda url, title, body, event_type, data=None, secret="", max_attempts=3, subtitle="":
             calls.update(
                 url=url,
                 event_type=event_type,

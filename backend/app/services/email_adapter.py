@@ -10,11 +10,12 @@ import smtplib
 import time
 from contextlib import suppress
 from email.message import EmailMessage
-from email.utils import parseaddr
+from email.utils import formataddr, parseaddr
 
 logger = logging.getLogger(__name__)
 
 SECURITY_MODES = {"ssl", "starttls", "none"}
+SENDER_NAME = "ZenTrade"  # From 显示名: 收件箱里显示为「ZenTrade」而不是裸地址
 _MAX_ATTEMPTS = 2
 
 
@@ -65,8 +66,8 @@ def send_email(
         return False
 
     message = EmailMessage()
-    message["Subject"] = str(subject or "TickFlow 通知")
-    message["From"] = sender
+    message["Subject"] = str(subject or f"{SENDER_NAME} 通知")
+    message["From"] = formataddr((SENDER_NAME, sender))
     message["To"] = ", ".join(recipients)
     message.set_content(str(body or ""))
 
