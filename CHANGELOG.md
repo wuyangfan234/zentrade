@@ -11,6 +11,7 @@
 - 第三方 Webhook：User-Agent 改为 `ZenTrade-Webhook/1.0`，签名请求头改为 `X-ZenTrade-Timestamp` / `X-ZenTrade-Signature`（HMAC-SHA256 算法不变），JSON 新增 `subtitle` 字段（通常是日期）。**已对接旧请求头的接收端需要同步改名。**
 - 邮件：发件人显示为「ZenTrade」，主题带日期（如「ZenTrade · 收盘 · 2026-11-12」），正文去掉 markdown 记号并加 ZenTrade 落款；未传主题时默认「ZenTrade 通知」。
 - 企业微信：标题下加日期，正文去掉 markdown 记号；原来按 500 个字符截断，现在按企业微信文本上限 2048 字节截断，超长时提示到「推送日志」看全文。仍用文本消息，保证绑定的个人微信能显示。
+- 第三方 Webhook 填 Server酱 地址（`sctapi.ftqq.com` / 旧 `sc.ftqq.com` / Server酱³ `*.push.ft07.com`）时，自动按 Server酱 格式发送：`title`（单行、不超过 32 字，放得下就带日期）+ `desp`（Markdown 正文，每行一段）。原来按通用 JSON 发，Server酱 只认 `title`，正文全丢。成功按返回 JSON 的 `code == 0` 判断：额度用完、SendKey 错误时 Server酱 也回 HTTP 200，原来会被记成成功，现在记失败且不重试（失败调用同样计额度）。设置页该行显示「Server酱」，请求格式说明里注明免费版每天 5 条。
 
 ### 变更：推送日志默认折叠（只改显示）
 

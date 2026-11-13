@@ -345,6 +345,76 @@ def send_wecom(webhook_url: str, title: str, body: str, subtitle: str = "") -> b
 
 
 # ================================================================
+# Server酱 (第三方 Webhook 地址是 Server酱 时自动按它的格式发)
+# ================================================================
+#
+# Turbo: https://sctapi.ftqq.com/<SendKey>.send (旧域名 sc.ftqq.com 兼容)
+# Server酱³: https://<uid>.push.ft07.com/send/<SendKey>.send
+# 只认 title (必填, 单行, <= 32 字) 和 desp (Markdown 正文); 成功 = 返回 JSON 的 code == 0,
+# 不是 HTTP 200 (额度用完 / key 错也是 HTTP 200 + code != 0)。业务错误不重试: 失败调用也计额度。
+
+_SERVERCHAN_TITLE_MAX = 32
+_SERVERCHAN_DESP_MAX = 30000
+
+
+def serverchan_kind(url: str) -> str | None:
+    """Server酱地址 -> "turbo" / "sc3"; 其他地址 -> None。按主机名精确判断。"""
+    try:
+        host = (urlparse((url or "").strip()).hostname or "").lower()
+    except ValueError:
+        return None
+    if host in ("sctapi.ftqq.com", "sc.ftqq.com"):
+        return "turbo"
+    if host.endswith(".push.ft07.com"):
+        return "sc3"
+    return None
+
+
+def send_serverchan(url: str, title: str, body: str, subtitle: str = "",
+                    max_attempts: int = 3) -> bool:
+    """按 Server酱 格式推送: 标题 (能放下就带上副标题/日期) + Markdown 正文, 每行一段。"""
+    head = " ".join((title or "").split()) or "ZenTrade 通知"
+    subtitle = " ".join((subtitle or "").split())
+    in_title = bool(subtitle) and len(f"{head} · {subtitle}") <= _SERVERCHAN_TITLE_MAX
+    short_title = (f"{head} · {subtitle}" if in_title else head)[:_SERVERCHAN_TITLE_MAX]
+    paragraphs = [line.rstrip() for line in (body or "").splitlines() if line.strip()]
+    if subtitle and not in_title:
+        paragraphs.insert(0, f"**{subtitle}**")
+    desp = "\n\n".join(paragraphs)[:_SERVERCHAN_DESP_MAX]
+    data = {"title": short_title, "desp": desp}
+    headers = {"User-Agent": CUSTOM_USER_AGENT}
+
+    import httpx
+
+    last_err = ""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = httpx.post(url, data=data, headers=headers, timeout=10.0)
+            if response.status_code == 200:
+                try:
+                    reply = response.json()
+                except ValueError:
+                    reply = None
+                code = reply.get("code") if isinstance(reply, dict) else None
+                if code in (0, "0"):
+                    return True
+                detail = reply.get("message") if isinstance(reply, dict) else None
+                message = str(detail or response.text)[:120]
+                logger.warning("Server酱 推送失败(不重试): code=%s %s", code, message)
+                return False
+            last_err = f"HTTP {response.status_code}"
+            if response.status_code < 500:
+                logger.warning("Server酱 推送失败(不重试): %s", last_err)
+                return False
+        except Exception as exc:  # Network failures are retryable and must not escape.
+            last_err = type(exc).__name__  # 地址里含 SendKey, 不记异常正文
+        if attempt < max_attempts:
+            time.sleep(min(2 ** (attempt - 1), 3))
+    logger.warning("Server酱 推送最终失败(已尝试 %d 次): %s", max_attempts, last_err)
+    return False
+
+
+# ================================================================
 # 通用第三方 JSON Webhook
 # ================================================================
 
@@ -373,12 +443,15 @@ def send_custom(
     """POST a stable JSON envelope to a user-configured third-party system.
 
     Envelope: event / timestamp / title / subtitle / body / data.
+    A Server酱 address (see ``serverchan_kind``) gets Server酱's own title + desp format instead.
     When ``secret`` is configured the raw request body is signed with HMAC-SHA256.
     The receiver can validate ``X-ZenTrade-Timestamp`` and
     ``X-ZenTrade-Signature: sha256=<hex>`` before accepting the event.
     """
     if not is_valid_custom_url(webhook_url):
         return False
+    if serverchan_kind(webhook_url):
+        return send_serverchan(webhook_url, title, body, subtitle, max_attempts)
 
     timestamp = str(int(time.time()))
     payload = {

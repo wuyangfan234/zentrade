@@ -1500,6 +1500,8 @@ def test_webhook(req: WebhookTestIn) -> dict:
     from app.services import notify_opportunity, preferences, push_channels, webhook_adapter
 
     label = push_channels.TEST_LABELS[req.channel]
+    if req.channel == "custom" and webhook_adapter.serverchan_kind(preferences.get_custom_webhook_url()):
+        label = "Server酱"
     payload = {
         "title": push_channels.TEST_TITLE, "subtitle": label,
         "body": f"如果你看到这条消息，说明「{label}」推送配置正确 🎉\n{push_channels.TEST_HINTS.get(req.channel, push_channels.TEST_HINT_DEFAULT)}",

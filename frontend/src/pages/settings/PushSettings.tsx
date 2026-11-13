@@ -14,7 +14,7 @@ import { api, type EmailSmtpConfig, type PushChannel, type PushLogItem } from '@
 import { QK } from '@/lib/queryKeys'
 import { AnchorWrap } from '@/lib/useCardFlash'
 import { toast } from '@/components/Toast'
-import { pushChannelText } from '@/lib/pushChannels'
+import { isServerChanUrl, pushChannelText } from '@/lib/pushChannels'
 import { FeishuAppPanel } from './FeishuAppPanel'
 
 const EMPTY_EMAIL_SMTP: EmailSmtpConfig = {
@@ -462,7 +462,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   className="h-3 w-3 accent-accent cursor-pointer"
                 />
                 <span className="text-[11px] font-medium text-foreground">第三方系统</span>
-                <span className="text-[11px] text-muted">JSON Webhook</span>
+                <span className="text-[11px] text-muted" data-custom-kind>{isServerChanUrl(customWebhookUrl) ? 'Server酱' : 'JSON Webhook'}</span>
                 <span className={`ml-auto text-[11px] ${customWebhookUrl ? 'text-emerald-700 dark:text-emerald-500' : 'text-warning'}`}>
                   {customWebhookUrl ? '已配置' : '未配置'}
                 </span>
@@ -507,6 +507,10 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <p className="mt-1.5 leading-relaxed">
                       POST JSON 包含 event、timestamp、title、subtitle、body、data；User-Agent 为 ZenTrade-Webhook/1.0。
                       配置密钥后会附带 X-ZenTrade-Timestamp 和 X-ZenTrade-Signature（sha256=HMAC 十六进制）请求头。
+                    </p>
+                    <p className="mt-1.5 leading-relaxed">
+                      填 Server酱 地址（https://sctapi.ftqq.com/&lt;SendKey&gt;.send，或 Server酱³ 的 push.ft07.com 地址）时，
+                      自动按 Server酱 格式发送：标题 + Markdown 正文，返回 code 不为 0 记失败。Server酱 免费版每天 5 条，超出的推送会失败。
                     </p>
                   </details>
                 </div>
