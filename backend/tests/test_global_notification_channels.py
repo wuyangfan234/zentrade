@@ -35,11 +35,12 @@ def test_global_delivery_uses_existing_channel_adapters(monkeypatch):
     assert notify.send_to_channel(payload, "custom")
     assert notify.send_to_channel(payload, "email")
 
-    assert calls[0] == ("wecom", ("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x", "标题", "正文"))
+    # every channel gets the "ZenTrade · " title (2026-11-13); email gets plain text + footer
+    assert calls[0] == ("wecom", ("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=x", "ZenTrade · 标题", "正文", ""))
     assert calls[1][0] == "custom"
-    assert calls[1][1] == ("https://example.com/hook", "标题", "正文", "open_radar", {"symbols": ["NVDA"]})
-    assert calls[1][2] == {"secret": "custom-secret"}
-    assert calls[2] == ("email", (email_config, "email-secret", "标题", "正文"))
+    assert calls[1][1] == ("https://example.com/hook", "ZenTrade · 标题", "正文", "open_radar", {"symbols": ["NVDA"]})
+    assert calls[1][2] == {"secret": "custom-secret", "subtitle": ""}
+    assert calls[2] == ("email", (email_config, "email-secret", "ZenTrade · 标题", "正文" + notify.EMAIL_FOOTER))
 
 
 def test_targets_follow_ticked_and_configured_channels(monkeypatch):

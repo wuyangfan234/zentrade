@@ -45,7 +45,7 @@ def wire(monkeypatch):
         calls.append(("feishu", title))
         return result["feishu"]
 
-    def wecom(url, title, body):
+    def wecom(url, title, body, subtitle=""):
         calls.append(("wecom", title))
         return result["wecom"]
 

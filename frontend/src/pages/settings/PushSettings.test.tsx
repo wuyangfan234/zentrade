@@ -21,6 +21,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
 vi.mock('@/lib/useSharedQueries', () => ({ usePreferences: () => ({ data: mocks.prefs }) }))
 
 import { PushChannelsSection, PushLogSection } from './PushSettings'
+import { isServerChanUrl } from '@/lib/pushChannels'
 
 let qc: QueryClient
 let root: Root
@@ -71,6 +72,15 @@ it('one tick per channel decides where every push goes, and says where pushes go
   await flush()
   expect(mocks.updatePushChannels).toHaveBeenCalledWith(['feishu', 'wecom'])
   expect(host.textContent).toContain('只收消息，不参与推送')
+})
+
+it('labels a Server酱 address as Server酱 in the third-party row', async () => {
+  mocks.prefs = { ...mocks.prefs, custom_webhook_url: 'https://sctapi.ftqq.com/••••abcd' }
+  await render(<PushChannelsSection />)
+  expect(host.querySelector('[data-custom-kind]')?.textContent).toBe('Server酱')
+  expect(isServerChanUrl('https://123.push.ft07.com/send/x.send')).toBe(true)
+  expect(isServerChanUrl('https://ftqq.com.evil.example/x')).toBe(false)
+  expect(isServerChanUrl('https://example.com/hook')).toBe(false)
 })
 
 it('warns when no channel can send', async () => {

@@ -14,7 +14,7 @@ import { api, type EmailSmtpConfig, type PushChannel, type PushLogItem } from '@
 import { QK } from '@/lib/queryKeys'
 import { AnchorWrap } from '@/lib/useCardFlash'
 import { toast } from '@/components/Toast'
-import { pushChannelText } from '@/lib/pushChannels'
+import { isServerChanUrl, pushChannelText } from '@/lib/pushChannels'
 import { FeishuAppPanel } from './FeishuAppPanel'
 
 const EMPTY_EMAIL_SMTP: EmailSmtpConfig = {
@@ -462,7 +462,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   className="h-3 w-3 accent-accent cursor-pointer"
                 />
                 <span className="text-[11px] font-medium text-foreground">第三方系统</span>
-                <span className="text-[11px] text-muted">JSON Webhook</span>
+                <span className="text-[11px] text-muted" data-custom-kind>{isServerChanUrl(customWebhookUrl) ? 'Server酱' : 'JSON Webhook'}</span>
                 <span className={`ml-auto text-[11px] ${customWebhookUrl ? 'text-emerald-700 dark:text-emerald-500' : 'text-warning'}`}>
                   {customWebhookUrl ? '已配置' : '未配置'}
                 </span>
@@ -476,7 +476,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <input
                       value={customDraft}
                       onChange={e => { setCustomDraft(e.target.value); if (!testCustom.isPending) testCustom.reset() }}
-                      placeholder="https://example.com/webhooks/tickflow"
+                      placeholder="https://example.com/webhooks/zentrade"
                       className="h-9 w-full rounded-btn border border-border bg-base px-3 text-xs font-mono text-foreground focus:outline-none focus:border-accent/50"
                     />
                   </label>
@@ -505,8 +505,12 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   <details className="mt-3 text-[11px] text-muted">
                     <summary className="cursor-pointer hover:text-secondary">请求格式</summary>
                     <p className="mt-1.5 leading-relaxed">
-                      POST JSON 包含 event、timestamp、title、body、data。配置密钥后会附带
-                      X-TickFlow-Timestamp 和 X-TickFlow-Signature 请求头。
+                      POST JSON 包含 event、timestamp、title、subtitle、body、data；User-Agent 为 ZenTrade-Webhook/1.0。
+                      配置密钥后会附带 X-ZenTrade-Timestamp 和 X-ZenTrade-Signature（sha256=HMAC 十六进制）请求头。
+                    </p>
+                    <p className="mt-1.5 leading-relaxed">
+                      填 Server酱 地址（https://sctapi.ftqq.com/&lt;SendKey&gt;.send，或 Server酱³ 的 push.ft07.com 地址）时，
+                      自动按 Server酱 格式发送：标题 + Markdown 正文，返回 code 不为 0 记失败。Server酱 免费版每天 5 条，超出的推送会失败。
                     </p>
                   </details>
                 </div>

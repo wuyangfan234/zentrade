@@ -35,12 +35,14 @@ def test_custom_webhook_posts_stable_signed_json(monkeypatch):
         "event": "monitor_alert",
         "timestamp": 1_700_000_000,
         "title": "价格预警",
+        "subtitle": "",
         "body": "JPM 触发",
         "data": {"symbol": "JPM"},
     }
     expected = hmac.new(b"shared-secret", captured["content"], hashlib.sha256).hexdigest()
-    assert captured["headers"]["X-TickFlow-Signature"] == f"sha256={expected}"
-    assert captured["headers"]["X-TickFlow-Timestamp"] == "1700000000"
+    assert captured["headers"]["X-ZenTrade-Signature"] == f"sha256={expected}"
+    assert captured["headers"]["X-ZenTrade-Timestamp"] == "1700000000"
+    assert captured["headers"]["User-Agent"] == "ZenTrade-Webhook/1.0"
 
 
 def test_custom_webhook_rejects_non_http_urls(monkeypatch):
