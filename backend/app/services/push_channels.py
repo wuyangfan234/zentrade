@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001
 """Push channels, one place for every push (2026-11-13: unify all channels in system settings).
 
 One selection in settings > system > push decides where *every* push goes: paper trades,

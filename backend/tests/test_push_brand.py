@@ -13,7 +13,14 @@ from types import SimpleNamespace
 import pytest
 
 from app import secrets_store
-from app.services import email_adapter, feishu_app, notify_adapter, preferences, push_channels, webhook_adapter
+from app.services import (
+    email_adapter,
+    feishu_app,
+    notify_adapter,
+    preferences,
+    push_channels,
+    webhook_adapter,
+)
 from app.services import notify_opportunity as notify
 
 UPSTREAM = ("tickflow", "stock panel")
@@ -47,7 +54,7 @@ def wire(tmp_path, monkeypatch):
         def json(self):
             return {"code": 0, "errcode": 0}
 
-    def fake_post(url, json=None, content=None, headers=None, timeout=None):  # noqa: A002
+    def fake_post(url, json=None, content=None, headers=None, timeout=None):
         body = json if json is not None else __import__("json").loads(content)
         host = url.split("/")[2]
         channel = {"open.feishu.cn": "feishu_webhook", "qyapi.weixin.qq.com": "wecom"}.get(host, "custom")

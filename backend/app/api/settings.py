@@ -1492,8 +1492,8 @@ class WebhookTestIn(BaseModel):
 def test_webhook(req: WebhookTestIn) -> dict:
     """向已保存的 Webhook 地址发送一条测试消息，验证配置是否正确。
 
-    只测试已保存的配置，不测试未保存草稿；消息格式与生产推送同一个发送函数
-    (notify_opportunity.send_to_channel / send_feishu_webhook)，标题「ZenTrade · 推送测试」。
+    只测试已保存的配置, 不测试未保存草稿; 消息格式与生产推送同一个发送函数
+    (notify_opportunity.send_to_channel / send_feishu_webhook), 标题「ZenTrade · 推送测试」。
     未配置 / 地址非法 / 发送失败均返回 HTTP 200 + {ok: False}，
     前端统一读 detail 渲染绿/红，不抛 400。
     """
