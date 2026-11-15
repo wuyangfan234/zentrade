@@ -55,6 +55,11 @@ it('主题压力: 一行一个主题; 合计写计划止损与整组跌幅两种
   const meta = host.querySelector('[data-theme-meta]')!
   expect(meta.textContent).toBe('持仓 6 · 名义 54.9% · 计划止损 $2,546（2.41%） · 全部跌 20% −$11,583（−10.98%）')
   expect(meta.getAttribute('title')).toBe('核心 31 只 · 覆盖过半 · 不算主题')
+  // 只有挂单、没有持仓的主题: 持仓三列写「—」, 只给挂单全成交后
+  const pendOnly = { ...THEMES.rows[0], theme: '医药', symbols: [], count: 0, notional: 0, notional_pct: 0, stop_risk: 0, stress_loss: 0, stress_pct_nav: 0,
+    pending: ['LLY'], after_fill_loss: 3098, after_fill_pct_nav: 2.94 }
+  await act(async () => { root.render(<ThemeBar t={{ ...THEMES, rows: [pendOnly] }} />) })
+  expect([...host.querySelectorAll('[data-theme-row="医药"] td')].map((td) => td.textContent)).toEqual(['医药', '0', '—', '—', '—', '−$3,098 · −2.94%'])
   await act(async () => { root.render(<ThemeBar t={{ ...THEMES, positions: 0, rows: [] }} />) })
   expect(host.querySelector('[data-theme-meta]')!.textContent).toBe('暂无持仓')
   expect(host.querySelector('table')).toBeNull()

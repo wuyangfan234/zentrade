@@ -22,6 +22,7 @@ COOLDOWN_DAYS = 90
 MIN_WEEKLY_REPEATS = 3
 ENFORCED_FROM = date(2026, 11, 15)      # 冷却从上线起才生效: 之前的运行没有被冷却挡过, 照常计入“最后一次出现”
 OK_STATUSES = ("succeeded", "succeeded_with_budget_exhausted")
+RUNS_LIMIT = 200                        # MiningRunStore.list_runs 的上限 (超过直接报错, 11-16 线上实测)
 _CACHE: dict[str, tuple[tuple, list[dict]]] = {}
 
 
@@ -56,7 +57,7 @@ def collect(data_dir: Path) -> list[dict]:
 
     from app.services.mining_jobs import MiningRunStore
     store = MiningRunStore(Path(data_dir))
-    runs = [r for r in store.list_runs(limit=500) if r.get("status") in OK_STATUSES]
+    runs = [r for r in store.list_runs(limit=RUNS_LIMIT) if r.get("status") in OK_STATUSES]
     sig_parts = []
     for r in runs:
         p = store.artifact_path(str(r["run_id"]), "candidates")

@@ -40,9 +40,9 @@ export function ThemeBar({ t }: { t: ThemeExposure }) {
                 <tr key={r.theme} data-theme-row={r.theme} className="h-8 border-t border-border/70">
                   <td className="whitespace-nowrap px-3 text-left font-semibold text-foreground" title={[r.symbols.join(' '), r.pending.length ? `挂单 ${r.pending.join(' ')}` : ''].filter(Boolean).join(' · ')}>{r.theme}</td>
                   <td className="px-3 text-right text-secondary" title={r.symbols.join(' ')}>{r.count}</td>
-                  <td className="px-3 text-right text-secondary">{pc(r.notional_pct)}</td>
-                  <td className="px-3 text-right text-secondary">{usd0(r.stop_risk)}</td>
-                  <td className="whitespace-nowrap px-3 text-right font-semibold text-foreground">{`${loss(r.stress_loss)} · ${lossPct(r.stress_pct_nav)}`}</td>
+                  <td className="px-3 text-right text-secondary">{r.count ? pc(r.notional_pct) : '—'}</td>
+                  <td className="px-3 text-right text-secondary">{r.count ? usd0(r.stop_risk) : '—'}</td>
+                  <td className={`whitespace-nowrap px-3 text-right ${r.count ? 'font-semibold text-foreground' : 'text-muted'}`}>{r.count ? `${loss(r.stress_loss)} · ${lossPct(r.stress_pct_nav)}` : '—'}</td>
                   <td className="whitespace-nowrap px-3 text-right text-secondary" title={r.pending.length ? `挂单 ${r.pending.join(' ')}` : '无挂单'}>
                     {r.pending.length ? `${loss(r.after_fill_loss)} · ${lossPct(r.after_fill_pct_nav)}` : '—'}
                   </td>

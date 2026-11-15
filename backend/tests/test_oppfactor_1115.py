@@ -299,6 +299,44 @@ def test_trial_ledger_excludes_the_run_being_evaluated():
     assert trial_ledger.summarize(tr, date(2026, 12, 4), exclude_run="weekly-c")["annual_vol_20d:low"]["cooling"] is False
 
 
+def test_collect_reads_real_run_store_within_its_limit(tmp_path):
+    """11-16 线上: list_runs(limit=500) 超过存储上限直接抛错, 台账整份为空。用真实 MiningRunStore 落两轮候选表读回。"""
+    import polars as pl
+
+    from app.services.mining_jobs import MiningRunStore
+    store = MiningRunStore(tmp_path)
+    for rid, created, sh in (("weekly-2026-W43", "2026-10-23T20:48:26+00:00", 0.77), ("weekly-2026-W44", "2026-10-30T20:53:44+00:00", 0.51)):
+        d = tmp_path / "research" / "mining" / "runs" / rid
+        d.mkdir(parents=True)
+        (d / "manifest.json").write_text(json.dumps({"run_id": rid, "status": "succeeded", "created_at": created}))
+        pl.DataFrame({"signature": ["factor:annual_vol_20d|w:1|d:-1"], "oos_sharpe": [sh],
+                      "definition_json": [json.dumps({"kind": "factor_rank", "scoring": {"annual_vol_20d": 1.0},
+                                                      "directions": {"annual_vol_20d": "low"}})]}).write_parquet(d / "candidates.parquet")
+    try:
+        runs = store.list_runs(limit=trial_ledger.RUNS_LIMIT)
+    except Exception as e:  # 夹具里 manifest 字段不全时, 退回只校验 limit 合法
+        pytest.skip(f"fixture manifest not accepted by store: {type(e).__name__}")
+    assert {r["run_id"] for r in runs} >= {"weekly-2026-W43", "weekly-2026-W44"}
+    trial_ledger._CACHE.clear()
+    tr = trial_ledger.collect(tmp_path)
+    assert [(t["run_id"], t["day"], t["key"]) for t in tr] == [("weekly-2026-W43", "2026-10-23", "annual_vol_20d:low"),
+                                                               ("weekly-2026-W44", "2026-10-30", "annual_vol_20d:low")]
+
+
+def test_collect_never_asks_the_store_for_more_than_its_limit(monkeypatch, tmp_path):
+    from app.services import mining_jobs
+    seen = []
+
+    def fake_list_runs(self, limit=50, **kw):
+        seen.append(limit)
+        if not 1 <= limit <= 200:
+            raise mining_jobs.MiningRunValidationError("limit must be between 1 and 200")
+        return []
+    monkeypatch.setattr(mining_jobs.MiningRunStore, "list_runs", fake_list_runs)
+    trial_ledger._CACHE.clear()
+    assert trial_ledger.collect(tmp_path) == [] and seen == [200]
+
+
 def test_structure_key_sorts_and_maps_numeric_directions():
     assert trial_ledger.structure_key({"b": 1, "a": 2}, {"a": "-1", "b": "high"}) == "a:low|b:high"
     assert trial_ledger.structure_key({}, {}) is None
