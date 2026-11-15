@@ -156,7 +156,7 @@ async function render() {
 }
 const PREVIEW = {
   contract: 'opp-settings-preview-v1',
-  changes: { long: { add: ['trend_breakout'], remove: [], add_names: ['趋势突破'], remove_names: [] }, short: { add: [], remove: [], add_names: [], remove_names: [] } },
+  changes: { long: { add: ['trend_breakout'], remove: [], add_names: ['trend_breakout'], remove_names: [] }, short: { add: [], remove: [], add_names: [], remove_names: [] } },
   odds_match: { long: false, short: true }, book: { day: '2026-10-19', frozen: true },
   risk: { from: 0.5, to: 0.75, caps_from: [10, 4], caps_to: [6, 2] }, radar_push: null, theme_stress: { from: 20, to: 20 }, hash: 'h1',
 }
@@ -320,6 +320,7 @@ it('齿轮: 读当前 3+3 与风险; 一个保存按钮发 3+3 + 风险; 风险�
   expect(mocks.saveOppSettings).not.toHaveBeenCalled()
   const pv = c.querySelector('[data-settings-preview]') as HTMLElement
   expect(pv.textContent).toContain('+趋势突破')
+  expect(pv.textContent).not.toContain('trend_breakout')
   expect(pv.textContent).toContain('0.5% → 0.75%')
   expect(pv.textContent).toContain('单日开仓 10 → 6 笔')
   await act(async () => { (c.querySelector('[data-save-confirm]') as HTMLButtonElement).click() })

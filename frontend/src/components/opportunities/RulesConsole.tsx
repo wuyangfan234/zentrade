@@ -373,7 +373,9 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
 function SettingsPreview({ p, nameOf }: { p: OppSettingsPreview; nameOf: (id: string) => string }) {
   const side = (k: 'long' | 'short') => {
     const c = p.changes[k]
-    const parts = [...c.remove.map((id, i) => `−${c.remove_names[i] || nameOf(id)}`), ...c.add.map((id, i) => `+${c.add_names[i] || nameOf(id)}`)]
+    // 后端拿不到名字时会回原始编号 (例如 AI 策略): 用齿轮目录里的名字, 编号不上屏
+    const nm = (id: string, n?: string) => (n && n !== id ? n : nameOf(id))
+    const parts = [...c.remove.map((id, i) => `−${nm(id, c.remove_names[i])}`), ...c.add.map((id, i) => `+${nm(id, c.add_names[i])}`)]
     return parts.length ? parts.join(' ') : '不变'
   }
   const capTxt = (a: number[] | null, b: number[] | null) =>
