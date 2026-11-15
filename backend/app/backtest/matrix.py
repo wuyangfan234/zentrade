@@ -3317,16 +3317,9 @@ class MatrixStrategyPipeline:
         config: MatrixPipelineConfig,
         timing_ms: dict[str, float] | None,
     ) -> SignalMatrix:
-        strategy_started = time.perf_counter()
-        signals = strategy.compute_signals(market, params)
-        validate_signal_matrix(signals, market.shape)
-        if timing_ms is not None:
-            timing_ms["strategy_signals"] = round(
-                (time.perf_counter() - strategy_started) * 1000,
-                1,
-            )
-
-        filter_started = time.perf_counter()
+        # 截面排名类策略 (ranks_within_universe) 要在可交易池内排名: 先算基础过滤再交给策略,
+        # 否则过滤前的票 (仙股 / 权证 / 成交额不足) 会占满每日前 N 名额, 过滤后一个不剩。
+        universe_aware = bool(getattr(strategy, "ranks_within_universe", False))
         cache = active_matrix_compute_cache()
         protect_cache = (
             cache is not None
@@ -3335,13 +3328,32 @@ class MatrixStrategyPipeline:
             and cache.current_bytes + _estimate_pipeline_cache_bytes(market, config)
             > cache.max_bytes
         )
-        cache_scope = (
-            cache.suspend()
-            if protect_cache
-            else nullcontext()
-        )
-        with cache_scope:
-            basic_mask = build_pipeline_filter_mask(market, config)
+
+        def cache_scope():
+            return cache.suspend() if protect_cache and cache is not None else nullcontext()
+
+        basic_mask: np.ndarray | None = None
+        if universe_aware:
+            with cache_scope():
+                basic_mask = build_pipeline_filter_mask(market, config)
+        strategy_started = time.perf_counter()
+        if universe_aware:
+            signals = strategy.compute_signals(  # type: ignore[call-arg]
+                market, params, universe=basic_mask,
+            )
+        else:
+            signals = strategy.compute_signals(market, params)
+        validate_signal_matrix(signals, market.shape)
+        if timing_ms is not None:
+            timing_ms["strategy_signals"] = round(
+                (time.perf_counter() - strategy_started) * 1000,
+                1,
+            )
+
+        filter_started = time.perf_counter()
+        with cache_scope():
+            if basic_mask is None:
+                basic_mask = build_pipeline_filter_mask(market, config)
             entry = (signals.entry.astype(bool) & basic_mask).astype(np.uint8)
             score = build_matrix_score(
                 market,

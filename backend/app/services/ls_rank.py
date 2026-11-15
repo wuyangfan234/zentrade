@@ -301,7 +301,7 @@ def train(data_dir: Path, day: date, *, narrow=None, daily=None, watch: list[str
         if m is not None:
             return m
     from app.services.heavy_job_limiter import shared_heavy_job_limiter
-    with shared_heavy_job_limiter.slot("normal", timeout=1800):
+    with shared_heavy_job_limiter.slot("normal", timeout=1800, label="模型训练"):
         return _train(data_dir, day, narrow=narrow, daily=daily, watch=watch, excluded=excluded)
 
 

@@ -919,7 +919,7 @@ def run_nightly(data_dir: Path, repo) -> dict | None:
     cfg = {"end": us_clock.previous_trading_day(us_clock.today()).isoformat(), "watchlist": watch}
     _RUNNING[0] += 1
     try:
-        with shared_heavy_job_limiter.slot("normal"):
+        with shared_heavy_job_limiter.slot("normal", label="排序因子"):
             res = run_worker_task(make_worker_task("rank_lab", Path(data_dir), cfg))
     finally:
         _RUNNING[0] -= 1

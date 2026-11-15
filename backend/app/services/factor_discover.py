@@ -348,7 +348,7 @@ def run_weekly(data_dir: Path, repo, *, start: date | None = None, end: date | N
     try:
         cfg = {"op": "discover", "symbols": symbols or watchlist_symbols(),
                "start": (start or DEFAULT_START).isoformat(), "end": end.isoformat() if end else None}
-        with shared_heavy_job_limiter.slot("normal"):
+        with shared_heavy_job_limiter.slot("normal", label="周度发现"):
             return run_worker_task(make_worker_task("factor_lab", Path(data_dir), cfg))
     finally:
         _RUN_LOCK.release()
@@ -683,7 +683,7 @@ def recalc(data_dir: Path, repo, signature: str, *, symbols: list[str], start: d
     from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
     cfg = {"op": "recalc", "signature": signature, "symbols": symbols, "start": start.isoformat(), "end": end.isoformat()}
-    with shared_heavy_job_limiter.slot("normal"):
+    with shared_heavy_job_limiter.slot("normal", label="周度发现"):
         out = run_worker_task(make_worker_task("factor_lab", Path(data_dir), cfg))
     if out.get("_error") == "not_found":
         raise KeyError(signature)

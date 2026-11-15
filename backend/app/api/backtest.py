@@ -468,7 +468,7 @@ def strategy_run(req: StrategyBacktestRequest, request: Request):
     task = make_worker_task("backtest", settings.data_dir, cfg)
     from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
-    with shared_heavy_job_limiter.slot("normal"):
+    with shared_heavy_job_limiter.slot("normal", label="回测"):
         return run_worker_task(task)
 
 
@@ -480,7 +480,7 @@ import hashlib
 
 class _BacktestJob:
     """单个回测任务的状态, 存模块级供重连使用。"""
-    __slots__ = ("key", "cancel_event", "progress", "result", "error", "done", "finish_ts", "started")
+    __slots__ = ("key", "cancel_event", "progress", "result", "error", "done", "finish_ts", "started", "waiting_for")
 
     def __init__(self, key: str):
         self.key = key
@@ -491,6 +491,8 @@ class _BacktestJob:
         self.done = False
         self.finish_ts: float = 0.0
         self.started = False              # worker 是否已被某次事件流认领
+        # 排队中: 等哪些重任务让出额度 (如 ["回放验收"]); None = 没在排队
+        self.waiting_for: list[str] | None = None
 
 
 # 模块级任务表: key -> _BacktestJob
@@ -733,10 +735,14 @@ async def strategy_stream(
                 )
 
                 try:
+                    if shared_heavy_job_limiter.available < 1 or shared_heavy_job_limiter.waiting_count() > 0:
+                        job.waiting_for = shared_heavy_job_limiter.holder_labels() or ["其他计算任务"]
                     with shared_heavy_job_limiter.slot(
                         "normal",
                         cancel_event=job.cancel_event,
+                        label="回测",
                     ):
+                        job.waiting_for = None
                         task = make_worker_task("backtest", settings.data_dir, cfg)
                         result = run_worker_task(
                             task,
@@ -755,6 +761,7 @@ async def strategy_stream(
         # 订阅进度: 用读指针读 job.progress 列表 (多连接互不干扰)
         cursor = 0
         tick = 0
+        queued_sent: list[str] | None = None
 
         try:
             while True:
@@ -778,6 +785,15 @@ async def strategy_stream(
                 tick += 1
                 if tick % 4 == 0 and await request.is_disconnected():
                     break
+
+                # 排队: 额度被其他重任务占着时告诉前端在等谁, 不让页面只显示“正在加载”
+                waiting = job.waiting_for
+                if waiting and waiting != queued_sent:
+                    queued_sent = list(waiting)
+                    yield f"event: queued\ndata: {json.dumps({'waiting_for': queued_sent}, ensure_ascii=False)}\n\n"
+                elif not waiting and queued_sent:
+                    queued_sent = None   # 已拿到额度, 前端清掉排队提示
+                    yield f"event: queued\ndata: {json.dumps({'waiting_for': []}, ensure_ascii=False)}\n\n"
 
                 # 推送新进度 (从 cursor 开始读)
                 prog_list = job.progress

@@ -312,5 +312,5 @@ def run_scheduled(data_dir: Path, repo, *, force: bool = False) -> dict:
         return {"skipped": "not_due"}
     if not can_run_heavy():
         return {"skipped": "session"}
-    with shared_heavy_job_limiter.slot("normal"):
+    with shared_heavy_job_limiter.slot("normal", label="因子成熟度"):
         return run_worker_task(make_worker_task("factor_lab", Path(data_dir), {"op": "maturity"}))

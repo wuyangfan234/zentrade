@@ -198,10 +198,11 @@ def test_ai_publish_endpoint_schedules_candidate_check(tmp_path, monkeypatch):
     from app.api.strategy import publish_ai_strategy
     calls = []
     monkeypatch.setattr(sc, "can_run_now", lambda now=None: True)      # 0.30.0: in-session requests queue instead
-    monkeypatch.setattr(sc, "schedule_check", lambda data_dir, repo, *, reason: calls.append(reason))
+    monkeypatch.setattr(sc, "schedule_check",
+                        lambda data_dir, repo, *, reason, **kw: calls.append((reason, kw.get("strategy_ids"))))
     request, _ = _save_ai(tmp_path, "ai_draft")
     assert publish_ai_strategy("ai_draft", request)["ok"] is True
-    assert calls == ["ai_publish"]
+    assert calls == [("ai_publish", ["ai_draft"])]    # 11-16: 只验收刚发布的这一条
 
 
 @pytest.mark.real_swing_candidate_check
@@ -215,3 +216,50 @@ def test_schedule_check_failure_is_soft(tmp_path, monkeypatch, caplog):
         th.join(timeout=5)
     assert not th.is_alive()
     assert any("swing candidate check after t failed" in r.getMessage() for r in caplog.records)
+
+
+# ---------- 11-16: 发布后只验收新策略, 结果并入现有文件 ----------
+
+def test_run_after_mining_with_ids_checks_only_those_and_merges(tmp_path, monkeypatch):
+    from app.backtest import worker as w
+    from app.services import decision_scan_job as job
+    from app.services import strategy_evaluation_runner as runner
+    monkeypatch.setattr(runner, "_strategy_engine", lambda d: SimpleNamespace(list_strategies=lambda: [
+        {"id": i, "source": "custom", "execution_backend": "matrix_native"} for i in ("mined_a", "mined_b", "mined_new")]))
+    monkeypatch.setattr(job, "_watchlist", lambda: {"AAA"})
+    seen = {}
+    monkeypatch.setattr(w, "run_worker_task", lambda task, *a, **k: seen.update(task) or {})
+    sc.run_after_mining(tmp_path, object(), end=date(2026, 11, 13), strategy_ids=["mined_new", "not_discovered"])
+    assert seen["config"]["strategy_ids"] == ["mined_new"] and seen["config"]["merge"] is True
+    seen.clear()
+    sc.run_after_mining(tmp_path, object(), end=date(2026, 11, 13))
+    assert seen["config"]["strategy_ids"] == ["mined_a", "mined_b", "mined_new"] and seen["config"]["merge"] is False
+
+
+def test_evaluate_merge_keeps_other_rules_and_file_window(tmp_path, monkeypatch):
+    from app.services import strategy_evaluation_runner as runner
+    prior = {"contract": sc.CONTRACT, "window": ["2023-01-03", "2026-11-06"], "generated_at": "2026-11-07T06:00:00+08:00",
+             "rules": {"mined_a": {"passed": True, "n": 40, "first_passed": "2026-11-06"},
+                       "mined_new": {"passed": False, "n": 1}}}
+    p = sc.candidates_path(tmp_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(prior))
+
+    def boom(*a, **k):
+        raise ValueError("no data")
+    monkeypatch.setattr(runner, "_strategy_engine", lambda d: SimpleNamespace(list_strategies=lambda: []))
+    monkeypatch.setattr(sc, "_signals_any", boom)
+    import app.backtest.engine as be
+    import app.backtest.strategy as bs
+    monkeypatch.setattr(be, "BacktestEngine", lambda repo: SimpleNamespace())
+    monkeypatch.setattr(bs, "StrategyBacktestService", lambda *a, **k: SimpleNamespace())
+
+    out = sc.evaluate(tmp_path, object(), ["mined_new"], end=date(2026, 11, 13), watchlist={"AAA"}, merge=True)
+
+    assert out["rules"]["mined_a"] == prior["rules"]["mined_a"]              # 其他策略原样保留
+    assert out["rules"]["mined_new"]["error"] == "ValueError"                 # 新策略按本次结果覆盖
+    assert out["window"] == prior["window"] and out["generated_at"] == prior["generated_at"]
+    assert json.loads(p.read_text()) == out
+
+    full = sc.evaluate(tmp_path, object(), ["mined_new"], end=date(2026, 11, 13), watchlist={"AAA"})
+    assert set(full["rules"]) == {"mined_new"}                                # 不带 merge = 旧行为: 整份重写

@@ -430,6 +430,8 @@ export interface StrategyDetail {
   description: string
   tags: string[]
   source: 'builtin' | 'custom' | 'ai' | 'composite'
+  /** 挖掘发布的策略可改名 */
+  renamable?: boolean
   research_only?: boolean
   execution_backend: 'polars_expr' | 'matrix_native' | 'python_history_legacy' | 'composite' | 'minute_filter'
   asset_types: string[]
@@ -1951,6 +1953,8 @@ export interface MiningCandidateGate {
 export interface MiningCandidateRow {
   signature: string
   name: string
+  /** 发布弹窗的默认名称: 因子名 + 方向 (如 “ATR(14)原值 低”) */
+  display_name?: string
   kind: 'factor_combination' | 'existing_strategy'
   factor_names?: string[]
   strategy_id?: string | null
@@ -3422,10 +3426,10 @@ export const api = {
       { method: 'POST' },
     ),
 
-  miningPublish: (runId: string, signature: string) =>
-    request<{ ok: boolean; strategy_id: string }>(
+  miningPublish: (runId: string, signature: string, name?: string) =>
+    request<{ ok: boolean; strategy_id: string; name?: string }>(
       `/api/backtest/mining/runs/${encodeURIComponent(runId)}/candidates/${encodeURIComponent(signature)}/publish`,
-      { method: 'POST' },
+      { method: 'POST', body: JSON.stringify(name ? { name } : {}), quiet: true },
     ),
 
   miningConfig: () =>
@@ -3723,6 +3727,13 @@ export const api = {
 
   strategyGet: (id: string) =>
     request<StrategyDetail>(`/api/strategies/${id}`),
+
+  /** 挖掘发布策略改名 (只改显示名) */
+  strategyRename: (strategyId: string, name: string) =>
+    request<{ ok: boolean; strategy_id: string; name: string }>(
+      `/api/strategies/${encodeURIComponent(strategyId)}/name`,
+      { method: 'PATCH', body: JSON.stringify({ name }), quiet: true },
+    ),
 
   /** 发布 research_only 的 AI 草稿策略(翻转为公开) */
   strategyPublish: (strategyId: string) =>

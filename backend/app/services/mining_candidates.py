@@ -4,6 +4,7 @@ Concurrency protection is process-local; V1 remains a single-process service.
 """
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import math
@@ -24,12 +25,84 @@ from app.backtest.mining import compute_candidate_signature, evaluate_candidate_
 from app.services.mining_jobs import SUCCESS_RUN_STATUSES, MiningRunStore
 from app.strategy.ai_generator import AIStrategyGenerator
 from app.strategy.engine import StrategyEngine
+from app.strategy.naming import is_renamable
 
 _MAX_ARTIFACT_BYTES = 8 * 1024 * 1024
 _MAX_ARTIFACT_ROWS = 32
 _MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
 _MAX_DEFINITION_BYTES = 16 * 1024
 _FACTOR_IDS = frozenset(str(item["id"]) for item in FACTOR_COLUMNS)
+STRATEGY_NAME_MAX = 40
+_NAME_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+
+
+def clean_strategy_name(raw: object) -> str:
+    """策略显示名: 去首尾空白、内部空白压成一个空格; 1 到 40 字, 不含控制字符。"""
+    if not isinstance(raw, str):
+        raise ValueError("名称必须是文字")
+    if _NAME_CONTROL.search(raw):
+        raise ValueError("名称不能包含换行或控制字符")
+    name = " ".join(raw.split())
+    if not name:
+        raise ValueError("名称不能为空")
+    if len(name) > STRATEGY_NAME_MAX:
+        raise ValueError(f"名称最多 {STRATEGY_NAME_MAX} 个字")
+    return name
+
+
+def default_strategy_name(definition: Mapping[str, Any]) -> str:
+    """挖掘因子组合的默认显示名 = 因子名 + 方向, 例: “ATR(14)原值 低”“5日动量 高 + 量比 低”。"""
+    from app.factors.registry import get_factor
+
+    directions = definition.get("directions") or {}
+    parts = []
+    for factor_id in definition.get("factor_names") or []:
+        spec = get_factor(str(factor_id))
+        label = spec.label if spec is not None and spec.label else str(factor_id)
+        parts.append(f"{label} {'低' if directions.get(factor_id) == 'low' else '高'}")
+    name = " + ".join(parts) or "因子组合"
+    return name if len(name) <= STRATEGY_NAME_MAX else name[: STRATEGY_NAME_MAX - 1] + "…"
+
+
+def _run_label(run_id: str) -> str:
+    match = re.search(r"W\d{2}$", run_id)
+    return match.group(0) if match else run_id[:8]
+
+
+def _literal_meta(source: str) -> tuple[dict[str, Any], ast.expr]:
+    """取模块顶层 ``META = {...}`` 的字面量与其节点; 不是纯字面量时报错。"""
+    tree = ast.parse(source)
+    for node in tree.body:
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id == "META"
+        ):
+            meta = ast.literal_eval(node.value)
+            if not isinstance(meta, dict):
+                raise ValueError("META 不是字典")
+            return meta, node.value
+    raise ValueError("策略文件没有 META")
+
+
+def _replace_meta_name(source: str, name: str) -> str:
+    meta, node = _literal_meta(source)
+    meta["name"] = name
+    lines = source.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line))
+
+    def char_offset(lineno: int, col_bytes: int) -> int:
+        # ast 的列号是 UTF-8 字节偏移, 中文名称所在行要换算成字符偏移
+        line_start = offsets[lineno - 1]
+        line_bytes = lines[lineno - 1].encode("utf-8")[:col_bytes]
+        return line_start + len(line_bytes.decode("utf-8"))
+
+    start = char_offset(node.lineno, node.col_offset)
+    end = char_offset(node.end_lineno or node.lineno, node.end_col_offset or 0)
+    return source[:start] + repr(meta) + source[end:]
 
 
 def _known_factor_ids() -> frozenset[str]:
@@ -128,7 +201,16 @@ class MiningCandidateService:
                 )
             return item
 
-    def publish(self, run_id: str, signature: str) -> dict[str, Any]:
+    def publish(
+        self,
+        run_id: str,
+        signature: str,
+        *,
+        name: str | None = None,
+    ) -> dict[str, Any]:
+        """发布挖掘候选为策略。name = 显示名 (可空: 用因子名 + 方向的默认名)。
+        已发布过的候选重复发布是幂等的; 这时传入不同的 name 等于改名。"""
+        requested_name = clean_strategy_name(name) if name is not None else None
         with _LOCK:
             manifest, summary, path, frame, row, definition = self._load_candidate(
                 run_id, signature
@@ -159,17 +241,26 @@ class MiningCandidateService:
                         "published_strategy_id",
                         published_id,
                     )
-                return {"ok": True, "strategy_id": published_id}
+                return {
+                    "ok": True,
+                    "strategy_id": published_id,
+                    "name": str(self.strategy_engine.get(published_id).meta.get("name") or published_id),
+                }
 
             published_id = self._validate_published_id(
                 _published_strategy_id(run_id, signature)
             )
             self._validate_publication_backlink(row, published_id)
+            target = self._custom_strategy_path(published_id)
+            # 已发布过: 按文件里现有的名称渲染做一致性校验 (旧版本用候选行的 name 渲染)
+            existing_name = self._existing_meta_name(target)
+            render_name = existing_name or self._new_strategy_name(
+                requested_name, definition, run_id, published_id
+            )
             source = self._render_factor_strategy(
-                manifest, summary, row, definition, published_id
+                manifest, summary, row, definition, published_id, render_name
             )
 
-            target = self._custom_strategy_path(published_id)
             created = self._publish_or_verify_source(
                 target,
                 source,
@@ -198,7 +289,108 @@ class MiningCandidateService:
                     "published_strategy_id",
                     published_id,
                 )
-            return {"ok": True, "strategy_id": published_id}
+            final_name = render_name
+            if existing_name is not None and requested_name not in (None, existing_name):
+                final_name = self._rename_locked(published_id, requested_name)
+            return {"ok": True, "strategy_id": published_id, "name": final_name}
+
+    def rename(self, strategy_id: str, name: str) -> dict[str, Any]:
+        """改挖掘发布策略的显示名 (只改 META.name, id / 打分 / 参数不变)。"""
+        with _LOCK:
+            return {
+                "ok": True,
+                "strategy_id": strategy_id,
+                "name": self._rename_locked(strategy_id, clean_strategy_name(name)),
+            }
+
+    def default_name(self, definition: Mapping[str, Any]) -> str:
+        return default_strategy_name(definition)
+
+    def _existing_meta_name(self, path: Path) -> str | None:
+        if not path.is_file() or path.is_symlink():
+            return None
+        try:
+            meta, _node = _literal_meta(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, SyntaxError, ValueError):
+            return None
+        name = meta.get("name")
+        return name if isinstance(name, str) and name else None
+
+    def _names_in_use(self, exclude_id: str) -> set[str]:
+        return {
+            str(meta.get("name"))
+            for meta in self.strategy_engine.list_strategies()
+            if meta.get("id") != exclude_id and meta.get("name")
+        }
+
+    def _new_strategy_name(
+        self,
+        requested: str | None,
+        definition: Mapping[str, Any],
+        run_id: str,
+        strategy_id: str,
+    ) -> str:
+        taken = self._names_in_use(strategy_id)
+        if requested is not None and requested != default_strategy_name(definition):
+            if requested in taken:
+                raise ValueError(f"名称已被其他策略使用: {requested}")
+            return requested
+        # 默认名撞名 (同一因子在另一周再次挖出): 自动加周次, 再撞就加序号
+        base = default_strategy_name(definition)
+        if base not in taken:
+            return base
+        candidate = clean_strategy_name(f"{base[: STRATEGY_NAME_MAX - 6]} · {_run_label(run_id)}")
+        counter = 2
+        while candidate in taken:
+            candidate = clean_strategy_name(f"{base[: STRATEGY_NAME_MAX - 9]} · {_run_label(run_id)}-{counter}")
+            counter += 1
+        return candidate
+
+    def _rename_locked(self, strategy_id: str, name: str) -> str:
+        if not self.strategy_engine.has(strategy_id):
+            raise KeyError(strategy_id)
+        strategy = self.strategy_engine.get(strategy_id)
+        if not is_renamable({**strategy.meta, "id": strategy_id}, strategy.source):
+            raise ValueError("只有挖掘发布的策略可以在这里改名")
+        if strategy.meta.get("name") == name:
+            return name
+        if name in self._names_in_use(strategy_id):
+            raise ValueError(f"名称已被其他策略使用: {name}")
+        path = self._custom_strategy_path(strategy_id)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("strategy publication target is not a regular file")
+        if strategy.file_path is None or strategy.file_path.resolve() != path.resolve():
+            raise ValueError("published strategy provenance is invalid")
+        original = path.read_text(encoding="utf-8")
+        updated = _replace_meta_name(original, name)
+        validation = AIStrategyGenerator().validate_code(updated)
+        if not validation.get("valid") or validation.get("meta", {}).get("id") != strategy_id:
+            raise ValueError(f"renamed strategy failed validation: {validation.get('error')}")
+        temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            with temporary.open("x", encoding="utf-8", newline="\n") as stream:
+                stream.write(updated)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            self._fsync_directory(path.parent)
+            self.strategy_engine.reload()
+            if self.strategy_engine.get(strategy_id).meta.get("name") != name:
+                raise RuntimeError("renamed strategy did not reload")
+            self._strategy_cache_invalidator(self.data_dir)
+            if self._monitor_state_invalidator is not None:
+                self._monitor_state_invalidator()
+        except Exception as exc:
+            temporary.unlink(missing_ok=True)
+            try:
+                path.write_text(original, encoding="utf-8")
+                self.strategy_engine.reload()
+            except Exception as restore_exc:
+                raise RuntimeError(f"strategy rename failed: {exc}; restore failed: {restore_exc}") from exc
+            if isinstance(exc, (ValueError, RuntimeError)):
+                raise
+            raise RuntimeError(f"strategy rename failed: {exc}") from exc
+        return name
 
     def _load_candidate(
         self,
@@ -574,6 +766,7 @@ class MiningCandidateService:
         row: Mapping[str, Any],
         definition: Mapping[str, Any],
         strategy_id: str,
+        display_name: str | None = None,
     ) -> str:
         asset_type = self._asset_type(manifest)
         factor_names = list(definition["factor_names"])
@@ -583,7 +776,7 @@ class MiningCandidateService:
         directions = {name: definition["directions"][name] for name in factor_names}
         meta = {
             "id": strategy_id,
-            "name": row["name"],
+            "name": display_name or row["name"],
             "description": "Published mining factor-rank candidate",
             "tags": ["mining", "factor-rank"],
             "asset_types": [asset_type],

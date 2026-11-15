@@ -235,7 +235,7 @@ class BacktestService:
     def run(self, config: BacktestConfig) -> BacktestResult:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="回测"):
             return self._run(config)
 
     def _run(self, config: BacktestConfig) -> BacktestResult:

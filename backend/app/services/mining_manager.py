@@ -173,7 +173,7 @@ class MiningJobManager:
         cancel_event: threading.Event,
     ) -> None:
         try:
-            with shared_heavy_job_limiter.slot("mining", cancel_event=cancel_event):
+            with shared_heavy_job_limiter.slot("mining", cancel_event=cancel_event, label="因子挖掘"):
                 if not self._mark_running(run_id, cancel_event):
                     return
                 manifest = self._store.get(run_id)

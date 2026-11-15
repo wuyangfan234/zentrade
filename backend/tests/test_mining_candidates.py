@@ -259,7 +259,8 @@ def test_publish_existing_strategy_returns_verified_id_and_repairs_backlink(tmp_
     with pytest.raises(TypeError):
         service.publish(run_id, signature, "existing_daily")
 
-    assert first == second == {"ok": True, "strategy_id": "existing_daily"}
+    # 0.56.x: 返回带显示名 (已有策略没有 META.name 时用 id)
+    assert first == second == {"ok": True, "strategy_id": "existing_daily", "name": "existing_daily"}
     persisted = pl.read_parquet(store.artifact_path(run_id, "candidates")).row(0, named=True)
     assert persisted["published_strategy_id"] == "existing_daily"
     assert CandidateStore(tmp_path).list() == []
@@ -616,7 +617,7 @@ def test_publish_existing_does_not_reload_or_invalidate(tmp_path) -> None:
 
     result = service.publish(run_id, signature)
 
-    assert result == {"ok": True, "strategy_id": "ma_golden_cross"}
+    assert result == {"ok": True, "strategy_id": "ma_golden_cross", "name": "MA 金叉"}
     assert engine.get("ma_golden_cross") is original
     assert invalidations == []
 

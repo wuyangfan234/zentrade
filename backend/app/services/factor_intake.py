@@ -881,7 +881,7 @@ def screen_pending(data_dir: Path, repo, *, now: datetime | None = None) -> dict
         cfg = {"op": "screen", "formulas": [{"key": f"{iid}:{k}", **{x: f[x] for x in ("name", "dsl", "direction", "quote_hash")}}
                                             for iid, k, f in todo],
                "watchlist": factor_discover.watchlist_symbols()}
-        with shared_heavy_job_limiter.slot("normal"):
+        with shared_heavy_job_limiter.slot("normal", label="采集快筛"):
             res = run_worker_task(make_worker_task("factor_lab", Path(data_dir), cfg))
         screens = res.get("screens") or {}
     else:

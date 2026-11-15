@@ -27,6 +27,8 @@ export interface BacktestTask {
   error: string | null
   /** 连接中断、正在有界重连中 (UI 显示"连接中断，重试中") */
   reconnecting: boolean
+  /** 排队中: 在等哪些重任务让出算力 (如 ["回放验收"]); null = 没在排队 */
+  waitingFor?: string[] | null
 }
 
 // 连接断开后最多自动重连次数, 超过则放弃并进入可重试的错误态
@@ -116,13 +118,24 @@ async function connectSSE(url: string): Promise<void> {
     clearReconnecting()
   }
 
+  es.addEventListener('queued', (e: MessageEvent) => {
+    if (current?.id !== id) return
+    reconnectAttempts = 0
+    try {
+      const data = JSON.parse(e.data) as { waiting_for?: string[] }
+      const waiting = Array.isArray(data.waiting_for) && data.waiting_for.length ? data.waiting_for : null
+      current = { ...current, waitingFor: waiting, reconnecting: false }
+      emit()
+    } catch { /* ignore */ }
+  })
+
   es.addEventListener('progress', (e: MessageEvent) => {
     if (current?.id !== id) return
     // 收到数据说明连接恢复正常
     reconnectAttempts = 0
     try {
       const prog = JSON.parse(e.data) as BacktestProgress
-      current = { ...current, progress: prog, reconnecting: false }
+      current = { ...current, progress: prog, waitingFor: null, reconnecting: false }
       emit()
     } catch { /* ignore */ }
   })

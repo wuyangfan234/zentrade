@@ -45,10 +45,10 @@ def _no_swing_candidate_background_check(request, monkeypatch):
         yield
         return
     from app.services import swing_candidates
-    monkeypatch.setattr(swing_candidates, "schedule_check", lambda data_dir, repo, *, reason: None)
+    monkeypatch.setattr(swing_candidates, "schedule_check", lambda data_dir, repo, *, reason, **_kw: None)
     # 0.30.0: publish goes through request_check, which queues by wall clock; keep tests clock-independent
     monkeypatch.setattr(swing_candidates, "request_check",
-                        lambda data_dir, repo, *, reason, now=None, if_idle=False: {"started": False, "queued": False, "running": False})
+                        lambda data_dir, repo, *, reason, now=None, if_idle=False, **_kw: {"started": False, "queued": False, "running": False})
     yield
 
 

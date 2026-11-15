@@ -66,6 +66,11 @@ _VALID_DIRECTIONS = {"high", "low"}
 
 
 class FactorRankResearchMatrixStrategy:
+    # 截面排名必须在「可交易池」(基础过滤: 价格 / 成交额 / 股票池) 内做: 管道先算过滤再传 universe 进来。
+    # 0.56.x 之前先在全部有收盘价的票上排名取前 N, 再由管道过滤 —— 原值类因子 (如 ATR(14)原值 低)
+    # 在全市场的前 20 名全是不足 1 美元的仙股 / 权证, 过滤后一个不剩, 回测报“未产生买入信号” (11-16 实证)。
+    ranks_within_universe = True
+
     def __init__(
         self,
         scoring: dict[str, float] | None = None,
@@ -101,7 +106,15 @@ class FactorRankResearchMatrixStrategy:
             return frozenset()
         return frozenset(_validated_scoring(raw))
 
-    def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
+    def compute_signals(
+        self,
+        market: MarketDataMatrix,
+        params: dict,
+        *,
+        universe: np.ndarray | None = None,
+    ) -> SignalMatrix:
+        """universe = 可交易池 (T, N) 布尔; None = 全部有收盘价的票 (直接调用 / 旧口径)。
+        池外的票不参与排名、不入场, 也不按分数离场 (池外分数恒为 0, 不能当作“分数跌破”)。"""
         scoring = self._scoring or _validated_scoring(params.get("scoring"))
         directions = self._directions or _validated_directions(
             params.get("directions"), scoring
@@ -114,7 +127,13 @@ class FactorRankResearchMatrixStrategy:
         if exit_score > entry_score:
             raise ValueError("exit_score must not exceed entry_score")
 
-        universe = np.isfinite(market.close)
+        tradable = np.isfinite(market.close)
+        if universe is not None:
+            mask = np.asarray(universe, dtype=bool)
+            if mask.shape != tradable.shape:
+                raise ValueError("factor-rank universe mask shape does not match market")
+            tradable = tradable & mask
+        universe = tradable
         score = build_matrix_score(
             market,
             universe,
