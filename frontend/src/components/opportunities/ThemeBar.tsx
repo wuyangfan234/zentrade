@@ -17,15 +17,19 @@ const TITLE = '压力损失 = 主题内持仓名义 × 压力跌幅（空头按�
 export function ThemeBar({ t }: { t: ThemeExposure }) {
   const k = t.stress_pct
   const tiers = t.tiers.map((x) => `${x.name} ${x.n} 只 · 覆盖过半 · 不算主题`).join('\n')
+  // 每一段不拆行 (手机宽度下「全部跌 20%」不被拆成两行)
   const meta = t.positions > 0
-    ? `持仓 ${t.positions} · 名义 ${pc(t.total.notional_pct)} · 计划止损 ${usd0(t.total.stop_risk)}（${pc2(t.total.stop_risk_pct)}） · 全部跌 ${k}% ${loss(t.total.stress_loss)}（${lossPct(t.total.stress_pct_nav)}）`
-    : '暂无持仓'
+    ? [`持仓 ${t.positions}`, `名义 ${pc(t.total.notional_pct)}`, `计划止损 ${usd0(t.total.stop_risk)}（${pc2(t.total.stop_risk_pct)}）`,
+      `全部跌 ${k}% ${loss(t.total.stress_loss)}（${lossPct(t.total.stress_pct_nav)}）`]
+    : ['暂无持仓']
   return (
     <section data-theme-bar className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2">
         <h2 className="shrink-0 text-[14px] font-semibold text-foreground" title={TITLE}>主题压力</h2>
         <span className={badge('limit')} title={TITLE}>{`跌 ${k}%`}</span>
-        <span data-theme-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto" title={tiers || undefined}>{meta}</span>
+        <span data-theme-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto" title={tiers || undefined}>
+          {meta.map((x, i) => <span key={x}>{i > 0 && ' · '}<span className="whitespace-nowrap">{x}</span></span>)}
+        </span>
       </div>
       {t.rows.length > 0 && (
         <div className="overflow-x-auto border-t border-border/70">
