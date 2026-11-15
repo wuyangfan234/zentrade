@@ -61,6 +61,7 @@ export const JOB_LABEL: Record<string, string> = {
   zen_corporate_actions: '公司行动',
   zen_earnings_premarket: '财报日历 · 盘前',
   zen_earnings_postclose: '财报日历 · 盘后',
+  zen_earnings_retry: '财报日历重试 · 失败时 15/30/60/120 分钟',
   zen_market_mood_score: '大盘判断记分',
   zen_ls_rank: '今日多空名单补生成 · 08:20 / 17:20 ET',
   zen_market_mood_score_retry: '大盘判断补记分',
