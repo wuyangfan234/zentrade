@@ -10,6 +10,7 @@ import type { IntradayCard, LsRankPayload, LsRankRow, MarketMoodPayload, OppDesk
 
 const mocks = vi.hoisted(() => ({
   oppPage: vi.fn(), saveOppSettings: vi.fn(), watchlistRules: vi.fn(), newsSummary: vi.fn(), qverisOptions: vi.fn(), runSwingCandidates: vi.fn(),
+  previewOppSettings: vi.fn(), oppAsofDays: vi.fn(), oppAsof: vi.fn(),
 }))
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
@@ -153,9 +154,18 @@ async function render() {
   await act(async () => { root.render(<QueryClientProvider client={qc}><Opportunities /></QueryClientProvider>) })
   for (let i = 0; i < 6; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
 }
+const PREVIEW = {
+  contract: 'opp-settings-preview-v1',
+  changes: { long: { add: ['trend_breakout'], remove: [], add_names: ['趋势突破'], remove_names: [] }, short: { add: [], remove: [], add_names: [], remove_names: [] } },
+  odds_match: { long: false, short: true }, book: { day: '2026-10-19', frozen: true },
+  risk: { from: 0.5, to: 0.75, caps_from: [10, 4], caps_to: [6, 2] }, radar_push: null, theme_stress: { from: 20, to: 20 }, hash: 'h1',
+}
+
 beforeEach(() => {
   Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true })
   for (const m of Object.values(mocks)) m.mockReset()
+  mocks.previewOppSettings.mockResolvedValue(PREVIEW)
+  mocks.oppAsofDays.mockResolvedValue({ today: '2026-10-20', days: ['2026-10-16', '2026-10-19'] })
   mocks.oppPage.mockResolvedValue(page())
   mocks.watchlistRules.mockResolvedValue(rules)
   mocks.saveOppSettings.mockResolvedValue({ swing: { long: [], short: [] }, ruleset: { version: 46, risk_per_trade_pct: 0.75 } })
@@ -303,8 +313,34 @@ it('齿轮: 读当前 3+3 与风险; 一个保存按钮发 3+3 + 风险; 风险�
   await act(async () => { setter.call(risk, '5'); risk.dispatchEvent(new Event('input', { bubbles: true })) })
   expect(save.disabled).toBe(true)
   await act(async () => { setter.call(risk, '0.75'); risk.dispatchEvent(new Event('input', { bubbles: true })) })
+  // 2026-11-15 两步保存: 第一下只出预览 (不写), 确认后才带哈希保存
   await act(async () => { save.click() })
-  expect(mocks.saveOppSettings).toHaveBeenCalledWith(['macd_golden', 'trend_breakout'], ['tv_halftrend'], 0.75, null)
+  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  expect(mocks.previewOppSettings).toHaveBeenCalledWith(['macd_golden', 'trend_breakout'], ['tv_halftrend'], 0.75, null, null)
+  expect(mocks.saveOppSettings).not.toHaveBeenCalled()
+  const pv = c.querySelector('[data-settings-preview]') as HTMLElement
+  expect(pv.textContent).toContain('+趋势突破')
+  expect(pv.textContent).toContain('0.5% → 0.75%')
+  expect(pv.textContent).toContain('单日开仓 10 → 6 笔')
+  await act(async () => { (c.querySelector('[data-save-confirm]') as HTMLButtonElement).click() })
+  expect(mocks.saveOppSettings).toHaveBeenCalledWith(['macd_golden', 'trend_breakout'], ['tv_halftrend'], 0.75, null, { preview_hash: 'h1', theme_stress_pct: null })
+})
+
+it('齿轮: 确认时另一处已改过 (409) → 换成新预览, 不写', async () => {
+  const { ApiError } = await import('@/lib/api')
+  mocks.saveOppSettings.mockRejectedValueOnce(new ApiError(JSON.stringify({ reason: 'settings_changed', preview: { ...PREVIEW, hash: 'h2' } }), 409))
+  await render()
+  await act(async () => { (host.querySelector('[data-gear]') as HTMLElement).click() })
+  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  const c = document.body.querySelector('[data-console]') as HTMLElement
+  await act(async () => { (c.querySelector('[data-swing-list="long"] [data-swing-pick="trend_breakout"] input') as HTMLInputElement).click() })
+  await act(async () => { (c.querySelector('[data-save]') as HTMLButtonElement).click() })
+  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  await act(async () => { (c.querySelector('[data-save-confirm]') as HTMLButtonElement).click() })
+  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  expect(c.querySelector('[data-preview-conflict]')).not.toBeNull()
+  await act(async () => { (c.querySelector('[data-save-confirm]') as HTMLButtonElement).click() })
+  expect(mocks.saveOppSettings).toHaveBeenLastCalledWith(['macd_golden', 'trend_breakout'], ['tv_halftrend'], null, null, { preview_hash: 'h2', theme_stress_pct: null })
 })
 
 it('0.51.0 版面: 状态栏 → 盘前判断 → 今日多空 → 大盘状态条; 大盘条不再带盘前判断', async () => {
@@ -361,6 +397,35 @@ it('今日多空: 没有名单 = 一行空态; 段读取失败 = 只空这一块
   await render()
   expect(text('[data-section-error="今日多空"]')).toBe('今日多空读取失败 · ValueError')
   expect(host.querySelector('[data-col]')).not.toBeNull()
+})
+
+it('今日多空页头: 模型 · 训练至 · 前向 k/65 · 覆盖; 回放标「名单未记录」; 上一版成绩只在悬停', async () => {
+  const ruler = { contract: 'replay-ruler-v1', kind: 'unrecorded' as const, n: null, fixed: null, window: ['2024-01', '2026-10'], watch_now: 47, changed: null }
+  mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ coverage: { ranked: 47, young: 3, missing: 0, stale: 0, total: 47 }, ruler,
+    next_retrain: { quarter: '2027Q1', train_end: '2026-12-24', rows_now: 12345 },
+    settle: { ...ls().settle, quarter: '2026Q4', prev: [{ quarter: '2026Q3', days: 9, first: '2026-08-01', last_list: '2026-09-30', total: null }] } }) }))
+  await render()
+  expect(text('[data-ls-model]')).toMatch(/训练至 .* · 前向 \d+\/65/)
+  expect(host.querySelector('[data-ls-model]')!.getAttribute('title')).toContain('下次重训 2027Q1 · 只用 12-24 之前的入场日')
+  expect(host.querySelector('[data-ls-model]')!.getAttribute('title')).toContain('2026Q3 · 前向 9 份')
+  expect(text('[data-ls-coverage]')).toBe('覆盖 47/47')
+  expect(host.querySelector('[data-ls-coverage]')!.getAttribute('title')).toBe('打分 47 · 上市不足 130 日不上榜 3 · 缺数据 0 · 数据过期 0')
+  expect(host.querySelectorAll('[data-ls-side] [data-ruler="unrecorded"]').length).toBe(2)
+})
+
+it('历史日回看: 选过去的日子 → 只读那天冻结的数据, 当天各块收起', async () => {
+  mocks.oppAsof.mockResolvedValue({ contract: 'opp-asof-v1', asof: '2026-10-19', today: '2026-10-20', days: ['2026-10-19'], board: null, ls_rank: null,
+    intraday: null, radar: null, resonance: null, mood: null, errors: { board: 'not_archived' } })
+  await render()
+  const sel = host.querySelector('[data-asof-picker]') as HTMLSelectElement
+  expect([...sel.options].map((o) => o.value)).toEqual(['', '2026-10-19', '2026-10-16'])
+  const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!
+  await act(async () => { setter.call(sel, '2026-10-19'); sel.dispatchEvent(new Event('change', { bubbles: true })) })
+  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  expect(mocks.oppAsof).toHaveBeenCalledWith('2026-10-19')
+  expect(host.querySelector('[data-asof="2026-10-19"]')).not.toBeNull()
+  expect(host.querySelector('[data-strategy-board]')).toBeNull()
+  expect(text('[data-asof-head]')).toBe('回看 2026-10-19')
 })
 
 it('今日多空: 开盘后才补出的名单标「盘中补出」', async () => {

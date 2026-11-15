@@ -967,7 +967,52 @@ export type RadarPushLevel = { v: number; days: number; per_day: number; up5: nu
 export type RadarPushSettings = { enabled: boolean; min_rvol: number; period?: string; other?: number; levels?: RadarPushLevel[] }
 export type OppSettings = { long: string[]; short: string[]; risk_per_trade_pct: number | null; ruleset_version: number | null; evo: boolean; radar_push?: RadarPushSettings
   /** 机会板方向门 (可插拔): 内置日线 MA50 门或插件门 */
-  gate?: { id: string; name: string } }
+  gate?: { id: string; name: string }
+  /** 2026-11-15 主题压力跌幅 (%) 与可选档位 */
+  theme_stress_pct?: number; theme_stress_levels?: number[] }
+/** 2026-11-15 回放数字的口径: post_hoc = 事后名单 (回看窗口早于定名单那天); unrecorded = 文件里没记名单 */
+export type ReplayRuler = {
+  contract: string; kind: 'post_hoc' | 'fixed' | 'unrecorded'; n: number | null; fixed: string | null
+  window: string[] | null; watch_now: number | null; changed: boolean | null
+}
+/** 2026-11-15 主题压力 (只显示, 不拦单) */
+export type ThemeRow = {
+  theme: string; symbols: string[]; count: number; notional: number; notional_pct: number | null; stop_risk: number
+  stress_loss: number; stress_pct_nav: number | null; pending: string[]; after_fill_loss: number; after_fill_pct_nav: number | null
+}
+export type ThemeExposure = {
+  contract: string; stress_pct: number; levels: number[]; nav: number | null; positions: number; rows: ThemeRow[]; hidden: number
+  tiers: { name: string; n: number }[]
+  total: { notional: number; notional_pct: number | null; stop_risk: number; stop_risk_pct: number | null; stress_loss: number; stress_pct_nav: number | null }
+}
+/** 2026-11-15 齿轮预览 (保存前) */
+export type OppSettingsPreview = {
+  contract: string
+  changes: Record<'long' | 'short', { add: string[]; remove: string[]; add_names: string[]; remove_names: string[] }>
+  odds_match: Record<'long' | 'short', boolean>
+  book: { day: string | null; frozen: boolean }
+  risk: { from: number | null; to: number | null; caps_from: number[] | null; caps_to: number[] | null }
+  radar_push: { from: { enabled?: boolean; min_rvol?: number }; to: { enabled: boolean; min_rvol: number } } | null
+  theme_stress: { from: number | null; to: number | null }
+  hash: string
+}
+/** 2026-11-15 历史日回看 (只读那天冻结的文件) */
+export type AsOfOutcome = { status: string | null; r: number | null; why: string | null; fill_date: string | null; exit_date: string | null; settled_on: string | null }
+export type AsOfPayload = {
+  contract: string; asof: string; today: string; days: string[]
+  board: { signal_days: string[]; built_at: string | null; rules: { long: string[]; short: string[] } | null
+    cards: { card_id: string; signal_day: string; symbol: string; side: 'long' | 'short'; entry_zone: number[] | null; stop: number | null
+      target: number | null; reward_risk: number | null; score: number | null; rules: { id: string; name: string }[]; outcome: AsOfOutcome | null }[]
+    skipped: { signal_day: string; symbol: string; side: string; reason: string }[] } | null
+  ls_rank: { day: string; as_of: string; made_at: string | null; late: boolean; model: string | null; n: number | null; settled_end: string | null
+    long: { symbol: string; rank: number | null; close: number | null; atr: number | null; r: number | null; exit: string | null }[]
+    short: { symbol: string; rank: number | null; close: number | null; atr: number | null; r: number | null; exit: string | null }[] } | null
+  intraday: { cards: { symbol: string; side: string; check: string; fired_at: string; entry: number; stop: number; target: number; status: string; exit_reason: string | null; r: number | null }[]; checks: number } | null
+  radar: { at: string | null; symbols: number | null; rows: { symbol: string; rank: number | null; rvol: number; dir: number; gap_pct: number; or_chg_pct: number; chg_close_pct: number | null }[] } | null
+  resonance: { rows: { symbol: string; side: string; n: number; engines: string[]; at: string; entry: number | null }[] } | null
+  mood: { generated_at: string | null; stance: string | null; probs: { up: number; down: number; range: number } | null; main: string | null; stars: number | null } | null
+  errors: Record<string, string>
+}
 /** 0.34.0 按时段换主角: 盘前 = 跳空榜 / 开盘 = 开盘放量榜 / 盘中 = 盘中强势 + 放量前 5 / 挂单 = 机会板 */
 export type OppStageKey = 'pre' | 'open' | 'session' | 'board'
 export type OpenRadarRow = {
@@ -1071,6 +1116,8 @@ export type OppPagePayload = {
   desk?: OppDesk | null
   /** 今日多空 (显然档预览): 盘前自选横截面排名, 只展示 */
   ls_rank?: LsRankPayload | null
+  /** 2026-11-15 主题压力 */
+  themes?: ThemeExposure | null
   errors: Record<string, string>
 }
 /** 今日多空 (契约 ls-rank-v1): 自选排名 → 看多 5 / 看空 5; settle = 前向结算 (单位 ATR, 1 ATR = risk_usd / stop_atr 美元) */
@@ -1100,7 +1147,14 @@ export type LsRankPayload = {
     long_minus_all?: number }
   long: LsRankRow[]; short: LsRankRow[]; all: LsRankRow[]; n?: number; missing?: string[]; stale?: string[]
   settle: { days: number; check_days: number; late?: number; first?: string | null; last_list?: string | null; total: LsSettleSeries | null
-    weeks: (LsSettleSeries & { week: string })[]; last: LsSettleLast | null }
+    weeks: (LsSettleSeries & { week: string })[]; last: LsSettleLast | null
+    /** 2026-11-15 前向按模型季度分段: quarter = 本季度模型; prev = 其他季度各自冻结的成绩 */
+    quarter?: string | null; prev?: { quarter: string; days: number; first: string; last_list: string; total: LsSettleSeries | null }[] }
+  /** 2026-11-15 页头: 模型季度 / 覆盖 / 下次重训 / 回放口径 */
+  model_quarter?: string | null
+  coverage?: { ranked: number; young: number; missing: number; stale: number; total: number }
+  next_retrain?: { quarter: string; train_end: string; rows_now: number | null }
+  ruler?: ReplayRuler | null
 }
 export type SwingBoardsPayload = {
   contract: string
@@ -1124,6 +1178,8 @@ export type SwingBoardsPayload = {
   today?: string
   entry_day?: string
   now?: string
+  /** 2026-11-15 口径标签: 成交率 / 页头回放按哪份名单、哪段窗口算的 */
+  ruler?: ReplayRuler | null
 }
 
 /** 0.28.0 盘中强势卡 (GET /api/opportunities/intraday): 只记录不下单, 波段 2R / 5 天出场。 */
@@ -1148,6 +1204,8 @@ export type IntradayPayload = {
   replay: IntradayOdds
   /** 上线后自然出卡的成绩并排回放值 */
   live?: LiveVsReplay | null
+  /** 2026-11-15 口径标签 (回放是代码常量, 名单未记录) */
+  ruler?: ReplayRuler | null
   checks_today: { at: string; check: string; symbols: number; candidates: number; fired: string[]; heat?: IntradayHeatRow[]; near?: IntradayNearRow[]; late?: boolean }[]
   next_check: string | null
   rule: { min_chg: number; min_rvol: number; min_er: number; min_above: number; max_pull: number; hold_days: number; target_r: number }
@@ -1223,7 +1281,7 @@ export interface WatchlistRulesPayload {
   trading?: { long: string[]; short: string[]; risk_pct: number }
   candidates?: SwingCandidatesStatus
   /** 0.30.1 内置策略回放文件的元数据 (窗口 / 名单 / 数据截至 / 生成时刻); 齿轮的来源行读它 */
-  history_meta?: { window: string[] | null; universe: string | null; data_end: string | null; generated: string | null } | null
+  history_meta?: { window: string[] | null; universe: string | null; data_end: string | null; generated: string | null; ruler?: ReplayRuler | null } | null
 }
 
 export interface WatchlistEvoPanel {
@@ -1595,6 +1653,17 @@ export interface FactorLibraryItem {
   available?: boolean
   /** 历史帧可算 (检验入口口径): 扩展表快照字段为 false */
   history_available?: boolean
+  /** 2026-11-15 月度成熟度 (派生标签; 模块未上线时只有 dup) */
+  maturity?: FactorMaturity | null
+}
+export type FactorMaturityState = 'experiment' | 'observing' | 'active' | 'retired'
+export interface FactorMaturity {
+  state?: FactorMaturityState; icir?: number | null; n?: number | null; streak?: number
+  dup?: { of: string; rho: number }; weak?: boolean
+}
+export interface FactorMaturityMeta {
+  launched?: boolean; month?: string | null; generated_at?: string | null; pool?: number | null
+  distribution?: { counts: Record<FactorMaturityState, number>; total: number; max_share: number | null; launch_ok: boolean } | null
 }
 
 export interface FactorDslError {
@@ -2442,6 +2511,9 @@ export interface DiscoverCandidate {
   last_trades?: DiscoverTrade[]; published_strategy_id?: string | null
   /** full = 过完整发布门槛; observe = 只过样本外夏普 (页面叫「观察通过」) */
   oos_gate?: 'full' | 'observe' | null; oos_gate_reasons?: string[]
+  /** 2026-11-15 试验台账: 已试 N 次 + 历次周度样本外夏普 */
+  tried?: { n: number; weekly_n: number; sharpes: number[]; cooldown_until: string | null }
+  scoring?: Record<string, number>; directions?: Record<string, string>
 }
 /** 重算响应: 指标平铺 + 自己的曲线 / 最近成交 / 检查项 (整块替换详情, 不和原回测混显) */
 export interface DiscoverRecalc extends DiscoverStats {
@@ -2459,6 +2531,12 @@ export interface DiscoverWeek {
   funnel: { factors_selected?: number; factors_total?: number; combos?: number; valid_folds?: number; skipped_folds?: number; pool?: number; oos_passed?: number; passed?: number }
   engine: DiscoverEngine | null; spy: { stats: DiscoverStats; yearly: Record<string, number> } | null
   candidates: DiscoverCandidate[]; curves: Record<string, (number | null)[] | string[]> & { dates: string[] }
+  /** 2026-11-15 本轮因冷却没有回测的结构 */
+  cooled?: { signature: string; key: string; oos_sharpe: number | null; n: number; cooldown_until: string }[]
+}
+export interface DiscoverTrials {
+  contract?: string; structures?: number; trials?: number; cooldown_days?: number; min_repeats?: number
+  cooling?: { key: string; name: string; n: number; sharpes: number[]; cooldown_until: string; last: string }[]
 }
 export interface IntakeScreen {
   ic?: number | null; t?: number | null; nearest?: string | null; nearest_label?: string | null; corr?: number | null; duplicate?: boolean; error?: string
@@ -2491,8 +2569,11 @@ export interface FactorLabPage {
   weeks: { week: string; data_as_of: string; funnel: DiscoverWeek['funnel']; candidates: number }[]
   intake: IntakeOverview | null
   decisions: Record<string, { action: 'save' | 'discard'; at: string; candidate_id?: string }>
-  schedule: { next_weekly?: string; intake_every_hours?: number }
+  schedule: { next_weekly?: string | null; enabled?: boolean; last_weekly?: { run_id: string; week: string; day: string | null } | null; intake_every_hours?: number }
   running: boolean
+  /** 2026-11-15 立即跑一轮的进度: mining → discover → done / failed */
+  run_now?: { state?: 'mining' | 'discover' | 'done' | 'failed'; run_id?: string; reason?: string; at?: string; done_at?: string }
+  trials?: DiscoverTrials
   errors: Record<string, string>
 }
 
@@ -3004,9 +3085,18 @@ export const api = {
     request<{ macro_impact: IntelImpactLevel }>('/api/intel/settings', { method: 'POST', body: JSON.stringify({ macro_impact }) }),
   intelRefresh: () => request<{ ran: Record<string, number | string> }>('/api/intel/refresh', { method: 'POST', timeoutMs: 180_000 }),
   /** 0.29.0 规则齿轮唯一保存口: 3+3 + 单笔风险 (风险变了才建规则集新版本) */
-  saveOppSettings: (long: string[], short: string[], riskPct: number | null, radarPush?: { enabled: boolean; min_rvol: number } | null) =>
+  saveOppSettings: (long: string[], short: string[], riskPct: number | null, radarPush?: { enabled: boolean; min_rvol: number } | null,
+    extra?: { preview_hash?: string; theme_stress_pct?: number | null }) =>
     request<{ swing: { long: string[]; short: string[] }; ruleset: { version: number | null; risk_per_trade_pct: number | null }; radar_push?: { enabled: boolean; min_rvol: number } }>(
-      '/api/opportunities/settings', { method: 'POST', body: JSON.stringify({ long, short, risk_per_trade_pct: riskPct, ...(radarPush ? { radar_push: radarPush } : {}) }) }),
+      '/api/opportunities/settings', { method: 'POST', quiet: true, body: JSON.stringify({ long, short, risk_per_trade_pct: riskPct, ...(radarPush ? { radar_push: radarPush } : {}),
+        ...(extra?.preview_hash ? { preview_hash: extra.preview_hash } : {}), ...(extra?.theme_stress_pct != null ? { theme_stress_pct: extra.theme_stress_pct } : {}) }) }),
+  /** 2026-11-15 齿轮第一步: 预览 (只读, 不写文件) */
+  previewOppSettings: (long: string[], short: string[], riskPct: number | null, radarPush?: { enabled: boolean; min_rvol: number } | null, themeStressPct?: number | null) =>
+    request<OppSettingsPreview>('/api/opportunities/settings/preview', { method: 'POST', body: JSON.stringify({ long, short, risk_per_trade_pct: riskPct,
+      ...(radarPush ? { radar_push: radarPush } : {}), ...(themeStressPct != null ? { theme_stress_pct: themeStressPct } : {}) }) }),
+  /** 2026-11-15 历史日回看 */
+  oppAsof: (day: string) => request<AsOfPayload>(`/api/opportunities/asof?day=${encodeURIComponent(day)}`, { quiet: true }),
+  oppAsofDays: () => request<{ today: string; days: string[] }>('/api/opportunities/asof/days', { quiet: true }),
   cardSettlement: () => request<SettlementPayload>('/api/opportunities/settlement', { quiet: true }),
   swingSettlement: () => request<SwingSettlePayload>('/api/opportunities/swing-settlement', { quiet: true }),
   settlementCards: () => request<SettlementCardsPayload>('/api/opportunities/settlement/cards', { quiet: true }),
@@ -3166,7 +3256,7 @@ export const api = {
     request<{ columns: FactorColumn[] }>('/api/backtest/factor/columns'),
 
   factorLibrary: (assetType?: 'stock' | 'etf') =>
-    request<{ factors: FactorLibraryItem[] }>(
+    request<{ factors: FactorLibraryItem[]; maturity?: FactorMaturityMeta }>(
       `/api/factors${assetType ? `?asset_type=${assetType}` : ''}`,
     ),
 
@@ -3356,6 +3446,9 @@ export const api = {
   factorLabRecalc: (payload: { signature: string; pool: 'watchlist' | 'theme' | 'custom'; symbols?: string[]; start: string; end: string }) =>
     request<DiscoverRecalc>('/api/factor-lab/recalc', { method: 'POST', body: JSON.stringify(payload), timeoutMs: 180_000 }),
   factorLabRun: () => request<{ started: boolean }>('/api/factor-lab/run', { method: 'POST' }),
+  /** 2026-11-15 立即跑一轮周度挖掘 (本周编号), 跑完自动接着跑发现页回测 */
+  factorLabRunNow: () => request<{ status: string; run_id?: string }>('/api/factor-lab/weekly/run-now', { method: 'POST' }),
+  factorMaturityRun: () => request<{ started: boolean }>('/api/factor-lab/maturity/run', { method: 'POST' }),
   intakeRun: () => request<{ started: boolean }>('/api/factor-lab/intake/run', { method: 'POST' }),
   intakeMerge: (id: string, formula = 0) =>
     request<{ id: string; status: string }>(`/api/factor-lab/intake/items/${encodeURIComponent(id)}/merge?formula=${formula}`, { method: 'POST' }),

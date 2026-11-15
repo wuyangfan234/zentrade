@@ -3,10 +3,11 @@
  * 共振只进影子账本。只展示: 交易环 / 准入 / 下单簿 / 台账不变。
  * 文案只写结果 (名词 + 数字), 不写说明句。 */
 import type { ReactNode } from 'react'
-import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, LiveVsReplay, OpenRadarPayload, OppDesk, OppRadarView,
+import type { DeskEngine, DeskRegimeKey, DeskResonance, GapBoardPayload, IntradayPayload, LiveVsReplay, OpenRadarPayload, OppDesk, OppRadarView, ReplayRuler,
   RadarBlip, SwingBoardsPayload } from '@/lib/api'
 import { cardVerdict, p2, rS, SIDE_ZH, usdS } from '@/components/opportunities/terms'
 import { badge } from '@/components/ui/badge'
+import { RulerTag, rulerTitle } from '@/components/opportunities/RulerTag'
 
 const sgn = (v?: number | null) => (typeof v !== 'number' || !Number.isFinite(v) || v === 0 ? 'text-foreground' : v > 0 ? 'text-bull' : 'text-bear')
 const pc = (v?: number | null, d = 2) => (typeof v === 'number' && Number.isFinite(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(d)}%` : '—')
@@ -73,8 +74,8 @@ function Row({ symbol, onOpen, mark, main, sub, right, rightCls, dim, ...rest }:
 
 /** 上线后实际成绩并排回放值: 「笔数 · 每笔 R · 区间」并排「回放 R」; 区间不含回放值标「背离」。只展示。
  * lead = 开头那一项 (默认「实际 n 笔」); leadRef = 它旁边的回放对照 (如回区率)。 */
-export function LiveLine({ label, live, lead, leadRef, stale, ...rest }: { label?: string; live?: LiveVsReplay | null; lead?: string; leadRef?: string
-  stale?: boolean } & Record<`data-${string}`, string | undefined>) {
+export function LiveLine({ label, live, lead, leadRef, stale, ruler, ...rest }: { label?: string; live?: LiveVsReplay | null; lead?: string; leadRef?: string
+  stale?: boolean; ruler?: ReplayRuler | null } & Record<`data-${string}`, string | undefined>) {
   if (!live) return null
   const ciTxt = live.ci ? `${rS(live.ci[0])} ~ ${rS(live.ci[1])}` : ''
   const title = live.ci ? '区间 = 按机会生成日聚类的 95% 区间' : '机会生成日不足 8 个 · 不给区间'
@@ -86,6 +87,7 @@ export function LiveLine({ label, live, lead, leadRef, stale, ...rest }: { label
       {live.n > 0 && <span className="text-secondary">{'每笔 '}<b className={`font-semibold ${sgn(live.mean_r)}`}>{rS(live.mean_r)}</b></span>}
       {ciTxt && <span className="text-muted">{ciTxt}</span>}
       <span className="text-muted">{`回放 ${stale ? '—' : rS(live.replay_mean_r)}`}</span>
+      {ruler && <RulerTag r={ruler} className="!leading-4" />}
       {live.diverged && <span data-diverged-badge className={`${badge('warn')} !px-1 !leading-4`}>背离</span>}
     </span>
   )
@@ -198,7 +200,7 @@ function IntradayCol({ d, onOpen }: { d: ColData; onOpen: (s: string) => void })
   )
   const meta = [it?.next_check ? `下次 ${it.next_check}` : '', st && !it?.live ? `已结算 ${st.n} · ${rS(st.sum_r)}` : ''].filter(Boolean).join(' · ')
   const top = it?.live && it.live.n > 0
-    ? <div data-engine-live="intraday" className="border-b border-border/70 px-3 py-1.5 text-[12px] tabular-nums"><LiveLine live={it.live} /></div> : null
+    ? <div data-engine-live="intraday" className="border-b border-border/70 px-3 py-1.5 text-[12px] tabular-nums"><LiveLine live={it.live} ruler={it.ruler} /></div> : null
   return { count: active.length, meta, body, top }
 }
 
@@ -225,6 +227,7 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
         <span className={badge('limit')}>4h 趋势过滤</span>
         <span data-board-orders className={badge('action')}>{`下单 ${nOrder}`}</span>
         {nSkip > 0 && <span data-board-skips className={badge('warn')}>{`不下单 ${nSkip}`}</span>}
+        {!live && swing?.ruler && <RulerTag r={swing.ruler} />}
         <span className="ml-auto whitespace-nowrap text-[12px] tabular-nums text-muted">{meta}</span>
       </div>
       {live && (
@@ -233,13 +236,14 @@ export function StrategyBoard({ swing, error, res, onOpen }: { swing?: SwingBoar
             <LiveLine key={k} data-board-live-side={k} label={SIDE_ZH[k]} live={live[k]} stale={live[k].replay_stale}
               lead={`已成交 ${live[k].n}/${live[k].cards}`} leadRef={live[k].replay_stale ? undefined : `回放 ${pct0(live[k].replay_fill)}`} />
           ))}
+          {swing?.ruler && <RulerTag r={swing.ruler} />}
         </div>
       )}
       {error ? <Err name="机会板" /> : !swing ? <Empty t="—" /> : cards.length === 0 ? <Empty t="无" /> : (
         <div className="overflow-x-auto border-t border-border/70">
           <table className="w-full min-w-[1120px] text-[13px] tabular-nums">
             <thead><tr className="h-8 bg-elevated text-[12px] text-muted">
-              {['代码', '方向', '结论', '命中策略', '4h 趋势', '入场区', '止损', '目标', '股数', '成交率', '现价'].map((h, i) => <th key={h} className={`px-3 font-medium ${i === 0 || i === 2 || i === 3 ? 'text-left' : 'text-right'}`}>{h}</th>)}
+              {['代码', '方向', '结论', '命中策略', '4h 趋势', '入场区', '止损', '目标', '股数', '成交率', '现价'].map((h, i) => <th key={h} title={h === '成交率' ? rulerTitle(swing?.ruler) || undefined : undefined} className={`px-3 font-medium ${i === 0 || i === 2 || i === 3 ? 'text-left' : 'text-right'}`}>{h}</th>)}
             </tr></thead>
             <tbody>
               {cards.map((c, i) => {

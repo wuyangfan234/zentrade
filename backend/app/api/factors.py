@@ -37,12 +37,26 @@ def _custom_meta(request: Request | None) -> dict[str, dict]:
     return out
 
 
+def _maturity(request: Request | None) -> dict:
+    if request is None or not hasattr(request, "app"):
+        return {}
+    try:
+        from app.services import factor_maturity
+        return factor_maturity.library_view(_data_dir(request))
+    except Exception:  # 读不出: 因子库照常, 状态列显示「未评估」
+        return {}
+
+
 @router.get("")
 def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|etf)$"), request: Request = None) -> dict:  # type: ignore[assignment]
     """注册表因子列表; asset_type 过滤适用资产 (财务因子仅股票)。"""
     specs = selectable_factors(asset_type=asset_type)
     meta = _custom_meta(request)
+    mat = _maturity(request)
+    mf = mat.get("factors") or {}
     return {
+        # 2026-11-15 成熟度 (月度派生, 只当标签): launched=False = 预注册门槛没过或还没算, 前端只显示「未评估」
+        "maturity": {k: mat.get(k) for k in ("launched", "month", "generated_at", "pool", "distribution")},
         "factors": [
             {
                 "id": spec.id,
@@ -65,6 +79,7 @@ def list_factors(asset_type: str | None = Query(default=None, pattern="^(stock|e
                 "available": factor_available(spec),
                 # 当前可用 ≠ 历史可检验: 扩展表快照字段只有当日值 (信号可用, 检验整段为空)
                 "history_available": factor_history_available(spec),
+                "maturity": mf.get(spec.id),
             }
             for spec in specs
         ]

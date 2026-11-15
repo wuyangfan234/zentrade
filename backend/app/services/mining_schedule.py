@@ -163,15 +163,17 @@ def schedule_claim(day: date) -> str:
     return f"weekly-{iso_year}-W{week:02d}"
 
 
-def run_weekly_mining(app_state: Any, *, now: datetime | None = None) -> dict[str, Any]:
-    """Check the weekly gate and enqueue mining; never perform mining synchronously."""
+def run_weekly_mining(app_state: Any, *, now: datetime | None = None, force: bool = False) -> dict[str, Any]:
+    """Check the weekly gate and enqueue mining; never perform mining synchronously.
+    force=True (2026-11-15 因子页「立即跑一轮」): 不看开关与星期, 仍按本周编号认领 (一周最多一轮, 已有则不重跑)。"""
     config = preferences.get_mining_schedule()
     day = market_date(now)
-    if not config["mining_schedule_enabled"]:
-        return {"status": "disabled"}
-    weekday = day.weekday()
-    if weekday > 4 or weekday < config["mining_schedule_weekday"]:
-        return {"status": "weekday_mismatch"}
+    if not force:
+        if not config["mining_schedule_enabled"]:
+            return {"status": "disabled"}
+        weekday = day.weekday()
+        if weekday > 4 or weekday < config["mining_schedule_weekday"]:
+            return {"status": "weekday_mismatch"}
 
     manager = getattr(app_state, "mining_manager", None)
     repo = getattr(app_state, "repo", None)
@@ -184,7 +186,7 @@ def run_weekly_mining(app_state: Any, *, now: datetime | None = None) -> dict[st
     request = build_default_request(repo, config["mining_budget_profile"])
     fingerprint = build_data_fingerprint(repo, app_state, request)
     claim = schedule_claim(day)
-    fingerprint = {**fingerprint, "source": "scheduled", "source_claim": claim}
+    fingerprint = {**fingerprint, "source": "scheduled", "source_claim": claim, **({"forced": True} if force else {})}
 
     with _CLAIM_LOCK:
         existing = store.get(claim)

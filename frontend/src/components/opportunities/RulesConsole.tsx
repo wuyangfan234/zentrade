@@ -15,10 +15,12 @@
  *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道 = 系统设置 → 推送通道。 */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type OppSettings, type RadarPushSettings, type SwingCandidatesStatus, type WatchlistRuleCatalogItem, type WatchlistRuleHistory, type WatchlistRulesPayload } from '@/lib/api'
+import { api, type OppSettings, type OppSettingsPreview, type RadarPushSettings, type SwingCandidatesStatus, type WatchlistRuleCatalogItem, type WatchlistRuleHistory, type WatchlistRulesPayload } from '@/lib/api'
 import { displayStrategyName } from '@/lib/strategyDisplay'
 import { Sheet } from '@/components/opportunities/Sheet'
 import { hm, rr } from '@/components/opportunities/format'
+import { rulerLabel } from '@/components/opportunities/RulerTag'
+import { ApiError } from '@/lib/api'
 
 const BAN = new Set(['evo', 'phantom_4h', 'phantom_4h_short', 'phantom_4h_pine'])
 const MAX = 3
@@ -37,7 +39,10 @@ export function histSource(meta: WatchlistRulesPayload['history_meta'] | undefin
   if (!win || win.length < 2) return HIST_SRC_FALLBACK
   const span = `${win[0].slice(0, 7)}~${win[1].slice(0, 7)}`
   const n = (meta?.universe ?? '').match(/watchlist\s+(\d+)/i)?.[1]
-  const who = n ? `，自选 ${n} 只` : ''
+  // 2026-11-15 口径标签: 名单定于哪天、是否事后名单、与现名单是否一致 (与机会板标签同一函数 rulerLabel)
+  const r = meta?.ruler
+  const who = r && r.kind !== 'unrecorded' ? `，${rulerLabel(r)} 只 · 定于 ${r.fixed ?? ''}${r.changed ? ' · 与现名单不同' : ''}`
+    : n ? `，自选 ${n} 只` : ''
   const end = meta?.data_end ? `，数据到 ${meta.data_end}` : ''
   return `离线回放（${span} 信号日${who}${end}，与机会板同口径）`
 }
@@ -251,14 +256,40 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
 
   const riskNum = risk === null ? null : Number(risk)
   const riskBad = riskNum !== null && !(Number.isFinite(riskNum) && riskNum >= 0.1 && riskNum <= 2)
+  // 2026-11-15 主题压力跌幅 (只影响机会页主题压力条的显示)
+  const [stress, setStress] = useState<number | null>(null)
+  const stressCur = settings?.theme_stress_pct ?? 20
+  const stressDirty = stress !== null && stress !== stressCur
+  // 2026-11-15 两步保存: 先预览 (带哈希), 确认时核对; 409 = 另一处已改过, 换成新预览
+  const [previewRaw, setPreviewRaw] = useState<{ key: string; p: OppSettingsPreview } | null>(null)
+  const [conflict, setConflict] = useState(false)
+  const pushArg = pushDirty ? { enabled: pushEnabled, min_rvol: pushMin } : null
+  const stressArg = stressDirty ? stress : null
+  // 预览之后又改了勾选 / 数值 → 预览作废, 回到编辑态 (不拿旧预览去保存)
+  const editKey = JSON.stringify([longIds, shortIds, riskNum, pushArg, stressArg])
+  const preview = previewRaw && previewRaw.key === editKey ? previewRaw.p : null
+  const setPreview = (p: OppSettingsPreview | null) => setPreviewRaw(p ? { key: editKey, p } : null)
+  const doPreview = useMutation({
+    mutationFn: () => api.previewOppSettings(longIds, shortIds, riskNum, pushArg, stressArg),
+    onSuccess: (p) => { setPreview(p); setConflict(false) },
+  })
   const save = useMutation({
-    mutationFn: () => api.saveOppSettings(longIds, shortIds, riskNum, pushDirty ? { enabled: pushEnabled, min_rvol: pushMin } : null),
+    mutationFn: () => api.saveOppSettings(longIds, shortIds, riskNum, pushArg, { preview_hash: preview?.hash, theme_stress_pct: stressArg }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['opportunities'] })
-      setLongPick(null); setShortPick(null); setRisk(null); setPushOn(null); setPushTh(null)
+      setLongPick(null); setShortPick(null); setRisk(null); setPushOn(null); setPushTh(null); setStress(null)
+      setPreview(null); setConflict(false)
+    },
+    onError: (e) => {
+      if (e instanceof ApiError && e.status === 409) {
+        try {
+          const fresh = (JSON.parse(e.message) as { preview?: OppSettingsPreview }).preview
+          if (fresh) { setPreview(fresh); setConflict(true) }
+        } catch { /* 读不出新预览: 回到编辑态 */ setPreview(null) }
+      }
     },
   })
-  const dirty = longPick !== null || shortPick !== null || risk !== null || !!settings?.evo || pushDirty
+  const dirty = longPick !== null || shortPick !== null || risk !== null || !!settings?.evo || pushDirty || stressDirty
 
   const d = q.data
   const catalog = (d?.catalog ?? []).filter((r) => !BAN.has(r.id))
@@ -279,16 +310,27 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
 
   return (
     <Sheet attr={{ 'data-console': '' }} onClose={onClose} title="机会板策略"
-      footer={(
+      footer={preview ? (
         <>
-          <button type="button" data-save disabled={!dirty || riskBad || save.isPending || !settings}
-            onClick={() => save.mutate()}
+          <button type="button" data-preview-back onClick={() => { setPreview(null); setConflict(false) }}
+            className="rounded-btn border border-border px-3 py-1.5 text-secondary hover:bg-elevated">返回</button>
+          <button type="button" data-save-confirm disabled={save.isPending} onClick={() => save.mutate()}
             className="rounded-btn border border-accent/60 px-3 py-1.5 text-accent hover:bg-accent/10 disabled:opacity-40"
-          >{save.isPending ? '保存中' : '保存'}</button>
+          >{save.isPending ? '保存中' : '确认保存'}</button>
+          {conflict && <span data-preview-conflict className="text-warning">规则已在别处修改 · 预览已更新</span>}
+          {save.isError && !(save.error instanceof ApiError && save.error.status === 409) && <span className="text-danger">{`保存失败 · ${(save.error as Error).message}`}</span>}
+        </>
+      ) : (
+        <>
+          <button type="button" data-save disabled={!dirty || riskBad || doPreview.isPending || !settings}
+            onClick={() => doPreview.mutate()}
+            className="rounded-btn border border-accent/60 px-3 py-1.5 text-accent hover:bg-accent/10 disabled:opacity-40"
+          >{doPreview.isPending ? '预览中' : '保存'}</button>
           {riskBad && <span data-risk-error className="text-danger">单笔风险 0.1–2</span>}
-          {save.isError && <span className="text-danger">{(save.error as Error).message}</span>}
+          {doPreview.isError && <span className="text-danger">{`预览失败 · ${(doPreview.error as Error).message}`}</span>}
         </>
       )}>
+      {preview && <SettingsPreview p={preview} nameOf={nameOf} />}
       <div data-swing-explain className="mb-3 text-xs text-muted">{`${settings?.gate?.name ?? '方向门'}定方向 · 多空各至多 3 条策略 · 模拟账户仅执行机会板`}</div>
       <div data-forward-summary className="mb-3 flex flex-wrap items-end gap-3 rounded-card border border-border bg-base p-3 text-xs">
         <div className="min-w-0 flex-1">
@@ -300,6 +342,14 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
           <input data-risk aria-label="单笔风险" inputMode="decimal"
             className="mt-0.5 w-20 rounded-input border border-border bg-surface px-2 py-0.5 text-sm tabular-nums text-foreground"
             value={riskVal} onChange={(e) => setRisk(e.target.value)} />
+        </div>
+        <div className="min-w-0" title="机会页主题压力条: 主题内持仓一起再跌这个幅度时账户亏多少 · 只显示 · 不拦单">
+          <div className="text-[11px] leading-4 text-muted">主题压力跌幅</div>
+          <select data-theme-stress aria-label="主题压力跌幅"
+            className="mt-0.5 rounded-input border border-border bg-surface px-1.5 py-0.5 text-sm tabular-nums text-foreground"
+            value={stress ?? stressCur} onChange={(e) => setStress(Number(e.target.value))}>
+            {(settings?.theme_stress_levels ?? [10, 15, 20, 25, 30]).map((v) => <option key={v} value={v}>{`${v}%`}</option>)}
+          </select>
         </div>
       </div>
       {q.isLoading ? <div className="text-sm text-muted">…</div>
@@ -316,5 +366,35 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
         )}
       {pushCur && <RadarPushEditor cur={pushCur} enabled={pushEnabled} minRvol={pushMin} onEnabled={setPushOn} onMinRvol={setPushTh} />}
     </Sheet>
+  )
+}
+
+/** 2026-11-15 保存前预览: 只放名词、数字、状态 (一行一项) */
+function SettingsPreview({ p, nameOf }: { p: OppSettingsPreview; nameOf: (id: string) => string }) {
+  const side = (k: 'long' | 'short') => {
+    const c = p.changes[k]
+    const parts = [...c.remove.map((id, i) => `−${c.remove_names[i] || nameOf(id)}`), ...c.add.map((id, i) => `+${c.add_names[i] || nameOf(id)}`)]
+    return parts.length ? parts.join(' ') : '不变'
+  }
+  const capTxt = (a: number[] | null, b: number[] | null) =>
+    a && b ? `单日开仓 ${a[0]} → ${b[0]} 笔 · 同板块 ${a[1]} → ${b[1]} 仓` : ''
+  const oddsOk = p.odds_match.long && p.odds_match.short
+  const rows: [string, string, string?][] = [
+    ['入选做多', side('long')],
+    ['入选做空', side('short')],
+    ['赔率表', oddsOk ? '一致' : '不匹配 · 保存后成交率显示「—」至重算', oddsOk ? undefined : 'text-warning'],
+    ['今日下单簿', p.book.frozen ? `已冻结 · 不变${p.book.day ? `（信号日 ${p.book.day.slice(5)}）` : ''}` : '未生成'],
+    ['单笔风险', p.risk.from === p.risk.to ? `${p.risk.from ?? '—'}% · 不变` : `${p.risk.from}% → ${p.risk.to}% · ${capTxt(p.risk.caps_from, p.risk.caps_to)}`],
+    ['主题压力跌幅', p.theme_stress.from === p.theme_stress.to ? `${p.theme_stress.from}% · 不变` : `${p.theme_stress.from}% → ${p.theme_stress.to}%`],
+    ...(p.radar_push ? [['开盘放量推送', `${p.radar_push.to.enabled ? '开' : '关'} · ≥ ${p.radar_push.to.min_rvol} 倍`] as [string, string]] : []),
+  ]
+  return (
+    <div data-settings-preview className="mb-3 overflow-hidden rounded-card border border-accent/50 text-[13px] tabular-nums">
+      {rows.map(([k, v, cls]) => (
+        <div key={k} className="grid min-h-8 grid-cols-[96px_1fr] items-center gap-2 border-t border-border/70 px-3 py-1 first:border-t-0">
+          <span className="text-secondary">{k}</span><span data-preview-row={k} className={cls ?? 'text-foreground'}>{v}</span>
+        </div>
+      ))}
+    </div>
   )
 }

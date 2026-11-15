@@ -1517,6 +1517,20 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="sat", hour=10, minute=30, timezone="America/New_York"),
         id="zen_factor_discover_retry", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600, replace_existing=True)
 
+    # 2026-11-15 因子成熟度 (月度): 每周六 11:30 ET 检查, 本月还没有上个月末的读数才跑 (worker 子进程, 主题池 x 全部因子
+    # 的 12 个月日截面 IC)。只写 research/factor_maturity/, 只当因子库标签, 不进挖掘、不改策略打分。
+    def _factor_maturity():
+        from app.services import factor_maturity
+        st = _get_app_state()
+        r = getattr(st, "repo", None)
+        if r is None:
+            return None
+        return factor_maturity.run_scheduled(r.store.data_dir, r)
+
+    scheduler.add_job(_factor_maturity,
+        trigger=CronTrigger(day_of_week="sat", hour=11, minute=30, timezone="America/New_York"),
+        id="zen_factor_maturity", max_instances=1, coalesce=True, misfire_grace_time=6 * 3600, replace_existing=True)
+
     # 0.28.0 盘中强势卡 (10-20 产品决策: 只上机会板 + 自动结算记战绩, 不下单): 10:00-15:00 ET 每 30 分钟检查自选出卡
     # (形态用 20 分钟前已完成的 SIP 5 分钟K + 出卡时实时价), 同时按 5 分钟K 结算在途卡; 16:25 ET 再结算一次
     # (当天K线齐了, 第 5 天到期的卡按收盘结)。不碰台账、不进交易环。

@@ -367,6 +367,10 @@ def worker_run(data_dir: Path, repo, cfg: dict) -> dict:
     if op == "screen":
         from app.services import factor_intake
         return factor_intake.screen_impl(data_dir, repo, cfg)
+    if op == "maturity":                     # 2026-11-15 月度因子成熟度 (factor_maturity.run_scheduled)
+        from app.services import factor_maturity
+        out = factor_maturity.compute(data_dir, repo)
+        return {"months": out.get("months"), "distribution": out.get("distribution"), "factors": len(out.get("factors") or {})}
     raise ValueError(f"unsupported factor_lab op: {op!r}")
 
 
@@ -386,7 +390,12 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
     ref_pos = {x: i for i, x in enumerate(ref["dates"])} if ref else {}
     spy_pos = {x: i for i, x in enumerate(ref["spy"]["dates"])} if ref and ref.get("spy") else {}
     cands = []
+    cooled = []
     oos_passed = 0
+    # 2026-11-15 试验台账: 判冷却不算本轮 (本轮就是正在评的这一次)
+    from app.market_clock import us_clock
+    from app.services import trial_ledger
+    led = trial_ledger.view(Path(data_dir), us_clock.market_datetime(us_clock.now()).date(), exclude_run=run_id)
     for c in _candidates(Path(data_dir), run_id):
         if not c["passed_oos"]:
             continue
@@ -394,6 +403,11 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
         d = c["definition"]
         scoring = {str(k): float(v) for k, v in (d.get("scoring") or {}).items()}
         directions = {str(k): str(v) for k, v in (d.get("directions") or {}).items()}
+        t = led.get(trial_ledger.structure_key(scoring, directions) or "")
+        if t and t["cooling"]:
+            cooled.append({"signature": c["signature"], "key": trial_ledger.structure_key(scoring, directions),
+                           "oos_sharpe": c.get("oos_sharpe"), "n": t["n"] + 1, "cooldown_until": t["cooldown_until"]})
+            continue
         try:
             res = _run(service, "factor_rank_research", symbols, start, end,
                        {"scoring": scoring, "directions": directions, **RANK_PARAMS})
@@ -426,6 +440,7 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
             "last_trades": _last_trades(res.get("trades") or []), "published_strategy_id": c.get("published_strategy_id"),
         })
     out = _assemble(run_id, manifest, summary, symbols, start, end, ref, cands, oos_passed=oos_passed)
+    out["cooled"] = cooled
     week = run_id.removeprefix("weekly-")
     _dir(Path(data_dir)).mkdir(parents=True, exist_ok=True)
     atomic_write_text(_dir(Path(data_dir)) / f"{week}.json", json.dumps(out, ensure_ascii=False, indent=1, default=str))
@@ -522,9 +537,40 @@ def page(data_dir: Path) -> dict:
     hist = section("weeks", lambda: weeks(data_dir))
     intake = section("intake", lambda: factor_intake.overview(data_dir))
     decisions = section("decisions", lambda: _decisions(data_dir))
-    sched = section("schedule", _schedule)
+    sched = section("schedule", lambda: _schedule(data_dir))
+    trials = section("trials", lambda: _annotate_trials(data_dir, week))
     return {"contract": CONTRACT, "week": week, "weeks": hist or [], "intake": intake, "decisions": decisions or {},
-            "schedule": sched or {}, "running": _RUN_LOCK.locked(), "errors": errors}
+            "schedule": sched or {}, "running": _RUN_LOCK.locked(), "run_now": dict(_RUN_NOW), "trials": trials or {},
+            "errors": errors}
+
+
+def _annotate_trials(data_dir: Path, week: dict | None) -> dict:
+    """2026-11-15 试验台账: 本周每个候选标「已试 N 次」+ 历次样本外夏普; 冷却中的结构单列 (不当新候选)。
+    旧周文件没有这些字段, 读的时候补上 (不改文件)。"""
+    from app.market_clock import us_clock
+    from app.services import trial_ledger
+    today = us_clock.market_datetime(us_clock.now()).date()
+    led = trial_ledger.view(Path(data_dir), today)
+    if week:
+        for c in week.get("candidates") or []:
+            key = trial_ledger.structure_key(c.get("scoring"), c.get("directions"))
+            t = led.get(key or "")
+            if t:
+                c["tried"] = {"n": t["n"], "weekly_n": t["weekly_n"], "sharpes": t["sharpes"][-6:],
+                              "cooldown_until": t["cooldown_until"] if t["cooling"] else None}
+    cooling = [{"key": k, "n": v["n"], "sharpes": v["sharpes"][-6:], "cooldown_until": v["cooldown_until"], "last": v["last"],
+                "name": _key_name(k)} for k, v in sorted(led.items()) if v["cooling"]]
+    return {"contract": trial_ledger.CONTRACT, "structures": len(led), "trials": sum(v["n"] for v in led.values()),
+            "cooling": cooling, "cooldown_days": trial_ledger.COOLDOWN_DAYS, "min_repeats": trial_ledger.MIN_WEEKLY_REPEATS}
+
+
+def _key_name(key: str) -> str:
+    from app.factors.registry import get_factor
+    parts = []
+    for part in key.split("|"):
+        fid, _, d = part.partition(":")
+        parts.append(_label(get_factor, fid) + (" 低" if d == "low" else " 高"))
+    return " + ".join(parts)
 
 
 def _decisions_path(data_dir: Path) -> Path:
@@ -591,18 +637,42 @@ def decide(data_dir: Path, week: str, signature: str, action: str, *, promoter=N
     return out
 
 
-def _schedule() -> dict:
-    """Next weekly discover run: the first trading Friday whose DISCOVER_RUN_ET has not passed yet."""
+def _schedule(data_dir: Path | None = None) -> dict:
+    """Next weekly discover run: the first trading Friday whose DISCOVER_RUN_ET has not passed yet.
+    2026-11-15: 周度挖掘开关关着时不给“下次” (开关关 = 那天不会有新结果), 另给最近一轮周度挖掘的编号与日期。"""
     from app.market_clock import us_clock
+    from app.services import preferences
     now = us_clock.market_datetime(us_clock.now())
     today = now.date()
+    try:
+        cfg = preferences.get_mining_schedule()
+    except Exception:
+        cfg = {}
+    enabled = bool(cfg.get("mining_schedule_enabled"))
+    try:
+        last = _latest_weekly_run_meta(data_dir) if data_dir is not None else None
+    except Exception:
+        last = None
+    if not enabled:
+        return {"next_weekly": None, "enabled": False, "last_weekly": last, "intake_every_hours": 6}
     before_run = (now.hour, now.minute) < DISCOVER_RUN_ET
     d = today
     for _ in range(14):
         if d.weekday() == 4 and us_clock.is_trading_day(d) and (d > today or before_run):
             break
         d += timedelta(days=1)
-    return {"next_weekly": d.isoformat(), "intake_every_hours": 6}
+    return {"next_weekly": d.isoformat(), "enabled": True, "last_weekly": last, "intake_every_hours": 6}
+
+
+def _latest_weekly_run_meta(data_dir: Path) -> dict | None:
+    """最近一轮成功的周度挖掘: {run_id, week, day (美东)}。"""
+    from app.services import trial_ledger
+    latest = _latest_weekly_run(Path(data_dir))
+    if latest is None:
+        return None
+    run_id, manifest, _summary = latest
+    day = trial_ledger._run_day(manifest)
+    return {"run_id": run_id, "week": run_id.removeprefix("weekly-"), "day": day.isoformat() if day else None}
 
 
 def recalc(data_dir: Path, repo, signature: str, *, symbols: list[str], start: date, end: date) -> dict:
@@ -655,3 +725,60 @@ def _recalc_impl(data_dir: Path, repo, signature: str, *, symbols: list[str], st
     out["checks"] = [c for c in _checks(out, None, None, (cand.get("oos") or {}).get("oos_sharpe"))
                      if c[1] not in ("corr_engine", "corr_spy")]
     return out
+
+
+# ── 2026-11-15 立即跑一轮: 本周周度挖掘 (按本周编号认领) → 跑完接着跑发现页回测 ─────────────────
+_RUN_NOW: dict = {}
+_RUN_NOW_LOCK = threading.Lock()
+RUN_NOW_WAIT_S = 3 * 3600
+RUN_NOW_POLL_S = 10
+
+
+def run_now(app_state, data_dir: Path, repo, *, sleep=None, clock=None) -> dict:
+    """入队本周周度挖掘 (不看开关与星期), 后台等它结束再跑 run_weekly。盘中 (交易日 09:00-17:00 ET) 不跑。
+    一周只认领一轮: 本周已跑过 → already_claimed, 只补跑发现页回测。"""
+    import time as _time
+
+    from app.services import mining_schedule
+    from app.services.mining_jobs import TERMINAL_RUN_STATUSES
+    if not can_run_heavy():
+        return {"status": "session"}
+    with _RUN_NOW_LOCK:
+        if _RUN_NOW.get("state") in ("mining", "discover"):
+            return {"status": "running", **_RUN_NOW}
+        res = mining_schedule.run_weekly_mining(app_state, force=True)
+        run_id = res.get("run_id")
+        if res.get("status") not in ("enqueued", "already_claimed") or not run_id:
+            _RUN_NOW.clear()
+            _RUN_NOW.update({"state": "failed", "run_id": run_id, "reason": res.get("status"),
+                             "at": datetime.now().astimezone().isoformat(timespec="seconds")})
+            return {**res}
+        _RUN_NOW.clear()
+        _RUN_NOW.update({"state": "mining", "run_id": run_id, "at": datetime.now().astimezone().isoformat(timespec="seconds")})
+    store = getattr(getattr(app_state, "mining_manager", None), "store", None)
+    sleep = sleep or _time.sleep
+    clock = clock or _time.monotonic
+
+    def chain():
+        try:
+            t0 = clock()
+            status = None
+            while clock() - t0 < RUN_NOW_WAIT_S:
+                m = store.get(run_id) if store is not None else None
+                status = (m or {}).get("status")
+                if status in TERMINAL_RUN_STATUSES:
+                    break
+                sleep(RUN_NOW_POLL_S)
+            if status not in ("succeeded", "succeeded_with_budget_exhausted"):
+                _RUN_NOW.update({"state": "failed", "reason": status or "timeout"})
+                return
+            _RUN_NOW.update({"state": "discover"})
+            out = run_weekly(Path(data_dir), repo)
+            _RUN_NOW.update({"state": "done", "result": out,
+                             "done_at": datetime.now().astimezone().isoformat(timespec="seconds")})
+        except Exception as exc:  # 后台: 只记日志与状态
+            logger.warning("factor-lab run-now failed: %s", type(exc).__name__)
+            _RUN_NOW.update({"state": "failed", "reason": type(exc).__name__})
+
+    threading.Thread(target=chain, name="factor-lab-run-now", daemon=True).start()
+    return {"status": res.get("status"), "run_id": run_id}

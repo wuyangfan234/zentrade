@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, FlaskConical, PenLine, Search, Sparkles, Trash2, X } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { toast } from '@/components/Toast'
-import { api, type FactorLibraryItem } from '@/lib/api'
+import { api, type FactorLibraryItem, type FactorMaturityMeta, type FactorMaturityState } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { GenerateFactorStrategyDialog } from './GenerateFactorStrategyDialog'
 
@@ -25,9 +25,40 @@ const STATUS_META: Record<NonNullable<FactorLibraryItem['status']>, { label: str
   retired: { label: '停用', cls: 'bg-elevated text-muted' },
 }
 const STATUS_ORDER = ['active', 'watch', 'retired', 'draft'] as const
+// 2026-11-15 成熟度 (月度派生, 只当标签): 内置因子没有评估时显示「未评估」, 不再默认「在用」;
+// 自定义因子的手动状态优先, 带「手动」小标; 派生读数放悬停。
+const MATURITY_META: Record<FactorMaturityState | 'none', { label: string; cls: string }> = {
+  experiment: { label: '实验', cls: 'bg-accent/10 text-accent dark:text-blue-400' },
+  observing: { label: '观察', cls: 'bg-accent/10 text-accent dark:text-blue-400' },
+  active: { label: '在用', cls: 'bg-elevated text-foreground' },
+  retired: { label: '退役', cls: 'bg-elevated text-muted' },
+  none: { label: '未评估', cls: 'bg-elevated text-secondary' },
+}
+export function maturityTitle(m: FactorLibraryItem['maturity'], meta?: FactorMaturityMeta): string {
+  if (!m?.state) return meta?.launched ? '本月未评估' : '未评估'
+  if (m.state === 'experiment') return '实验 · 并入不足 180 天 · 不显示读数'
+  const parts = [MATURITY_META[m.state].label]
+  if (typeof m.icir === 'number') parts.push(`12 月 ICIR ${m.icir.toFixed(3)}`)
+  if (m.state === 'retired' && m.streak) parts.push(`连续 ${m.streak} 个月末低于 0.2`)
+  if (typeof m.n === 'number') parts.push(`样本 ${m.n} 天`)
+  if (meta?.pool) parts.push(`主题池 ${meta.pool}`)
+  if (meta?.month) parts.push(`${meta.month.slice(0, 7)} 月末`)
+  if (m.weak) parts.push('ICIR 后 20%')
+  return parts.join(' · ')
+}
+export function displayStatus(item: FactorLibraryItem, meta?: FactorMaturityMeta): { label: string; cls: string; manual: boolean; title: string } {
+  const builtin = (item.origin ?? 'builtin') === 'builtin'
+  const m = meta?.launched ? item.maturity : null
+  if (!builtin && item.status) {
+    const s = STATUS_META[item.status]
+    return { label: s.label, cls: s.cls, manual: true, title: `手动设置 · ${maturityTitle(m, meta)}` }
+  }
+  const key = (m?.state ?? 'none') as FactorMaturityState | 'none'
+  return { ...MATURITY_META[key], manual: false, title: maturityTitle(m, meta) }
+}
 const ASSET_LABEL: Record<string, string> = { stock: '股票', etf: 'ETF' }
 const assetText = (types: string[]) => types.map(type => ASSET_LABEL[type] ?? type).join(' / ')
-const statusLabel = (status: string | undefined) => STATUS_META[(status ?? 'active') as keyof typeof STATUS_META]?.label ?? status ?? ''
+
 
 export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: string) => void; onEdit?: (factorId: string) => void }) {
   const [query, setQuery] = useState('')
@@ -41,6 +72,8 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
     queryFn: () => api.factorLibrary(),
   })
   const factors = lib.data?.factors ?? []
+  const matMeta = lib.data?.maturity
+  const labelOf = useMemo(() => new Map(factors.map(f => [f.id, f.label])), [factors])
 
   const groups = useMemo(
     () => Array.from(new Set(factors.map(item => item.group))),
@@ -112,7 +145,8 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
               <tr>
                 <th className="px-3 py-2.5 font-medium">因子</th>
                 <th className="px-3 py-2.5 font-medium">来源</th>
-                <th className="px-3 py-2.5 font-medium">状态</th>
+                <th className="px-3 py-2.5 font-medium" title="内置因子：月度成熟度（主题池 12 个月日截面 IC）· 自定义因子：手动状态">状态</th>
+                <th className="px-3 py-2.5 font-medium" title="最近一次周度挖掘里与更强的因子秩相关 ≥ 0.9 · 只提示，不删">重复</th>
                 <th className="px-3 py-2.5 font-medium">分组</th>
                 <th className="px-3 py-2.5 font-medium">类型</th>
                 <th className="px-3 py-2.5 font-medium">公式</th>
@@ -134,7 +168,18 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
                   </td>
                   <td className="px-3 py-2.5 text-secondary" data-origin={item.origin ?? 'builtin'}>{ORIGIN_LABEL[item.origin ?? 'builtin']}</td>
                   <td className="px-3 py-2.5">
-                    <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${STATUS_META[item.status ?? 'active'].cls}`}>{STATUS_META[item.status ?? 'active'].label}</span>
+                    {(() => {
+                      const st = displayStatus(item, matMeta)
+                      return (
+                        <span data-factor-status={st.label} title={st.title} className="inline-flex items-center gap-1 whitespace-nowrap">
+                          <span className={`inline-flex rounded-btn px-1.5 py-0.5 text-[11px] font-medium ${st.cls}`}>{st.label}</span>
+                          {st.manual && <span className="text-[11px] text-muted">手动</span>}
+                        </span>
+                      )
+                    })()}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-secondary" data-factor-dup={item.maturity?.dup?.of ?? undefined}>
+                    {item.maturity?.dup ? `≈ ${labelOf.get(item.maturity.dup.of) ?? item.maturity.dup.of} ${item.maturity.dup.rho.toFixed(2)}` : '—'}
                   </td>
                   <td className="px-3 py-2.5 text-secondary">{item.group}</td>
                   <td className="px-3 py-2.5">
@@ -169,18 +214,20 @@ export function FactorLibrary({ onInspect, onEdit }: { onInspect: (factorId: str
         )}
       </div>
 
-      {detail && <FactorDetailModal item={detail} onClose={() => setDetail(null)} onInspect={onInspect} onEdit={onEdit} />}
+      {detail && <FactorDetailModal item={detail} meta={matMeta} onClose={() => setDetail(null)} onInspect={onInspect} onEdit={onEdit} />}
     </div>
   )
 }
 
 function FactorDetailModal({
+  meta,
   item,
   onClose,
   onInspect,
   onEdit,
 }: {
   item: FactorLibraryItem
+  meta?: FactorMaturityMeta
   onClose: () => void
   onInspect: (factorId: string) => void
   onEdit?: (factorId: string) => void
@@ -189,7 +236,7 @@ function FactorDetailModal({
   const setStatus = useMutation({
     mutationFn: (status: 'draft' | 'active' | 'watch' | 'retired') => api.factorSetStatus(item.id, status),
     onSuccess: data => {
-      toast(`${item.label} · ${statusLabel(data.status)}`, 'success')
+      toast(`${item.label} · ${STATUS_META[data.status as keyof typeof STATUS_META]?.label ?? data.status}`, 'success')
       void queryClient.invalidateQueries({ queryKey: QK.factorsLibrary })
       void queryClient.invalidateQueries({ queryKey: QK.factorColumns })
       onClose()
@@ -249,7 +296,9 @@ function FactorDetailModal({
     ['适用资产', assetText(item.asset_types)],
     ['跨个股可比', item.scale_free ? '是' : '否'],
     ['依赖列', item.dependencies.length > 0 ? item.dependencies.join(', ') : '—'],
-    ['状态', statusLabel(item.status)],
+    ['状态', displayStatus(item, meta).label],
+    ['成熟度', maturityTitle(meta?.launched ? item.maturity : null, meta)],
+    ...(item.maturity?.dup ? [['重复', `≈ ${item.maturity.dup.of} ${item.maturity.dup.rho.toFixed(2)}`] as [string, string]] : []),
     ...(item.available === false ? [['数据', '当前数据源未接入'] as [string, string]]
       : item.history_available === false ? [['数据', '只有当日快照 · 可用于信号 · 不能做历史检验'] as [string, string]] : []),
     ...(item.description ? [['描述', item.description] as [string, string]] : []),
