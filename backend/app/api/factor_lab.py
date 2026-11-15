@@ -131,6 +131,28 @@ def run_discover(request: Request) -> dict:
     return {"started": True}
 
 
+@router.post("/weekly/run-now")
+def run_weekly_now(request: Request) -> dict:
+    """2026-11-15 立即跑一轮周度挖掘 (本周编号, 一周一轮), 跑完自动接着跑发现页回测。盘中不跑。"""
+    if not factor_discover.can_run_heavy():
+        raise HTTPException(status_code=409, detail="盘中不跑, 收盘后 17:00 ET 起可运行")
+    out = factor_discover.run_now(request.app.state, _data_dir(request), _repo(request))
+    if out.get("status") == "session":
+        raise HTTPException(status_code=409, detail="盘中不跑, 收盘后 17:00 ET 起可运行")
+    return out
+
+
+@router.post("/maturity/run")
+def run_maturity(request: Request) -> dict:
+    """2026-11-15 手动重算因子成熟度 (后台, worker 子进程)。盘中不跑。"""
+    if not factor_discover.can_run_heavy():
+        raise HTTPException(status_code=409, detail="盘中不跑, 收盘后 17:00 ET 起可运行")
+    from app.services import factor_maturity
+    data_dir, repo = _data_dir(request), _repo(request)
+    _background("maturity", lambda: factor_maturity.run_scheduled(data_dir, repo, force=True))
+    return {"started": True}
+
+
 @router.post("/intake/run")
 def run_intake(request: Request) -> dict:
     if factor_intake.running():

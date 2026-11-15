@@ -984,6 +984,14 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     except Exception as e:
         logger.warning("swing_desk: live line unavailable: %s", type(e).__name__)
         base["live"] = None
+    # 2026-11-15 口径标签: 成交率与页头回放 (赔率表 / 基础率同一次重算) 是按哪份名单、哪段窗口算的 (只展示)
+    try:
+        from app.services import replay_ruler
+        from app.services import swing_verdict as sv
+        base["ruler"] = replay_ruler.from_meta(sv.odds_table(), data_dir=data_dir, watch_now=_watchlist_now() or None)
+    except Exception as e:
+        logger.warning("swing_desk: replay ruler unavailable: %s", type(e).__name__)
+        base["ruler"] = None
     base["now"] = now.isoformat(timespec="seconds")
     return base
 

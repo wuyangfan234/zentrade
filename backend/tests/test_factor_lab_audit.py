@@ -94,7 +94,23 @@ def test_next_weekly_is_today_until_the_discover_job_has_run(monkeypatch):
     monkeypatch.setattr(us_clock, "now", lambda: friday)
     monkeypatch.setattr(us_clock, "today", lambda: friday.date())
     monkeypatch.setattr(us_clock, "is_trading_day", lambda d: d.weekday() < 5)
+    from app.services import preferences
+    monkeypatch.setattr(preferences, "get_mining_schedule", lambda: {"mining_schedule_enabled": True})
     assert fd._schedule()["next_weekly"] == "2026-11-06"
+
+
+def test_schedule_has_no_next_run_when_weekly_mining_is_off(monkeypatch):
+    """2026-11-15: 周度挖掘开关关着 = 那天不会有新结果, 不给「下次」(旧实现只看日历, 页面写“下次 11-20 盘后”)。"""
+    from zoneinfo import ZoneInfo
+
+    from app.market_clock import us_clock
+    from app.services import preferences
+    friday = datetime(2026, 11, 6, 17, 20, tzinfo=ZoneInfo("America/New_York"))
+    monkeypatch.setattr(us_clock, "now", lambda: friday)
+    monkeypatch.setattr(us_clock, "is_trading_day", lambda d: d.weekday() < 5)
+    monkeypatch.setattr(preferences, "get_mining_schedule", lambda: {"mining_schedule_enabled": False})
+    out = fd._schedule()
+    assert out["next_weekly"] is None and out["enabled"] is False
 
 
 def test_cross_article_dedupe_sees_quotes_from_earlier_runs(tmp_path, monkeypatch):

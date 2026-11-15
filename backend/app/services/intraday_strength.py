@@ -914,8 +914,16 @@ def build_live(data_dir: Path, *, repo=None, loop=None, now: datetime | None = N
         live = ss.live_vs_replay(by_day, ODDS["mean_r"])
     except Exception as e:
         logger.warning("intraday strength: live stats unavailable: %s", type(e).__name__)
+    # 2026-11-15 口径标签: ODDS 是代码常量, 没记回放名单 → 「名单未记录」(只展示)
+    try:
+        from app.services import replay_ruler
+        ruler = replay_ruler.ruler(None, ODDS["period"], watch_now=replay_ruler.current_watchlist())
+    except Exception as e:
+        logger.warning("intraday strength: replay ruler unavailable: %s", type(e).__name__)
+        ruler = None
     return {"contract": CONTRACT, "today": today.isoformat(), "now": now.isoformat(timespec="seconds"),
             "active": active, "history": history[:HISTORY_MAX], "stats": stats, "replay": ODDS, "live": live,
+            "ruler": ruler,
             "checks_today": rec["checks"][-12:], "next_check": nxt,
             "rule": {"min_chg": MIN_CHG, "min_rvol": MIN_RVOL, "min_er": MIN_ER, "min_above": MIN_ABOVE,
                      "max_pull": MAX_PULL, "hold_days": HOLD_DAYS, "target_r": TARGET_R}}

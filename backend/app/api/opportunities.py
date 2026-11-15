@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import logging
+import threading
 from datetime import date
 from app.market_clock import us_clock
 
@@ -384,6 +385,31 @@ def opportunities_page(request: Request) -> dict:
                                           loop=getattr(request.app.state, "trading_loop", None)))
 
 
+@router.get("/asof")
+def opportunities_asof(request: Request, day: str = Query(..., max_length=10)) -> dict:
+    """2026-11-15 历史日回看 (只读): 那天冻结的下单簿 / 今日多空 / 盘中强势 / 开盘放量 / 共振 / 盘前判断。
+    没存档的块 = null + errors=not_archived, 不回退到别的日子。"""
+    from app.services import desk_overview as ov
+    from app.services import opp_asof
+    try:
+        d = date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(422, "day must be YYYY-MM-DD") from None
+    today = us_clock.market_datetime(us_clock.now()).date()
+    if d >= today:
+        raise HTTPException(422, "day must be before today")
+    data_dir = request.app.state.repo.store.data_dir
+    return ov.to_json_safe({**opp_asof.build(data_dir, d, today=today), "days": opp_asof.available_days(data_dir, today)})
+
+
+@router.get("/asof/days")
+def opportunities_asof_days(request: Request) -> dict:
+    """可回看的过去交易日 (有任一冻结文件)。"""
+    from app.services import opp_asof
+    today = us_clock.market_datetime(us_clock.now()).date()
+    return {"today": today.isoformat(), "days": opp_asof.available_days(request.app.state.repo.store.data_dir, today)}
+
+
 class RadarPushIn(BaseModel):
     """0.35.0 开盘放量榜推送 (渠道 = 系统设置 → 推送通道): 开关 + 门槛 (只收档位 1 / 2 / 3 / 5)。strict: 不把 "true" / "3" 宽松转换。"""
     enabled: bool = Field(..., strict=True)
@@ -397,6 +423,13 @@ class OppSettingsIn(BaseModel):
     risk_per_trade_pct: float | None = Field(None, strict=True)
     note: str = Field("", max_length=200)
     radar_push: RadarPushIn | None = None
+    # 2026-11-15 两步保存: 预览返回的哈希; 带了就核对, 不符 = 409 (另一个入口已改过 / 内容与预览不同), 不写任何文件
+    preview_hash: str | None = Field(None, max_length=64, strict=True)
+    # 2026-11-15 主题压力跌幅 (%), 只收 10 / 15 / 20 / 25 / 30; 只影响机会页主题压力条的显示
+    theme_stress_pct: int | None = Field(None, strict=True)
+
+
+_SETTINGS_LOCK = threading.Lock()
 
 
 _SWING_BAN = frozenset({"evo", "phantom_4h", "phantom_4h_short", "phantom_4h_pine"})   # save_strategies 本来就丢掉这几条
@@ -426,10 +459,8 @@ def _swing_rule_errors(request: Request, long_ids: list[str], short_ids: list[st
     return None
 
 
-@router.post("/settings")
-def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
-    """0.29.0 规则齿轮唯一保存口: 3+3 + 单笔风险 (风险变了才建规则集新版本, 勾选原样沿用)。"""
-    from app.services import opp_page
+def _settings_input(body: OppSettingsIn, request: Request) -> tuple[float | None, dict | None]:
+    """齿轮请求体校验 (保存与预览同一套): 越界 / 坏档位 / 未知规则 → 422。返回 (规范化风险, 推送设置)。"""
     risk = body.risk_per_trade_pct
     if risk is not None:
         if not (risk == risk and 0.1 <= risk <= 2.0):
@@ -441,11 +472,44 @@ def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
         if float(body.radar_push.min_rvol) not in open_radar.PUSH_LEVELS:
             raise HTTPException(422, f"radar_push.min_rvol must be one of {list(open_radar.PUSH_LEVELS)}")
         push = {"enabled": body.radar_push.enabled, "min_rvol": float(body.radar_push.min_rvol)}
+    if body.theme_stress_pct is not None:
+        from app.services import theme_exposure
+        if body.theme_stress_pct not in theme_exposure.STRESS_LEVELS:
+            raise HTTPException(422, f"theme_stress_pct must be one of {list(theme_exposure.STRESS_LEVELS)}")
     bad = _swing_rule_errors(request, body.long, body.short)
     if bad:
         raise HTTPException(422, bad)
-    return opp_page.save_settings(request.app.state.repo.store.data_dir, long_ids=body.long, short_ids=body.short,
-                                  risk_pct=risk, note=body.note, radar_push=push)
+    return risk, push
+
+
+@router.post("/settings/preview")
+def opportunities_settings_preview(body: OppSettingsIn, request: Request) -> dict:
+    """2026-11-15 齿轮第一步 (只读, 不写任何文件): 入选策略增减、赔率表是否对得上、今日下单簿、单笔风险与上限前后 + 哈希。"""
+    from app.services import opp_page
+    risk, push = _settings_input(body, request)
+    return opp_page.preview_settings(request.app.state.repo.store.data_dir, long_ids=body.long, short_ids=body.short,
+                                     risk_pct=risk, radar_push=push, theme_stress_pct=body.theme_stress_pct)
+
+
+@router.post("/settings")
+def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
+    """0.29.0 规则齿轮唯一保存口: 3+3 + 单笔风险 (风险变了才建规则集新版本, 勾选原样沿用)。
+    2026-11-15: 带 preview_hash 时先核对, 不符返回 409 + 新预览, 不写文件。"""
+    from app.services import opp_page
+    risk, push = _settings_input(body, request)
+    data_dir = request.app.state.repo.store.data_dir
+    with _SETTINGS_LOCK:
+        if body.preview_hash is not None:
+            now_hash = opp_page.preview_hash(data_dir, long_ids=body.long, short_ids=body.short, risk_pct=risk, radar_push=push,
+                                             theme_stress_pct=body.theme_stress_pct)
+            if now_hash != body.preview_hash:
+                raise HTTPException(409, {"reason": "settings_changed",
+                                          "preview": opp_page.preview_settings(data_dir, long_ids=body.long, short_ids=body.short,
+                                                                               risk_pct=risk, radar_push=push,
+                                                                               theme_stress_pct=body.theme_stress_pct)})
+        return opp_page.save_settings(data_dir, long_ids=body.long, short_ids=body.short,
+                                      risk_pct=risk, note=body.note, radar_push=push,
+                                      theme_stress_pct=body.theme_stress_pct)
 
 
 @router.get("/swing")
@@ -464,14 +528,19 @@ def _rule_history_for_panel() -> dict:
     return dict(sd.rule_history().get("rules") or {})
 
 
-def _rule_history_meta() -> dict:
+def _rule_history_meta(data_dir=None) -> dict:
     """0.30.1: 齿轮里回放数字的来源写成文件自己的元数据, 不再写死日期与名单 (重算后自动跟上)。
     文件读不到 = 空 dict, 前端退回「无来源」。"""
     from app.services import swing_desk as sd
     h = sd.rule_history()
     win = h.get("window") or []
+    try:   # 2026-11-15 口径标签 (名单定于哪天 / 是否事后名单 / 与现在的自选是否一致), 与机会板同一函数
+        from app.services import replay_ruler
+        ruler = replay_ruler.from_meta(h, data_dir=data_dir, watch_now=replay_ruler.current_watchlist())
+    except Exception:
+        ruler = None
     return {"window": [str(x) for x in win][:2] or None, "universe": h.get("universe"),
-            "data_end": h.get("data_end"), "generated": h.get("generated")}
+            "data_end": h.get("data_end"), "generated": h.get("generated"), "ruler": ruler}
 
 
 @router.get("/rules")
@@ -532,7 +601,7 @@ def rules_get(request: Request) -> dict:
             "rule": {"start": str(wv.FORWARD_START), "min_n": wv.MIN_N, "min_months": wv.MIN_MONTHS},
             "evo": _evo_panel(data_dir, rs, names),
             "candidates": _sc.status(data_dir),
-            "history_meta": _rule_history_meta(),
+            "history_meta": _rule_history_meta(data_dir),
             "params_default": wv.DEFAULT_PARAMS}
 
 

@@ -7,16 +7,19 @@
  * 0.52.2 (11-06 产品决策选 A): 今日多空标为模型观察; 机会板独立; 共振与三个盘面引擎归入只记录雷达。
  */
 import { lazy, Suspense, useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Settings2 } from 'lucide-react'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
 import { StatusRail } from '@/components/opportunities/StatusRail'
 import { COL_ORDER, EngineCols, Holdings, RegimeBar, StrategyBoard } from '@/components/opportunities/Desk'
 import { LsRank, LsRankEmpty } from '@/components/opportunities/LsRank'
 import { MoodBar } from '@/components/opportunities/MoodBar'
+import { ThemeBar } from '@/components/opportunities/ThemeBar'
+import { AsOfView } from '@/components/opportunities/AsOfView'
 import { useOppPage } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
 import { badge } from '@/components/ui/badge'
-import type { OppPagePayload, SwingBoardsPayload } from '@/lib/api'
+import { api, type OppPagePayload, type SwingBoardsPayload } from '@/lib/api'
 
 // 个股预览 (K 线 / 分时, 含 ~1MB ECharts) 只在点开后才需要: 懒加载, 不进首屏包。
 const StockPreviewDialog = lazy(() => import('@/components/StockPreviewDialog').then((m) => ({ default: m.StockPreviewDialog })))
@@ -30,15 +33,32 @@ export function headMeta(sw: SwingBoardsPayload): string {
   return [sw.as_of ? `信号日 ${md(sw.as_of)}` : '', sw.refresh?.last_at ? `机会板刷新 ${hm(sw.refresh.last_at)}（北京）` : ''].filter(Boolean).join(' · ')
 }
 
-function Head({ d, onGear }: { d: OppPagePayload | undefined; onGear: () => void }) {
+/** 2026-11-15 历史日回看: 页头日期选择 (默认今天; 只列有冻结文件的过去交易日) */
+function AsOfPicker({ value, onChange }: { value: string | null; onChange: (v: string | null) => void }) {
+  const q = useQuery({ queryKey: ['opportunities', 'asof-days'], queryFn: () => api.oppAsofDays(), staleTime: 600_000 })
+  const days = [...(q.data?.days ?? [])].reverse()
+  return (
+    <select data-asof-picker aria-label="回看日期" title="回看那天页面上的冻结数据"
+      className="shrink-0 rounded-input border border-border bg-surface px-1.5 py-0.5 text-xs tabular-nums text-foreground"
+      value={value ?? ''} onChange={(e) => onChange(e.target.value || null)}>
+      <option value="">今天</option>
+      {days.map((x) => <option key={x} value={x}>{x}</option>)}
+    </select>
+  )
+}
+
+function Head({ d, onGear, asof, onAsof }: { d: OppPagePayload | undefined; onGear: () => void; asof: string | null; onAsof: (v: string | null) => void }) {
   const sw = d?.swing
   return (
     <div data-head className="mb-3 flex items-center gap-2">
       <h1 className="shrink-0 text-lg font-semibold tracking-tight">机会</h1>
       <span className={badge('limit')} title="模拟账户 · 无真实下单">模拟</span>
-      {sw && <span data-swing-head className="min-w-0 truncate text-xs tabular-nums text-muted">{headMeta(sw)}</span>}
+      {asof ? <span data-asof-head className={badge('warn')}>{`回看 ${asof}`}</span>
+        : sw && <span data-swing-head className="min-w-0 truncate text-xs tabular-nums text-muted">{headMeta(sw)}</span>}
+      <span className="ml-auto" />
+      <AsOfPicker value={asof} onChange={onAsof} />
       <button type="button" aria-label="规则" title="规则设置" data-gear onClick={onGear}
-        className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-btn text-secondary hover:bg-elevated hover:text-foreground max-md:h-11 max-md:w-11">
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-btn text-secondary hover:bg-elevated hover:text-foreground max-md:h-11 max-md:w-11">
         <Settings2 className="h-[18px] w-[18px]" />
       </button>
     </div>
@@ -46,7 +66,8 @@ function Head({ d, onGear }: { d: OppPagePayload | undefined; onGear: () => void
 }
 
 export function Opportunities() {
-  const q = useOppPage()
+  const [asof, setAsof] = useState<string | null>(null)
+  const q = useOppPage(asof === null)
   const d = q.data
   const [open, setOpen] = useState<string | null>(null)
   // 地址带 ?rules=1 时直接打开规则设置 (策略页「入选策略」按钮跳过来)
@@ -70,13 +91,15 @@ export function Opportunities() {
   const stale = !!(q.isError && d)
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-4 pb-24 md:px-6">
-      <Head d={d} onGear={() => setConsoleOpen(true)} />
-      {q.isLoading && <div data-loading role="status" className="py-12 text-center text-sm text-muted">加载中</div>}
-      {q.isError && !d && <div data-error className="py-6 text-sm text-danger">{(q.error as Error)?.message || '读取失败'}</div>}
-      {stale && <div data-stale className="mb-2 rounded-btn border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">{`刷新失败 · 当前为 ${hm(d!.generated_at)}（北京）的数据`}</div>}
-      {d && (
+      <Head d={d} onGear={() => setConsoleOpen(true)} asof={asof} onAsof={setAsof} />
+      {asof && <AsOfView day={asof} onOpen={setOpen} />}
+      {!asof && q.isLoading && <div data-loading role="status" className="py-12 text-center text-sm text-muted">加载中</div>}
+      {!asof && q.isError && !d && <div data-error className="py-6 text-sm text-danger">{(q.error as Error)?.message || '读取失败'}</div>}
+      {!asof && stale && <div data-stale className="mb-2 rounded-btn border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">{`刷新失败 · 当前为 ${hm(d!.generated_at)}（北京）的数据`}</div>}
+      {d && !asof && (
         <>
           {view ? <StatusRail view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
+          {errs.themes ? <SectionError name="主题压力" err={errs.themes} /> : d.themes ? <ThemeBar t={d.themes} /> : null}
           {errs.mood ? <SectionError name="大盘判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
           {errs.ls_rank ? <SectionError name="今日多空" err={errs.ls_rank} /> : d.ls_rank ? <LsRank d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
           {desk ? <RegimeBar desk={desk} /> : <SectionError name="市场宽度" err={errs.desk ?? '无数据'} />}

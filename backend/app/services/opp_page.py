@@ -209,11 +209,13 @@ def _settings(data_dir: Path) -> dict:
     from app.services import open_radar
     rs = wv.current_ruleset(data_dir)
     from app.opportunity import direction_gate
+    from app.services import theme_exposure
     gate = direction_gate.active(data_dir)
     return {"long": list(lg), "short": list(sh), "risk_per_trade_pct": (rs.get("params") or {}).get("risk_per_trade_pct"),
             "ruleset_version": rs.get("version"), "evo": rs.get("evo") is True,
             "radar_push": {**open_radar.push_settings(data_dir), **open_radar.push_options()},
-            "gate": {"id": gate.id, "name": gate.name}}
+            "gate": {"id": gate.id, "name": gate.name},
+            "theme_stress_pct": theme_exposure.stress_pct(data_dir), "theme_stress_levels": list(theme_exposure.STRESS_LEVELS)}
 
 
 def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) -> dict:
@@ -248,9 +250,12 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
     # 0.51.0 今日多空 (只读; 没有名单 = None)
     from app.services import ls_rank
     lsr = _section("ls_rank", lambda: ls_rank.view(data_dir, repo=repo, now=now), errors)
+    # 2026-11-15 主题压力 (只显示, 不拦单; 分组读不到只空这一块)
+    from app.services import theme_exposure
+    themes = _section("themes", lambda: theme_exposure.view(data_dir, repo=repo, loop=loop, swing=swing), errors)
     return {"contract": CONTRACT, "generated_at": now.isoformat(timespec="seconds"), "phase": phase, "stage": stage,
             "swing": swing, "intraday": intraday, "radar": radar, "gaps": gaps, "mood": mood, "ctx": ctx,
-            "settings": settings, "radar_view": radar_view, "desk": desk, "ls_rank": lsr, "errors": errors}
+            "settings": settings, "radar_view": radar_view, "desk": desk, "ls_rank": lsr, "themes": themes, "errors": errors}
 
 
 def _watch_symbols() -> set[str]:
@@ -370,7 +375,7 @@ def gap_board(data_dir: Path, repo, now: datetime, swing: dict | None, stage: st
 
 
 def save_settings(data_dir: Path, *, long_ids: list, short_ids: list, risk_pct: float | None, note: str = "",
-                  radar_push: dict | None = None) -> dict:
+                  radar_push: dict | None = None, theme_stress_pct: int | None = None) -> dict:
     """规则齿轮的唯一保存口 (0.29.0): 机会板 3+3 + 单笔风险 (+ 0.35.0 开盘榜推送开关 / 门槛)。
     风险变了 (或旧自进化开关还开着) 才新建规则集版本, 勾选 / 看空列表原样沿用, 自进化关掉; 其余不建版本。
     先建版本再写 3+3: 版本写失败 3+3 不动。推送设置只在请求带了才写, 与 3+3 / 风险无关 (不建规则集版本)。"""
@@ -389,6 +394,84 @@ def save_settings(data_dir: Path, *, long_ids: list, short_ids: list, risk_pct: 
         ruleset = wv.save_ruleset(data_dir, list(cur.get("enabled") or []), params,
                                   note or "opp page settings: risk", short=list(cur.get("short") or []), evo=False)
     swing = sd.save_strategies(data_dir, long_ids, short_ids)
+    from app.services import theme_exposure
+    if theme_stress_pct is not None and theme_stress_pct != theme_exposure.stress_pct(data_dir):
+        theme_exposure.save_stress_pct(data_dir, theme_stress_pct)
     return {"swing": swing, "ruleset": {"version": ruleset.get("version"),
                                         "risk_per_trade_pct": (ruleset.get("params") or {}).get("risk_per_trade_pct")},
-            "radar_push": push if push is not None else open_radar.push_settings(data_dir)}
+            "radar_push": push if push is not None else open_radar.push_settings(data_dir),
+            "theme_stress_pct": theme_exposure.stress_pct(data_dir)}
+
+
+# ── 2026-11-15 齿轮两步保存: 先预览 (带哈希), 确认时核对哈希 ─────────────────────
+PREVIEW_CONTRACT = "opp-settings-preview-v1"
+
+
+def _file_digest(path: Path) -> str | None:
+    import hashlib
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def settings_state(data_dir: Path) -> dict:
+    """齿轮保存会改动的全部状态: 3+3 文件字节、当前规则集版本与单笔风险、开盘榜推送设置。"""
+    from app.services import open_radar, theme_exposure
+    from app.services import swing_desk as sd
+    from app.services import watchlist_v4 as wv
+    rs = wv.current_ruleset(data_dir)
+    return {"swing": _file_digest(sd.swing_config_path(data_dir)), "ruleset_version": rs.get("version"),
+            "risk": (rs.get("params") or {}).get("risk_per_trade_pct"), "evo": rs.get("evo") is True,
+            "radar_push": open_radar.push_settings(data_dir), "theme_stress_pct": theme_exposure.stress_pct(data_dir)}
+
+
+def preview_hash(data_dir: Path, *, long_ids: list, short_ids: list, risk_pct, radar_push: dict | None,
+                 theme_stress_pct: int | None = None) -> str:
+    """预览哈希 = sha256(当前状态 + 本次要保存的内容)。确认时重算; 状态被另一个入口改过或内容变了 → 不同。"""
+    import hashlib
+    body = {"state": settings_state(data_dir), "long": list(long_ids), "short": list(short_ids),
+            "risk": risk_pct, "radar_push": radar_push, "theme_stress_pct": theme_stress_pct}
+    return hashlib.sha256(json.dumps(body, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")).hexdigest()[:16]
+
+
+def preview_settings(data_dir: Path, *, long_ids: list, short_ids: list, risk_pct, radar_push: dict | None = None,
+                     theme_stress_pct: int | None = None) -> dict:
+    """保存前的预览 (只读): 入选策略增减、赔率表还对不对得上、今日下单簿是否已冻结、单笔风险与两个上限前后。"""
+    from app.services import entry_guard
+    from app.services import swing_desk as sd
+    from app.services import swing_verdict as sv
+    from app.services import watchlist_book as wb
+    data_dir = Path(data_dir)
+    cur = _settings(data_dir)
+    new_long = [x for x in long_ids if isinstance(x, str)][:3] or list(sd.DEFAULT_LONG)
+    new_short = [x for x in short_ids if isinstance(x, str)][:3] or list(sd.DEFAULT_SHORT)
+    changes = {}
+    for side, new in (("long", new_long), ("short", new_short)):
+        old = list(cur.get(side) or [])
+        changes[side] = {"add": [x for x in new if x not in old], "remove": [x for x in old if x not in new],
+                         "add_names": [sd.strategy_name(x, side) for x in new if x not in old],
+                         "remove_names": [sd.strategy_name(x, side) for x in old if x not in new]}
+    table = sv.odds_table()
+    odds = {side: bool(table) and sv.table_matches(table, side, new) for side, new in (("long", new_long), ("short", new_short))}
+    day = sd.latest_watchlist_day(data_dir)
+    book_frozen = bool(day and wb.load_day(data_dir, day) is not None)
+    old_risk = cur.get("risk_per_trade_pct")
+    new_risk = old_risk if risk_pct is None else risk_pct
+
+    def caps(r):
+        try:
+            return list(entry_guard.book_caps(float(r) / 100)) if isinstance(r, (int, float)) else None
+        except (TypeError, ValueError):
+            return None
+    push_old = (cur.get("radar_push") or {})
+    push = None if radar_push is None else {"from": {"enabled": push_old.get("enabled"), "min_rvol": push_old.get("min_rvol")},
+                                             "to": dict(radar_push)}
+    return {"contract": PREVIEW_CONTRACT, "changes": changes, "odds_match": odds,
+            "book": {"day": day.isoformat() if day else None, "frozen": book_frozen},
+            "risk": {"from": old_risk, "to": new_risk, "caps_from": caps(old_risk), "caps_to": caps(new_risk)},
+            "radar_push": push,
+            "theme_stress": {"from": cur.get("theme_stress_pct"),
+                             "to": cur.get("theme_stress_pct") if theme_stress_pct is None else theme_stress_pct},
+            "hash": preview_hash(data_dir, long_ids=long_ids, short_ids=short_ids, risk_pct=risk_pct, radar_push=radar_push,
+                                 theme_stress_pct=theme_stress_pct)}

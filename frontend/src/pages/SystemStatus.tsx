@@ -54,6 +54,7 @@ export const JOB_LABEL: Record<string, string> = {
   zen_factor_intake: '公开因子采集 · 每 6 小时',
   zen_factor_discover: '每周因子挖掘 · 周五 17:40 ET',
   zen_factor_discover_retry: '每周因子挖掘补跑 · 周六 10:30 ET',
+  zen_factor_maturity: '因子成熟度 · 每月 · 周六 11:30 ET',
   zen_weekly_strategy_evaluation: '策略检验周更 · 周六 10:00 ET',
   zen_weekly_review: '周报 · 周日 09:00 ET',
   zen_ops_check: '运行巡检 · 3 分钟',

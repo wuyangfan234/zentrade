@@ -22,6 +22,7 @@ import {
   type DiscoverRecalc,
 } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
+import { RUN_NOW_ZH, weeklyText } from './weeklySchedule'
 
 const DASH = '—'
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -154,8 +155,53 @@ function FlowBar({ page, onStep }: { page: FactorLabPage; onStep: (i: number) =>
         <span>股票池 <b className="tabular-nums text-foreground">{w?.funnel.pool ?? DASH}</b></span>
         <span>自选 <b className="tabular-nums text-foreground">{w?.symbols ?? DASH}</b></span>
         <span>已发布 <b className="tabular-nums text-foreground">{(w?.candidates ?? []).filter(c => c.published_strategy_id).length}</b></span>
-        <span className="ml-auto">下次 · {page.schedule.next_weekly?.slice(5) ?? DASH} 周五 收盘后</span>
+        <span className="ml-auto" data-weekly-sched={page.schedule.enabled === false ? 'off' : 'on'}>{weeklyText(page.schedule, '周五 收盘后')}</span>
+        <RunNow page={page} />
       </div>
+    </Card>
+  )
+}
+
+/** 2026-11-15 立即跑一轮: 本周编号的周度挖掘 (一周一轮) → 跑完自动回测候选。盘中不跑。 */
+function RunNow({ page }: { page: FactorLabPage }) {
+  const qc = useQueryClient()
+  const st = page.run_now?.state
+  const busy = st === 'mining' || st === 'discover'
+  const run = useMutation({
+    mutationFn: () => api.factorLabRunNow(),
+    onSettled: () => { void qc.invalidateQueries({ queryKey: QK.factorLabPage }) },
+  })
+  const title = [page.run_now?.run_id ? `运行 ${page.run_now.run_id}` : '', page.run_now?.reason ? `原因 ${page.run_now.reason}` : ''].filter(Boolean).join(' · ')
+  return (
+    <span className="flex items-center gap-2">
+      {st && <span data-run-now-state={st} title={title || undefined} className={st === 'failed' ? 'text-warning' : 'text-secondary'}>{RUN_NOW_ZH[st] ?? st}</span>}
+      <button type="button" data-run-now disabled={busy || run.isPending} onClick={() => run.mutate()}
+        title="本周编号的周度挖掘 · 一周一轮 · 跑完自动回测候选 · 盘中不跑"
+        className="inline-flex h-7 items-center rounded-btn border border-border bg-surface px-2.5 text-xs font-medium text-secondary hover:text-foreground disabled:opacity-50">
+        {run.isPending ? '提交中' : '立即跑一轮'}
+      </button>
+    </span>
+  )
+}
+
+/** 2026-11-15 冷却中的结构: 近 90 天在周度挖掘里作为候选出现 ≥ 3 次, 不再当本周新候选回测 */
+function CoolingList({ page }: { page: FactorLabPage }) {
+  const xs = page.trials?.cooling ?? []
+  if (!xs.length) return null
+  return (
+    <Card attr={{ 'data-cooling': '' }} className="mt-3 overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-border px-3.5 py-2 text-[13px]">
+        <b className="text-foreground">冷却中</b>
+        <span className="text-[12px] text-muted" title={`近 ${page.trials?.cooldown_days ?? 90} 天作为周度候选出现 ≥ ${page.trials?.min_repeats ?? 3} 次 · 冷却到最后一次 + ${page.trials?.cooldown_days ?? 90} 天 · 到期自动解除 · 挖掘照跑`}>{xs.length}</span>
+      </div>
+      {xs.map(x => (
+        <div key={x.key} data-cooling-row={x.key} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-border/60 px-3.5 py-2 text-[12px] tabular-nums last:border-b-0">
+          <span className="font-semibold text-foreground">{x.name}</span>
+          <span className="text-secondary">{`已试 ${x.n} 次`}</span>
+          <span className="text-secondary" title="历次周度挖掘的样本外夏普">{`样本外夏普 ${x.sharpes.map(v => v.toFixed(2)).join(' / ') || DASH}`}</span>
+          <span className="ml-auto text-secondary">{`冷却至 ${x.cooldown_until.slice(5)}`}</span>
+        </div>
+      ))}
     </Card>
   )
 }
@@ -466,6 +512,8 @@ function CandidateCards({ page, sel, setSel, filter, onDecide }: {
             <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-legs=""
               className="flex min-w-0 cursor-pointer flex-wrap gap-1 lg:col-start-1 lg:row-start-2">
               {(c.legs ?? []).map(l => <Chip key={l.factor}>{l.label} {l.direction === 'low' ? '低' : '高'}</Chip>)}<Chip>每日前 20</Chip>{c.oos_gate === 'observe' && <span title={OBSERVE_NOTE}><Chip dashed>观察通过</Chip></span>}
+              {c.tried && c.tried.n > 1 && <span data-tried={c.tried.n} title={`历次周度样本外夏普 ${c.tried.sharpes.map(v => v.toFixed(2)).join(' / ')}`}><Chip dashed>{`已试 ${c.tried.n} 次`}</Chip></span>}
+              {c.tried?.cooldown_until && <Chip dashed>{`冷却至 ${c.tried.cooldown_until.slice(5)}`}</Chip>}
             </div>
             <div onClick={() => setSel({ kind: 'cand', sig: c.signature })} data-row-metrics=""
               className="grid min-w-0 cursor-pointer grid-cols-4 gap-2 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-x lg:border-border lg:px-4">
@@ -859,6 +907,7 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
       </div>
       {w ? <CandidateCards page={page} sel={effectiveSel ?? { kind: 'engine' }} setSel={openSel} filter={candFilter} onDecide={(sig, action) => decide.mutate({ sig, action })} />
         : <Card className="p-6 text-center text-xs text-muted">本周未生成 · 周五 17:40 ET</Card>}
+      <CoolingList page={page} />
 
       {effectiveSel && (w || effectiveSel.kind === 'intake') && <Detail key={selectionKey(effectiveSel)} page={page} sel={effectiveSel} onDecide={(sig, action) => decide.mutate({ sig, action })} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />}
 

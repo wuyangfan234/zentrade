@@ -613,18 +613,29 @@ def series(recs: list[dict]) -> dict | None:
 _SETTLE_CACHE: dict[str, tuple[tuple, dict]] = {}
 
 
-def settle_view(data_dir: Path) -> dict:
-    """前向结算汇总 (全部 / 近 8 周 / 最近一份)。按名单文件签名缓存, 页面 30 秒一轮不重复解析。"""
+def model_quarter(rec: dict) -> str | None:
+    """名单是哪个季度模型出的 (名单文件 model.quarter); 读不到 = None。"""
+    m = rec.get("model") if isinstance(rec, dict) else None
+    q = m.get("quarter") if isinstance(m, dict) else None
+    return str(q) if q else None
+
+
+def settle_view(data_dir: Path, quarter: str | None = None) -> dict:
+    """前向结算汇总 (全部 / 近 8 周 / 最近一份)。按名单文件签名缓存, 页面 30 秒一轮不重复解析。
+    2026-11-15: quarter 给了 → 只算这个季度模型出的名单 (换模型后前向从 0 重新计), 其他季度各自一份冻结成绩放 prev;
+    quarter=None → 旧口径 (全部合在一起)。"""
     r = root(data_dir)
     files = sorted(r.glob("*.json")) if r.exists() else []
-    sig = tuple((p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in files)
-    hit = _SETTLE_CACHE.get(str(r))
+    sig = (quarter, tuple((p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in files))
+    key = f"{r}|{quarter}"
+    hit = _SETTLE_CACHE.get(key)
     if hit and hit[0] == sig:
         return hit[1]
-    done = sorted((x for x in (load_day(data_dir, d) for d in list_days(data_dir)) if x and x.get("settled")),
-                  key=lambda x: x["day"])
+    every = [x for x in (load_day(data_dir, d) for d in list_days(data_dir)) if x]
+    mine = every if quarter is None else [x for x in every if model_quarter(x) == quarter]
+    done = sorted((x for x in mine if x.get("settled")), key=lambda x: x["day"])
     recs = [x for x in done if not x.get("late")]          # 开盘后才生成的名单不计入前向成绩
-    n_late = sum(1 for x in (load_day(data_dir, d) for d in list_days(data_dir)) if x and x.get("late"))
+    n_late = sum(1 for x in mine if x.get("late"))
     weeks: dict[str, list[dict]] = {}
     for x in recs:
         d = date.fromisoformat(x["day"])
@@ -643,11 +654,22 @@ def settle_view(data_dir: Path) -> dict:
         last = {"made": lr["day"], "settled": lr["settled"]["end"], **sides,
                 "missing": {side: [s for s in lr.get(side) or [] if s in miss] for side in ("long", "short")},
                 "sum_long": round(sum(x["r"] for x in sides["long"]), 3), "sum_short": round(sum(x["r"] for x in sides["short"]), 3)}
+    prev = []
+    if quarter is not None:
+        others: dict[str, list[dict]] = {}
+        for x in every:
+            q = model_quarter(x) or "?"
+            if q != quarter and x.get("settled") and not x.get("late"):
+                others.setdefault(q, []).append(x)
+        for q in sorted(others, reverse=True):
+            xs = sorted(others[q], key=lambda x: x["day"])
+            prev.append({"quarter": q, "days": len(xs), "first": xs[0]["day"], "last_list": xs[-1]["day"], "total": series(xs)})
     out = {"days": len(recs), "check_days": CHECK_DAYS, "late": n_late, "first": recs[0]["day"] if recs else None,
-           "last_list": recs[-1]["day"] if recs else None, "total": series(recs), "weeks": wk, "last": last}
+           "last_list": recs[-1]["day"] if recs else None, "total": series(recs), "weeks": wk, "last": last,
+           "quarter": quarter, "prev": prev}
     if len(_SETTLE_CACHE) > 8:
         _SETTLE_CACHE.clear()
-    _SETTLE_CACHE[str(r)] = (sig, out)
+    _SETTLE_CACHE[key] = (sig, out)
     return out
 
 
@@ -805,14 +827,31 @@ def view(data_dir: Path, *, repo=None, now: datetime | None = None) -> dict | No
                      "pre_pct": round(pre_pct, 2) if pre_pct is not None else None, "stop": stop, "qty": qty,
                      "spark": sp.get(s)})
     by = {r["symbol"]: r for r in rows}
+    quarter = model_quarter(rec)
+    missing, stale = list(rec.get("missing") or []), list(rec.get("stale") or [])
+    n_ranked = rec.get("n") if isinstance(rec.get("n"), int) else len(rows_all)
+    # 2026-11-15 页头: 覆盖 (打分 / 上市不足不上榜 / 缺数据 / 数据过期) + 下次重训 + 回放口径 (只展示)
+    coverage = {"ranked": n_ranked, "young": sum(1 for r in rows_all if r.get("young")), "missing": len(missing),
+                "stale": len(stale), "total": n_ranked + len(missing) + len(stale)}
+    nq_start = quarter_start(pick)
+    nq_start = date(nq_start.year + (nq_start.month == 10), (nq_start.month + 2) % 12 + 1, 1)
+    next_retrain = {"quarter": quarter_of(nq_start), "train_end": train_end(nq_start).isoformat(),
+                    "rows_now": (rec.get("model") or {}).get("rows")}
+    try:
+        from app.services import replay_ruler
+        ruler = replay_ruler.ruler(None, BACKTEST["period"], watch_now=replay_ruler.current_watchlist())
+    except Exception as e:
+        logger.warning("ls_rank: replay ruler unavailable: %s", type(e).__name__)
+        ruler = None
     return {"contract": CONTRACT, "day": rec["day"], "hold_until": until.isoformat(), "as_of": rec["as_of"],
+            "model_quarter": quarter, "coverage": coverage, "next_retrain": next_retrain, "ruler": ruler,
             "made_at": rec.get("made_at"), "model": f"GBM {rec['model']['quarter']}", "trained_to": rec["model"]["trained_to"],
             "hold_days": HOLD_DAYS, "stop_atr": STOP_ATR, "risk_usd": risk, "equity": eq, "pre": pre_meta,
             "is_today": pick == today, "late": bool(rec.get("late")), "prev_day": rec.get("prev_day"), "backtest": BACKTEST,
             "long": [by[s] for s in rec.get("long") or [] if s in by],
             "short": [by[s] for s in rec.get("short") or [] if s in by],
             "all": rows, "n": rec.get("n"), "missing": rec.get("missing") or [], "stale": rec.get("stale") or [],
-            "settle": settle_view(data_dir)}
+            "settle": settle_view(data_dir, quarter=quarter)}
 
 
 # ── 调度入口 ──────────────────────────────────────────────────────

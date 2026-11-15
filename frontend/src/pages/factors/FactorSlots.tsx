@@ -20,13 +20,15 @@ import {
   type DiscoverCandidate,
   type DiscoverWeek,
   type FactorLabPage,
-  type FactorLibraryItem,
+  type FactorLibraryItem, type FactorMaturityMeta,
   type MiningResult,
   type MiningRun,
   type OppSettings,
   type StrategyDetail,
   type WatchlistRuleCatalogItem,
 } from '@/lib/api'
+import { weeklyText } from './weeklySchedule'
+import { maturityTitle } from './FactorLibrary'
 import { QK } from '@/lib/queryKeys'
 import { RETIRED_MARKET_FIELDS } from '@/lib/retired-market-fields'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
@@ -513,9 +515,9 @@ function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void 
       sub={w ? `每日前 20 · 自选 ${w.symbols} · ${w.window?.[0]?.slice(0, 7) ?? ''} → ${w.window?.[1]?.slice(0, 7) ?? ''} · ${w.week.replace(/^\d{4}-/, '')}` : '本周未生成'}
       footer={<>
         <span data-slot-verdict="" className="min-w-0 flex-1 truncate text-secondary">
-          {d.lab.isError ? '读取失败' : !w ? '本周未生成' : !lead ? `本周无候选 · 下次 ${page?.schedule.next_weekly?.slice(5) ?? DASH} 盘后`
+          {d.lab.isError ? '读取失败' : !w ? '本周未生成' : !lead ? `本周无候选 · ${weeklyText(page?.schedule)}`
             : pending.length ? `待审 ${pending.length} · 年化比在用 ${fmtPct((lead.stats.annual_return ?? 0) - (engine?.stats.annual_return ?? 0))}`
-              : `本周已处理 · 下次 ${page?.schedule.next_weekly?.slice(5) ?? DASH} 盘后`}
+              : `本周已处理 · ${weeklyText(page?.schedule)}`}
         </span>
         {pending.length > 0 && lead && !decision(lead) && <>
           <button type="button" data-decide="discard" disabled={decide.isPending} onClick={() => decide.mutate({ sig: lead.signature, action: 'discard' })}
@@ -585,6 +587,16 @@ const FLAG_TIP: Record<ScoreFlag, string> = {
   方向不一: '有的策略要大值 · 有的要小值',
   方向相反: `近 ${WEEKS_SHOWN} 次周度的训练窗 IC 折算后都 < 0 且 |IC| ≥ ${REVERSE_MIN} · 打分偏好的方向在主题池上表现更差 · 非策略命中后的条件效果`,
 }
+/** 2026-11-15 在用策略引用了退役或重复因子 → 琥珀标签 (成熟度只当标签, 不改打分权重) */
+function matTags(f: FactorLibraryItem | undefined, meta: FactorMaturityMeta | undefined, libMap: Map<string, FactorLibraryItem>) {
+  const m = f?.maturity
+  if (!f || !m) return null
+  const out = []
+  if (meta?.launched && m.state === 'retired') out.push(<span key="r" data-mat-tag="retired" title={maturityTitle(m, meta)}><Tag tone="warn">退役</Tag></span>)
+  if (m.dup) out.push(<span key="d" data-mat-tag="dup" title={`与 ${libMap.get(m.dup.of)?.label ?? m.dup.of} 秩相关 ${m.dup.rho.toFixed(2)} · 对方更强`}><Tag tone="warn">重复</Tag></span>)
+  return out.length ? out : null
+}
+
 function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) => void }) {
   const { uses, nStrat } = d.scoring
   const weeks = d.weeklyRuns.map(w => w.week)
@@ -635,7 +647,10 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
                     <td className={cell}><SelDots sel={u.sel} weeks={weeks} /></td>
                     <td className={cell}><div className="flex items-center justify-end gap-2"><IcBar v={u.sign === 0 ? null : u.dirMean} scale={icScale} />
                       <span className={`w-[52px] text-right font-semibold tabular-nums ${u.flag === '方向相反' ? 'text-warning' : 'text-foreground'}`}>{fmtIc(u.sign === 0 ? null : u.dirMean)}</span></div></td>
-                    <td className="py-1.5 pr-4">{u.flag && <span title={FLAG_TIP[u.flag]}><Tag tone={u.flag === '方向不一' || u.flag === '无检验' ? 'mute' : 'warn'}>{u.flag}</Tag></span>}</td>
+                    <td className="py-1.5 pr-4"><span className="flex flex-wrap gap-1">
+                      {u.flag && <span title={FLAG_TIP[u.flag]}><Tag tone={u.flag === '方向不一' || u.flag === '无检验' ? 'mute' : 'warn'}>{u.flag}</Tag></span>}
+                      {matTags(d.libMap.get(u.id), d.lib.data?.maturity, d.libMap)}
+                    </span></td>
                   </tr>
                 )
               })}
@@ -682,7 +697,7 @@ function IdleStrip({ d }: { d: SlotData }) {
       <span>未使用 <b className="tabular-nums text-foreground">{lib.length ? spare : DASH}</b></span>
       <span>缺数据 <b className="tabular-nums text-foreground">{missing}</b></span>
       <span className="ml-auto">采集 · 下次 <b className="tabular-nums text-foreground">{next}</b> 北京</span>
-      <span>周度挖掘 · 下次 <b className="tabular-nums text-foreground">{d.lab.data?.schedule.next_weekly?.slice(5) ?? DASH}</b> 盘后</span>
+      <span data-weekly-sched={d.lab.data?.schedule.enabled === false ? 'off' : 'on'}>周度挖掘 · <b className="tabular-nums text-foreground">{weeklyText(d.lab.data?.schedule)}</b></span>
     </div>
   )
 }

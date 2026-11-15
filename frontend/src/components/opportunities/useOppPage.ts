@@ -7,11 +7,13 @@ import { OPP_PAGE_QUERY_KEY } from '@/lib/useQuoteStream'
 export const OPP_PAGE_KEY = OPP_PAGE_QUERY_KEY
 export const ACTIVE_PHASES = new Set(['premarket', 'open_wait', 'session'])
 
-export function useOppPage() {
+/** live = false (2026-11-15 历史日回看): 停止轮询, 保留已取到的当天数据 */
+export function useOppPage(live = true) {
   return useQuery<OppPagePayload>({
     queryKey: OPP_PAGE_KEY,
     queryFn: () => api.oppPage(),
-    refetchInterval: (q) => (ACTIVE_PHASES.has((q.state.data as OppPagePayload | undefined)?.phase?.phase ?? '') ? 30_000 : 60_000),
+    enabled: live,
+    refetchInterval: (q) => (!live ? false : ACTIVE_PHASES.has((q.state.data as OppPagePayload | undefined)?.phase?.phase ?? '') ? 30_000 : 60_000),
     refetchIntervalInBackground: false,
   })
 }

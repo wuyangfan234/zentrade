@@ -233,7 +233,8 @@ def test_page_settings_are_current_swing_json_not_board_frozen_rules(tmp_path, m
     gate = d["settings"].pop("gate")
     assert gate["id"] and gate["name"]          # 当前方向门 (插件门或内置日线门)
     assert d["settings"] == {"long": ["volume_price_surge"], "short": ["tv_halftrend"], "risk_per_trade_pct": 0.5,
-                             "ruleset_version": 1, "evo": False}
+                             "ruleset_version": 1, "evo": False,
+                             "theme_stress_pct": 20, "theme_stress_levels": [10, 15, 20, 25, 30]}
     assert push["enabled"] is True and push["min_rvol"] == 3.0 and [x["v"] for x in push["levels"]] == [1.0, 2.0, 3.0, 5.0]
     assert d["swing"]["long_rules"] == ["tv_smc_structure"]
 

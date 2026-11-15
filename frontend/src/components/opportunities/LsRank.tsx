@@ -8,6 +8,7 @@ import type { LsRankPayload, LsRankRow, LsSettleSeries } from '@/lib/api'
 import { Sheet } from '@/components/opportunities/Sheet'
 import { p2, weekday } from '@/components/opportunities/terms'
 import { badge } from '@/components/ui/badge'
+import { RulerTag, rulerTitle } from '@/components/opportunities/RulerTag'
 
 type Side = 'long' | 'short'
 const SIDE_ZH: Record<Side, string> = { long: '看多', short: '看空' }
@@ -176,6 +177,7 @@ function SidePanel({ side, rows, d, onOpen }: { side: Side; rows: LsRankRow[]; d
         <h3 className={`text-[14px] font-semibold ${side === 'long' ? 'text-bull' : 'text-bear'}`}>{SIDE_ZH[side]}</h3>
         <span className="text-[13px] font-semibold tabular-nums text-secondary">{rows.length}</span>
         <span className="ml-auto min-w-0 truncate whitespace-nowrap text-[12px] tabular-nums text-muted">{`回放 ${atrS(bt.mean_atr)}/笔 · 随机基准 ${num2(bt.rand)}`}</span>
+        {d.ruler && <RulerTag r={d.ruler} />}
       </div>
       <div data-ls-colhead style={{ gridTemplateColumns: TPL[tier] }} className={`${ROW} h-7 border-t border-border/70 text-[12px] text-muted`}>
         <span>#</span><span>代码</span>{tier >= 8 && <span className="text-right">20 日</span>}
@@ -344,6 +346,9 @@ function SettleSheet({ d, onOpen, onClose }: { d: LsRankPayload; onOpen: (s: str
           ['回放', `${d.backtest.period} · 看多 ${atrS(d.backtest.long.mean_atr)} · 看空 ${atrS(d.backtest.short.mean_atr)}`],
           ['单位', u === null ? `止损 ${d.stop_atr} ATR · 持有 ${d.hold_days} 日` : `1 ATR = $${Math.round(u)} · 每笔 $${Math.round(d.risk_usd ?? 0)} · 止损 ${d.stop_atr} ATR · 持有 ${d.hold_days} 日`],
           ['模型', `${d.model} · 训练截至 ${md(d.trained_to)}${d.made_at ? ` · 名单 ${md(d.made_at)} ${etHm(d.made_at)} ET 生成` : ''}`],
+          ...(d.next_retrain ? [['下次重训', `${d.next_retrain.quarter} · 只用 ${md(d.next_retrain.train_end)} 之前的入场日${d.next_retrain.rows_now ? ` · 本版样本 ${d.next_retrain.rows_now.toLocaleString()} 行` : ''}`]] : []),
+          ...(d.settle.prev ?? []).map((p) => [`上一版 ${p.quarter}`, `前向 ${p.days} 份 · 看多−全体 ${atrS(p.total?.long_minus_all ?? null)}`]),
+          ...(d.ruler ? [['回放口径', rulerTitle(d.ruler)]] : []),
         ].map(([k, v, cls]) => (
           <div key={k} className="grid min-h-8 grid-cols-[84px_1fr] items-center gap-2 border-t border-border/70 px-3 py-1 first:border-t-0">
             <span className="text-secondary">{k}</span><span className={cls ?? 'text-foreground'}>{v}</span>
@@ -358,6 +363,9 @@ export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) =>
   const [sheet, setSheet] = useState<'all' | 'settle' | null>(null)
   const nNew = [...d.long, ...d.short].filter((r) => r.is_new).length
   const meta = [`${md(d.day)} ${weekday(d.day)}`, `名单 ${md(d.as_of)} 收盘`, d.pre?.open ? '开盘价' : d.pre?.at ? `盘前 ${etHm(d.pre.at)} ET` : '', `换入 ${nNew}`].filter(Boolean)
+  const cov = d.coverage
+  const prev = d.settle.prev ?? []
+  const prevTitle = prev.map((p) => `${p.quarter} · 前向 ${p.days} 份 · 看多−全体 ${atrS(p.total?.long_minus_all ?? null)}`).join('\n')
   const open = (s: string) => { setSheet(null); onOpen(s) }
   return (
     <section data-ls-rank data-source="model" className="mb-3 overflow-hidden rounded-card border border-border bg-surface">
@@ -369,6 +377,14 @@ export function LsRank({ d, onOpen }: { d: LsRankPayload; onOpen: (s: string) =>
         <span className={badge('limit')}>仅观察</span>
         {d.demo && <span data-ls-demo className="shrink-0 rounded-btn bg-warning px-1.5 text-[11px] font-semibold leading-5 text-white dark:text-zinc-950">示例数据</span>}
         {d.late && <span data-ls-late title="名单日开盘后才生成 · 照常结算 · 不计入前向成绩" className={badge('warn')}>盘中补出</span>}
+        <span data-ls-model className="whitespace-nowrap text-[12px] tabular-nums text-secondary"
+          title={[`模型版本 ${d.model}`, d.next_retrain ? `下次重训 ${d.next_retrain.quarter} · 只用 ${md(d.next_retrain.train_end)} 之前的入场日` : '', prevTitle ? `上一版\n${prevTitle}` : ''].filter(Boolean).join('\n')}>
+          {`${d.model} · 训练至 ${md(d.trained_to)} · 前向 ${d.settle.days}/${d.settle.check_days}`}
+        </span>
+        {cov && <span data-ls-coverage className="whitespace-nowrap text-[12px] tabular-nums text-secondary"
+          title={`打分 ${cov.ranked} · 上市不足 130 日不上榜 ${cov.young} · 缺数据 ${cov.missing} · 数据过期 ${cov.stale}`}>
+          {`覆盖 ${cov.ranked}/${cov.total}`}
+        </span>}
         <span data-ls-meta className="min-w-0 text-[12px] tabular-nums text-muted xl:ml-auto xl:truncate max-xl:order-last max-xl:basis-full">
           {meta.map((t, i) => <span key={t}>{i > 0 && ' '}<span className="whitespace-nowrap">{i < meta.length - 1 ? `${t} ·` : t}</span></span>)}
         </span>
