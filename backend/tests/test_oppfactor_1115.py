@@ -488,3 +488,28 @@ def test_page_sections_include_themes_and_ruler_does_not_break_page(tmp_path, mo
     monkeypatch.setattr(theme_exposure, "view", lambda data_dir, repo=None, loop=None, swing=None: (_ for _ in ()).throw(OSError("groups")))
     d = _client(tmp_path).get("/api/opportunities/page").json()
     assert d["themes"] is None and d["errors"]["themes"] == "OSError" and d["swing"]["as_of"] == "2026-11-13"
+
+
+def test_weekly_discover_skips_cooling_structures_and_records_them(monkeypatch, tmp_path):
+    """冷却中的结构不进本周回测, 记进 week.cooled; 次数用台账里的 n (已含本轮, 不再 +1)。"""
+    from app.services import factor_discover as fd
+    def cand(f, sh):
+        return {"signature": f"factor:{f}|w:1|d:-1", "passed_oos": True, "oos_sharpe": sh, "oos_gate": "observe",
+                "definition": {"scoring": {f: 1.0}, "directions": {f: "low"}}}
+    monkeypatch.setattr(fd, "_latest_weekly_run", lambda d: ("weekly-2026-W46", {"request": {}}, {}))
+    monkeypatch.setattr(fd, "_candidates", lambda d, rid: [cand("annual_vol_20d", 0.51), cand("atr_14", 2.87)])
+    monkeypatch.setattr(trial_ledger, "view", lambda d, today, exclude_run=None: {
+        "annual_vol_20d:low": {"n": 5, "cooling": True, "cooldown_until": "2027-01-28"},
+        "atr_14:low": {"n": 1, "cooling": False, "cooldown_until": None}})
+    monkeypatch.setattr(fd, "_service", lambda repo, d: None)
+    monkeypatch.setattr(fd, "engine_reference", lambda *a, **k: None)
+    ran = []
+    monkeypatch.setattr(fd, "_run", lambda svc, sid, syms, s, e, params: ran.append(list(params["scoring"])) or {})
+    monkeypatch.setattr(fd, "_series", lambda res: {})                     # 回测曲线不足 30 天: 不进候选, 只看跳过逻辑
+    repo = SimpleNamespace(latest_enriched_date=lambda kind: date(2026, 11, 13))
+    out = fd._run_weekly_impl(tmp_path, repo, symbols=["A"], start=date(2023, 1, 3), end=None)
+    assert ran == [["atr_14"]]                                              # 冷却的那个没回测
+    w = json.loads((tmp_path / "research" / "discover" / "2026-W46.json").read_text())
+    assert w["cooled"] == [{"signature": "factor:annual_vol_20d|w:1|d:-1", "key": "annual_vol_20d:low", "oos_sharpe": 0.51, "n": 5,
+                            "cooldown_until": "2027-01-28"}]
+    assert out["week"] == "2026-W46" and w["funnel"]["oos_passed"] == 2

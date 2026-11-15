@@ -406,7 +406,7 @@ def _run_weekly_impl(data_dir: Path, repo, *, symbols: list[str], start: date, e
         t = led.get(trial_ledger.structure_key(scoring, directions) or "")
         if t and t["cooling"]:
             cooled.append({"signature": c["signature"], "key": trial_ledger.structure_key(scoring, directions),
-                           "oos_sharpe": c.get("oos_sharpe"), "n": t["n"] + 1, "cooldown_until": t["cooldown_until"]})
+                           "oos_sharpe": c.get("oos_sharpe"), "n": t["n"], "cooldown_until": t["cooldown_until"]})   # n 已含本轮
             continue
         try:
             res = _run(service, "factor_rank_research", symbols, start, end,

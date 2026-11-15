@@ -591,10 +591,12 @@ const FLAG_TIP: Record<ScoreFlag, string> = {
 function matTags(f: FactorLibraryItem | undefined, meta: FactorMaturityMeta | undefined, libMap: Map<string, FactorLibraryItem>) {
   const m = f?.maturity
   if (!f || !m) return null
-  const out = []
-  if (meta?.launched && m.state === 'retired') out.push(<span key="r" data-mat-tag="retired" title={maturityTitle(m, meta)}><Tag tone="warn">退役</Tag></span>)
-  if (m.dup) out.push(<span key="d" data-mat-tag="dup" title={`与 ${libMap.get(m.dup.of)?.label ?? m.dup.of} 秩相关 ${m.dup.rho.toFixed(2)} · 对方更强`}><Tag tone="warn">重复</Tag></span>)
-  return out.length ? out : null
+  // 一行只放一个标签 (退役 / 重复 / 退役·重复), 说明放悬停: 多个标签竖叠会把表格行撑高
+  const retired = !!meta?.launched && m.state === 'retired'
+  const parts = [retired ? '退役' : '', m.dup ? '重复' : ''].filter(Boolean)
+  if (!parts.length) return null
+  const title = [retired ? maturityTitle(m, meta) : '', m.dup ? `与 ${libMap.get(m.dup.of)?.label ?? m.dup.of} 秩相关 ${m.dup.rho.toFixed(2)} · 对方更强` : ''].filter(Boolean).join('\n')
+  return <span data-mat-tag={retired ? (m.dup ? 'retired dup' : 'retired') : 'dup'} title={title}><Tag tone="warn">{parts.join('·')}</Tag></span>
 }
 
 function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) => void }) {
@@ -624,7 +626,7 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
       {err ? <SlotError text="策略列表读取失败" /> : (
         <div className="overflow-x-auto">
           <table className="w-full min-w-[960px] table-fixed text-xs" data-scoring-table="">
-            <colgroup><col className="w-[66px]" /><col className="w-[200px]" /><col className="w-[88px]" /><col className="w-[60px]" /><col /><col className="w-[150px]" /><col className="w-[232px]" /><col className="w-[110px]" /></colgroup>
+            <colgroup><col className="w-[66px]" /><col className="w-[200px]" /><col className="w-[88px]" /><col className="w-[60px]" /><col /><col className="w-[150px]" /><col className="w-[232px]" /><col className="w-[150px]" /></colgroup>
             <thead><tr className="border-b border-border text-[11px] text-secondary">
               <th className="py-1.5 pl-4 text-left font-medium" /><th className="py-1.5 text-left font-medium">因子</th>
               <th className="py-1.5 pr-3 text-right font-medium" title="各策略内部权重归一后平均">权重占比</th>
@@ -647,7 +649,7 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
                     <td className={cell}><SelDots sel={u.sel} weeks={weeks} /></td>
                     <td className={cell}><div className="flex items-center justify-end gap-2"><IcBar v={u.sign === 0 ? null : u.dirMean} scale={icScale} />
                       <span className={`w-[52px] text-right font-semibold tabular-nums ${u.flag === '方向相反' ? 'text-warning' : 'text-foreground'}`}>{fmtIc(u.sign === 0 ? null : u.dirMean)}</span></div></td>
-                    <td className="py-1.5 pr-4"><span className="flex flex-wrap gap-1">
+                    <td className="py-1.5 pr-4"><span className="flex flex-nowrap gap-1 whitespace-nowrap">
                       {u.flag && <span title={FLAG_TIP[u.flag]}><Tag tone={u.flag === '方向不一' || u.flag === '无检验' ? 'mute' : 'warn'}>{u.flag}</Tag></span>}
                       {matTags(d.libMap.get(u.id), d.lib.data?.maturity, d.libMap)}
                     </span></td>
