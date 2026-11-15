@@ -295,6 +295,7 @@ async def _application_lifespan(app: FastAPI):
                         with shared_heavy_job_limiter.slot(
                             "exclusive",
                             cancel_event=matrix_prewarm_owner.cancel_event,
+                            label="回测缓存预热",
                         ):
                             result = prewarm_matrix_cache(
                                 BacktestEngine(repo),

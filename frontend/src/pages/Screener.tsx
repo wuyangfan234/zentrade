@@ -1019,6 +1019,13 @@ export function Screener() {
                 onToggleMonitor={() => toggleStrategyMonitor(activeMeta.id, activeMeta.name)}
                 onSettings={() => setSettingsStrategyId(activeMeta.id)}
                 onPreview={symbol => { setPreviewSymbol(symbol); setPreviewName(''); setPreviewNavList([]) }}
+                onRename={async name => {
+                  await api.strategyRename(activeMeta.id, name)
+                  toast(`已改名 · ${name}`, 'success')
+                  void qc.invalidateQueries({ queryKey: QK.strategyDetail(activeMeta.id) })
+                  void qc.invalidateQueries({ queryKey: ['screener-strategies'] })
+                  void qc.invalidateQueries({ queryKey: ['strategy-panel'] })
+                }}
               />
             )}
             {!showAll && !activeMeta && strategies.isSuccess && railAll.length === 0 && (

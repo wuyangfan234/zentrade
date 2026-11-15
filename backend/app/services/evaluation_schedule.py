@@ -47,7 +47,7 @@ def run(app_state) -> dict:
     t0 = time.perf_counter()
     try:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="策略评估"):
             payload = runner.run_all(data_dir, start, end, repo=repo, engine=getattr(app_state, "strategy_engine", None))
         out = {"status": "succeeded", "window": [str(start), str(end)], "evaluated": len(payload.get("evaluated", [])),
                "errors": [k for k, v in payload.get("sources", {}).items() if isinstance(v, dict) and v.get("error")],
@@ -83,7 +83,7 @@ def run_v2(app_state, start=None, end=None) -> dict:
     t0 = time.perf_counter()
     try:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="策略评估"):
             payload = runner.run_all_v2(data_dir, start, end, repo=repo, engine=getattr(app_state, "strategy_engine", None))
         out = {"status": "succeeded", "window": [str(start), str(end)], "evaluated": len(payload.get("evaluated", [])),
                "permission_changes": sorted(k for k, v in (payload.get("comparison") or {}).items() if v.get("changes_permission")),
@@ -144,7 +144,7 @@ def run_v3(app_state, start=None, end=None, *, refresh: bool = True) -> dict:
                 except Exception as e:  # noqa: BLE001
                     logger.warning("v3 research data %s failed (soft): %s", name, e)
                     notes[name] = {"status": "failed", "error": f"{type(e).__name__}"}
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="策略评估"):
             _v3_state["stage"] = "dataset"
             try:
                 notes["dataset"] = research_data.build_v3_dataset(data_dir)

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { History, Settings2, SlidersHorizontal } from 'lucide-react'
+import { History, Pencil, Settings2, SlidersHorizontal } from 'lucide-react'
 import type { StrategyDetail as StrategyMeta, StrategyPanelEntry, StrategyPanelPayload } from '@/lib/api'
+import { RenameStrategyDialog, backtestHref } from '@/components/strategy/PublishStrategyDialog'
 import { badge } from '@/components/ui/badge'
 import { StrategyRCurve } from '@/components/screener/StrategyRCurve'
 import {
@@ -38,6 +39,8 @@ interface Props {
   onToggleMonitor: () => void
   onSettings: () => void
   onPreview: (symbol: string) => void
+  /** 挖掘发布策略改名 (renamable 时标题旁出铅笔); 不传 = 不提供改名 */
+  onRename?: (name: string) => Promise<unknown>
 }
 
 function timeframeLabel(frames?: string[]): string {
@@ -117,8 +120,10 @@ const CARD_HEAD = 'flex min-h-[37px] flex-wrap items-center gap-x-2 gap-y-1 bord
  */
 export function StrategyDetail({
   strategy, entry, panel, panelLoading, side, onSideChange, inPool, onTogglePool, monitored, onToggleMonitor, onSettings, onPreview,
+  onRename,
 }: Props) {
   const [allTrades, setAllTrades] = useState(false)
+  const [renaming, setRenaming] = useState(false)
   const view = sideOf(entry, side)
   const replay = view?.replay ?? null
   const full = hasFullReplay(replay)
@@ -171,12 +176,27 @@ export function StrategyDetail({
 
   return (
     <div data-strategy-detail={strategy.id} className="min-w-0 space-y-3">
+      {renaming && onRename && (
+        <RenameStrategyDialog currentName={strategy.name} onRename={onRename} onClose={() => setRenaming(false)} />
+      )}
       {/* 标题区: 第一行名称与标签; 第二行左边方向与开关, 右边入口 */}
       <div className={CARD}>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-3.5 pb-2.5 pt-3">
           <h2 data-detail-name className="min-w-0 truncate text-[18px] font-semibold leading-7 tracking-tight text-foreground" title={strategy.description}>
             {title}
           </h2>
+          {strategy.renamable && onRename && (
+            <button
+              type="button"
+              data-detail-rename
+              onClick={() => setRenaming(true)}
+              title="改名"
+              aria-label="改名"
+              className="-ml-1.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-btn text-muted transition-colors hover:bg-elevated hover:text-accent"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <span className={badge('limit')}>{SOURCE_LABEL[strategy.source] ?? '内置'}</span>
             <span className={badge('limit')}>{timeframeLabel(strategy.timeframes)}</span>
@@ -225,7 +245,9 @@ export function StrategyDetail({
               参数设置
             </button>
             <Link
-              to="/backtest"
+              to={backtestHref(strategy.id)}
+              data-detail-backtest
+              title="回测页选中该策略并开始回测"
               className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-btn border border-border px-2.5 text-xs font-medium text-secondary transition-colors hover:border-accent/50 hover:text-accent"
             >
               <History className="h-3.5 w-3.5 shrink-0" />

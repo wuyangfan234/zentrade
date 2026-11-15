@@ -10,7 +10,7 @@ from datetime import date
 from typing import Annotated, Any, Literal
 
 import polars as pl
-from fastapi import APIRouter, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Body, Header, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sse_starlette.sse import EventSourceResponse
 
@@ -49,6 +49,15 @@ def _known_factor_ids() -> frozenset[str]:
 _MAX_ARTIFACT_BYTES = 64 * 1024 * 1024
 _SSE_POLL_SECONDS = 0.5
 _SSE_HEARTBEAT_SECONDS = 15.0
+
+
+class PublishCandidateRequest(BaseModel):
+    """发布时的显示名; 不传 = 因子名 + 方向的默认名 (如 “ATR(14)原值 低”)。
+    其他字段一律忽略: 策略定义只认挖掘产物里持久化的那份, 调用方不能借发布改打分 / id。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str | None = Field(None, max_length=80, strict=True)
 
 
 class MiningStartRequest(BaseModel):
@@ -476,10 +485,15 @@ def promote_candidate(run_id: str, signature: str, request: Request) -> dict[str
 
 
 @router.post("/runs/{run_id}/candidates/{signature}/publish")
-def publish_candidate(run_id: str, signature: str, request: Request) -> dict[str, Any]:
+def publish_candidate(
+    run_id: str,
+    signature: str,
+    request: Request,
+    payload: Annotated[PublishCandidateRequest | None, Body()] = None,
+) -> dict[str, Any]:
     service = _candidate_service(request)
     try:
-        out = service.publish(run_id, signature)
+        out = service.publish(run_id, signature, name=payload.name if payload else None)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="mining run or candidate not found") from exc
     except FileExistsError as exc:
@@ -488,18 +502,26 @@ def publish_candidate(run_id: str, signature: str, request: Request) -> dict[str
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-    _schedule_swing_candidate_check(request, "mining_publish")
+    # 只验收这一条新策略 (约 1 分钟); 全部策略的验收留给周度挖掘 / 17:05 ET 队列。
+    # 原来发布后重跑全部系统发现策略 (11-16 实测 5 条约 4 分钟), 期间独占重任务额度, 紧接着点的回测只能干等。
+    _schedule_swing_candidate_check(request, "mining_publish", strategy_ids=[str(out["strategy_id"])])
     return out
 
 
-def _schedule_swing_candidate_check(request: Request, reason: str) -> None:
+def _schedule_swing_candidate_check(
+    request: Request,
+    reason: str,
+    *,
+    strategy_ids: list[str] | None = None,
+) -> None:
     """0.26.0: 人点“发布”后, 后台按机会板卡回放验收一次 (不等下周挖掘), 结果只写候选标记; 失败只记日志。
     0.30.0: on trading days 09:00-17:00 ET the check is queued and runs after the post-close pipeline
     (a full-market read during the session collides with the 10 s quote republish)."""
     try:
         from app.services import swing_candidates
         repo = request.app.state.repo
-        swing_candidates.request_check(repo.store.data_dir, repo, reason=reason)
+        extra = {"strategy_ids": strategy_ids} if strategy_ids else {}
+        swing_candidates.request_check(repo.store.data_dir, repo, reason=reason, **extra)
     except Exception as exc:  # 验收失败不影响发布结果
         logger.warning("swing candidate check not scheduled: %s", type(exc).__name__)
 
@@ -758,6 +780,7 @@ def _project_candidates(
         candidate.pop("definition_json", None)
         candidate.pop("factor_names_json", None)
         candidate["factor_names"] = _json_string_list(row.get("factor_names_json"))
+        candidate["display_name"] = _candidate_display_name(row)
         signature = str(row["signature"])
         candidate["folds"] = [
             _public_fold(fold)
@@ -785,6 +808,19 @@ def _project_candidates(
         )
     )
     return candidates
+
+
+def _candidate_display_name(row: Mapping[str, Any]) -> str:
+    """发布弹窗的默认名称: 因子名 + 方向 (“ATR(14)原值 低”); 定义读不出时退回候选原名。"""
+    from app.services.mining_candidates import default_strategy_name
+
+    try:
+        definition = json.loads(str(row.get("definition_json") or ""))
+    except (TypeError, ValueError):
+        definition = None
+    if isinstance(definition, Mapping) and definition.get("kind") == "factor_rank":
+        return default_strategy_name(definition)
+    return str(row.get("name") or row.get("signature") or "")
 
 
 def _project_regimes(

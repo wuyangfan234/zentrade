@@ -192,7 +192,7 @@ class FactorBacktestService:
     ) -> FactorResult:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="因子检验"):
             return self._run(config, regime_by_date=regime_by_date)
 
     def _run(
@@ -247,7 +247,7 @@ class FactorBacktestService:
     ) -> FactorBatchResult:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="因子检验"):
             return self._run_batch(config, regime_by_date=regime_by_date)
 
     def _run_batch(

@@ -521,7 +521,8 @@ def run_with_capacity(job_id: str, fn: Callable[[], _Result]) -> _Result:
         remaining = _pending_remaining_s(job)
         if remaining <= 0:
             raise HeavyJobLimitTimeoutError("pipeline pending deadline expired")
-        with shared_heavy_job_limiter.slot("exclusive", timeout=remaining, cancel_event=cancel_event):
+        with shared_heavy_job_limiter.slot("exclusive", timeout=remaining, cancel_event=cancel_event,
+                                           label="数据任务"):
             if is_cancelled(job_id):
                 raise JobCancelledError(job_id)
             if _pending_remaining_s(job) <= 0:

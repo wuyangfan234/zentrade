@@ -24,6 +24,7 @@ from app.services.ndjson_heartbeat import with_heartbeat
 from app.strategy import config as strategy_config
 from app.strategy.ai_generator import AIStrategyGenerator, find_meta_assignment
 from app.strategy.engine import StrategyDef, StrategyEngine
+from app.strategy.naming import is_renamable
 from app.strategy.prompt_builder import build_step1, build_step2
 from app.strategy.scoring import (
     SCORING_DIRECTIONS,
@@ -188,6 +189,8 @@ def _strategy_detail(
         "description": description or s.meta.get("description", ""),
         "tags": s.meta.get("tags", []),
         "source": s.source,
+        # 挖掘发布的策略可在策略页改名 (PATCH /api/strategies/{id}/name)
+        "renamable": is_renamable(s.meta, s.source),
         "research_only": s.meta.get("research_only", False),
         "execution_backend": s.execution_backend,
         "asset_types": s.meta.get("asset_types", ["stock"]),
@@ -1278,10 +1281,29 @@ def publish_ai_strategy(strategy_id: str, request: Request):
     _invalidate_strategy_runtime(request)
     try:   # 0.26.0: AI 草稿发布后按机会板卡回放验收一次 (后台, 只写候选标记; 失败不影响发布)
         from app.api.mining import _schedule_swing_candidate_check
-        _schedule_swing_candidate_check(request, "ai_publish")
+        _schedule_swing_candidate_check(request, "ai_publish", strategy_ids=[sid])
     except Exception as e:
         logger.warning("swing candidate check not scheduled: %s", type(e).__name__)
     return {"ok": True, "strategy_id": sid}
+
+
+class RenameStrategyRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80, strict=True)
+
+
+@router.patch("/{strategy_id}/name")
+def rename_strategy(strategy_id: str, req: RenameStrategyRequest, request: Request):
+    """改挖掘发布策略的显示名 (只改名称, 打分 / 参数 / 回测口径不变)。"""
+    from app.api.mining import _candidate_service
+
+    try:
+        return _candidate_service(request).rename(strategy_id, req.name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="策略不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"改名失败 · {exc}") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=f"改名失败 · {exc}") from exc
 
 
 @router.delete("/{strategy_id}")

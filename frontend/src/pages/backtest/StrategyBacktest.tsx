@@ -901,15 +901,34 @@ function StockPoolPicker({ value, onChange, assetType = 'stock' }: { value: stri
   )
 }
 
-export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
+/** 直达链接 /backtest?strategy=<id>[&run=1] 解析后的目标 (挖掘发布弹窗 / 策略页「回测」) */
+export interface BacktestLinkTarget {
+  strategyId: string
+  autoRun: boolean
+}
+
+export function StrategyBacktest({ loadCandidate, onLoadConsumed, linkTarget, onLinkConsumed }: {
   /** 候选方案「载入复测」: 回填保存的回测配置 (消费后由父组件清空) */
   loadCandidate?: ResearchCandidate | null
   onLoadConsumed?: () => void
+  /** 直达链接: 预选该策略, autoRun 时配置就绪后自动跑一次 (消费后由父组件清空) */
+  linkTarget?: BacktestLinkTarget | null
+  onLinkConsumed?: () => void
 }) {
   const queryClient = useQueryClient()
   const signalNames = useSignalNames()
   const [saved] = useState(() => storage.strategyBacktestLast.get(null))
-  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(saved?.selectedStrategy ?? null)
+  const [selectedStrategy, setSelectedStrategy] = useState<string | null>(linkTarget?.strategyId ?? saved?.selectedStrategy ?? null)
+  // 直达链接: 预选该策略; autoRun 时等参数 / 风控回填完成 (configReadyFor) 后自动跑一次
+  const autoRunRef = useRef<string | null>(null)
+  const [configReadyFor, setConfigReadyFor] = useState<string | null>(null)
+  useEffect(() => {
+    if (!linkTarget) return
+    setSelectedStrategy(linkTarget.strategyId)
+    if (linkTarget.autoRun) autoRunRef.current = linkTarget.strategyId
+    onLinkConsumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 每个链接只消费一次
+  }, [linkTarget])
   const [strategyGroup, setStrategyGroup] = useState<StrategyGroup>('all')
   const [symbols, setSymbols] = useState(saved?.symbols ?? '')
   const [assetType, setAssetType] = useState<'stock' | 'etf'>(saved?.assetType ?? 'stock')
@@ -1033,14 +1052,15 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
   // 连带清除其专属的 params/overrides/result(这些是该策略的运行配置/产物,
   // 策略失效后留着会造成"孤儿"状态:界面显示旧回测结果却无对应策略)。
   useEffect(() => {
-    if (strategies.isLoading || strategyList.length === 0) return
+    // 刷新中不判失效: 刚发布的策略在旧缓存里还没有, 等新列表回来再判 (否则直达链接选中的策略会被清掉)
+    if (strategies.isLoading || strategies.isFetching || strategyList.length === 0) return
     if (selectedStrategy && !strategyList.some(st => st.id === selectedStrategy)) {
       setSelectedStrategy(null)
       setStrategyParams({})
       setOverrides({})
       setResult(null)
     }
-  }, [strategies.isLoading, strategyList, selectedStrategy])
+  }, [strategies.isLoading, strategies.isFetching, strategyList, selectedStrategy])
 
   const strategyDetail = useQuery({
     queryKey: QK.strategyDetail(selectedStrategy ?? ''),
@@ -1110,8 +1130,12 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
     if (!detail) return
     const configSignature = strategyBacktestConfigSignature(detail)
     const configKey = `${assetType}:${detail.id}:${configSignature}`
-    if (loadedStrategyRef.current === configKey) return
+    if (loadedStrategyRef.current === configKey) {
+      setConfigReadyFor(detail.id)
+      return
+    }
     loadedStrategyRef.current = configKey
+    setConfigReadyFor(detail.id)
     const pending = pendingCandidateRef.current
     if (pending && pending.strategyId === detail.id) {
       pendingCandidateRef.current = null
@@ -1169,6 +1193,16 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
       })
     }
   }, [backtestTask])
+
+  // 直达链接 run=1: 等该策略的参数 / 风控回填完成 (configReadyFor) 后自动跑一次, 只跑一次
+  useEffect(() => {
+    const target = autoRunRef.current
+    if (!target || configReadyFor !== target || selectedStrategy !== target) return
+    if (isPending || strategyDetail.isLoading || strategyDetail.data?.id !== target || backtestDataUnavailable) return
+    autoRunRef.current = null
+    handleRun()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleRun 每次渲染都新建, 只按就绪状态触发
+  }, [configReadyFor, selectedStrategy, isPending, strategyDetail.isLoading, strategyDetail.data, backtestDataUnavailable])
 
   const handleRun = () => {
     if (!selectedStrategy || backtestDataUnavailable) return
@@ -2031,17 +2065,24 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed }: {
                 <Loader2 className="relative h-4 w-4 animate-spin text-accent" />
               </span>
               <div className="min-w-0">
-                <div className={backtestTask?.reconnecting ? 'text-xs font-medium text-warning' : 'text-xs font-medium text-accent'}>
+                <div
+                  data-backtest-status={backtestTask?.waitingFor?.length ? 'queued' : undefined}
+                  className={backtestTask?.reconnecting ? 'text-xs font-medium text-warning' : 'text-xs font-medium text-accent'}
+                >
                   {backtestTask?.reconnecting
                     ? '连接中断，重试中…'
-                    : backtestTask?.progress
-                      ? `回测中 · 第 ${backtestTask.progress.day}/${backtestTask.progress.total} 天 (${backtestTask.progress.date})`
-                      : '正在重新计算回测…'}
+                    : backtestTask?.waitingFor?.length
+                      ? `排队中 · 等待${backtestTask.waitingFor.join('、')}结束`
+                      : backtestTask?.progress
+                        ? `回测中 · 第 ${backtestTask.progress.day}/${backtestTask.progress.total} 天 (${backtestTask.progress.date})`
+                        : '正在重新计算回测…'}
                 </div>
                 <div className="mt-0.5 text-[11px] text-secondary">
                   {backtestTask?.reconnecting
                     ? '正在尝试恢复连接，若持续失败可停止后重试'
-                    : result ? '当前展示上次结果，完成后自动替换' : '正在加载回测数据…'}
+                    : backtestTask?.waitingFor?.length
+                      ? '轮到后自动开始 · 不用重复点击'
+                      : result ? '当前展示上次结果，完成后自动替换' : '正在加载回测数据…'}
                 </div>
               </div>
               {backtestTask?.progress && (

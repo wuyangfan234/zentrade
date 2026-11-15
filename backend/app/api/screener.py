@@ -20,6 +20,7 @@ from app.db_safe import is_valid_ext_ident, quote_ident
 from app.services import strategy_cache, strategy_run_queue
 from app.services.screener import ScreenerService
 from app.strategy import config as strategy_config
+from app.strategy.naming import is_renamable
 
 logger = logging.getLogger(__name__)
 
@@ -258,6 +259,7 @@ def strategies(
             **meta,
             "name": overrides.get("name") or meta["name"],
             "description": overrides.get("description") or meta.get("description", ""),
+            "renamable": is_renamable(meta, meta.get("source")),
         })
 
     return _safe({"presets": presets, "load_errors": engine.load_errors()})

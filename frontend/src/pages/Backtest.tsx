@@ -4,7 +4,7 @@ import { BookmarkCheck, FlaskConical, Scale, ShieldCheck } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { ResearchCandidatesDialog } from './backtest/ResearchCandidatesDialog'
 import { RobustnessValidation } from './backtest/RobustnessValidation'
-import { StrategyBacktest } from './backtest/StrategyBacktest'
+import { StrategyBacktest, type BacktestLinkTarget } from './backtest/StrategyBacktest'
 import { EvidenceDesk } from './backtest/EvidenceDesk'
 import { type ResearchCandidate } from '@/lib/api'
 
@@ -36,6 +36,20 @@ export function Backtest() {
   const [candidatesOpen, setCandidatesOpen] = useState(false)
   // 候选「载入复测」: 弹窗选定 → 关闭弹窗切到策略页 → StrategyBacktest 消费后清空
   const [pendingLoad, setPendingLoad] = useState<ResearchCandidate | null>(null)
+  // 直达链接 /backtest?strategy=<id>[&run=1]: 读出后从地址栏去掉 (刷新不重复自动回测), 交给策略回测消费
+  const [linkTarget, setLinkTarget] = useState<BacktestLinkTarget | null>(null)
+  const linkedStrategy = searchParams.get('strategy')
+  const linkedRun = searchParams.get('run') === '1'
+  useEffect(() => {
+    if (!linkedStrategy) return
+    setLinkTarget({ strategyId: linkedStrategy, autoRun: linkedRun })
+    const next = new URLSearchParams(searchParams)
+    next.delete('strategy')
+    next.delete('run')
+    next.delete('tab')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在链接参数出现时消费一次
+  }, [linkedStrategy, linkedRun])
 
   // 跨页「载入复测」: 因子页候选弹窗经 router state 传入 (location.state), 消费后清除防止刷新重复载入
   const stateCandidate = (location.state as { loadCandidate?: ResearchCandidate } | null)?.loadCandidate ?? null
@@ -122,6 +136,8 @@ export function Backtest() {
           <StrategyBacktest
             loadCandidate={pendingLoad}
             onLoadConsumed={() => setPendingLoad(null)}
+            linkTarget={linkTarget}
+            onLinkConsumed={() => setLinkTarget(null)}
           />
         )}
         {activeTab === 'robustness' && <RobustnessValidation />}

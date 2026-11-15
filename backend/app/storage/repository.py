@@ -532,7 +532,7 @@ class KlineRepository:
     def _refresh_enriched(self) -> None:
         from app.services.heavy_job_limiter import shared_heavy_job_limiter
 
-        with shared_heavy_job_limiter.slot("exclusive"):
+        with shared_heavy_job_limiter.slot("exclusive", label="日K重算"):
             self._refresh_enriched_impl()
 
     def _refresh_enriched_impl(self) -> None:

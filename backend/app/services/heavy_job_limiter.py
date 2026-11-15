@@ -37,6 +37,9 @@ class HeavyJobLimiter:
         self._condition = threading.Condition()
         self._waiters: deque[object] = deque()
         self._local = threading.local()
+        # 正在占用额度的任务名 (界面排队提示用: “等待 回放验收 结束”); 未命名的不记
+        self._holders: dict[int, str] = {}
+        self._holder_seq = 0
 
     @property
     def in_use(self) -> int:
@@ -47,6 +50,15 @@ class HeavyJobLimiter:
     def available(self) -> int:
         with self._condition:
             return self.capacity - self._used
+
+    def holder_labels(self) -> list[str]:
+        """当前占用额度的已命名任务 (去重, 按开始先后)。"""
+        with self._condition:
+            return list(dict.fromkeys(self._holders.values()))
+
+    def waiting_count(self) -> int:
+        with self._condition:
+            return len(self._waiters)
 
     def acquire(
         self,
@@ -109,6 +121,7 @@ class HeavyJobLimiter:
         *,
         timeout: float | None = None,
         cancel_event: threading.Event | None = None,
+        label: str | None = None,
     ) -> Iterator[HeavyJobLimiter]:
         """Reserve capacity in the executing thread, reusing an outer reservation."""
         weight = self._weight(kind)
@@ -125,11 +138,20 @@ class HeavyJobLimiter:
             if cancel_event is not None and cancel_event.is_set():
                 raise HeavyJobCancelledError(f"{kind} job was cancelled while waiting")
             raise HeavyJobLimitTimeoutError(f"timed out waiting for {kind} job capacity")
+        holder_id = None
+        if label:
+            with self._condition:
+                self._holder_seq += 1
+                holder_id = self._holder_seq
+                self._holders[holder_id] = label
         try:
             self._local.weight = weight
             yield self
         finally:
             self._local.weight = 0
+            if holder_id is not None:
+                with self._condition:
+                    self._holders.pop(holder_id, None)
             self.release(kind)
 
     def _weight(self, kind: HeavyJobKind) -> int:

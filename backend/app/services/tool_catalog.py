@@ -229,7 +229,7 @@ def run_backtest(
         # 其余成本/撮合口径走默认 (与 api/backtest.py 的 /strategy/run 默认一致)
     )
     # 与其它重回测端点一致: 走共享重任务限流 (容量 2), 防并发迭代/手动回测叠加挤爆内存
-    with shared_heavy_job_limiter.slot("normal"):
+    with shared_heavy_job_limiter.slot("normal", label="回测"):
         task = make_worker_task("backtest", Path(data_dir), cfg)
         result = run_worker_task(task)
 

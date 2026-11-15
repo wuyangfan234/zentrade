@@ -216,3 +216,68 @@ def test_strategy_rejects_uncontrolled_or_invalid_research_params(params, messag
 
     with pytest.raises(ValueError, match=message):
         strategy.compute_signals(_market(), params)
+
+
+def _penny_market():
+    # P1/P2 = 不足 5 美元的仙股, 成交额最低; A/B = 可交易。按“成交额 低”排名时仙股分数最高。
+    panel = pl.DataFrame({
+        "symbol": ["P1", "P2", "A", "B"] * 2,
+        "date": [date(2024, 1, 2)] * 4 + [date(2024, 1, 3)] * 4,
+        "open": [1.0, 1.0, 20.0, 30.0] * 2,
+        "high": [1.1, 1.1, 21.0, 31.0] * 2,
+        "low": [0.9, 0.9, 19.0, 29.0] * 2,
+        "close": [1.0, 1.0, 20.0, 30.0] * 2,
+        "volume": [1_000.0] * 8,
+        "amount": [1.0, 2.0, 3.0, 4.0] * 2,
+        "turnover_rate": [1.0] * 8,
+    })
+    return build_market_data_matrix(panel, field_columns={"amount", "turnover_rate"})
+
+
+_LOW_AMOUNT_TOP2 = {
+    "scoring": {"amount": 1.0},
+    "directions": {"amount": "low"},
+    "entry_score": 0.0,
+    "exit_score": 0.0,
+    "top_rank": 2,
+}
+
+
+def test_pipeline_ranks_within_tradable_universe_not_whole_market():
+    # 11-16 回归: 全市场先排名取前 N 再过滤, 前 N 全是仙股 -> 过滤后 0 个买点 (“未产生买入信号”)。
+    from app.backtest.matrix import MatrixPipelineConfig, MatrixStrategyPipeline
+
+    strategy = StrategyEngine._load_file(STRATEGY_PATH).matrix_strategy
+    assert strategy.ranks_within_universe is True
+    market = _penny_market()
+    config = MatrixPipelineConfig(
+        basic_filter={"price_min": 5.0}, scoring={}, order_by="score", descending=True,
+    )
+
+    signals = MatrixStrategyPipeline().run(strategy, market, dict(_LOW_AMOUNT_TOP2), config)
+
+    cols = {symbol: i for i, symbol in enumerate(market.symbols)}
+    for day in range(2):
+        picked = {symbol for symbol, i in cols.items() if signals.entry[day, i]}
+        assert picked == {"A", "B"}
+        # 池外的票分数为 0, 但不能被当成“分数跌破”而发离场信号
+        assert not signals.exit[day, cols["P1"]] and not signals.exit[day, cols["P2"]]
+
+
+def test_direct_call_without_universe_keeps_whole_market_ranking():
+    strategy = StrategyEngine._load_file(STRATEGY_PATH).matrix_strategy
+    market = _penny_market()
+
+    signals = strategy.compute_signals(market, dict(_LOW_AMOUNT_TOP2))
+
+    cols = {symbol: i for i, symbol in enumerate(market.symbols)}
+    for day in range(2):
+        assert {symbol for symbol, i in cols.items() if signals.entry[day, i]} == {"P1", "P2"}
+
+
+def test_universe_mask_shape_mismatch_is_rejected():
+    strategy = StrategyEngine._load_file(STRATEGY_PATH).matrix_strategy
+    market = _penny_market()
+
+    with pytest.raises(ValueError, match="universe mask shape"):
+        strategy.compute_signals(market, dict(_LOW_AMOUNT_TOP2), universe=np.ones((1, 4), dtype=bool))

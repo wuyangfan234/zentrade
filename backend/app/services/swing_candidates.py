@@ -161,8 +161,11 @@ def _gate_matrix(data_dir: Path, repo, symbols: list[str], days: list[date]) -> 
     return gate.matrix(Path(data_dir), repo, symbols, days)
 
 
-def evaluate(data_dir: Path, repo, strategy_ids: list[str], *, end: date, watchlist: set[str]) -> dict:
-    """对每个候选策略做卡回放验收, 写 research/swing_candidates.json (原子写)。返回写入内容。"""
+def evaluate(data_dir: Path, repo, strategy_ids: list[str], *, end: date, watchlist: set[str],
+             merge: bool = False) -> dict:
+    """对每个候选策略做卡回放验收, 写 research/swing_candidates.json (原子写)。返回写入内容。
+    merge=True (发布后只验收新策略): 保留文件里其他策略的结果与文件级 window/generated_at,
+    本次验收的条目自带 window / checked_at (它的窗口可能比文件级的新几天)。"""
     from app.backtest.engine import BacktestEngine
     from app.backtest.strategy import StrategyBacktestService
     from app.services import strategy_evaluation_runner as runner
@@ -172,7 +175,13 @@ def evaluate(data_dir: Path, repo, strategy_ids: list[str], *, end: date, watchl
     start = WINDOW_START
     out = {"contract": CONTRACT, "window": [start.isoformat(), end.isoformat()], "risk_pct": RISK_PCT,
            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"), "rules": {}}
-    prior = read_candidates(data_dir).get("rules") or {}
+    prior_file = read_candidates(data_dir)
+    prior = prior_file.get("rules") or {}
+    if merge and prior_file.get("contract") == CONTRACT and isinstance(prior, dict):
+        out["rules"] = {k: v for k, v in prior.items() if k not in set(strategy_ids)}
+        out["window"] = prior_file.get("window") or out["window"]
+        out["generated_at"] = prior_file.get("generated_at") or out["generated_at"]
+    checked_at = datetime.now().astimezone().isoformat(timespec="seconds")
     shared = None
     for sid in strategy_ids:
         try:
@@ -237,6 +246,9 @@ def evaluate(data_dir: Path, repo, strategy_ids: list[str], *, end: date, watchl
         years = len(days) / 252
         res = judge(cand, base_runs, years)
         res["first_passed"] = (prior.get(sid) or {}).get("first_passed") or (end.isoformat() if res["passed"] else None)
+        if merge:
+            res["window"] = [start.isoformat(), end.isoformat()]
+            res["checked_at"] = checked_at
         out["rules"][sid] = res
         logger.info("swing candidate %s: %s", sid, res)
     p = candidates_path(data_dir)
@@ -324,17 +336,18 @@ def worker_run(data_dir: Path, repo, cfg: dict) -> dict:
     from app.config import settings
     settings.backtest_matrix_disk_cache_enabled = False
     repo._enriched_warming = True
+    extra = {"merge": True} if cfg.get("merge") else {}
     out = evaluate(data_dir, repo, list(cfg["strategy_ids"]), end=date.fromisoformat(cfg["end"]),
-                   watchlist=set(cfg["watchlist"]))
+                   watchlist=set(cfg["watchlist"]), **extra)
     return {"rules": {k: {kk: vv for kk, vv in v.items() if kk in ("passed", "n", "excess", "error")}
                       for k, v in (out.get("rules") or {}).items()}}
 
 
-def run_after_mining(data_dir: Path, repo, *, end: date) -> dict:
+def run_after_mining(data_dir: Path, repo, *, end: date, strategy_ids: list[str] | None = None) -> dict:
     """周度挖掘结束后、或人点“发布”策略后调用: 对全部系统发现的策略做卡回放验收; 失败由调用方记日志。
     串行靠共享重任务额度 (slot("mining") = 全部额度): 两次验收、验收与回测/挖掘都不会同时跑。
     不另加进程锁 —— 挖掘线程是持有额度后才调到这里, 再加一把锁会与“先拿锁再等额度”的后台线程互相等死。"""
-    return _run_after_mining(data_dir, repo, end=end)
+    return _run_after_mining(data_dir, repo, end=end, strategy_ids=strategy_ids)
 
 
 def pending_path(data_dir: Path) -> Path:
@@ -379,15 +392,18 @@ def is_running() -> bool:
     return _RUNS[0] > 0
 
 
-def request_check(data_dir: Path, repo, *, reason: str, now: datetime | None = None, if_idle: bool = False) -> dict:
+def request_check(data_dir: Path, repo, *, reason: str, now: datetime | None = None, if_idle: bool = False,
+                  strategy_ids: list[str] | None = None) -> dict:
     """Ask for one card-replay check. Off-hours it starts now in the background; 09:00-17:00 ET on trading days
     it is queued in research/swing_candidates_pending.json and the 17:05 ET job (zen_swing_candidates_queue)
     starts it. if_idle (the gear button): do nothing while a check is already running."""
     if if_idle and is_running():
         return {"started": False, "queued": False, "running": True}
     if can_run_now(now):
-        _clear_pending(data_dir)
-        schedule_check(data_dir, repo, reason=reason)
+        if not strategy_ids:
+            _clear_pending(data_dir)   # 全量验收会覆盖排队的那次; 只验收新策略时排队的全量照旧保留
+        extra = {"strategy_ids": strategy_ids} if strategy_ids else {}
+        schedule_check(data_dir, repo, reason=reason, **extra)
         return {"started": True, "queued": False, "running": True}
     from app.services.fs_utils import atomic_write_text
     p = pending_path(data_dir)
@@ -414,14 +430,15 @@ def status(data_dir: Path) -> dict:
             "pending_at": p.get("requested_at")}
 
 
-def schedule_check(data_dir: Path, repo, *, reason: str) -> threading.Thread:
+def schedule_check(data_dir: Path, repo, *, reason: str, strategy_ids: list[str] | None = None) -> threading.Thread:
     """人点“发布”(挖掘候选 / AI 草稿) 后在后台补一次验收, 不用等下周挖掘跑完才出“候选”标记 (0.26.0 自审 F3)。
     后台线程, 不阻塞发布请求; 失败只记日志。返回线程 (测试 join 用)。"""
     from app.market_clock import us_clock
 
     def run():
         try:
-            run_after_mining(data_dir, repo, end=us_clock.previous_trading_day(us_clock.today()))
+            extra = {"strategy_ids": strategy_ids} if strategy_ids else {}
+            run_after_mining(data_dir, repo, end=us_clock.previous_trading_day(us_clock.today()), **extra)
         except Exception as e:
             logger.warning("swing candidate check after %s failed (soft): %s", reason, type(e).__name__)
         finally:
@@ -440,11 +457,16 @@ def schedule_check(data_dir: Path, repo, *, reason: str) -> threading.Thread:
     return th
 
 
-def _run_after_mining(data_dir: Path, repo, *, end: date) -> dict:
+def _run_after_mining(data_dir: Path, repo, *, end: date, strategy_ids: list[str] | None = None) -> dict:
     from app.services import decision_scan_job as job
     from app.services import strategy_evaluation_runner as runner
     from app.services.heavy_job_limiter import shared_heavy_job_limiter
-    ids = discovered_ids(runner._strategy_engine(Path(data_dir)))
+    discovered = discovered_ids(runner._strategy_engine(Path(data_dir)))
+    # strategy_ids = 只验收指定的 (发布后那一条), 结果并入现有文件; None = 全部系统发现策略重算
+    merge = strategy_ids is not None
+    ids = [sid for sid in discovered if sid in set(strategy_ids)] if merge else discovered
+    if merge and not ids:
+        return read_candidates(data_dir)
     if not ids:
         out = {"contract": CONTRACT, "window": None, "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                "rules": {}, "note": "no_discovered_strategies"}
@@ -454,10 +476,10 @@ def _run_after_mining(data_dir: Path, repo, *, end: date) -> dict:
         atomic_write_text(p, json.dumps(out, ensure_ascii=False, indent=1))
         return out
     from app.backtest.worker import make_worker_task, run_worker_task
-    cfg = {"strategy_ids": ids, "end": end.isoformat(), "watchlist": sorted(job._watchlist())}
+    cfg = {"strategy_ids": ids, "end": end.isoformat(), "watchlist": sorted(job._watchlist()), "merge": merge}
     # 独占重任务额度 (与挖掘同权重): 全市场矩阵峰值约 1.5 GB, 不与回测/证据周更等其他重任务叠加。
     # 挖掘线程里调用时它本来就持有这份额度 (复用, 不会自锁); 发布后的后台线程会排队等其他重任务结束。
-    with shared_heavy_job_limiter.slot("mining"):
+    with shared_heavy_job_limiter.slot("mining", label="回放验收"):
         res = run_worker_task(make_worker_task("swing_candidates", Path(data_dir), cfg))
     if res.get("error"):
         raise RuntimeError(f"swing candidates worker failed: {res['error']}")
