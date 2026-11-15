@@ -66,11 +66,12 @@ def _marks(repo, ledger) -> tuple[dict, dict]:
     marks, origin = {}, {}
     symbols = [p.symbol for p in ledger.open_positions]
     try:
-        from app.api.portfolio import _live_marks
+        from app.api.portfolio import _live_marks, tick_mark
         for s, (price, ts, src) in _live_marks(symbols).items():
-            marks[s], origin[s] = float(price), {"source": src, "ts": ts}
+            marks[s], origin[s] = tick_mark(ledger, s, price, ts), {"source": src, "ts": ts}
     except Exception:  # noqa: BLE001
         pass
+    from app.api.portfolio import close_mark
     today = us_clock.today()
     for s in symbols:
         if s in marks:
@@ -78,7 +79,7 @@ def _marks(repo, ledger) -> tuple[dict, dict]:
         try:
             df = repo.get_daily(s, today - timedelta(days=10), today)
             if not df.is_empty():
-                marks[s], origin[s] = float(df["close"][-1]), {"source": "close", "date": str(df["date"][-1])}
+                marks[s], origin[s] = close_mark(ledger, s, df), {"source": "close", "date": str(df["date"][-1])}
         except Exception:  # noqa: BLE001
             continue
     return marks, origin

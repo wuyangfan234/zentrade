@@ -579,7 +579,8 @@ class TradingLoop:
             pc = self._prev_official_close(pos.symbol, now.date())
             if pc is None:
                 return None, None, None
-            marks[pos.symbol] = pc
+            # 除权日: 昨收是拆前价, 台账已按拆后股数记账 → 换到同一股数口径, 否则 2 拆 1 读成 ±12% 误触/漏触
+            marks[pos.symbol] = pc / self.ledger.split_factor_after(pos.symbol, us_clock.previous_trading_day(now.date()))
         nav_now = self.ledger.nav(marks)
         path = self.ledger.data_dir / 'nav' / 'daily.jsonl'
         rows = []
@@ -786,6 +787,37 @@ class TradingLoop:
                 self._notify_seq = e['seq']
         except (ImportError, OSError) as e:
             logger.warning('paper notification enqueue unavailable: %s', type(e).__name__)
+        self._notify_held_corporate_actions()
+
+    def _notify_held_corporate_actions(self):
+        """持仓遇到系统不自动处理的公司行动 (并购 / 分拆 / 改代码 / 摘牌 / 送股等): 一次性提醒, 持仓与计划不动。
+
+        只提醒生效日落在本回合持有期内的 (晚于建仓日、不超过最长持有天数); 按 action_id + 建仓日去重,
+        重启后由通知队列的主键去重。现金分红与拆合股自动入账, 另有自己的推送。出错只记日志, 不影响交易环。"""
+        try:
+            actions = [a for a in self.corp_actions.actions() if not a.get('auto')]
+            if not actions:
+                return
+            from app.services import notify_opportunity
+            sent = self.__dict__.setdefault('_held_corp_notified', set())
+            with self.ledger._lock:
+                positions = {p.symbol: p for p in self.ledger.open_positions}
+            for action in actions:
+                pos = positions.get(str(action.get('symbol') or ''))
+                if pos is None or not pos.entry_date:
+                    continue
+                try:
+                    ex_day = date.fromisoformat(str(action.get('ex_date'))[:10])
+                    entry = date.fromisoformat(pos.entry_date)
+                except (TypeError, ValueError):
+                    continue
+                if ex_day <= entry or us_clock.days_held(entry, ex_day) > self.account.max_holding_days:
+                    continue
+                key = (action.get('id'), pos.symbol, pos.entry_date)
+                if key not in sent and notify_opportunity.enqueue_corp_held(self.repo.store.data_dir, action, pos):
+                    sent.add(key)
+        except Exception as e:
+            logger.warning('held corporate action notice failed: %s', type(e).__name__)
 
     def status(self):
         with self.ledger._lock:

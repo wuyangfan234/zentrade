@@ -108,6 +108,8 @@ class Ledger:
     _seq: int = field(default=0, init=False)
     _cash: float = field(default=0.0, init=False)
     _positions: dict[str, Position] = field(default_factory=dict, init=False)
+    # 已入账到持仓上的拆股 {symbol: [(除权日 iso, 比例), ...]}: 由事件重放推导, 供估值把拆前旧价换到当前股数口径
+    _splits: dict[str, list[tuple[str, float]]] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "_events_path", self.data_dir / "events.jsonl")
@@ -357,6 +359,8 @@ class Ledger:
             pos.avg_cost = round(pos.avg_cost / factor, 6)
             if pos.stop_price is not None:
                 pos.stop_price = round(pos.stop_price / factor, 6)
+            ex = str(e.get("ex_date") or e.get("trade_date") or e["at"])[:10]
+            self._splits.setdefault(sym, []).append((ex, factor))
         if cash_dividend:
             self._cash += cash_dividend
 
@@ -390,6 +394,7 @@ class Ledger:
         with self._lock:
             self._cash = account.initial_equity
             self._positions = {}
+            self._splits = {}
             self._seq = 0
             if not self._events_path.exists():
                 return
@@ -417,6 +422,19 @@ class Ledger:
     def position(self, symbol: str) -> Position | None:
         p = self._positions.get(symbol)
         return p if p and p.qty != 0 else None
+
+    def split_factor_after(self, symbol: str, day: date | str) -> float:
+        """已入账拆股中除权日晚于 day 的累计比例 (8 拆 1 = 8, 10 并 1 = 0.1)。
+
+        day 当天的原始价 ÷ 本值 = 台账现行股数口径的价格。除权日早上只有拆前的昨收 / 昨天最后一笔报价,
+        台账却已按拆后股数记账; 不换算会把 2 拆 1 读成持仓翻倍 (QuantConnect LEAN ApplySplit 同理换算)。
+        """
+        d = (day.isoformat() if isinstance(day, date) else str(day))[:10]
+        factor = 1.0
+        for ex, k in self._splits.get(symbol, ()):
+            if ex > d:
+                factor *= k
+        return factor
 
     def market_value(self, marks: dict[str, float]) -> float:
         """带符号市值: 多头为正, 空头为负 (回补负债); 合约式 = 浮动盈亏 qty × (现价 − 均价)。净值 = 现金 + 本值。"""

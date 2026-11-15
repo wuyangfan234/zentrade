@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Request
@@ -25,6 +25,25 @@ MARK_LOOKBACK_DAYS = 10  # 覆盖长周末/休市; 更久无收盘则按成本�
 
 def _ledger_dir(request: Request) -> Path:
     return Path(request.app.state.repo.store.data_dir) / "ledger"
+
+
+def _split_after(lg, symbol: str, day) -> float:
+    fn = getattr(lg, "split_factor_after", None)
+    return fn(symbol, day) if fn is not None else 1.0
+
+
+def close_mark(lg: Ledger, symbol: str, df) -> float:
+    """最近一根日K收盘, 换到台账现行股数口径: 除权日早上最近收盘仍是拆前价, 台账已按拆后股数记账。"""
+    price = float(df["close"][-1])
+    if "date" not in df.columns:
+        return price
+    return price / _split_after(lg, symbol, str(df["date"][-1])[:10])
+
+
+def tick_mark(lg: Ledger, symbol: str, price: float, ts_ms: int) -> float:
+    """热报价同理: 缓冲里可能还是拆股前一天的最后一笔。"""
+    day = datetime.fromtimestamp(ts_ms / 1000, us_clock.tz).date()
+    return float(price) / _split_after(lg, symbol, day)
 
 
 @router.get("/overview")
@@ -51,7 +70,7 @@ def overview(request: Request) -> dict:
     for pos in snap["positions"]:
         df = request.app.state.repo.get_daily(pos["symbol"], since, today)
         if not df.is_empty():
-            marks[pos["symbol"]] = float(df["close"][-1])
+            marks[pos["symbol"]] = close_mark(lg, pos["symbol"], df)
     nav = snap["cash"] + sum(
         position_value(p["qty"], marks.get(p["symbol"], p["avg_cost"]), p["avg_cost"], p.get("contract", False))
         for p in snap["positions"]
@@ -259,13 +278,14 @@ def live(request: Request) -> dict:
         plan = open_plans.get(sym, {})
         if sym in marks:
             price, ts, source = marks[sym]
+            price = tick_mark(lg, sym, price, ts)
             age = round(now.timestamp() - ts / 1000, 1)
             if not us_clock.in_session(now):
                 # off-session the buffer still holds the last session tick: price = last trade, label it as close
                 source, age = "last_close", None
         else:
             df = request.app.state.repo.get_daily(sym, since, today)
-            price = float(df["close"][-1]) if not df.is_empty() else p["avg_cost"]
+            price = close_mark(lg, sym, df) if not df.is_empty() else p["avg_cost"]
             age, source = None, "last_close" if not df.is_empty() else "cost"
         avg = p["avg_cost"]
         stop = p.get("stop_price") or plan.get("stop_price")
