@@ -1096,6 +1096,31 @@ def pipeline_retry_due(jobs, now, sched, *, nav_dates=None, attempts: int = 0, a
     return d
 
 
+# 财报日历是两路外部 HTTP 数据, 单次定时失败不能等到下一个 08:30 / 17:00 才恢复。
+# 退避逐步升至 120 分钟后继续重试; 成功前准入仍 fail-closed, 不放宽新开仓。
+EARNINGS_RETRY_GAPS_MIN = (15, 30, 60, 120)
+
+
+def earnings_retry_due(status: dict, now, *, attempts: int = 0) -> bool:
+    """返回失败的财报日历是否已到下一次重试时点; 已连接或未到退避时间则不重试。"""
+    if (status or {}).get("status") == "connected":
+        return False
+    from datetime import timedelta
+
+    from app.market_clock import us_clock
+
+    raw = (status or {}).get("last_attempt_at")
+    if not raw:
+        return True
+    try:
+        last = us_clock.market_datetime(raw)
+        now = us_clock.market_datetime(now)
+    except (TypeError, ValueError):
+        return True
+    gap = EARNINGS_RETRY_GAPS_MIN[min(max(attempts, 0), len(EARNINGS_RETRY_GAPS_MIN) - 1)]
+    return now - last >= timedelta(minutes=gap)
+
+
 def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOScheduler:
     """启动调度器。
 
@@ -1619,6 +1644,30 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         scheduler.add_job(_refresh_earnings,
             trigger=CronTrigger(day_of_week="mon-fri", hour=hour, minute=minute, timezone="America/New_York"),
             id=job_id, max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
+
+    _earnings_retry_failures = 0
+
+    def _earnings_retry():
+        nonlocal _earnings_retry_failures
+        from app.services.earnings_calendar import EarningsCalendar
+
+        cal = EarningsCalendar(repo.store.data_dir)
+        status = cal.status()
+        if status.get("status") == "connected":
+            _earnings_retry_failures = 0
+            return None
+        if not earnings_retry_due(status, _clock.now(), attempts=_earnings_retry_failures):
+            return None
+        logger.warning("earnings calendar retry: 第 %d 次补刷", _earnings_retry_failures + 1)
+        status = _refresh_earnings()
+        if status.get("status") == "connected":
+            _earnings_retry_failures = 0
+        else:
+            _earnings_retry_failures += 1
+        return status
+
+    scheduler.add_job(_earnings_retry, trigger=IntervalTrigger(minutes=15), id="zen_earnings_retry",
+                      max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True)
 
     # 公司行动: 盘前 08:00 拉取关心标的 (持仓 + 未成交卡) 的窗口, 并立即对持仓入账。
     def _refresh_corporate_actions():
