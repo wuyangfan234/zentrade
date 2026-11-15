@@ -425,6 +425,19 @@ def enqueue_corp_action(data_dir: Path, event: dict) -> bool:
                                     "body": body})
 
 
+def enqueue_corp_held(data_dir: Path, action: dict, position) -> bool:
+    """持仓遇到不自动处理的公司行动 (并购/分拆/改代码/摘牌/送股): 一次性提醒, 按 action_id + 建仓日去重。"""
+    from app.services.corporate_actions import TYPE_LABEL
+    qty = abs(float(position.qty))
+    qty_s = str(int(qty)) if qty.is_integer() else f"{qty:.6f}".rstrip("0")
+    ex = str(action.get("ex_date") or "")[:10]
+    body = (f"**{position.symbol}** · {TYPE_LABEL.get(str(action.get('type') or ''), '公司行动')}（生效日 {ex}）\n"
+            f"> 持仓 {qty_s} 股（{'空头' if position.qty < 0 else '多头'}），这类公司行动不自动入账，"
+            f"持仓、止损与目标均未调整\n> 请人工确认是否在生效日前离场")
+    key = f"corp:held:{action.get('id')}:{position.entry_date}"
+    return _enqueue(data_dir, key, {"title": "ZenTrade · 公司行动提醒", "subtitle": ex, "body": body})
+
+
 def enqueue_setup_degraded(data_dir: Path, setups: list[str], state: dict) -> bool:
     """setup 被自动降级为只观察: 一次性通知 (按 setup+降级时间去重)。"""
     lines = []
