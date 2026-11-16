@@ -5,18 +5,22 @@
  * 0.51.0 (11-06 产品决策): 状态栏下 = 盘前判断 (08:35 ET 大盘三档) → 今日多空 (自选看多 5 / 看空 5), 再往下原样。
  *   状态变化由后端帧经 SSE 推送, 页面立即重取; 30/60 秒轮询保留作兜底。
  * 0.52.2 (11-06 产品决策选 A): 今日多空标为模型观察; 机会板独立; 共振与三个盘面引擎归入只记录雷达。
+ * 2026-11-15 B 方案 (产品决策选定): 状态行 → 大盘方向置顶 → 左栏 今日机会 / 我的持仓 (价格尺卡片, 左亏右赚) ·
+ *   右栏 账户名额 (次要) / 集中风险 / 模型打分 → 盘中异动四组完整列出。价格尺现价跟报价推送刷新。
+ *   来源边界不变: 只有今日机会 (机会板) 进入模拟下单; 模型打分与盘中异动只作参考, 不合成分数、不改方向。
  */
 import { lazy, Suspense, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Settings2 } from 'lucide-react'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
-import { StatusRail } from '@/components/opportunities/StatusRail'
-import { COL_ORDER, EngineCols, Holdings, RegimeBar, StrategyBoard } from '@/components/opportunities/Desk'
-import { LsRank, LsRankEmpty } from '@/components/opportunities/LsRank'
-import { MoodBar } from '@/components/opportunities/MoodBar'
-import { ThemeBar } from '@/components/opportunities/ThemeBar'
+import { StatusLine } from '@/components/opportunities/StatusRail'
+import { COL_ORDER, RadarFull } from '@/components/opportunities/Desk'
+import { LsRankEmpty, ModelCard } from '@/components/opportunities/LsRank'
+import { MarketHero } from '@/components/opportunities/MarketHero'
+import { BoardCards, HoldCards, modelSides } from '@/components/opportunities/Cards'
+import { AccountCard, ConcRisk } from '@/components/opportunities/SideRail'
 import { AsOfView } from '@/components/opportunities/AsOfView'
-import { useOppPage } from '@/components/opportunities/useOppPage'
+import { ACTIVE_PHASES, useOppPage, useOppQuotes } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
 import { badge } from '@/components/ui/badge'
 import { api, type OppPagePayload, type SwingBoardsPayload } from '@/lib/api'
@@ -79,15 +83,27 @@ export function Opportunities() {
   const desk = d?.desk ?? null
   const order = COL_ORDER[desk?.regime.key ?? 'normal']
   const res = useMemo(() => new Set((desk?.resonance ?? []).map((x) => x.symbol)), [desk])
-  // 预览里左右切票顺序 = 今日多空 → 共振 → 各栏 → 持仓, 同票只出现一次
+  const model = useMemo(() => modelSides(d?.ls_rank), [d])
+  const nav = d?.themes?.nav ?? d?.swing?.equity ?? d?.ls_rank?.equity ?? null
+  // 价格尺现价: 今日机会 / 持仓 / 盘中异动里出现的票, 盘前 / 开盘 / 盘中跟报价推送刷新
+  const quoteSyms = useMemo(() => {
+    if (!d) return []
+    return [...[...(d.swing?.long ?? []), ...(d.swing?.short ?? [])].map((c) => c.symbol), ...(view?.blips ?? []).filter((b) => b.hold).map((b) => b.symbol),
+      ...(d.gaps?.rows ?? []).map((r) => r.symbol), ...(d.radar?.is_today ? [...d.radar.picks, ...d.radar.others].map((r) => r.symbol) : []),
+      ...(d.intraday?.active ?? []).map((c) => c.symbol), ...(desk?.resonance ?? []).map((x) => x.symbol)]
+  }, [d, view, desk])
+  const live = useOppQuotes(quoteSyms, !asof && ACTIVE_PHASES.has(d?.phase?.phase ?? ''))
+  // 预览里左右切票顺序 = 今日机会 → 持仓 → 模型打分 → 盘中异动, 同票只出现一次
   const navList = useMemo(() => {
     if (!d) return []
     const seen = new Set<string>()
-    const all = [...(d.ls_rank?.long ?? []).map((r) => r.symbol), ...(d.ls_rank?.short ?? []).map((r) => r.symbol),
+    const all = [...[...(d.swing?.long ?? []), ...(d.swing?.short ?? [])].filter((c) => c.state !== 'holding').map((c) => c.symbol),
+      ...(view?.blips ?? []).filter((b) => b.hold).map((b) => b.symbol),
+      ...(d.ls_rank?.long ?? []).map((r) => r.symbol), ...(d.ls_rank?.short ?? []).map((r) => r.symbol),
       ...(desk?.resonance ?? []).map((x) => x.symbol), ...(d.intraday?.active ?? []).map((c) => c.symbol), ...(d.radar?.picks ?? []).map((r) => r.symbol),
-      ...(d.gaps?.rows ?? []).map((r) => r.symbol), ...[...(d.swing?.long ?? []), ...(d.swing?.short ?? [])].map((c) => c.symbol)]
+      ...(d.gaps?.rows ?? []).map((r) => r.symbol)]
     return all.filter((s) => !seen.has(s) && seen.add(s)).map((symbol) => ({ symbol }))
-  }, [d, desk])
+  }, [d, desk, view])
   const stale = !!(q.isError && d)
   return (
     <div className="mx-auto max-w-[1440px] px-4 py-4 pb-24 md:px-6">
@@ -98,15 +114,21 @@ export function Opportunities() {
       {!asof && stale && <div data-stale className="mb-2 rounded-btn border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-semibold text-warning">{`刷新失败 · 当前为 ${hm(d!.generated_at)}（北京）的数据`}</div>}
       {d && !asof && (
         <>
-          {view ? <StatusRail view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
-          {errs.themes ? <SectionError name="主题压力" err={errs.themes} /> : d.themes ? <ThemeBar t={d.themes} /> : null}
-          {errs.mood ? <SectionError name="大盘判断" err={errs.mood} /> : <MoodBar mood={d.mood} />}
-          {errs.ls_rank ? <SectionError name="今日多空" err={errs.ls_rank} /> : d.ls_rank ? <LsRank d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
-          {desk ? <RegimeBar desk={desk} /> : <SectionError name="市场宽度" err={errs.desk ?? '无数据'} />}
-          <StrategyBoard swing={d.swing} error={errs.swing} res={res} onOpen={setOpen} />
-          <EngineCols order={order} onOpen={setOpen} desk={desk}
-            d={{ gaps: d.gaps, radar: d.radar, intraday: d.intraday, errors: errs, chg: desk?.regime.chg ?? {}, res }} />
-          {view && <Holdings view={view} onOpen={setOpen} />}
+          {view ? <StatusLine view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
+          <MarketHero mood={d.mood} desk={desk} moodError={errs.mood} deskError={errs.desk} />
+          <div data-opp-grid className="grid items-start gap-x-3 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div data-opp-main className="min-w-0">
+              <BoardCards swing={d.swing} error={errs.swing} quotes={live.quotes} quotesAt={live.at} model={model} ctx={d.ctx ?? {}} nav={nav} onOpen={setOpen} />
+              {view && <HoldCards view={view} swing={d.swing} quotes={live.quotes} quotesAt={live.at} model={model} onOpen={setOpen} />}
+            </div>
+            <aside data-opp-rail className="min-w-0">
+              {view && <AccountCard view={view} nav={nav} />}
+              {errs.themes ? <SectionError name="集中风险" err={errs.themes} /> : d.themes ? <ConcRisk t={d.themes} /> : null}
+              {errs.ls_rank ? <SectionError name="模型打分" err={errs.ls_rank} /> : d.ls_rank ? <ModelCard d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
+            </aside>
+          </div>
+          <RadarFull order={order} onOpen={setOpen} desk={desk}
+            d={{ gaps: d.gaps, radar: d.radar, intraday: d.intraday, view, errors: errs, chg: desk?.regime.chg ?? {}, quotes: live.quotes, res }} />
         </>
       )}
       {open && (

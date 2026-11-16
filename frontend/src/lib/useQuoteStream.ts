@@ -129,6 +129,8 @@ export function useQuoteStream(
         const activePrefixes = SSE_INVALIDATE_PREFIXES.filter((p) => {
           // 'quote-status' 始终刷新 (全局状态)
           if (p === 'quote-status') return true
+          // 机会页价格尺跟「机会页」开关走 (关掉时只按 15 秒兜底轮询)
+          if (p === 'opp-quotes') return pages['opportunities'] !== false
           // 兼容旧配置: 'watchlist' 拆成两个精确前缀后, 未单独设置时沿用旧 'watchlist' 开关
           if (
             (p === 'watchlist-quotes' || p === 'watchlist-enriched') &&

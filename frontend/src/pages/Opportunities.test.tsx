@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-// 0.52.2 A 方案 = 模型观察 → 独立策略机会 → 盘面雷达 (三引擎 + 引擎共振) → 持仓。
-// 不变量: 一个请求 (/page) 取齐; 雷达顺序随大盘状态; 机会板独立; 某块失败只空一块; 整页失败 = 错误不是“无机会”; 齿轮一个保存口;
-// 系统文字只写结果 (无说明句、无口语)。
+// 2026-11-15 B 方案 = 状态行 → 大盘方向 → 今日机会 / 我的持仓 (价格尺) · 右栏 账户 / 集中风险 / 模型打分 → 盘中异动。
+// 不变量: 一个请求 (/page) 取齐整页 (盘中另有轻量报价); 价格尺现价跟报价刷新; 只有今日机会进入下单, 模型与盘中异动只作参考;
+// 盘中异动顺序随大盘状态; 某块失败只空一块; 整页失败 = 错误不是“无机会”; 齿轮一个保存口; 系统文字只写结果 (无说明句、无口语)。
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -10,7 +10,7 @@ import type { IntradayCard, LsRankPayload, LsRankRow, MarketMoodPayload, OppDesk
 
 const mocks = vi.hoisted(() => ({
   oppPage: vi.fn(), saveOppSettings: vi.fn(), watchlistRules: vi.fn(), newsSummary: vi.fn(), qverisOptions: vi.fn(), runSwingCandidates: vi.fn(),
-  previewOppSettings: vi.fn(), oppAsofDays: vi.fn(), oppAsof: vi.fn(),
+  previewOppSettings: vi.fn(), oppAsofDays: vi.fn(), oppAsof: vi.fn(), oppQuotes: vi.fn(),
 }))
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
@@ -167,6 +167,7 @@ beforeEach(() => {
   mocks.previewOppSettings.mockResolvedValue(PREVIEW)
   mocks.oppAsofDays.mockResolvedValue({ today: '2026-10-20', days: ['2026-10-16', '2026-10-19'] })
   mocks.oppPage.mockResolvedValue(page())
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:12-04:00', quotes: {} })
   mocks.watchlistRules.mockResolvedValue(rules)
   mocks.saveOppSettings.mockResolvedValue({ swing: { long: [], short: [] }, ruleset: { version: 46, risk_per_trade_pct: 0.75 } })
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -175,40 +176,205 @@ beforeEach(() => {
 afterEach(() => { act(() => root.unmount()); host.remove(); document.body.innerHTML = '' })
 const text = (sel: string) => host.querySelector(sel)?.textContent ?? ''
 
-it('一个请求取齐整页: 不逐票请求期权 / 新闻; 规则目录只在开齿轮时取', async () => {
+const flush = async (n = 6) => { for (let i = 0; i < n; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) }) }
+const seqOf = (sels: Record<string, string>) => [...host.querySelectorAll(Object.values(sels).join(', '))]
+  .map((e) => Object.entries(sels).find(([, sel]) => e.matches(sel))![0])
+
+it('一个请求取齐整页; 盘中另取一次价格尺报价 (票去重排序); 不逐票请求期权 / 新闻; 规则目录只在开齿轮时取', async () => {
   await render()
   expect(mocks.oppPage).toHaveBeenCalledTimes(1)
   for (const k of ['newsSummary', 'qverisOptions', 'watchlistRules'] as const) expect(mocks[k], k).not.toHaveBeenCalled()
   expect(text('[data-swing-head]')).toContain('信号日 10-22')
+  expect(mocks.oppQuotes).toHaveBeenCalledTimes(1)
+  expect(mocks.oppQuotes).toHaveBeenCalledWith('ARM,BABA,META,NBIS,TSLA')
 })
 
-it('状态栏保留: 时钟 + 时段 + 下一事件 + 名额 + 泳道; 雷达图 / 页签 / 引擎明细已删', async () => {
+it('休市 / 盘后不取报价, 价格尺用页面价', async () => {
+  mocks.oppPage.mockResolvedValue(page({ phase: { phase: 'closed', label: '休市', at: '2026-10-25T10:00' } }))
   await render()
+  expect(mocks.oppQuotes).not.toHaveBeenCalled()
+  expect(host.querySelector('[data-board-card="BABA"] [data-ruler-price]')).not.toBeNull()
+})
+
+it('B 版面: 状态行 → 大盘方向 → 今日机会 → 持仓 → 账户 → 模型打分 → 盘中异动; 泳道 / 名额条 / 主题压力表 / 旧大盘条已退役', async () => {
+  await render()
+  expect(seqOf({ rail: '[data-status-rail]', hero: '[data-market-hero]', board: '[data-board]', hold: '[data-holdings]', acct: '[data-account]',
+    model: '[data-ls-rank]', radar: '[data-radar-section]' })).toEqual(['rail', 'hero', 'board', 'hold', 'acct', 'model', 'radar'])
+  expect(host.querySelector('[data-opp-rail] [data-account]')).not.toBeNull()       // 账户名额在右栏 (次要位置)
+  expect(host.querySelector('[data-opp-main] [data-account]')).toBeNull()
+  for (const sel of ['[data-lane]', '[data-rail-lanes]', '[data-rail-caps]', '[data-cap]', '[data-theme-bar]', '[data-strategy-board]', '[data-mood-bar-old]']) {
+    expect(host.querySelector(sel), sel).toBeNull()
+  }
   expect(text('[data-rail-clock]')).toContain('10:39')
   expect(text('[data-rail-clock]')).toContain('北京 22:39')
   expect(text('[data-rail-phase]')).toContain('盘中 · 入场窗')
   expect(text('[data-rail-next]')).toContain('11:00 ET 盘中检查')
-  expect(text('[data-cap="slot"]')).toContain('科技·空')
-  expect(host.querySelector('[data-lane="board"]')).not.toBeNull()
-  for (const sel of ['[data-sweep]', '[data-readout]', '[data-feed]', '[data-engine-details]', '[data-details-toggle]', '[data-stage-tab]', '[data-mark]']) {
-    expect(host.querySelector(sel), sel).toBeNull()
-  }
 })
 
-it('名额格进度条按占用比例填充: 组合风险 1.4%/6% = 23%, 持仓 1/12 = 8%', async () => {
+it('大盘方向: 盘前结论 + 三档概率 + 星级; 盘中实况并排 (普涨 · 标普 / 纳指 · 自选宽度); 六项依据只在悬停', async () => {
+  mocks.oppPage.mockResolvedValue(page({ mood: mood() }))
   await render()
-  const fill = (k: string) => (host.querySelector(`[data-cap="${k}"] i`) as HTMLElement | null)?.style.width
-  expect(text('[data-cap="risk"]')).toContain('1.4%/6%')
-  expect(fill('risk')).toBe('23%')
-  expect(fill('positions')).toBe('8%')
+  expect(text('[data-mood-stance]')).toBe('偏空')
+  expect(host.querySelector('[data-mood-stance]')!.getAttribute('title')).toBe('趋势 跌 · 隔夜 涨 · 日历 震荡 · 利率 旧 · 板块 跌 · 恐慌 缺')
+  expect(text('[data-mood-probs]')).toBe('上涨 25%震荡 30%下跌 45%')
+  expect(text('[data-mood-hit]')).toBe('近 17 日判对 10 次')
+  expect(host.querySelector('[data-mood-old]')).toBeNull()
+  expect(text('[data-market-hero] [data-regime]')).toBe('普涨')
+  expect(text('[data-regime-index]')).toContain('标普 +0.54%')
+  expect(text('[data-regime-index]')).toContain('纳指 +1.25%')
+  expect(text('[data-regime-breadth]')).toBe('自选涨 ≥1% 34/44')
+  expect(text('[data-market-hero]')).not.toContain('趋势 跌')
 })
 
-it('大盘状态条: 普涨 + 自选宽度 + SPY / QQQ', async () => {
+it('大盘方向: 非当日标出来; 没有判断写下次生成时刻, 盘中实况照常', async () => {
+  mocks.oppPage.mockResolvedValue(page({ mood: mood({ is_today: false }) }))
   await render()
-  expect(host.querySelector('[data-regime]')!.getAttribute('data-regime')).toBe('up')
-  expect(text('[data-regime-badge]')).toBe('普涨')
-  expect(text('[data-regime-breadth]')).toBe('自选涨≥1% 34/44 · 涨≥3% 22 · 跌≥1% 2')
-  expect(text('[data-regime-index]')).toBe('SPY +0.54% · QQQ +1.25%')
+  expect(text('[data-mood-old]')).toBe('非当日')
+  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
+  mocks.oppPage.mockResolvedValue(page({ mood: mood({ judgment: null }) }))
+  await render()
+  expect(host.querySelector('[data-market-hero]')!.getAttribute('data-mood-state')).toBe('none')
+  expect(text('[data-market-hero]')).toContain('盘前判断 10-26 08:35 ET 生成')
+  expect(text('[data-market-hero] [data-regime]')).toBe('普涨')
+})
+
+const BOARD = () => {
+  const sw = page().swing!
+  return { ...sw, long: [card('BABA'), card('TSLA', { entry_zone: [384.51, 388.07], stop: 373.85, target: 412.3, price: 406.87, dist_pct: -4.62,
+    odds: { fill: 0.084, ev_r: 0.02, ci_r: [-0.02, 0.07], sig: 0, n: 452, level: 'x', day: 1, phase: 'pm', bin: 'gt1', dist_atr: 1.3, qty: 41, risk_usd: 510, ev_usd: 12, ci_usd: [-12, 37] } }),
+  card('PLTR', { verdict: 'skip', verdict_reason: 'cooldown', blocked: 'cooldown' }), card('PLTR', { verdict: 'skip', verdict_reason: 'cooldown', blocked: 'cooldown', card_id: 'p2' }),
+  card('AMD', { verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：同板块同向已满；组合风险超限' })],
+  short: [card('META', { side: 'short', verdict: 'skip', verdict_reason: 'premarket_beyond_stop' }), card('ORCL', { side: 'short', entry_zone: [101, 102], stop: 107, target: 90, price: 100 })] }
+}
+
+it('今日机会: 可进场的卡一张一把尺, 计数 = 卡数; 不做的卡折成一行写白话原因 (同票同原因只写一次)', async () => {
+  mocks.oppPage.mockResolvedValue(page({ swing: BOARD() }))
+  await render()
+  expect([...host.querySelectorAll('[data-board-card]')].map((e) => e.getAttribute('data-board-card'))).toEqual(['BABA', 'TSLA', 'ORCL'])
+  expect(text('[data-board] h2 + span')).toBe('3')
+  const tsla = text('[data-board-card="TSLA"]')
+  expect(tsla).toContain('↑ 做多')
+  expect(tsla).toContain('等进场还差 4.6%')
+  expect(tsla).toContain('止损亏 −$510')
+  expect(tsla).toContain('目标赚 +$1,066')                 // 41 × (412.30 − 386.29)
+  expect(tsla).toContain('进场 384.51 ~ 388.07')
+  expect(tsla).toContain('41 股')
+  expect(tsla).toContain('止损 373.85')
+  expect(tsla).toContain('目标 412.30')
+  expect(text('[data-board-card="ORCL"]')).toContain('↓ 做空')
+  expect(host.querySelector('[data-board-card="ORCL"]')!.getAttribute('data-zone')).toBe('wait')
+  expect([...host.querySelectorAll('[data-skip]')].map((e) => e.textContent)).toEqual(['PLTR↑ 做多刚卖出 暂不买回', 'AMD↑ 做多同板块同向已满', 'META↓ 做空盘前已破止损'])
+  expect(host.querySelector('[data-skip="AMD"]')!.getAttribute('title')).toContain('组合风险超限')
+  expect(text('[data-board-skips]')).toContain('不做 3')
+  // 白话: 不再出现内部口径
+  for (const x of ['4h', '成交率', '回放', '下单 ', '名义']) expect(text('[data-board]'), x).not.toContain(x)
+  expect(text('[data-board]')).not.toMatch(/[+−]?\d+\.\d+R(?![a-z])/)
+})
+
+it('价格尺: 左亏右赚 (做空也一样); 报价推送后现价标记移动, 进入进场区改成「已到进场价」', async () => {
+  mocks.oppPage.mockResolvedValue(page({ swing: BOARD() }))
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:12-04:00', quotes: { BABA: { price: 99.2, src: 'live', chg: 1.1 } } })
+  await render()
+  const pos = (s: string) => Number(host.querySelector(`[data-board-card="${s}"] [data-ruler-price]`)!.getAttribute('data-ruler-price'))
+  expect(text('[data-board-card="BABA"] [data-ruler-loss]')).toMatch(/^止损亏 /)
+  expect(text('[data-board-card="ORCL"] [data-ruler-stop]')).toBe('止损 107.00')            // 做空: 止损仍在左端
+  expect(text('[data-board-card="ORCL"] [data-ruler-target]')).toBe('目标 90.00')
+  expect(text('[data-board-card="BABA"] [data-card-price]')).toContain('99.20')
+  expect(text('[data-board-card="BABA"] [data-card-price]')).toContain('+1.10%')
+  expect(text('[data-board-card="BABA"] [data-card-state]')).toContain('等进场')
+  expect(text('[data-board] [data-section-meta]')).toBe('现价 10:39:12 ET · 实时')
+  const before = pos('BABA')
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:17-04:00', quotes: { BABA: { price: 97.5, src: 'live', chg: -0.6 } } })
+  await act(async () => { await qc.invalidateQueries({ queryKey: ['opp-quotes'] }) })
+  await flush()
+  expect(pos('BABA')).toBeLessThan(before)                     // 做多: 价格跌 → 标记往左 (往止损方向)
+  expect(text('[data-board-card="BABA"] [data-card-state]')).toContain('已到进场价')
+  expect(host.querySelector('[data-board-card="BABA"]')!.getAttribute('data-zone')).toBe('in')
+  expect(text('[data-board-card="BABA"] [data-card-price]')).toContain('97.50')
+})
+
+it('价格尺越界: 现价越过止损贴在左端并标出', async () => {
+  const v = view({ blips: [hold('ARM', { hold: { ...hold('ARM').hold!, price: 231 } })] })
+  mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
+  await render()
+  expect(host.querySelector('[data-hold="ARM"] [data-ruler]')!.getAttribute('data-ruler-off')).toBe('stop')
+  expect(host.querySelector('[data-hold="ARM"] [data-ruler-price]')!.getAttribute('data-ruler-price')).toBe('0.0')
+  expect(text('[data-hold="ARM"] [data-hold-tags]')).toContain('已涨破止损')
+})
+
+it('持仓: 台账为准 (股数 / 成本 / 当前止损 + 原止损 / 第几天); 浮动按报价重算; 要处理的排前', async () => {
+  const v = view({ blips: [hold('ARM'),
+    hold('IREN', { side: 'long', kind: 'exit', ring: 0, hold: { ...hold('IREN').hold!, qty: 198, avg: 27.69, price: 28.5, stop_now: 27.69, stop_initial: 26.1, stop_moved: true, target: 31,
+      day_n: 5, exit_day: '2026-10-23', exit_at: '15:30', exit_code: 'time_exit', stop_dist_atr: 1.4 } })] })
+  mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:12-04:00', quotes: { ARM: { price: 200, src: 'live', chg: -2 } } })
+  await render()
+  expect([...host.querySelectorAll('[data-hold]')].map((e) => e.getAttribute('data-hold'))).toEqual(['IREN', 'ARM'])
+  const iren = text('[data-hold="IREN"]')
+  expect(text('[data-hold="IREN"] [data-hold-tags]')).toContain('今天 15:30 到期平仓')
+  expect(text('[data-hold="IREN"] [data-hold-tags]')).toContain('保本')
+  expect(iren).toContain('止损 27.69 · 原 26.10')
+  expect(iren).toContain('止损亏 $0')
+  expect(iren).toContain('198 股')
+  expect(iren).toContain('第 5 天 / 最多 5')
+  expect(text('[data-hold="ARM"] [data-hold-pnl]')).toBe('+$483')            // 做空 35 股: (213.80 − 200) × 35, 报价价不是页面价 210.33
+  expect(text('[data-hold="ARM"]')).toContain('↓ 做空')
+  expect(text('[data-hold="ARM"]')).toContain('止损亏 −$506')               // (213.80 − 228.27) × 35
+  expect(text('[data-hold-total]')).toBe('+$643')                             // 483 + 198 × (28.50 − 27.69)
+})
+
+it('近止损按现价换算 ATR 距离; 止损已在成本或更好 (保本 / 锁盈) 不提示近止损', async () => {
+  const base = hold('ARM').hold!
+  const v = view({ blips: [
+    hold('NEAR', { side: 'long', hold: { ...base, avg: 100, price: 104, stop_now: 98, stop_initial: 98, target: 110, stop_dist_atr: 1.2 } }),
+    hold('EVEN', { side: 'long', hold: { ...base, avg: 100, price: 100.4, stop_now: 100, stop_initial: 95, stop_moved: true, target: 110, stop_dist_atr: 0.1 } })] })
+  mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:12-04:00', quotes: { NEAR: { price: 99.5, src: 'live', chg: -4 } } })
+  await render()
+  expect(text('[data-hold="NEAR"] [data-hold-tags]')).toContain('近止损')        // 1.2 ATR × (99.5 − 98) / (104 − 98) = 0.3 ATR
+  expect(text('[data-hold="EVEN"] [data-hold-tags]')).not.toContain('近止损')
+  expect(text('[data-hold="EVEN"] [data-hold-tags]')).toContain('保本')
+})
+
+it('账户名额在右栏: 今日还能开 / 持仓 / 止损全触发 (美元) / 最紧的板块名额', async () => {
+  await render()
+  expect(text('[data-acct="opens"]')).toContain('今日还能开9 笔')
+  expect(text('[data-acct="positions"]')).toContain('1 / 12 只')
+  expect(text('[data-acct="risk"]')).toContain('止损全触发−$506')             // 台账: 35 × (228.27 − 213.80), 与持仓卡同一份数
+  expect(text('[data-acct="risk"]')).toContain('上限 −$6,120')
+  expect(text('[data-acct="slot"]')).toContain('科技股做空还剩 2 只')
+  expect(text('[data-acct="slot"]')).toContain('已有 ARM COHR')
+})
+
+it('模型打分 (右栏, 仅参考): 看涨 5 / 看跌 5 只列代码与排名; 全部名单与结算在抽屉; 与策略方向相反时卡上标「模型反向」', async () => {
+  const sw = BOARD()
+  mocks.oppPage.mockResolvedValue(page({ swing: { ...sw, long: [...sw.long, card('MRNA')] } }))
+  await render()
+  const m = host.querySelector('[data-ls-rank]')!
+  expect(m.getAttribute('data-source')).toBe('model')
+  expect(host.querySelectorAll('[data-ls-side="long"] [data-ls-row]').length).toBe(5)
+  expect(host.querySelectorAll('[data-ls-side="short"] [data-ls-row]').length).toBe(5)
+  expect(text('[data-ls-row="AAOI"]')).toBe('AAOI财前 2%')
+  expect(host.querySelector('[data-ls-row="IREN"] [data-ls-new]')).not.toBeNull()
+  expect(m.querySelector('[title="模型独立打分 · 不据此生成策略机会 · 不下单"]')).not.toBeNull()
+  for (const x of ['股数', '止损', 'ATR', '每笔 $510', '88.80']) expect(m.textContent, x).not.toContain(x)
+  expect(text('[data-ls-open="all"]')).toBe('全部 12')
+  expect(text('[data-board-card="MRNA"] [data-model-conflict]')).toBe('模型反向')     // 模型看跌 MRNA, 策略做多
+  expect(host.querySelector('[data-board-card="BABA"] [data-model-conflict]')).toBeNull()
+  act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
+  expect(document.querySelector('[data-ls-settle]')?.textContent).toContain('GBM 2026Q4')
+})
+
+it('模型打分: 没有名单 = 一行空态; 段读取失败 = 只空这一块', async () => {
+  mocks.oppPage.mockResolvedValue(page({ ls_rank: null }))
+  await render()
+  expect(host.querySelector('[data-ls-rank-empty]')).not.toBeNull()
+  expect(host.querySelector('[data-ls-rank]')).toBeNull()
+  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
+  mocks.oppPage.mockResolvedValue(page({ ls_rank: null, errors: { ls_rank: 'ValueError' } }))
+  await render()
+  expect(text('[data-section-error="模型打分"]')).toBe('模型打分读取失败 · ValueError')
+  expect(host.querySelector('[data-col]')).not.toBeNull()
 })
 
 it.each([
@@ -216,70 +382,59 @@ it.each([
   ['normal', ['intraday', 'open', 'gap', 'resonance']],
   ['down', ['open', 'gap', 'intraday', 'resonance']],
   [null, ['intraday', 'open', 'gap', 'resonance']],
-] as const)('盘面雷达顺序随大盘状态, 共振固定第四栏: %s', async (key, order) => {
+] as const)('盘中异动四组顺序随大盘状态, 共振固定最后: %s', async (key, order) => {
   mocks.oppPage.mockResolvedValue(page({ desk: desk({ key }) }))
   await render()
   expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(order)
-  expect([...host.querySelectorAll('[data-col]')].every((e) => !e.className.includes('opacity'))).toBe(true)      // 末栏不变淡
 })
 
-it('共振: 同票多引擎; 影子标记; 栏内同票带圆点', async () => {
+it('盘中异动: 四组完整列出, 读数写全; 右列现在涨跌跟报价; 共振票在各组带圆点; 不用固定窄标签列', async () => {
+  mocks.oppQuotes.mockResolvedValue({ contract: 'opp-quotes-v1', at: '2026-10-23T10:39:12-04:00', quotes: { NBIS: { price: 160, src: 'live', chg: 12.04 } } })
+  mocks.oppPage.mockResolvedValue(page({ radar: { ...page().radar!, push: { enabled: true, min_rvol: 3, today: null } } }))
   await render()
-  const r = host.querySelector('[data-res="TSLA"]')!
-  expect(r.textContent).toContain('3 个信号')
-  expect(r.textContent).toContain('开盘放量 #3 1.2×')
-  expect(r.textContent).toContain('盘中强势 10-22 +1.45R')
-  expect(r.textContent).toContain('机会板 挂单')
-  expect(text('[data-res="TSLA"] [data-res-shadow]')).toBe('观察 10:05')
-  expect(host.querySelector('[data-intraday-row="TSLA"] [data-res-mark]')).not.toBeNull()
-  expect(host.querySelector('[data-board-row="BABA"] [data-res-mark]')).toBeNull()
-})
-
-it('四栏内容: 跳空现在涨幅 / 开盘点名 / 盘中在途与今日已止损 / 机会板回区率', async () => {
-  await render()
-  expect(text('[data-gap-row="NBIS"]')).toContain('跳空 +4.3%')
-  expect(text('[data-gap-row="NBIS"]')).toContain('+11.32%')
-  expect(text('[data-open-row="TSLA"]')).toContain('#3 · 相对量 1.2×')
-  expect(text('[data-intraday-row="TSLA"]')).toContain('+0.46R')
+  expect(text('[data-radar-section]')).toContain('仅参考 · 不下单')
+  expect(host.querySelector('[data-radar-section] [title="只记录 · 不下单 · 不计入模型评分"]')).not.toBeNull()
+  expect(text('[data-gap-row="NBIS"]')).toBe('NBIS高开 +4.3%+12.04%')
+  expect(text('[data-intraday-row="TSLA"] [data-res-mark]')).toBe('共振')
+  expect(text('[data-open-row="TSLA"] [data-row-main]')).toBe('第 3 · 平时的 1.2 倍 · 开盘 5 分钟 +2.3%')
+  expect(text('[data-open-row="TSLA"] [data-row-sub]')).toBe('开盘区间 395.25 ~ 401.00')
+  expect(text('[data-intraday-row="TSLA"]')).toContain('10-23 10:00 走强 · 第 1/5 天')
+  expect(text('[data-intraday-row="TSLA"]')).toContain('+0.95%')               // 101 / 100.05 − 1
   expect(text('[data-intraday-closed="AVGO"]')).toContain('10:15 止损')
-  expect(text('[data-col="intraday"]')).toContain('已结算 4 · −4.11R')
-  expect(text('[data-strategy-board] thead')).toContain('成交率')
-  expect(text('[data-board-row="TSLA"]')).toContain('8%')
-  expect(text('[data-board-row="TSLA"]')).toContain('距入场 4.6%')
+  expect(text('[data-res="TSLA"]')).toContain('3 个信号同向 · ↑ 做多')
+  expect(text('[data-res="TSLA"]')).toContain('开盘量第 3')
+  expect(text('[data-res="TSLA"]')).toContain('机会 等进场')
+  expect(text('[data-res="TSLA"] [data-row-sub]')).toContain('观察 10:05')
+  expect(host.querySelector('[data-intraday-row="TSLA"] [data-res-mark]')).not.toBeNull()
+  expect(text('[data-col="open"]')).toContain('推送 ≥3 倍')
+  // 一行 = 代码 | 读数 | 现在涨跌, 读数格可换行不截断
+  for (const r of host.querySelectorAll('[data-col-body] > [role="button"]')) {
+    expect(r.className).toContain('grid-cols-[60px_minmax(0,1fr)_auto]')
+    expect(r.querySelector('[data-row-main]')!.className).not.toContain('truncate')
+  }
+  // 各组不再限高滚动
+  for (const b of host.querySelectorAll('[data-col-body]')) expect(b.className).not.toContain('overflow-y-auto')
 })
 
-it('四栏同一高度上限, 跳空多时栏内滚动 (10-29)', async () => {
+it('盘中异动: 跳空多时全部列出; 没跑到点写下次时刻', async () => {
   const rows = Array.from({ length: 18 }, (_, i) => ({ symbol: `G${i}`, gap_pct: -3 - i * 0.4, price: 100 }))
-  mocks.oppPage.mockResolvedValue(page({ gaps: { at: '2026-10-29T04:28:00-04:00', live: true, threshold_pct: 3, checked: 41, rows } }))
+  mocks.oppPage.mockResolvedValue(page({ gaps: { at: '2026-10-29T04:28:00-04:00', live: true, threshold_pct: 3, checked: 41, rows },
+    radar: { ...page().radar!, is_today: false, picks: [], others: [] } }))
   await render()
   expect(host.querySelectorAll('[data-gap-row]').length).toBe(18)
-  const bodies = [...host.querySelectorAll('[data-col] > [data-col-body]')]
-  expect(bodies.length).toBe(4)
-  for (const b of bodies) {
-    expect(b.className).toContain('max-h-[320px]')
-    expect(b.className).toContain('md:h-[320px]')
-    expect(b.className).toContain('overflow-y-auto')
-  }
-  expect(host.querySelector('[data-col="gap"] [data-col-body] [data-gap-row="G17"]')).not.toBeNull()
-})
-
-it('持仓表读台账: 当前止损 (原止损) + 浮动', async () => {
-  const v = view({ blips: [hold('IREN', { kind: 'exit', ring: 0, hold: { ...hold('IREN').hold!, qty: 198, avg: 27.69, stop_now: 27.68, stop_initial: 30.29, stop_moved: true, day_n: 5 } })] })
-  mocks.oppPage.mockResolvedValue(page({ radar_view: v }))
-  await render()
-  const row = text('[data-hold="IREN"]')
-  expect(row).toContain('27.68原 30.29')   // 原止损在第二行, 当前止损的小数点与其他行对齐
-  expect(host.querySelector('[data-hold="IREN"] [data-stop-initial]')!.className).toContain('block')
-  expect(row).toContain('5/5')
+  expect(text('[data-gap-row="G17"]')).toContain('低开 −9.8%')
+  expect(text('[data-col="gap"]')).toContain('04:28 ET 实时 · 门槛 3%')
+  expect(text('[data-col="open"] [data-col-empty]')).toBe('09:51 ET 发布')
 })
 
 it('某块失败只空那一块', async () => {
   mocks.oppPage.mockResolvedValue(page({ desk: null, radar: null, errors: { desk: 'KeyError', radar: 'KeyError' } }))
   await render()
-  expect(text('[data-section-error="市场宽度"]')).toBe('市场宽度读取失败 · KeyError')
-  expect(text('[data-col="open"] [data-col-error]')).toBe('开盘放量读取失败')
+  expect(text('[data-market-hero] [data-regime]')).toBe('读取失败')
+  expect(text('[data-col="open"] [data-col-error]')).toBe('开盘量读取失败')
   expect(host.querySelector('[data-intraday-row="TSLA"]')).not.toBeNull()
-  expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(['intraday', 'open', 'gap', 'resonance'])
+  expect(host.querySelector('[data-board-card="BABA"]')).not.toBeNull()
+  expect([...host.querySelectorAll('[data-col]')].map((e) => e.getAttribute('data-col'))).toEqual(['board', 'intraday', 'open', 'gap', 'resonance'].filter((k) => k !== 'board'))
   expect(text('[data-col="resonance"] [data-col-error]')).toBe('多信号共振读取失败')
 })
 
@@ -288,15 +443,16 @@ it('整页请求失败 = 错误, 不是“无机会”', async () => {
   await render()
   expect(text('[data-error]')).toContain('HTTP 503')
   expect(host.querySelector('[data-col]')).toBeNull()
+  expect(host.querySelector('[data-board]')).toBeNull()
 })
 
-it('点共振卡打开预览; 左右切票顺序 = 今日多空 → 共振 → 各栏', async () => {
+it('点卡打开预览; 左右切票顺序 = 今日机会 → 持仓 → 模型打分 → 盘中异动', async () => {
   await render()
   await act(async () => { (host.querySelector('[data-res="TSLA"]') as HTMLElement).click() })
-  for (let i = 0; i < 4; i += 1) await act(async () => { await new Promise((r) => setTimeout(r, 0)) })
+  await flush(4)
   const pv = host.querySelector('[data-preview]')!
   expect(pv.getAttribute('data-preview')).toBe('TSLA')
-  expect(pv.getAttribute('data-nav')).toBe('AAOI,IREN,LITE,CRWV,MRVL,MRNA,ORCL,PLTR,WDC,HIMS,TSLA,NBIS,BABA,META')
+  expect(pv.getAttribute('data-nav')).toBe('BABA,TSLA,META,ARM,AAOI,IREN,LITE,CRWV,MRVL,MRNA,ORCL,PLTR,WDC,HIMS,NBIS')
 })
 
 it('齿轮: 读当前 3+3 与风险; 一个保存按钮发 3+3 + 风险; 风险越界不能存', async () => {
@@ -344,76 +500,6 @@ it('齿轮: 确认时另一处已改过 (409) → 换成新预览, 不写', asyn
   expect(mocks.saveOppSettings).toHaveBeenLastCalledWith(['macd_golden', 'trend_breakout'], ['tv_halftrend'], null, null, { preview_hash: 'h2', theme_stress_pct: null })
 })
 
-it('0.51.0 版面: 状态栏 → 盘前判断 → 今日多空 → 大盘状态条; 大盘条不再带盘前判断', async () => {
-  mocks.oppPage.mockResolvedValue(page({ mood: mood() }))
-  await render()
-  const seq = [...host.querySelectorAll('[data-status-rail], [data-mood-bar], [data-ls-rank], [data-regime]')].map((e) =>
-    e.hasAttribute('data-status-rail') ? 'rail' : e.hasAttribute('data-mood-bar') ? 'mood' : e.hasAttribute('data-ls-rank') ? 'ls' : 'regime')
-  expect(seq).toEqual(['rail', 'mood', 'ls', 'regime'])
-  expect(host.querySelector('[data-regime-mood]')).toBeNull()
-  expect(text('[data-mood-stance]')).toBe('偏空')
-  expect(text('[data-mood-probs]')).toBe('涨 25 · 震荡 30 · 跌 45')
-  expect(text('[data-mood-item="trend"]')).toBe('趋势 跌')
-  expect(text('[data-mood-item="rates"]')).toBe('利率 旧')
-  expect(text('[data-mood-item="panic"]')).toBe('恐慌 缺')
-  expect(text('[data-mood-hit]')).toBe('近 17 日中 10')
-  expect(host.querySelector('[data-mood-old]')).toBeNull()
-})
-
-it('盘前判断: 非今日标出来; 没有判断显示下次生成时刻', async () => {
-  mocks.oppPage.mockResolvedValue(page({ mood: mood({ is_today: false }) }))
-  await render()
-  expect(text('[data-mood-old]')).toBe('非当日')
-  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
-  mocks.oppPage.mockResolvedValue(page({ mood: mood({ judgment: null }) }))
-  await render()
-  expect(host.querySelector('[data-mood-bar]')!.getAttribute('data-mood-state')).toBe('none')
-  expect(text('[data-mood-bar]')).toContain('10-26 08:35 ET 生成')
-})
-
-it('今日多空: 看多 5 / 看空 5 同屏, 计数 = 行数; 排名 / 参考价 / 盘前 / 财报 / 换入', async () => {
-  await render()
-  expect(host.querySelectorAll('[data-ls-side="long"] [data-ls-row]').length).toBe(5)
-  expect(host.querySelectorAll('[data-ls-side="short"] [data-ls-row]').length).toBe(5)
-  const counts = [...host.querySelectorAll('[data-ls-side] h3 + span')].map((e) => e.textContent)
-  expect(counts).toEqual(['5', '5'])
-  const row = text('[data-ls-row="AAOI"]')
-  expect(row).toContain('98.80')
-  expect(row).toContain('−1.2%')
-  expect(row).toContain('财报 今日盘后')
-  expect(host.querySelector('[data-ls-row="IREN"] [data-ls-new]')).not.toBeNull()
-  expect(text('[data-ls-meta]')).toContain('换入 1')
-  expect(text('[data-ls-meta]')).not.toContain('每笔 $510')
-  expect(text('[data-ls-open="all"]')).toBe('全部 12')
-  expect(text('[data-ls-stat="progress"]')).toContain('0/65')
-})
-
-it('今日多空: 没有名单 = 一行空态; 段读取失败 = 只空这一块', async () => {
-  mocks.oppPage.mockResolvedValue(page({ ls_rank: null }))
-  await render()
-  expect(host.querySelector('[data-ls-rank-empty]')).not.toBeNull()
-  expect(host.querySelector('[data-ls-rank]')).toBeNull()
-  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
-  mocks.oppPage.mockResolvedValue(page({ ls_rank: null, errors: { ls_rank: 'ValueError' } }))
-  await render()
-  expect(text('[data-section-error="今日多空"]')).toBe('今日多空读取失败 · ValueError')
-  expect(host.querySelector('[data-col]')).not.toBeNull()
-})
-
-it('今日多空页头: 模型 · 训练至 · 前向 k/65 · 覆盖; 回放标「名单未记录」; 上一版成绩只在悬停', async () => {
-  const ruler = { contract: 'replay-ruler-v1', kind: 'unrecorded' as const, n: null, fixed: null, window: ['2024-01', '2026-10'], watch_now: 47, changed: null }
-  mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ coverage: { ranked: 47, young: 3, missing: 0, stale: 0, total: 47 }, ruler,
-    next_retrain: { quarter: '2027Q1', train_end: '2026-12-24', rows_now: 12345 },
-    settle: { ...ls().settle, quarter: '2026Q4', prev: [{ quarter: '2026Q3', days: 9, first: '2026-08-01', last_list: '2026-09-30', total: null }] } }) }))
-  await render()
-  expect(text('[data-ls-model]')).toMatch(/训练至 .* · 前向 \d+\/65/)
-  expect(host.querySelector('[data-ls-model]')!.getAttribute('title')).toContain('下次重训 2027Q1 · 只用 12-24 之前的入场日')
-  expect(host.querySelector('[data-ls-model]')!.getAttribute('title')).toContain('2026Q3 · 前向 9 份')
-  expect(text('[data-ls-coverage]')).toBe('覆盖 47/47')
-  expect(host.querySelector('[data-ls-coverage]')!.getAttribute('title')).toBe('打分 47 · 上市不足 130 日不上榜 3 · 缺数据 0 · 数据过期 0')
-  expect(host.querySelectorAll('[data-ls-side] [data-ruler="unrecorded"]').length).toBe(2)
-})
-
 it('历史日回看: 选过去的日子 → 只读那天冻结的数据, 当天各块收起', async () => {
   mocks.oppAsof.mockResolvedValue({ contract: 'opp-asof-v1', asof: '2026-10-19', today: '2026-10-20', days: ['2026-10-19'], board: null, ls_rank: null,
     intraday: null, radar: null, resonance: null, mood: null, errors: { board: 'not_archived' } })
@@ -429,23 +515,14 @@ it('历史日回看: 选过去的日子 → 只读那天冻结的数据, 当天�
   expect(text('[data-asof-head]')).toBe('回看 2026-10-19')
 })
 
-it('今日多空: 开盘后才补出的名单标「盘中补出」', async () => {
+
+it('模型打分: 开盘后才补出的名单标「盘中补出」', async () => {
   mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ late: true }) }))
   await render()
   expect(text('[data-ls-late]')).toBe('盘中补出')
 })
 
-it('今日多空: 开盘后涨跌列改标「开盘」, 元信息写开盘价 (与参考价同源)', async () => {
-  mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ pre: { at: '2026-10-23T09:00:00-04:00', live: false, open: true } }) }))
-  await render()
-  const head = text('[data-ls-side="long"] [data-ls-colhead]')
-  expect(head).toContain('开盘')
-  expect(head).not.toContain('盘前')
-  expect(text('[data-ls-meta]')).toContain('开盘价')
-  expect(text('[data-ls-meta]')).not.toContain('盘前 09:00')
-})
-
-it('今日多空: 结算明细里停牌缺 K 线的票标「缺」', async () => {
+it('模型打分: 结算明细里停牌缺 K 线的票标「缺」', async () => {
   const last = { made: '2026-10-16', settled: '2026-10-22', long: [{ symbol: 'AAOI', r: 0.4, exit: 'time' as const }], short: [],
     sum_long: 0.4, sum_short: 0, missing: { long: ['LITE'], short: [] } }
   mocks.oppPage.mockResolvedValue(page({ ls_rank: ls({ settle: { ...ls().settle, last } }) }))
@@ -455,160 +532,36 @@ it('今日多空: 结算明细里停牌缺 K 线的票标「缺」', async () =>
   expect(document.querySelector('[data-ls-missing="short"]')).toBeNull()
 })
 
-it('盘中强势「今日已结束」按出场日: 前几天出的卡今天止损也列出, 今天出卡但前一天已出场的不列', async () => {
+it('盘中走强「今日已结束」按出场日: 前几天出的卡今天止损也列出, 今天出卡但前一天已出场的不列', async () => {
   const it0 = page().intraday!
-  const history = [icard('GOOGL', { day: '2026-10-21', status: 'closed', exit_reason: 'stop', exit_at: '2026-10-23T10:05', r: -1, r_now: null }),
-    icard('LLY', { status: 'closed', exit_reason: 'target', exit_at: '2026-10-23T11:00', r: 2, r_now: null }),
+  const history = [icard('GOOGL', { day: '2026-10-21', status: 'closed', exit_reason: 'stop', exit_at: '2026-10-23T10:05', exit: 98, r: -1, r_now: null }),
+    icard('LLY', { status: 'closed', exit_reason: 'target', exit_at: '2026-10-23T11:00', exit: 104.1, r: 2, r_now: null }),
     icard('OLD', { day: '2026-10-20', status: 'closed', exit_reason: 'stop', exit_at: '2026-10-22T10:05', r: -1, r_now: null })]
   mocks.oppPage.mockResolvedValue(page({ intraday: { ...it0, history } }))
   await render()
   expect(host.querySelector('[data-intraday-closed="GOOGL"]')).not.toBeNull()
-  expect(host.querySelector('[data-intraday-closed="LLY"]')).not.toBeNull()
+  expect(text('[data-intraday-closed="LLY"]')).toContain('11:00 到目标')
+  expect(text('[data-intraday-closed="LLY"]')).toContain('+4.05%')
   expect(host.querySelector('[data-intraday-closed="OLD"]')).toBeNull()
 })
 
-it('今日多空: 风险读不到时结算明细不显示美元换算, 只显示 ATR', async () => {
+it('模型打分: 风险读不到时结算明细不显示美元换算, 只显示 ATR', async () => {
   const d = ls({ risk_usd: null, long: ls().long.map((r) => ({ ...r, qty: null })), short: ls().short.map((r) => ({ ...r, qty: null })) })
   mocks.oppPage.mockResolvedValue(page({ ls_rank: d }))
   await render()
-  expect(text('[data-ls-meta]')).not.toContain('每笔 $')
   act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
   const rules = document.querySelector('[data-ls-rules]')?.textContent ?? ''
   expect(rules).toContain('止损 2 ATR')
   expect(rules).not.toContain('1 ATR = $')
 })
 
-it('四栏表头标题不收缩、meta 放不下换行不截断 (0.48.0 在 1280/1440 宽「盘中强势」被挤成竖排)', async () => {
-  await render()
-  for (const col of host.querySelectorAll('[data-col]')) {
-    const h2 = col.querySelector('h2')!
-    expect(h2.className).toContain('shrink-0')
-    expect(h2.className).toContain('whitespace-nowrap')
-    // 标题行可换行: 副注放不下时落到下一行, 不挤标题、也不截成省略号
-    expect(h2.parentElement!.className).toContain('flex-wrap')
-    const meta = h2.parentElement!.querySelector('span.ml-auto')
-    if (meta) {
-      expect(meta.className).toContain('min-w-0')
-      expect(meta.className).not.toContain('truncate')
-    }
-  }
-  // 行内第二行 (入场 / 止损 / 目标) 同样不截断
-  for (const sub of host.querySelectorAll('[data-row-sub]')) {
-    expect(sub.className).not.toContain('truncate')
-    expect(sub.className).toContain('col-span-2')
-  }
-})
-
-it('0.52.2 A 方案: 今日多空只呈现模型排名, 主区不混策略与交易参数', async () => {
-  await render()
-  const model = host.querySelector('[data-ls-rank]')!
-  expect(model.getAttribute('data-source')).toBe('model')
-  expect(model.textContent).toContain('模型观察')
-  expect(model.textContent).toContain('模型评分')
-  expect(model.textContent).toContain('8 个日线特征')
-  expect(model.textContent).toContain('仅观察')
-  const row = text('[data-ls-row="AAOI"]')
-  expect(row).toContain('−1.2%')
-  expect(row).toContain('98.80')
-  expect(row).not.toContain('趋势突破')
-  expect(row).not.toContain('88.80')
-  expect(row).not.toContain('51')
-  for (const x of ['股数', '止损', '名义', '每笔 $510']) expect(model.textContent, x).not.toContain(x)
-  expect(text('[data-ls-open="all"]')).toBe('全部 12')
-  act(() => { (host.querySelector('[data-ls-open="settle"]') as HTMLButtonElement).click() })
-  expect(document.querySelector('[data-ls-settle]')?.textContent).toContain('GBM 2026Q4')
-})
-
-it('0.52.2 A 方案: 模型观察 → 独立策略机会 → 盘面雷达, 机会板不再占雷达栏', async () => {
-  await render()
-  const seq = [...host.querySelectorAll('[data-ls-rank], [data-strategy-board], [data-radar-section]')].map((e) =>
-    e.hasAttribute('data-ls-rank') ? 'model' : e.hasAttribute('data-strategy-board') ? 'strategy' : 'radar')
-  expect(seq).toEqual(['model', 'strategy', 'radar'])
-  expect(host.querySelector('[data-cols] [data-col="board"]')).toBeNull()
-  expect(host.querySelector('[data-radar-section] [data-resonance]')).not.toBeNull()
-  // 来源边界: 雷达区标「仅观察」, 悬停写明只记录不下单、不计入模型评分
-  expect(text('[data-radar-section]')).toContain('仅观察')
-  expect(host.querySelector('[data-radar-section] [title="只记录，不下单；不计入模型评分"]')).not.toBeNull()
-  const board = text('[data-strategy-board]')
-  expect(board).toContain('策略命中')
-  expect(board).not.toContain('3+3')
-  expect(board).toContain('4h 趋势过滤')
-  expect(text('[data-board-orders]')).toMatch(/^下单 \d+$/)
-  expect(text('[data-strategy-board] [data-board-row="BABA"]')).toContain('MACD 金叉放量')
-  expect(text('[data-strategy-board] [data-board-row="TSLA"]')).toContain('41')
-})
-
-// ── 2026-11-10 审计修复: 每张卡一个结论 (下单 / 不下单 + 原因) + 目标价 + 4h 门类型 + 回放数字旁并排实际数 ──
-
-it('机会板逐卡结论: 后端裁决不下单的卡写原因, 页头分别计数; 表里有目标价与 4h 门类型', async () => {
-  const sw = page().swing!
-  mocks.oppPage.mockResolvedValue(page({ swing: { ...sw,
-    long: [card('BABA', { gate: 'state', target: 104 }),
-      card('TSLA', { verdict: 'skip', verdict_reason: 'premarket_beyond_stop', blocked: null, dist_pct: -4.62 }),
-      card('NVDA', { verdict: 'skip', verdict_reason: 'entry_closed', blocked: null }),
-      card('AMD', { verdict: 'skip', verdict_reason: 'paper_watch', blocked: 'paper_watch', paper_reason: '准入阻断：同板块同向已满；组合风险超限' }),
-      card('MU', { verdict: 'skip', verdict_reason: 'earnings', blocked: 'earnings' })],
-    short: [] } }))
-  await render()
-  expect(text('[data-board-orders]')).toBe('下单 1')
-  expect(text('[data-board-skips]')).toBe('不下单 4')
-  const heads = [...host.querySelectorAll('[data-strategy-board] thead th')].map((x) => x.textContent)
-  expect(heads).toEqual(['代码', '方向', '结论', '命中策略', '4h 趋势', '入场区', '止损', '目标', '股数', '成交率', '现价'])   // 结论紧跟票和方向
-  const v = (s: string) => text(`[data-board-row="${s}"] [data-board-verdict]`)
-  expect(v('BABA')).toBe('下单距入场 1.0%')
-  expect(v('TSLA')).toBe('不下单盘前越止损')                      // 以前和可下单行一样显示「距区 4.6%」
-  expect(v('NVDA')).toBe('不下单入场截止')
-  expect(v('AMD')).toBe('不下单同板块同向已满')
-  expect(host.querySelector('[data-board-row="AMD"] [data-board-verdict]')!.getAttribute('title')).toContain('组合风险超限')
-  expect(v('MU')).toBe('不下单财报前一日')
-  expect(host.querySelector('[data-board-row="TSLA"]')!.getAttribute('data-verdict')).toBe('skip')
-  expect(text('[data-board-row="BABA"] [data-board-target]')).toBe('104.00')
-  expect(text('[data-board-row="BABA"] [data-board-gate]')).toBe('同向')
-  expect(text('[data-board-row="TSLA"] [data-board-gate]')).toBe('齐备')
-})
-
-it('回放表不是这张卡的出卡规则: 回区显示 —, 计划股数照给', async () => {
-  const sw = page().swing!
-  mocks.oppPage.mockResolvedValue(page({ swing: { ...sw, short: [], long: [card('BABA', {
-    odds: { fill: null, ev_r: null, ci_r: null, sig: 0, n: null, level: null, stale: true, day: 1, phase: 'pre', bin: 'birth', dist_atr: 0.25,
-      qty: 56, risk_usd: 517, ev_usd: null, ci_usd: null } })] } }))
-  await render()
-  expect(text('[data-board-row="BABA"] [data-board-fill]')).toBe('—')
-  expect(text('[data-board-row="BABA"]')).toContain('56')
-})
-
-it('回放数字旁并排上线后的实际数: 机会板多空各一行, 盘中强势区间不含回放值标背离', async () => {
-  const p0 = page()
-  mocks.oppPage.mockResolvedValue(page({
-    swing: { ...p0.swing!, live: { contract: 'swing-settle-v3',
-      long: { n: 4, days: 4, mean_r: -1.68, ci: null, replay_mean_r: 0.27, diverged: false, cards: 11, fill: 0.364, replay_fill: 0.6, replay_stale: false },
-      short: { n: 13, days: 9, mean_r: 0.72, ci: [-0.1, 1.5], replay_mean_r: null, diverged: false, cards: 24, fill: 0.542, replay_fill: null, replay_stale: true } } },
-    intraday: { ...p0.intraday!, live: { n: 25, days: 10, mean_r: -0.709, ci: [-1.197, -0.169], replay_mean_r: 0.098, diverged: true } },
-  }))
-  await render()
-  const long = text('[data-board-live-side="long"]')
-  expect(long).toContain('已成交 4/11')
-  expect(long).toContain('回放 60%')
-  expect(long).toContain('每笔 −1.68R')
-  expect(long).toContain('回放 +0.27R')
-  expect(host.querySelector('[data-board-live-side="long"] [data-diverged-badge]')).toBeNull()      // 出卡日不足, 不判背离
-  const short = text('[data-board-live-side="short"]')
-  expect(short).toContain('已成交 13/24')
-  expect(short).toContain('−0.10R ~ +1.50R')
-  expect(short).toContain('回放 —')                                                                 // 回放基础率不是现行 3+3
-  const it = text('[data-engine-live="intraday"]')
-  expect(it).toContain('实际 25 笔')
-  expect(it).toContain('每笔 −0.71R')
-  expect(it).toContain('−1.20R ~ −0.17R')
-  expect(it).toContain('回放 +0.10R')
-  expect(text('[data-engine-live="intraday"] [data-diverged-badge]')).toBe('背离')
-  expect(text('[data-col="intraday"]')).not.toContain('已结算')                                       // 有并排行时不再重复写累计
-})
-
-it('系统文字只写结果: 页面无说明句与禁用词', async () => {
+it('系统文字只写结果: 页面无说明句与禁用词; 内部口径 (R / ATR / 名义 / 主题压力 / 4h / 回放) 不在主页面', async () => {
+  mocks.oppPage.mockResolvedValue(page({ mood: mood() }))
   await render()
   const t = host.textContent!
-  for (const banned of ['今天不会', '不会再', '不用操作', '照着追', '能不能', '接下来', '建议', '吧', '呢', '。', '只记录不下单', '依据', '说明', '回测', '未证明', '大概率']) {
+  for (const banned of ['今天不会', '不会再', '不用操作', '照着追', '能不能', '接下来', '建议', '吧', '呢', '。', '只记录不下单', '依据', '说明', '回测', '未证明', '大概率',
+    'ATR', '名义', '主题压力', '4h', '回放', '随机基准', '入场区', '距入场']) {
     expect(t, banned).not.toContain(banned)
   }
+  expect(t).not.toMatch(/[+−]\d+\.\d+R(?![a-z])/)
 })

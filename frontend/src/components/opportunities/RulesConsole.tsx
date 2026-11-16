@@ -256,7 +256,7 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
 
   const riskNum = risk === null ? null : Number(risk)
   const riskBad = riskNum !== null && !(Number.isFinite(riskNum) && riskNum >= 0.1 && riskNum <= 2)
-  // 2026-11-15 主题压力跌幅 (只影响机会页主题压力条的显示)
+  // 2026-11-15 集中风险假设亏幅 (只影响机会页集中风险卡的显示)
   const [stress, setStress] = useState<number | null>(null)
   const stressCur = settings?.theme_stress_pct ?? 20
   const stressDirty = stress !== null && stress !== stressCur
@@ -343,9 +343,9 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
             className="mt-0.5 w-20 rounded-input border border-border bg-surface px-2 py-0.5 text-sm tabular-nums text-foreground"
             value={riskVal} onChange={(e) => setRisk(e.target.value)} />
         </div>
-        <div className="min-w-0" title="机会页主题压力条: 主题内持仓一起再跌这个幅度时账户亏多少 · 只显示 · 不拦单">
-          <div className="text-[11px] leading-4 text-muted">主题压力跌幅</div>
-          <select data-theme-stress aria-label="主题压力跌幅"
+        <div className="min-w-0" title="机会页集中风险: 每组持仓都按不利方向亏这个幅度时账户亏多少 · 只显示 · 不拦单">
+          <div className="text-[11px] leading-4 text-muted">集中风险亏幅</div>
+          <select data-theme-stress aria-label="集中风险亏幅"
             className="mt-0.5 rounded-input border border-border bg-surface px-1.5 py-0.5 text-sm tabular-nums text-foreground"
             value={stress ?? stressCur} onChange={(e) => setStress(Number(e.target.value))}>
             {(settings?.theme_stress_levels ?? [10, 15, 20, 25, 30]).map((v) => <option key={v} value={v}>{`${v}%`}</option>)}
@@ -387,7 +387,7 @@ function SettingsPreview({ p, nameOf }: { p: OppSettingsPreview; nameOf: (id: st
     ['赔率表', oddsOk ? '一致' : '不匹配 · 保存后成交率显示「—」至重算', oddsOk ? undefined : 'text-warning'],
     ['今日下单簿', p.book.frozen ? `已冻结 · 不变${p.book.day ? `（信号日 ${p.book.day.slice(5)}）` : ''}` : '未生成'],
     ['单笔风险', p.risk.from === p.risk.to ? `${p.risk.from ?? '—'}% · 不变` : `${p.risk.from}% → ${p.risk.to}% · ${capTxt(p.risk.caps_from, p.risk.caps_to)}`],
-    ['主题压力跌幅', p.theme_stress.from === p.theme_stress.to ? `${p.theme_stress.from}% · 不变` : `${p.theme_stress.from}% → ${p.theme_stress.to}%`],
+    ['集中风险亏幅', p.theme_stress.from === p.theme_stress.to ? `${p.theme_stress.from}% · 不变` : `${p.theme_stress.from}% → ${p.theme_stress.to}%`],
     ...(p.radar_push ? [['开盘放量推送', `${p.radar_push.to.enabled ? '开' : '关'} · ≥ ${p.radar_push.to.min_rvol} 倍`] as [string, string]] : []),
   ]
   return (

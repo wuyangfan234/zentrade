@@ -7,10 +7,12 @@
  * - 禁用: 今天不会 / 不用操作 / 先回区先得 / 照着追 / 才释放 / 也不成交 / 就退出 / 还有 / 吧 / 呢 / 了。 / 。
  * 后端只给代码与数字, 文案只在这里拼。
  */
-import type { OppRadarView, RadarSlot } from '@/lib/api'
+import type { RadarSlot } from '@/lib/api'
 import { admissionLabel } from '@/lib/reasonLabels'
 
 export const SIDE_ZH: Record<string, string> = { long: '多', short: '空' }
+/** 2026-11-15 B 方案: 方向用中性色 + 箭头, 红绿只留给盈亏 */
+export const SIDE_ARROW: Record<string, string> = { long: '↑ 做多', short: '↓ 做空' }
 
 /** 板块 (instruments.sector, Nasdaq 粗分类) 中文名 */
 const SECTOR_ZH: Record<string, string> = {
@@ -18,7 +20,7 @@ const SECTOR_ZH: Record<string, string> = {
   Industrials: '工业', Energy: '能源', 'Health Care': '医疗', Telecommunications: '通信', Utilities: '公用事业',
   'Real Estate': '地产', 'Basic Materials': '原材料', Miscellaneous: '其他',
 }
-const sectorZh = (s?: string | null) => (s ? SECTOR_ZH[s] ?? s : '未识别')
+export const sectorZh = (s?: string | null) => (s ? SECTOR_ZH[s] ?? s : '未识别')
 export const slotLabel = (s: Pick<RadarSlot, 'sector' | 'side'>) => `${sectorZh(s.sector)}·${SIDE_ZH[s.side] ?? ''}`
 
 /** 下一事件 */
@@ -32,15 +34,15 @@ export const PHASE_ZH: Record<string, string> = {
   closed: '休市', night: '盘前未开', premarket: '盘前', open_wait: '开盘观察', session: '盘中', after: '已收盘',
 }
 
-/** 机会板卡不下单的原因 (后端 verdict_reason 原因码) */
+/** 机会板卡不做的原因 (后端 verdict_reason 原因码) · 2026-11-15 白话 */
 export const SKIP_ZH: Record<string, string> = {
-  holding_other: '已持仓', cooldown: '平仓冷却', earnings: '财报前一日', direction_conflict: '多空冲突',
-  paper_watch: '准入阻断', premarket_beyond_stop: '盘前越止损', entry_closed: '入场截止',
+  holding_other: '已持仓', cooldown: '刚卖出 暂不买回', earnings: '临近财报', direction_conflict: '多空冲突',
+  paper_watch: '账户限制', premarket_beyond_stop: '盘前已破止损', entry_closed: '今日入场已截止',
 }
 
 type VerdictCard = { verdict?: string | null; verdict_reason?: string | null; blocked?: string | null; paper_reason?: string | null
   state?: string | null; dist_pct?: number | null }
-/** 一张机会板卡的结论: 下单 / 不下单 + 原因。以后端裁决 (verdict) 为准; 载荷里没有裁决时按 blocked 判 */
+/** 一张机会板卡的结论: 进场 (已到进场价 / 等进场) 或不做 + 原因。以后端裁决 (verdict) 为准; 载荷里没有裁决时按 blocked 判 */
 export function cardVerdict(c: VerdictCard): { order: boolean; label: string; detail: string; title?: string } {
   const code = c.verdict === 'skip' ? (c.verdict_reason ?? c.blocked ?? '') : c.verdict ? '' : (c.blocked ?? '')
   if (code) {
@@ -56,10 +58,39 @@ export function cardVerdict(c: VerdictCard): { order: boolean; label: string; de
       if (first) detail = admissionLabel(first) ?? (/^[a-z][a-z0-9_.:]*$/.test(first) ? SKIP_ZH.paper_watch : first)
       title = c.paper_reason
     }
-    return { order: false, label: '不下单', detail, title }
+    return { order: false, label: '不做', detail, title }
   }
-  const detail = c.state === 'in_zone' ? '入场区内' : typeof c.dist_pct === 'number' && Number.isFinite(c.dist_pct) ? `距入场 ${Math.abs(c.dist_pct).toFixed(1)}%` : '待触发'
-  return { order: true, label: '下单', detail }
+  if (c.state === 'in_zone') return { order: true, label: '已到进场价', detail: '' }
+  const detail = typeof c.dist_pct === 'number' && Number.isFinite(c.dist_pct) ? `还差 ${Math.abs(c.dist_pct).toFixed(1)}%` : '等触发'
+  return { order: true, label: '等进场', detail }
+}
+
+/** 现价相对进场区 (与交易环成交条件同式 lo <= 价 <= hi): in 区内 · wait 未到 · past 已穿过 (不会成交); gap = 离区边 % */
+export function zonePos(side: string, price: number | null | undefined, zone: number[] | null | undefined): { pos: 'in' | 'wait' | 'past' | null; gap: number | null } {
+  const lo = zone?.[0], hi = zone?.[1]
+  if (typeof price !== 'number' || !Number.isFinite(price) || price <= 0 || typeof lo !== 'number' || typeof hi !== 'number') return { pos: null, gap: null }
+  if (lo <= price && price <= hi) return { pos: 'in', gap: 0 }
+  const wait = side === 'short' ? price < lo : price > hi
+  const gap = (price > hi ? price - hi : lo - price) / price * 100
+  return { pos: wait ? 'wait' : 'past', gap }
+}
+
+/** 策略 → 白话类型 (现行 3+3 逐个对照, 其余按名字归类); 原名放悬停 */
+const KIND_BY_ID: Record<string, string> = {
+  ibs_mean_reversion: '超跌反弹', tv_zlsma_cross: '趋势转多', trend_breakout: '突破追涨',
+  tv_smc_structure: '结构转空', tv_chandelier_exit: '趋势转空', tv_halftrend: '趋势转空',
+}
+export function setupKind(strategies: { id: string; name: string }[] | null | undefined, side: string): string {
+  const s = strategies?.[0]
+  if (!s) return ''
+  if (KIND_BY_ID[s.id]) return KIND_BY_ID[s.id]
+  const id = s.id.toLowerCase()
+  if (/breakout|new_high|platform|squeeze/.test(id)) return '突破追涨'
+  if (/pullback|support|bounce|midline/.test(id)) return '回调买入'
+  if (/oversold|reversal|reversion|rsi2|ibs|williams|down_days|low_overnight|mdd|connors|shadow/.test(id)) return side === 'short' ? '超涨回落' : '超跌反弹'
+  if (/volume|turnover|surge|strong_open/.test(id)) return '放量走强'
+  if (/golden|macd|alignment|supertrend|zlsma|halftrend|chandelier|ut_bot|wavetrend|tke|phantom|smc|cross/.test(id)) return side === 'short' ? '趋势转空' : '趋势转多'
+  return s.name
 }
 
 export const p2 = (n?: number | null) => (typeof n === 'number' && Number.isFinite(n) ? n.toFixed(2) : '—')
@@ -82,25 +113,6 @@ export function dayTag(day: string, today: string): string {
   if (day === today) return ''
   const diff = (Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000
   return diff > 0 && diff <= 6 ? weekday(day) : md(day)
-}
-
-/** 泳道右侧读数 */
-export function laneText(view: OppRadarView): Record<'board' | 'gap' | 'open' | 'intraday', string> {
-  const L = view.lanes
-  const ck = view.clock
-  const today = ck.et.slice(0, 10)
-  const nextTag = dayTag(ck.next.day, today)
-  const blocked = view.blips.filter((b) => b.kind === 'blocked').length
-  const orders = view.blips.filter((b) => b.kind === 'order').length
-  const fills = L.board.fills.length
-  const board = !ck.trading_day ? `挂单 ${orders + blocked} · ${nextTag || '次日'} ${ck.board_first} 首次刷新`
-    : [`挂单 ${orders + blocked}`, blocked ? `受限 ${blocked}` : '', fills ? `成交 ${fills}` : ''].filter(Boolean).join(' · ')
-  const gap = L.gap.at ? `定稿 ${L.gap.n} 只 · 仅观察` : L.gap.warming ? '取数中' : L.gap.live ? `实时 ${L.gap.n} 只` : `${!ck.trading_day ? `${nextTag} ` : ''}09:00 定稿`
-  const push = L.open.push ? (!L.open.push.enabled ? '推送关' : L.open.push.today ? `推送 ${L.open.push.today.symbols.length}` : `推送 ≥${L.open.push.min_rvol}×`) : ''
-  const open = L.open.at ? [`上榜 ${L.open.picks.length}`, push].filter(Boolean).join(' · ') : [`${!ck.trading_day ? `${nextTag} ` : ''}${L.open.ready_at} 发布`, push].filter(Boolean).join(' · ')
-  const intraday = L.intraday.ticks.length ? `检查 ${L.intraday.ticks.length}/${L.intraday.schedule.length} · 触发 ${L.intraday.fired}`
-    : `${!ck.trading_day ? `${nextTag} ` : ''}${L.intraday.schedule[0] ?? '10:00'} 首次检查`
-  return { board, gap, open, intraday }
 }
 
 /** 名额卡副标题 */
