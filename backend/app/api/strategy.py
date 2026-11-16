@@ -940,15 +940,23 @@ def get_strategy_source(strategy_id: str, request: Request):
 @router.post("/ai/test")
 async def ai_test(request: Request):
     """Send a small prompt through the selected AI provider."""
-    from app.services.ai_provider import current_ai_model, current_ai_provider, generate_ai_text
+    from app.services.ai_provider import (
+        OPENAI_REQUEST_TIMEOUT_S,
+        OPENAI_TEST_MAX_TOKENS,
+        current_ai_model,
+        current_ai_provider,
+        generate_ai_text,
+    )
 
     try:
         text = await generate_ai_text(
             [{"role": "user", "content": "Reply exactly: OK"}],
             temperature=0,
-            max_tokens=8,
-            timeout=15,
+            max_tokens=OPENAI_TEST_MAX_TOKENS,
+            timeout=OPENAI_REQUEST_TIMEOUT_S,
         )
+        if not text:
+            raise RuntimeError("AI 服务未返回正文内容")
         return {"ok": True, "model": current_ai_model() or current_ai_provider(), "response": text[:80]}
     except Exception as e:
         return {

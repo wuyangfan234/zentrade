@@ -93,9 +93,10 @@ class Settings(BaseSettings):
     ai_user_agent: str = "ZenTrade (self-hosted; +https://github.com/wuyangfan234/zentrade)"
     # AI 输出上限 (max_tokens) 与输入上下文窗口上限 (约 token)。
     # 任务级 max_tokens 会被钳制到 ai_max_output_tokens; 输入估算超出上下文窗口时给出明确报错。
-    # 钳制仅封顶不放大: 现有任务最多请求 4500, 上调默认值只影响用户自行调高任务上限的场景。
+    # 默认 32768: 长思考模型 (实测 Qwen xhigh) 的因子抽取需要约 26,648 个输出 tokens 才能返回完整 JSON。
+    # 钳制仅封顶不放大; 输出预算不足时推理可能耗尽额度, 正文为空或只返回半截 JSON。
     # 上下文 128000 对齐当前主流模型底线 (GPT/Claude/GLM/DeepSeek/Kimi 均 ≥128k); 可在 AI 设置里调整。
-    ai_max_output_tokens: int = 16384
+    ai_max_output_tokens: int = 32768
     ai_context_window: int = 128000
 
     # Server

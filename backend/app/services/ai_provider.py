@@ -26,6 +26,10 @@ CODEX_CLI_PROVIDER = "codex_cli"
 CODEX_DEFAULT_COMMAND = "codex"
 CODEX_SUPPORTED_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh"}
 OPENAI_DEFAULT_REASONING_EFFORT = "high"
+# Qwen xhigh 在真实因子抽取中仅推理就消耗 25,593 tokens、耗时约 136 秒。
+# 所有 OpenAI 兼容入口统一使用 900 秒, 避免任务级 120/150/180 秒覆盖后重复请求。
+OPENAI_REQUEST_TIMEOUT_S = 900.0
+OPENAI_TEST_MAX_TOKENS = 1024
 
 _CODEX_ENV_ALLOWLIST = (
     "PATH",
@@ -444,7 +448,7 @@ async def generate_ai_text(
     *,
     temperature: float | None = 0.3,
     max_tokens: int | None = 3000,
-    timeout: float = 180.0,
+    timeout: float = OPENAI_REQUEST_TIMEOUT_S,
     task: str | None = None,
 ) -> str:
     """Return a complete AI response from the currently configured provider.
@@ -477,7 +481,7 @@ async def generate_ai_text_with_tools(
     execute_tool,
     temperature: float | None = 0.3,
     max_tokens: int | None = 3000,
-    timeout: float = 180.0,
+    timeout: float = OPENAI_REQUEST_TIMEOUT_S,
     max_rounds: int = 4,
     task: str | None = None,
 ) -> list[dict]:
@@ -568,7 +572,7 @@ async def stream_ai_text(
     *,
     temperature: float | None = 0.5,
     max_tokens: int | None = 4000,
-    timeout: float = 180.0,
+    timeout: float = OPENAI_REQUEST_TIMEOUT_S,
     prefer_final_answer: bool = False,
     task: str | None = None,
 ) -> AsyncIterator[str]:
@@ -661,7 +665,22 @@ async def _run_openai_message_once(
             raise
     if not resp.choices:
         return None
-    return resp.choices[0].message
+    choice = resp.choices[0]
+    message = choice.message
+    finish_reason = str(getattr(choice, "finish_reason", "") or "")
+    if finish_reason in _LENGTH_FINISH_REASONS:
+        content = getattr(message, "content", None) or ""
+        usage = getattr(resp, "usage", None)
+        details = getattr(usage, "completion_tokens_details", None)
+        reasoning_seen = bool(getattr(message, "reasoning_content", None)) or bool(
+            getattr(details, "reasoning_tokens", 0) or 0
+        )
+        if reasoning_seen and not content:
+            raise RuntimeError(
+                "AI 推理达到输出长度上限, 未生成正文; 请提高输出 Token 上限或改用非推理模型"
+            )
+        raise RuntimeError("AI 输出达到长度上限, 内容不完整; 请提高输出 Token 上限后重试")
+    return message
 
 
 async def _stream_openai(

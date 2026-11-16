@@ -417,12 +417,12 @@ def _default_llm(messages) -> str:
     """调度线程用的同步入口; 复用一个事件循环 (同 news_translate, 避免客户端在已关闭循环上回收)。"""
     import asyncio
 
-    from app.services.ai_provider import generate_ai_text
+    from app.services.ai_provider import OPENAI_REQUEST_TIMEOUT_S, generate_ai_text
     global _LOOP
     if _LOOP is None or _LOOP.is_closed():
         _LOOP = asyncio.new_event_loop()
     return _LOOP.run_until_complete(
-        generate_ai_text(messages, temperature=0.2, max_tokens=None, timeout=120.0, task=TASK))
+        generate_ai_text(messages, temperature=0.2, max_tokens=None, timeout=OPENAI_REQUEST_TIMEOUT_S, task=TASK))
 
 
 def _model_label() -> str:

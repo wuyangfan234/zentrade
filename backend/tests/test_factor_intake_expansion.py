@@ -13,7 +13,7 @@ def test_default_watch_list_has_verified_expansion_sources(tmp_path, monkeypatch
     sources = fi.load_sources(tmp_path)
     assert {s["id"] for s in sources} >= NEW_SOURCE_IDS
     assert len(sources) == 24
-    assert sum(bool(s["enabled"]) for s in sources) == 23
+    assert sum(bool(s["enabled"]) for s in sources) == 22
 
 
 def test_source_migration_preserves_user_switches_and_custom_rows(tmp_path, monkeypatch):

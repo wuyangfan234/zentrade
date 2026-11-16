@@ -22,6 +22,7 @@ from app.custom.assistant import tools as assistant_tools
 from app.custom.assistant.prompt import build_system_prompt
 from app.custom.assistant.streaming import stream_openai_round
 from app.services.ai_provider import (
+    OPENAI_REQUEST_TIMEOUT_S,
     ai_configured,
     current_ai_context_window,
     current_ai_max_output_tokens,
@@ -200,7 +201,7 @@ async def chat_stream(
             while True:
                 round_text: list[str] = []
                 tool_calls: list[dict[str, Any]] = []
-                async for event in stream_openai_round(req_messages, schemas, temperature=0.3, timeout=240.0):
+                async for event in stream_openai_round(req_messages, schemas, temperature=0.3, timeout=OPENAI_REQUEST_TIMEOUT_S):
                     if event["type"] == "text":
                         round_text.append(event["delta"])
                         await queue.put({"type": "delta", "content": event["delta"]})

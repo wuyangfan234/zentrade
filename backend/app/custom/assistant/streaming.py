@@ -16,6 +16,7 @@ tool_calls 分片, 流结束时统一返回本轮结果, 由 chat_service 决定
 from __future__ import annotations
 
 import asyncio
+import inspect
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
@@ -25,6 +26,7 @@ from app import secrets_store
 from app.config import settings
 from app.services.ai_provider import (
     OPENAI_PROVIDER,
+    OPENAI_REQUEST_TIMEOUT_S,
     apply_task_thinking,
     current_ai_provider,
     current_openai_reasoning_effort,
@@ -89,7 +91,7 @@ async def stream_openai_round(
     tools: Sequence[dict[str, Any]],
     *,
     temperature: float | None = 0.3,
-    timeout: float = 240.0,
+    timeout: float = OPENAI_REQUEST_TIMEOUT_S,
 ) -> AsyncIterator[dict[str, Any]]:
     """执行一轮流式补全: yield 文本 delta, 最后 yield 一个 round_end 事件。"""
     profile = task_profile(ASSISTANT_TASK)
@@ -156,9 +158,13 @@ async def stream_openai_round(
                     entry["arguments"] += str(fn.arguments)
 
     # 让 SDK 流对象尽快释放(部分兼容网关要求显式 close)。
+    # openai.AsyncStream.close 是协程: 放进线程只会生成未 await 的协程, 连接不会释放。
     close = getattr(stream, "close", None)
     if close is not None:
-        await asyncio.to_thread(close)
+        if inspect.iscoroutinefunction(close):
+            await close()
+        else:
+            await asyncio.to_thread(close)
 
     if calls:
         yield {
