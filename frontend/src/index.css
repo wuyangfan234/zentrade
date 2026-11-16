@@ -40,6 +40,15 @@ html.dark {
 
 /* 价格 / 数字一律等宽 */
 .scrollbar-gutter-stable { scrollbar-gutter: stable; }
+/* 卡内滚动区: 滚动条常显。全局的 scrollbar-width / scrollbar-color 会让 Chrome 忽略 ::-webkit-scrollbar,
+ * macOS 退回浮动滚动条 (静止时隐藏), 看不出卡内还能滑; 这里把两项设回 auto, 用下面的细条样式。 */
+.scroll-y-visible { scrollbar-width: auto; scrollbar-color: auto; }
+.scroll-y-visible::-webkit-scrollbar { width: 6px; }
+.scroll-y-visible::-webkit-scrollbar-thumb { background: hsl(var(--fg-muted) / 0.55); border: 0; border-radius: 999px; }
+.scroll-y-visible::-webkit-scrollbar-thumb:hover { background: hsl(var(--fg-muted) / 0.85); }
+@supports not selector(::-webkit-scrollbar) {
+  .scroll-y-visible { scrollbar-width: thin; scrollbar-color: hsl(var(--fg-muted) / 0.55) transparent; }
+}
 
 /* 全局滚动条 */
 * {
