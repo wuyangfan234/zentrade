@@ -550,6 +550,11 @@ const METRIC_HELP = {
     description: '回测期末权益相对初始资金的累计收益率。',
     note: '已反映回测中的仓位、费用、滑点和成交约束。',
   },
+  totalReturnFull: {
+    title: '总收益（全量模拟）',
+    description: '每天把资金平均分给当天所有持有中的候选，按每日收盘价计算盈亏后累计；没有候选的日子算持现金。',
+    note: '不受资金和持仓数限制，只衡量策略本身；实际资金能做到多少看仓位模拟。',
+  },
   annualReturn: {
     title: '年化收益',
     description: '将回测期总收益按复利折算为一年的收益率。',
@@ -582,8 +587,8 @@ const METRIC_HELP = {
   },
   mcDrawdown: {
     title: '蒙特卡洛回撤（中位 / 95%）',
-    description: '对交易收益有放回重抽样 1000 次，各算最大回撤: 中位值 = 典型运气下的回撤，95% 边界 = 偏悲观的压力边界。',
-    note: '中位值用于和实际最大回撤对照判断序列运气；资金管理按 95% 边界准备。交易数多时两者可能同时逼近 -100%, 参考价值下降。',
+    description: '把每天的净值涨跌打乱顺序重排 1000 次，各算最大回撤: 中位值 = 典型运气下的回撤，95% 边界 = 偏悲观的压力边界。',
+    note: '中位值用于和实际最大回撤对照判断序列运气；资金管理按 95% 边界准备。',
   },
   tradeCount: {
     title: '交易数',
@@ -1930,7 +1935,7 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed, linkTarget, on
         )}
         {simMode === 'full' && (
         <div className="rounded-btn border border-accent/20 bg-accent/5 px-3 py-2.5 text-[11px] leading-relaxed text-secondary">
-          <span className="font-medium text-foreground">全量模拟</span>：每日将策略选出的全部候选独立买入，不受资金/最大持仓数限制；每一笔仍按策略卖点、止损、移动止盈/止损和最长持仓执行，用于评估策略本身的选股 + 交易规则质量。
+          <span className="font-medium text-foreground">全量模拟</span>：每日将策略选出的全部候选独立买入，不受资金/最大持仓数限制；每一笔仍按策略卖点、止损、移动止盈/止损和最长持仓执行，用于评估策略本身的选股 + 交易规则质量。净值按「每天资金平均分给所有持有中的候选、每日收盘计价」计算，可直接和同期 SPY 比较。
         </div>
         )}
 
@@ -2256,7 +2261,7 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed, linkTarget, on
             {/* 统计卡片 */}
             <div className="rounded-card border border-border bg-surface p-4">
               <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">
-                <Stat label={<MetricLabel label="总收益" metric="totalReturn" />} value={strategyReturn != null ? fmtPct(strategyReturn) : '—'}
+                <Stat label={<MetricLabel label="总收益" metric={result.stats.full_kind === 'candidate_execution' ? 'totalReturnFull' : 'totalReturn'} />} value={strategyReturn != null ? fmtPct(strategyReturn) : '—'}
                   color={statValueColor(strategyReturn)} />
                 <Stat label={<MetricLabel label="年化" metric="annualReturn" />} value={pick('annual_return') != null ? fmtPct(pick('annual_return') as number) : '—'}
                   color={statValueColor(pick('annual_return') as number)} />

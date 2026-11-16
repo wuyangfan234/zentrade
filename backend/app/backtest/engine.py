@@ -922,6 +922,9 @@ class BacktestEngine:
         entry_prices = self._resolve_entry_prices(matrix, config)
         exit_prices = matrix.open if config.exit_fill == "open_t+1" else matrix.close
         trades: list[TradeRecord] = []
+        # 每笔成交的持有区间与扣费后每股进出价, 供逐日盯市净值用:
+        # (资产列, 入场行, 退出行, 入场每股成本, 退出每股净得, 入场当天是否已持有)。
+        nav_paths: list[tuple[int, int, int, float, float, bool]] = []
         execution_stats = {
             "buy_invalid_price": 0,
             "buy_suspended": 0,
@@ -1084,6 +1087,10 @@ class BacktestEngine:
             entry_value = config.buy_value(shares, float(pos["entry_price"]))
             exit_value = config.sell_value(shares, exit_price)
             pnl_amount = exit_value - entry_value
+            nav_paths.append((
+                asset_id, int(pos["entry_time"]), int(time_id),
+                entry_value / shares, exit_value / shares, bool(pos["entry_day_held"]),
+            ))
             trades.append(TradeRecord(
                 symbol=matrix.symbols[asset_id],
                 name=matrix.names[asset_id],
@@ -1159,6 +1166,11 @@ class BacktestEngine:
                     int(matrix.entry_signal_code[time_id, asset_id]), matrix.entry_signal_ids
                 ),
                 "entry_price": entry_price,
+                # 收盘价成交的入场当天没有持有时间; 开盘 / 分钟价成交当天就承担到收盘的涨跌。
+                "entry_day_held": (
+                    config.entry_fill != "close_t"
+                    or entry_price != float(matrix.close[time_id, asset_id])
+                ),
                 "entry_score": score,
                 "hold_days": 0,
                 # close_t entry fills at the close: the bar high printed before the fill.
@@ -1210,6 +1222,7 @@ class BacktestEngine:
             raw_candidates,
             execution_stats,
             options=options,
+            nav=self._independent_nav_from_matrix(matrix, nav_paths),
         )
         result.stats["market_matrix_shape"] = list(matrix.shape)
         result.stats["market_matrix_bytes"] = matrix.nbytes
@@ -3033,6 +3046,107 @@ class BacktestEngine:
             })
         return sorted(result, key=lambda x: x["total_return"], reverse=True)
 
+    # ── 全量模拟净值: 逐日盯市等权组合 ──────────────────
+
+    @staticmethod
+    def _holding_path_returns(entry_level: float, closes: np.ndarray, exit_level: float) -> np.ndarray:
+        """一笔持仓的逐日收益: 入场每股成本 → 持有期各日收盘 (缺价沿用上一价) → 退出每股净得。
+
+        返回 len(closes)+1 个日收益, 连乘恰好等于 exit_level / entry_level (即该笔扣费后的收益)。
+        """
+        levels = np.empty(len(closes) + 1, dtype=np.float64)
+        levels[0] = entry_level
+        levels[1:] = closes
+        valid = np.isfinite(levels) & (levels > 0)
+        idx = np.where(valid, np.arange(len(levels)), 0)
+        np.maximum.accumulate(idx, out=idx)
+        filled = levels[idx]
+        rets = np.empty(len(closes) + 1, dtype=np.float64)
+        rets[:-1] = filled[1:] / filled[:-1] - 1.0
+        rets[-1] = exit_level / filled[-1] - 1.0
+        return np.maximum(rets, -1.0)
+
+    @staticmethod
+    def _aggregate_independent_nav(
+        dates: list[str],
+        segments: list[tuple[str, int, np.ndarray]],
+    ) -> dict | None:
+        """把每笔候选的逐日收益段汇成等权组合净值。
+
+        segments = (代码, 首个持有日下标, 该笔逐日收益)。每天组合收益 = 当天在场各笔逐日收益的算术平均
+        (每日再平衡到等权), 当天没有在场候选 = 持现金。曲线从 dates[0] 开始, 到最后一笔退出日结束。
+        同样的口径按单只股票再算一遍, 给分个股统计用。
+        """
+        segments = [seg for seg in segments if len(seg[2])]
+        if not dates or not segments:
+            return None
+        n = min(max(start + len(rets) for _, start, rets in segments), len(dates))
+        ret_sum = np.zeros(n, dtype=np.float64)
+        count = np.zeros(n, dtype=np.int64)
+        by_symbol: dict[str, list[tuple[int, np.ndarray]]] = {}
+        for symbol, start, rets in segments:
+            stop = min(start + len(rets), n)
+            if stop <= start:
+                continue
+            part = rets[: stop - start]
+            ret_sum[start:stop] += part
+            count[start:stop] += 1
+            by_symbol.setdefault(symbol, []).append((start, part))
+        daily = np.divide(ret_sum, count, out=np.zeros(n, dtype=np.float64), where=count > 0)
+        per_symbol: dict[str, float] = {}
+        for symbol, items in by_symbol.items():
+            lo = min(start for start, _ in items)
+            hi = max(start + len(part) for start, part in items)
+            s_sum = np.zeros(hi - lo, dtype=np.float64)
+            s_count = np.zeros(hi - lo, dtype=np.int64)
+            for start, part in items:
+                s_sum[start - lo:start - lo + len(part)] += part
+                s_count[start - lo:start - lo + len(part)] += 1
+            s_daily = np.divide(s_sum, s_count, out=np.zeros(hi - lo, dtype=np.float64), where=s_count > 0)
+            per_symbol[symbol] = float(np.prod(1.0 + s_daily) - 1.0)
+        return {"dates": list(dates[:n]), "daily": daily, "positions": count, "per_symbol": per_symbol}
+
+    @staticmethod
+    def _independent_nav_from_matrix(
+        matrix: MarketMatrix,
+        paths: list[tuple[int, int, int, float, float, bool]],
+    ) -> dict | None:
+        """矩阵路径: 用真实日收盘逐日盯市每一笔候选。"""
+        segments: list[tuple[str, int, np.ndarray]] = []
+        for asset_id, entry_t, exit_t, entry_level, exit_level, entry_day_held in paths:
+            first = entry_t if entry_day_held else entry_t + 1
+            closes = matrix.close[first:exit_t, asset_id]
+            rets = BacktestEngine._holding_path_returns(float(entry_level), closes, float(exit_level))
+            segments.append((matrix.symbols[asset_id], first, rets))
+        labels = [str(label)[:10] for label in matrix.timestamp_labels]
+        return BacktestEngine._aggregate_independent_nav(labels, segments)
+
+    @staticmethod
+    def _independent_nav_from_trades(trades: list[TradeRecord]) -> dict | None:
+        """没有行情矩阵时的兜底 (旧路径 / 直接调用): 每笔收益按持有的工作日几何均摊, 再等权汇总。"""
+        spans = [(t.symbol, _as_date(t.entry_date), _as_date(t.exit_date), float(t.pnl_pct)) for t in trades]
+        if not spans:
+            return None
+        lo = min(entry for _, entry, _, _ in spans)
+        hi = max(max(entry, exit_) for _, entry, exit_, _ in spans)
+        calendar = np.arange(np.datetime64(lo, "D"), np.datetime64(hi, "D") + 1)
+        axis = set(calendar[np.is_busday(calendar)].astype(object).tolist())
+        axis.update(entry for _, entry, _, _ in spans)
+        axis.update(exit_ for _, _, exit_, _ in spans)
+        days = sorted(axis)
+        index = {day: i for i, day in enumerate(days)}
+        segments: list[tuple[str, int, np.ndarray]] = []
+        for symbol, entry, exit_, pnl in spans:
+            i0, i1 = index[entry], index[exit_]
+            start, n = (i0 + 1, i1 - i0) if i1 > i0 else (i0, 1)
+            if 1.0 + pnl > 0:
+                rets = np.full(n, (1.0 + pnl) ** (1.0 / n) - 1.0)
+            else:
+                rets = np.zeros(n)
+                rets[-1] = -1.0
+            segments.append((symbol, start, rets))
+        return BacktestEngine._aggregate_independent_nav([day.isoformat() for day in days], segments)
+
     @staticmethod
     def _calc_independent_candidate_result(
         trades: list[TradeRecord],
@@ -3040,8 +3154,14 @@ class BacktestEngine:
         execution_stats: dict[str, int],
         *,
         options: SimulationOptions | None = None,
+        nav: dict | None = None,
     ) -> SimResult:
-        """全量独立候选统计：按每个候选样本的实际执行收益聚合。"""
+        """全量独立候选统计。
+
+        单笔指标 (胜率/均值/中位数/盈亏比) 按每个候选的实际执行收益算; 总收益、年化、夏普、回撤用逐日
+        盯市的等权组合净值 (每天资金等分给当天所有在场候选, 无候选持现金)。旧口径把每个退出日的平均
+        收益直接连乘, 重叠持仓被重复复利 (同一只票天天入场时可算出 1e22% 级的总收益), 已废弃。
+        """
         options = options or SimulationOptions()
         if not trades:
             return SimResult(
@@ -3066,61 +3186,48 @@ class BacktestEngine:
         avg_win = float(np.mean(wins)) if len(wins) else 0.0
         avg_loss = abs(float(np.mean(losses))) if len(losses) else 0.0
 
-        # 按退出日聚合已实现样本收益, 构造“样本收益曲线”。它不是账户净值。
-        daily_returns: dict[str, list[float]] = {}
-        for t in trades:
-            daily_returns.setdefault(str(t.exit_date)[:10], []).append(float(t.pnl_pct))
+        # 逐日盯市等权净值: 每天资金等分给当天在场的全部候选 (每日再平衡), 没有候选的日子持现金。
+        nav = nav or BacktestEngine._independent_nav_from_trades(trades)
+        statistics_started = time.perf_counter()
+        nav_dates: list[str] = list(nav["dates"]) if nav else []
+        daily = np.asarray(nav["daily"], dtype=float) if nav else np.array([], dtype=float)
+        open_positions = np.asarray(nav["positions"], dtype=np.int64) if nav else np.array([], dtype=np.int64)
+        values = np.cumprod(1.0 + daily) if len(daily) else np.array([], dtype=float)
+        # 曲线从 1.0 起步: 第一天的亏损就是相对初始资金的回撤。
+        peaks = np.maximum(np.maximum.accumulate(values), 1.0) if len(values) else np.array([])
+        drawdowns = values / peaks - 1 if len(values) else np.array([])
 
         equity_curve: list[dict] = []
         drawdown_curve: list[dict] = []
-        equity_values: list[float] = []
-        equity = 1.0
-        peak = 1.0
-        daily_avg: list[float] = []
-        for d_str in sorted(daily_returns.keys()):
-            values = daily_returns[d_str]
-            avg_ret = float(np.mean(values)) if values else 0.0
-            daily_avg.append(avg_ret)
-            equity *= (1 + avg_ret)
-            peak = max(peak, equity)
-            dd = (equity - peak) / peak if peak > 0 else 0.0
-            equity_value = round(float(equity), 4)
-            equity_values.append(equity_value)
-            if options.include_curves:
-                equity_curve.append({
-                    "date": d_str,
-                    "value": equity_value,
-                    "positions": len(values),
-                })
-                drawdown_curve.append({
-                    "date": d_str,
-                    "value": round(float(dd), 4),
-                })
+        if options.include_curves:
+            for d_str, value, dd, held in zip(nav_dates, values, drawdowns, open_positions, strict=True):
+                equity_curve.append({"date": d_str, "value": round(float(value), 4), "positions": int(held)})
+                drawdown_curve.append({"date": d_str, "value": round(float(dd), 4)})
 
-        statistics_started = time.perf_counter()
-        values = np.array(equity_values, dtype=float)
-        total_return = float(values[-1] - 1.0) if len(values) else 0.0
-        # The curve starts at 1.0: a loss on the first exit day is a drawdown from that peak.
-        peaks = np.maximum(np.maximum.accumulate(values), 1.0) if len(values) else np.array([])
-        drawdowns = values / peaks - 1 if len(values) else np.array([])
+        n_days = len(values)
+        total_return = float(values[-1] - 1.0) if n_days else 0.0
         max_drawdown = float(drawdowns.min()) if len(drawdowns) else 0.0
-        daily = np.array(daily_avg, dtype=float)
-        sharpe = float(np.mean(daily) / np.std(daily) * np.sqrt(252)) if len(daily) > 1 and np.std(daily) > 0 else 0.0
+        sharpe = float(np.mean(daily) / np.std(daily) * np.sqrt(252)) if n_days > 1 and np.std(daily) > 0 else 0.0
         sortino = BacktestEngine._sortino_ratio(daily)
-        # 年化 (0.43.2): 同一条样本收益曲线, 按首笔建仓日到末笔退出日的自然日跨度折算 (与 _calc_stats 同口径)。
-        # 之前全量模拟不出这个字段, 回测页「年化」一直显示「—」。
-        span_days = max((max(_as_date(t.exit_date) for t in trades) - min(_as_date(t.entry_date) for t in trades)).days, 1)
-        years = span_days / 365.25
-        annual_return = (1 + total_return) ** (1 / years) - 1 if total_return > -1.0 else total_return
+        # 年化: 按净值曲线覆盖的交易日数折算 (与仓位模拟 _calc_portfolio_stats_from_values 同口径)。
+        annual_return = (
+            (1 + total_return) ** (252 / n_days) - 1 if n_days and total_return > -1.0 else total_return
+        )
         calmar = annual_return / abs(max_drawdown) if abs(max_drawdown) > 0.001 else 0.0
+        entry_days = {str(t.entry_date)[:10] for t in trades}
+        active = open_positions[open_positions > 0]
 
         stats = {
             "mode": "full",
             "full_kind": "candidate_execution",
+            "nav_method": "daily_mtm_equal_weight",
             "n_candidates": int(n_candidates),
             "n_trades": int(len(trades)),
-            "n_days": int(len(daily_returns)),
-            "avg_daily_candidates": round(float(len(trades) / max(len(daily_returns), 1)), 1),
+            "n_days": int(n_days),
+            "avg_daily_candidates": round(float(len(trades) / max(len(entry_days), 1)), 1),
+            "avg_open_positions": round(float(np.mean(active)), 1) if len(active) else 0.0,
+            "max_open_positions": int(open_positions.max()) if len(open_positions) else 0,
+            "invested_days_ratio": round(float(len(active) / n_days), 4) if n_days else 0.0,
             "avg_return": round(float(np.mean(pnls)), 4),
             "median_return": round(float(np.median(pnls)), 4),
             "win_rate": round(float(len(wins) / len(pnls)), 4) if len(pnls) else 0.0,
@@ -3149,21 +3256,28 @@ class BacktestEngine:
                 for i in range(nbins)
             ]
         if options.include_monte_carlo:
-            stats.update(BacktestEngine._mc_drawdown_percentiles(pnls))
+            # 重抽样的是每日组合收益 (同一条净值的日序运气), 不再把逐笔收益当成满仓串行复利。
+            stats.update(BacktestEngine._mc_drawdown_percentiles(daily))
         stats["statistics_ms"] = round(
             (time.perf_counter() - statistics_started) * 1000,
             1,
         )
 
+        per_symbol_stats: list[dict] = []
+        if options.include_per_symbol_stats:
+            # 同一只票天天入场时逐笔连乘同样会失真: 个股收益改用该股候选的等权盯市净值。
+            symbol_nav = (nav or {}).get("per_symbol") or {}
+            per_symbol_stats = BacktestEngine._calc_per_symbol(trades)
+            for row in per_symbol_stats:
+                if row["symbol"] in symbol_nav:
+                    row["total_return"] = round(float(symbol_nav[row["symbol"]]), 4)
+            per_symbol_stats.sort(key=lambda row: row["total_return"], reverse=True)
+
         return SimResult(
             equity_curve=equity_curve if options.include_curves else [],
             drawdown_curve=drawdown_curve if options.include_curves else [],
             trades=trades if options.include_trades else [],
-            per_symbol_stats=(
-                BacktestEngine._calc_per_symbol(trades)
-                if options.include_per_symbol_stats
-                else []
-            ),
+            per_symbol_stats=per_symbol_stats,
             stats=stats,
         )
 
@@ -3236,7 +3350,9 @@ class BacktestEngine:
             "max_exposure": round(float(np.max(exposures)), 4) if len(exposures) else 0.0,
         }
         if include_monte_carlo:
-            stats.update(BacktestEngine._mc_drawdown_percentiles(pnls))
+            # 重抽样账户的每日净值收益。旧版重抽样逐笔收益并按满仓连乘: 每笔只占约 1/最大持仓数 的资金,
+            # 一笔 -8% 被当成整个账户 -8%, 蒙卡回撤比真实回撤深一倍以上。
+            stats.update(BacktestEngine._mc_drawdown_percentiles(daily))
         return stats
 
     @staticmethod
