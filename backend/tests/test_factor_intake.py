@@ -62,7 +62,7 @@ def test_default_watch_list_has_quantified_strategies_off(data_dir):
     assert len(sources) == 24
     qs = next(s for s in sources if s["id"] == "qstrat")
     assert qs["enabled"] is False
-    assert sum(1 for s in sources if s["enabled"]) == 23
+    assert sum(1 for s in sources if s["enabled"]) == 22
 
 
 def test_quote_must_be_verbatim():

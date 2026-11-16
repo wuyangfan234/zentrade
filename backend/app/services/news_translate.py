@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 TASK = "news_translate"
 PROMPT_VERSION = "news-tag-v1"
 BATCH_SIZE = 20
+# 推理模型的思考 token 计入 max_tokens; 20 条 JSON 正文约 3-4K, 留足推理冗余 (只是上限, 不用不计费)。
+NEWS_TRANSLATE_MAX_TOKENS = 16384
 MAX_BATCHES_PER_RUN = 2  # 每轮最多 40 条; 积压分摊到后续轮 (调度每分钟唤醒)
 TIME_BUDGET_S = 120.0    # 单轮翻译墙钟上限 (含预估的下一批耗时); 剩余下一轮继续
 # 实测 (2026-10-02, 推理模型关思考): 20 条/批 60-70 秒; 安静时段 ~40 秒。按慢的估。
@@ -152,8 +154,9 @@ async def _default_ai_call(messages, **kw) -> str:
 
 async def translate_batch(batch: list[dict], *, ai_call: AiCall | None = None, model_label: str = "") -> dict[int, dict]:
     ai_call = ai_call or _default_ai_call
+    from app.services.ai_provider import OPENAI_REQUEST_TIMEOUT_S
     text = await ai_call([{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": _user_prompt(batch)}],
-                         max_tokens=4000, timeout=120.0, task=TASK)
+                         max_tokens=NEWS_TRANSLATE_MAX_TOKENS, timeout=OPENAI_REQUEST_TIMEOUT_S, task=TASK)
     return parse_llm_output(text, batch)
 
 

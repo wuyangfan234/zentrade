@@ -15,6 +15,9 @@ from pathlib import Path
 
 from app.services import qveris_gate as gate
 
+# 电话会摘要正文约 1K tokens; 推理模型思考计入上限, 预留冗余避免正文被挤光。
+TRANSCRIPT_DIGEST_MAX_TOKENS = 8192
+
 logger = logging.getLogger(__name__)
 
 OPTIONS_TTL_S = 15 * 60
@@ -274,7 +277,8 @@ async def digest_transcript(data_dir: Path, symbol: str, quarter: str, *, ai_cal
     prompt = ("下面是美股公司财报电话会的英文原文。请只依据原文, 用简体中文输出 6–10 条要点, 每条一行、以「- 」开头, 覆盖: "
               "业绩亮点与不及预期处、管理层给出的指引(数字原样保留)、需求/订单/产能/价格的表述、风险与不确定性、问答环节分析师最关心的问题。"
               "不要给投资建议, 不要编造原文没有的数字。\n\n" + text)
-    out = await ai_call([{"role": "user", "content": prompt}], max_tokens=1500, timeout=180.0, task="news_translate")
+    from app.services.ai_provider import OPENAI_REQUEST_TIMEOUT_S
+    out = await ai_call([{"role": "user", "content": prompt}], max_tokens=TRANSCRIPT_DIGEST_MAX_TOKENS, timeout=OPENAI_REQUEST_TIMEOUT_S, task="news_translate")
     points = [ln.strip()[2:].strip() for ln in (out or "").splitlines() if ln.strip().startswith("- ")]
     if not points:
         return None

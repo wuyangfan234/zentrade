@@ -451,7 +451,14 @@ def delete_ai_model(model_id: str) -> dict:
 @router.post("/ai/models/{model_id}/test")
 async def test_ai_model(model_id: str) -> dict:
     """用该库模型发一句最小请求, 验证地址/Key/模型名可用。"""
-    from app.services.ai_provider import _openai_client, ai_model_entry, model_profile
+    from app.services.ai_provider import (
+        _LENGTH_FINISH_REASONS,
+        OPENAI_REQUEST_TIMEOUT_S,
+        OPENAI_TEST_MAX_TOKENS,
+        _openai_client,
+        ai_model_entry,
+        model_profile,
+    )
     entry = ai_model_entry(model_id)
     if entry is None:
         raise HTTPException(status_code=404, detail="模型不存在")
@@ -459,11 +466,18 @@ async def test_ai_model(model_id: str) -> dict:
     if not prof["api_key"]:
         return {"ok": False, "error": "没有可用的 API Key (库模型和全局都未配置)"}
     try:
-        client = _openai_client(prof["api_key"], 20.0, base_url=prof["base_url"])
+        client = _openai_client(prof["api_key"], OPENAI_REQUEST_TIMEOUT_S, base_url=prof["base_url"])
         resp = await client.chat.completions.create(
-            model=prof["model"], messages=[{"role": "user", "content": "Reply exactly: OK"}], max_tokens=16,
+            model=prof["model"], messages=[{"role": "user", "content": "Reply exactly: OK"}],
+            max_tokens=OPENAI_TEST_MAX_TOKENS,
         )
-        text = (resp.choices[0].message.content or "").strip() if resp.choices else ""
+        choice = resp.choices[0] if resp.choices else None
+        text = (choice.message.content or "").strip() if choice else ""
+        finish_reason = str(getattr(choice, "finish_reason", "") or "") if choice else ""
+        if finish_reason in _LENGTH_FINISH_REASONS:
+            return {"ok": False, "error": "AI 输出达到长度上限, 未返回完整正文"}
+        if not text:
+            return {"ok": False, "error": "AI 服务未返回正文内容"}
         return {"ok": True, "model": prof["model"], "response": text[:80]}
     except Exception as e:
         return {"ok": False, "error": (str(e) or type(e).__name__)[:300]}
@@ -536,7 +550,7 @@ def clear_ai_settings() -> dict:
     settings.ai_model = ""
     settings.ai_codex_command = "codex"
     settings.ai_codex_reasoning_effort = ""
-    settings.ai_max_output_tokens = 16384
+    settings.ai_max_output_tokens = 32768
     settings.ai_context_window = 128000
 
     return {"ok": True}

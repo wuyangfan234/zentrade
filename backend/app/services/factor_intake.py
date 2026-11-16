@@ -77,7 +77,8 @@ DEFAULT_SOURCES: list[dict] = [
     {"id": "alvarez", "name": "Alvarez Quant Trading", "kind": "person", "channel": "RSS", "url": "https://alvarezquanttrading.com/feed/"},
     {"id": "qoppac", "name": "Rob Carver · qoppac", "kind": "person", "channel": "Atom", "url": "https://qoppac.blogspot.com/feeds/posts/default"},
     {"id": "kinlay", "name": "Jonathan Kinlay", "kind": "person", "channel": "RSS", "url": "https://jonathankinlay.com/feed/"},
-    {"id": "clenow", "name": "Following the Trend", "kind": "person", "channel": "RSS", "url": "https://www.followingthetrend.com/feed/"},
+    # 主站已返回 Account Suspended HTML 页; 默认停用, 保留历史条目与安全解析规则。
+    {"id": "clenow", "name": "Following the Trend", "kind": "person", "channel": "RSS", "url": "https://www.followingthetrend.com/feed/", "enabled": False},
     # Quantified Strategies 默认关闭 (30 天 20 篇 16 篇付费、0 公式)
     {"id": "qstrat", "name": "Quantified Strategies", "kind": "site", "channel": "Substack", "url": "https://quantifiedstrategies.substack.com/feed", "enabled": False},
     {"id": "quantpedia", "name": "Quantpedia", "kind": "site", "channel": "RSS", "url": "https://quantpedia.com/feed/"},
@@ -357,6 +358,8 @@ _NS = {"atom": "http://www.w3.org/2005/Atom", "content": "http://purl.org/rss/1.
 def parse_feed(raw: bytes) -> list[dict]:
     """RSS 2.0 / Atom -> [{title, link, published, body}]. DTD / entity declarations are rejected."""
     head = raw[:4096].lower()
+    if head.lstrip().startswith((b"<!doctype html", b"<html")):
+        raise ValueError("source returned HTML instead of RSS/Atom")
     if b"<!doctype" in head or b"<!entity" in head:
         raise ValueError("feed contains a DTD / entity declaration")
     root = ET.fromstring(raw)  # DTD rejected above, so no entity expansion
@@ -456,6 +459,10 @@ def fetch_all(data_dir: Path, *, now: datetime | None = None) -> dict:
 
 
 # ---------------------------------------------------------------- LLM
+# 长思考模型 (Qwen xhigh) 同文章实测: 4K/16K 均被推理耗尽, 32K 返回完整 JSON。
+FACTOR_TRIAGE_MAX_TOKENS = 4096
+FACTOR_EXTRACT_MAX_TOKENS = 32768
+
 _TRIAGE_PROMPT = (
     "你是美股量化研究助理。判断下面这篇文章是否给出了可以用美股个股日线数据计算的交易因子或买卖规则。只判断, 不抽取。\n"
     "market: us_stock(美股个股) / us_index(SPY、QQQ 等指数或 ETF 择时) / futures / crypto / other。\n"
@@ -525,9 +532,9 @@ def _parse_json(text: str | None) -> dict | None:
 
 
 async def _ask(task: str, prompt: str, *, max_tokens: int) -> str:
-    from app.services.ai_provider import generate_ai_text
+    from app.services.ai_provider import OPENAI_REQUEST_TIMEOUT_S, generate_ai_text
     return await generate_ai_text([{"role": "user", "content": prompt}], temperature=0.0, max_tokens=max_tokens,
-                                  timeout=150.0, task=task)
+                                  timeout=OPENAI_REQUEST_TIMEOUT_S, task=task)
 
 
 _LOOP: asyncio.AbstractEventLoop | None = None
@@ -695,7 +702,7 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
             break
         try:
             if it["stage"] == "queued":
-                text = _call(data_dir, "factor_triage", _fill(_TRIAGE_PROMPT, SRC=it["source_name"], TITLE=it["title"], BODY=it["body"]), max_tokens=400)
+                text = _call(data_dir, "factor_triage", _fill(_TRIAGE_PROMPT, SRC=it["source_name"], TITLE=it["title"], BODY=it["body"]), max_tokens=FACTOR_TRIAGE_MAX_TOKENS)
                 budget -= 1
                 stats["triaged"] += 1
                 _commit(data_dir, item_id, "queued", lambda x, t=text: _triage_result(x, t))
@@ -705,7 +712,7 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
                 rules = rules if rules is not None else _rules_vocab(data_dir)
                 prompt = _fill(_EXTRACT_PROMPT, BASE=vocab["base"], LIB=vocab["lib"], OPS=vocab["ops"], RULES=rules,
                                SRC=it["source_name"], TITLE=it["title"], BODY=it["body"])
-                text = _call(data_dir, "factor_extract", prompt, max_tokens=4000)
+                text = _call(data_dir, "factor_extract", prompt, max_tokens=FACTOR_EXTRACT_MAX_TOKENS)
                 if budget > 0:
                     budget -= 1
                 stats["extracted"] += 1
@@ -715,7 +722,7 @@ def process_queue(data_dir: Path, *, max_calls: int | None = None) -> dict:
                 if _unusable(text):
                     calls = 2
                     try:
-                        text = _call(data_dir, "factor_extract", _RETRY_PREFIX + prompt, max_tokens=4000, counted=False)
+                        text = _call(data_dir, "factor_extract", _RETRY_PREFIX + prompt, max_tokens=FACTOR_EXTRACT_MAX_TOKENS, counted=False)
                         stats["retried"] += 1
                     except Exception as exc:  # retry failed: keep the first reply for the failure card
                         logger.warning("factor intake retry failed: %s", type(exc).__name__)
