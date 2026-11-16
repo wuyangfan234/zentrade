@@ -1100,6 +1100,9 @@ export type DeskResonance = {
 }
 export type OppDesk = { contract: string; regime: DeskRegime; resonance: DeskResonance[]
   shadow: { rule: string; n: number; settled: number; mean5: number | null; win5: number | null; since: string | null } }
+/** 2026-11-15 价格尺现价 (GET /api/opportunities/quotes): src = live 热报价 / snapshot 今日快照 / premarket 盘前; chg = 对昨收 % */
+export type OppQuote = { price: number; src: 'live' | 'snapshot' | 'premarket'; chg: number | null }
+export type OppQuotesPayload = { contract: string; at: string; quotes: Record<string, OppQuote> }
 export type OppPagePayload = {
   contract: string
   generated_at: string
@@ -3084,6 +3087,8 @@ export const api = {
   deskOverview: () => request<DeskOverviewPayload>('/api/opportunities/desk/overview', { quiet: true }).then(cleanDeskNames),
   /** 0.29.0 机会页一次取齐 (机会板 + 盘中强势 + 大盘条 + 板卡标注) */
   oppPage: () => request<OppPagePayload>('/api/opportunities/page', { quiet: true }),
+  /** 2026-11-15 价格尺现价 (只读): 与 /page 同源; 没价的票不返回 */
+  oppQuotes: (symbols: string) => request<OppQuotesPayload>(`/api/opportunities/quotes?symbols=${encodeURIComponent(symbols)}`, { quiet: true }),
   intelToday: () => request<IntelPayload>('/api/intel/today', { quiet: true }),
   intelSettings: (macro_impact: IntelImpactLevel) =>
     request<{ macro_impact: IntelImpactLevel }>('/api/intel/settings', { method: 'POST', body: JSON.stringify({ macro_impact }) }),

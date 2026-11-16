@@ -10,6 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import logging
+import re
 import threading
 from datetime import date
 from app.market_clock import us_clock
@@ -383,6 +384,39 @@ def opportunities_page(request: Request) -> dict:
     from app.services import opp_page
     return ov.to_json_safe(opp_page.build(request.app.state.repo.store.data_dir, repo=request.app.state.repo,
                                           loop=getattr(request.app.state, "trading_loop", None)))
+
+
+_QUOTE_SYM = re.compile(r"^[A-Z][A-Z0-9.-]{0,9}$")
+QUOTES_MAX = 60
+
+
+@router.get("/quotes")
+def opportunities_quotes(request: Request, symbols: str = Query("", max_length=1200)) -> dict:
+    """Live prices for the opportunity page price rulers (read-only, no network).
+
+    Same source as /page (swing_desk._live_prices): hot tick within 2 minutes = live, today's market
+    snapshot = snapshot, premarket perp mid = premarket. Symbols without a price are omitted and the
+    page keeps the /page value. Non-trading days return an empty map. Refreshed on quotes_updated.
+    """
+    from app.services import opp_page
+    from app.services import swing_desk as sd
+    now = us_clock.market_datetime(us_clock.now())
+    today = now.date()
+    syms = sorted({s for s in (x.strip().upper() for x in symbols.split(",")) if _QUOTE_SYM.match(s)})[:QUOTES_MAX]
+    quotes: dict[str, dict] = {}
+    if syms and us_clock.is_trading_day(today):
+        repo = request.app.state.repo
+        px = sd._live_prices(repo, set(syms), today, now)
+        try:
+            prev = opp_page._prev_closes(repo, sorted(px), today) if px else {}
+        except Exception:
+            logger.warning("opportunities quotes: prev close read failed", exc_info=True)
+            prev = {}
+        for s, (p, src) in px.items():
+            pc = prev.get(s)
+            quotes[s] = {"price": round(float(p), 4), "src": src,
+                         "chg": round((float(p) / pc - 1) * 100, 2) if pc else None}
+    return {"contract": "opp-quotes-v1", "at": now.isoformat(timespec="seconds"), "quotes": quotes}
 
 
 @router.get("/asof")

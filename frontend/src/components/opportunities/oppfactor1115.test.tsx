@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-/** 2026-11-15 B 档: 口径标签 / 主题压力 / 历史日回看 / 因子库状态 / 周度挖掘文字 */
+/** 2026-11-15 B 档: 口径标签 / 集中风险 / 历史日回看 / 因子库状态 / 周度挖掘文字 */
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ vi.mock('@/lib/api', async (importOriginal) => {
   return { ...actual, api: { ...actual.api, ...mocks } }
 })
 import { RulerTag, rulerLabel, rulerTitle } from './RulerTag'
-import { ThemeBar } from './ThemeBar'
+import { ConcRisk } from './SideRail'
 import { AsOfView } from './AsOfView'
 import { displayStatus, maturityTitle } from '@/pages/factors/FactorLibrary'
 import { weeklyText } from '@/pages/factors/weeklySchedule'
@@ -47,22 +47,24 @@ const THEMES: ThemeExposure = {
   total: { notional: 57913, notional_pct: 54.9, stop_risk: 2546, stop_risk_pct: 2.41, stress_loss: 11583, stress_pct_nav: 10.98 },
 }
 
-it('主题压力: 一行一个主题; 合计写计划止损与整组跌幅两种口径', async () => {
-  await act(async () => { root.render(<ThemeBar t={THEMES} />) })
-  const row = host.querySelector('[data-theme-row="科技巨头"]')!
-  expect(row.textContent).toContain('22.6%')
-  expect(row.textContent).toContain('−$4,760 · −4.51%')
-  const meta = host.querySelector('[data-theme-meta]')!
-  expect(meta.textContent).toBe('持仓 6 · 名义 54.9% · 计划止损 $2,546（2.41%） · 全部跌 20% −$11,583（−10.98%）')
-  expect(meta.getAttribute('title')).toBe('核心 31 只 · 覆盖过半 · 不算主题')
-  // 只有挂单、没有持仓的主题: 持仓三列写「—」, 只给挂单全成交后
+it('集中风险: 一组一条; 数字 = 持仓部分, 挂单单列; 只有挂单的组写「仅挂单」; 合计写持仓部分', async () => {
+  await act(async () => { root.render(<ConcRisk t={THEMES} />) })
+  const row = host.querySelector('[data-conc-row="科技巨头"]')!
+  expect(row.textContent).toContain('−$4,760')
+  expect(row.getAttribute('title')).toBe('AMZN TSLA')
+  expect(host.querySelector('[data-conc] [title]')!.textContent).toBe('假设每只都亏 20%')
+  expect(host.querySelector('[data-conc-total]')!.textContent).toBe('持仓合计 −$11,583')
   const pendOnly = { ...THEMES.rows[0], theme: '医药', symbols: [], count: 0, notional: 0, notional_pct: 0, stop_risk: 0, stress_loss: 0, stress_pct_nav: 0,
     pending: ['LLY'], after_fill_loss: 3098, after_fill_pct_nav: 2.94 }
-  await act(async () => { root.render(<ThemeBar t={{ ...THEMES, rows: [pendOnly] }} />) })
-  expect([...host.querySelectorAll('[data-theme-row="医药"] td')].map((td) => td.textContent)).toEqual(['医药', '0', '—', '—', '—', '−$3,098 · −2.94%'])
-  await act(async () => { root.render(<ThemeBar t={{ ...THEMES, positions: 0, rows: [] }} />) })
-  expect(host.querySelector('[data-theme-meta]')!.textContent).toBe('暂无持仓')
-  expect(host.querySelector('table')).toBeNull()
+  await act(async () => { root.render(<ConcRisk t={{ ...THEMES, rows: [THEMES.rows[0], pendOnly] }} />) })
+  expect(host.querySelector('[data-conc-row="医药"]')!.textContent).toBe('医药仅挂单 −$3,098—')
+  expect(host.querySelector('[data-conc-row="医药"] [data-conc-loss]')).toBeNull()
+  await act(async () => { root.render(<ConcRisk t={{ ...THEMES, positions: 0, rows: [] }} />) })
+  expect(host.querySelector('[data-conc]')!.textContent).toContain('无持仓')
+  expect(host.querySelector('[data-conc-row]')).toBeNull()
+  // 旧词不再上屏
+  expect(host.textContent).not.toContain('名义')
+  expect(host.textContent).not.toContain('主题压力')
 })
 
 const ASOF: AsOfPayload = {
