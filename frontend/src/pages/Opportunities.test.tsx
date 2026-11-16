@@ -412,11 +412,19 @@ it('盘中异动: 四组完整列出, 读数写全; 右列现在涨跌跟报价;
     expect(r.className).toContain('grid-cols-[60px_minmax(0,1fr)_auto]')
     expect(r.querySelector('[data-row-main]')!.className).not.toContain('truncate')
   }
-  // 各组不再限高滚动
-  for (const b of host.querySelectorAll('[data-col-body]')) expect(b.className).not.toContain('overflow-y-auto')
+  // 四组卡片统一限高, 超出在卡内滚动 (头部不动); 同一网格等高, 不用 items-start 让卡各自长高
+  const grid = host.querySelector('[data-cols]')!
+  expect(grid.className).toContain('md:auto-rows-fr')
+  expect(grid.className).not.toContain('items-start')
+  for (const c of host.querySelectorAll('[data-col]')) {
+    expect(c.className).toMatch(/max-h-\[\d+px\]/)
+    expect(c.className).toContain('overflow-hidden')
+    expect(c.querySelector('[data-col-body]')!.className).toContain('overflow-y-auto')
+    expect(c.querySelector('[data-col-body]')!.className).toContain('min-h-0')
+  }
 })
 
-it('盘中异动: 跳空多时全部列出; 没跑到点写下次时刻', async () => {
+it('盘中异动: 跳空多时全部列出 (卡内滚动); 没跑到点写下次时刻', async () => {
   const rows = Array.from({ length: 18 }, (_, i) => ({ symbol: `G${i}`, gap_pct: -3 - i * 0.4, price: 100 }))
   mocks.oppPage.mockResolvedValue(page({ gaps: { at: '2026-10-29T04:28:00-04:00', live: true, threshold_pct: 3, checked: 41, rows },
     radar: { ...page().radar!, is_today: false, picks: [], others: [] } }))

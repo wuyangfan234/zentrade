@@ -159,6 +159,12 @@ function resonanceCol(d: RadarData, desk: OppDesk | null, onOpen: (s: string) =>
 
 type RadarEngine = Exclude<DeskEngine, 'board'>
 
+/** 四组卡片统一限高, 超出在卡内滚动 (头部固定)。md 以上 auto-rows-fr: 同一网格所有卡等高 = min(最高一组的内容, 上限),
+ * 都很短时一起变矮, 不会一组几十行把同行另一组拉出大片空白; 手机单列只限高。 */
+export const RADAR_GRID = 'grid gap-3 border-t border-border/70 bg-base p-3 md:auto-rows-fr md:grid-cols-2 2xl:grid-cols-4'
+export const RADAR_CARD = 'flex max-h-[400px] min-h-0 min-w-0 flex-col overflow-hidden rounded-card border border-border bg-surface'
+export const RADAR_BODY = 'scroll-y-visible scrollbar-gutter-stable min-h-0 flex-1 overflow-y-auto pb-1'
+
 export function RadarFull({ order, d, desk, onOpen }: { order: DeskEngine[]; d: RadarData; desk: OppDesk | null; onOpen: (s: string) => void }) {
   const cols: [string, string, Col][] = order.filter((k): k is RadarEngine => k !== 'board').map((k) => [k, ENGINE_ZH[k],
     k === 'gap' ? gapCol(d, onOpen) : k === 'open' ? openCol(d, onOpen) : intradayCol(d, onOpen)] as [string, string, Col])
@@ -170,15 +176,15 @@ export function RadarFull({ order, d, desk, onOpen }: { order: DeskEngine[]; d: 
         <span title="只记录 · 不下单 · 不计入模型评分" className={badge('limit')}>仅参考 · 不下单</span>
         <span className="ml-auto text-[12px] text-muted">右列 = 对昨收涨跌</span>
       </div>
-      <div data-cols className="grid items-start gap-3 border-t border-border/70 bg-base p-3 md:grid-cols-2 2xl:grid-cols-4">
+      <div data-cols className={RADAR_GRID}>
         {cols.map(([k, title, c]) => (
-          <div key={k} data-col={k} className="flex min-w-0 flex-col rounded-card border border-border bg-surface">
-            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 pb-1.5 pt-2.5">
+          <div key={k} data-col={k} className={RADAR_CARD}>
+            <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 px-3 pb-1.5 pt-2.5">
               <h3 className="shrink-0 whitespace-nowrap text-[14px] font-semibold text-foreground">{title}</h3>
               <span className="shrink-0 text-[13px] font-semibold tabular-nums text-secondary">{c.count}</span>
               {c.meta && <span data-head-meta className="ml-auto min-w-0 text-right text-[12px] tabular-nums text-muted">{c.meta}</span>}
             </div>
-            <div data-col-body className="pb-1">{c.body}</div>
+            <div data-col-body className={RADAR_BODY}>{c.body}</div>
           </div>
         ))}
       </div>
