@@ -1687,7 +1687,7 @@ class StrategyBacktestService:
             result.stats["matrix_compute_cache"] = prepared.compute_cache.snapshot()
 
         benchmark_curve = (
-            self._build_benchmark_curve(config.start, config.end)
+            self._build_benchmark_curve(config.start, self._benchmark_end(config.end, result.equity_curve))
             if result_policy.include_benchmark
             else []
         )
@@ -1999,7 +1999,7 @@ class StrategyBacktestService:
         }
 
         benchmark_curve = (
-            self._build_benchmark_curve(config.start, config.end)
+            self._build_benchmark_curve(config.start, self._benchmark_end(config.end, result.equity_curve))
             if result_policy.include_benchmark
             else []
         )
@@ -2190,6 +2190,21 @@ class StrategyBacktestService:
         for m in masks[1:]:
             combined = combined | m
         return combined
+
+    @staticmethod
+    def _benchmark_end(end: date, equity_curve: list[dict]) -> date:
+        """基准取到净值曲线最后一天。
+
+        全量模拟要让区间末尾入场的候选走完持有期, 净值会延续到区间结束日之后; 基准若停在结束日,
+        首尾日期对不上, 页面「同期 SPY / 超额收益」只能显示「—」。
+        """
+        if not equity_curve:
+            return end
+        try:
+            last = date.fromisoformat(str(equity_curve[-1].get("date", ""))[:10])
+        except ValueError:
+            return end
+        return max(end, last)
 
     def _build_benchmark_curve(self, start: date, end: date) -> list[dict]:
         try:

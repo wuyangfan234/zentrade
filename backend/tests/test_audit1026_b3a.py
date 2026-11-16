@@ -324,9 +324,12 @@ def _trade(day, pnl):
 
 
 def test_m15_full_mode_max_drawdown_uses_initial_peak():
+    # 两笔都在 01-02 入场: 01-05 一笔 -10% 退出、另一笔按日均摊 +2.47%, 等权后当天 -3.77%;
+    # 这是首个持有日的亏损, 回撤必须相对初始 1.0 计 (净值口径见 test_full_mode_nav.py)。
     trades = [_trade(date(2026, 1, 5), -0.10), _trade(date(2026, 1, 6), 0.05)]
     res = BacktestEngine._calc_independent_candidate_result(trades, 2, {}, options=SimulationOptions())
-    assert res.stats["max_drawdown"] == -0.1
+    first_loss = (-0.10 + (1.05 ** 0.5 - 1)) / 2
+    assert res.stats["max_drawdown"] == round(first_loss, 4)
     assert res.stats["max_drawdown"] == min(p["value"] for p in res.drawdown_curve)
 
 
