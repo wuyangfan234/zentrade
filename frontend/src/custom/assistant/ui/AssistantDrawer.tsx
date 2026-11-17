@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import {
   ArrowDown,
+  BookOpen,
   History,
   Plus,
   SendHorizontal,
@@ -30,6 +31,7 @@ import {
 } from '../client'
 import {
   closeAssistant,
+  currentPage,
   deleteSession,
   newSession,
   retryLast,
@@ -39,6 +41,8 @@ import {
   useAssistantStore,
 } from '../store'
 import { AssistantMessageView } from './messages'
+import { SkillBar, SkillPalette, filterSkills, primaryTrigger, rankForPage, useSkills } from './SkillPicker'
+import type { SkillSummary } from '../client'
 
 const EASE_SMOOTH: [number, number, number, number] = [0.16, 1, 0.3, 1]
 
@@ -63,8 +67,10 @@ function saveWidth(width: number) {
 }
 
 function clampWidth(width: number): number {
-  // 右缘贴齐, 至少给页面主体留 64px 上下文。
-  const maxWidth = Math.max(MIN_WIDTH, window.innerWidth - 64)
+  // 右缘贴齐, 至少给页面主体留 64px 上下文; 窄屏 (视口不足 MIN_WIDTH + 64) 时面板占满视口,
+  // 不再按 480px 下限把左侧推出屏幕 (手机 390 宽曾被切掉约 90px)。
+  if (window.innerWidth < MIN_WIDTH + 64) return window.innerWidth
+  const maxWidth = window.innerWidth - 64
   return Math.min(Math.max(width, MIN_WIDTH), maxWidth)
 }
 
@@ -93,6 +99,8 @@ function DrawerPanel({
   messages: DrawerMessages
 }) {
   const { sessions, activeId } = useAssistantStore()
+  const skills = useSkills()
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [status, setStatus] = useState<AssistantStatus | null>(null)
   const [suggests, setSuggests] = useState<QuickSuggest[]>([])
   const [width, setWidth] = useState(() => clampWidth(loadWidth()))
@@ -141,15 +149,19 @@ function DrawerPanel({
       transition={{ duration: 0.26, ease: EASE_SMOOTH }}
       style={{ right: 0, width }}
       className={cn(
-        'fixed inset-y-0 z-[60] flex min-w-0 flex-col border-l border-border',
+        'fixed inset-y-0 z-[60] flex min-w-0 max-w-[100vw] flex-col border-l border-border',
         'bg-surface/95 shadow-2xl backdrop-blur-xl',
       )}
       role="complementary"
       aria-label="AI 助手"
     >
-      <DrawerHeader status={status} sessions={sessions} activeId={activeId} sending={sending} />
+      <DrawerHeader status={status} sessions={sessions} activeId={activeId} sending={sending}
+        skillsOn={paletteOpen} onSkills={() => setPaletteOpen(v => !v)} />
+      <SkillBar skills={skills} page={currentPage()} disabled={sending || (status ? !status.supports_tools : false)}
+        onPick={skill => sendMessage(primaryTrigger(skill))} onMore={() => setPaletteOpen(true)} />
       <MessageList messages={messages} sending={sending} status={status} suggests={suggests} />
-      <InputArea sending={sending} blocked={status ? !status.supports_tools : false} />
+      <InputArea sending={sending} blocked={status ? !status.supports_tools : false} skills={skills}
+        forcePalette={paletteOpen} onPaletteClose={() => setPaletteOpen(false)} />
 
       {/* 左缘拖拽调宽 */}
       <div
@@ -174,11 +186,15 @@ function DrawerHeader({
   sessions,
   activeId,
   sending,
+  skillsOn,
+  onSkills,
 }: {
   status: AssistantStatus | null
   sessions: ReturnType<typeof useAssistantStore>['sessions']
   activeId: string
   sending: boolean
+  skillsOn: boolean
+  onSkills: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -195,6 +211,9 @@ function DrawerHeader({
         </span>
       )}
       <div className="ml-auto flex shrink-0 items-center gap-0.5">
+        <IconButton title="技能" onClick={onSkills} active={skillsOn}>
+          <BookOpen className="h-4 w-4" />
+        </IconButton>
         <div className="relative">
           <IconButton title="历史会话" onClick={() => setMenuOpen(v => !v)} disabled={sending}>
             <History className="h-4 w-4" />
@@ -263,11 +282,13 @@ function IconButton({
   title,
   onClick,
   disabled,
+  active,
   children,
 }: {
   title: string
   onClick: () => void
   disabled?: boolean
+  active?: boolean
   children: React.ReactNode
 }) {
   return (
@@ -275,9 +296,13 @@ function IconButton({
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={active}
       disabled={disabled}
       onClick={onClick}
-      className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn text-secondary transition-colors duration-150 ease-smooth hover:bg-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+      className={cn(
+        'flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn transition-colors duration-150 ease-smooth hover:bg-elevated hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40',
+        active ? 'bg-accent/10 text-accent dark:text-blue-400' : 'text-secondary',
+      )}
     >
       {children}
     </button>
@@ -414,20 +439,66 @@ function EmptyState({ status, suggests }: { status: AssistantStatus | null; sugg
   )
 }
 
-function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean }) {
+function InputArea({ sending, blocked, skills, forcePalette, onPaletteClose }: {
+  sending: boolean
+  blocked: boolean
+  skills: SkillSummary[]
+  forcePalette: boolean
+  onPaletteClose: () => void
+}) {
   const [text, setText] = useState('')
+  const [active, setActive] = useState(0)
+  const [dismissed, setDismissed] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // 只输入了「/关键词」(还没写正文) 时弹出指令卡; 技能按钮可强制打开
+  const slash = /^\/\S*$/.test(text)
+  const paletteOpen = !blocked && skills.length > 0 && (forcePalette || (slash && !dismissed))
+  const candidates = paletteOpen ? rankForPage(filterSkills(skills, slash ? text : ''), currentPage()) : []
   const canSend = !sending && !blocked && text.trim().length > 0
+
+  const closePalette = () => {
+    setDismissed(true)
+    onPaletteClose()
+  }
+
+  const pick = (skill: SkillSummary) => {
+    setText(`${primaryTrigger(skill)} `)
+    setActive(0)
+    setDismissed(true)
+    onPaletteClose()
+    textareaRef.current?.focus()
+  }
 
   const submit = () => {
     if (!canSend) return
     sendMessage(text)
     setText('')
+    setDismissed(false)
+    onPaletteClose()
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (paletteOpen && candidates.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const delta = e.key === 'ArrowDown' ? 1 : -1
+        setActive(i => (i + delta + candidates.length) % candidates.length)
+        return
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault()
+        e.stopPropagation()
+        closePalette()
+        return
+      }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault()
+        pick(candidates[Math.min(active, candidates.length - 1)])
+        return
+      }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault()
       submit()
@@ -442,6 +513,11 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
   }
 
   return (
+    <>
+    {paletteOpen && (
+      <SkillPalette skills={skills} query={slash ? text : ''} page={currentPage()} active={active}
+        onActive={setActive} onPick={pick} onClose={closePalette} />
+    )}
     <div className="shrink-0 border-t border-border bg-surface px-4 pb-3 pt-2.5">
       <div className="flex items-end gap-2 rounded-card border border-border bg-base focus-within:border-accent/50">
         <textarea
@@ -449,8 +525,8 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
           value={text}
           rows={1}
           disabled={blocked}
-          placeholder={blocked ? '未配置 AI 模型' : '提问，Enter 发送 / Shift+Enter 换行'}
-          onChange={e => { setText(e.target.value); autoGrow() }}
+          placeholder={blocked ? '未配置 AI 模型' : '提问或输入 / 调用技能'}
+          onChange={e => { setText(e.target.value); setActive(0); if (!e.target.value.startsWith('/')) setDismissed(false); autoGrow() }}
           onKeyDown={onKeyDown}
           className="max-h-36 min-h-[38px] flex-1 resize-none bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted disabled:cursor-not-allowed"
         />
@@ -478,8 +554,9 @@ function InputArea({ sending, blocked }: { sending: boolean; blocked: boolean })
         )}
       </div>
       <div className="mt-1.5 px-1 text-[11px] text-muted">
-        ⌘K / Ctrl+K 打开 · 回答基于本地数据，不构成投资建议
+        <span className="hidden md:inline">⌘K / Ctrl+K 打开 · </span>只读 · 回答附数据时点 · 不构成投资建议
       </div>
     </div>
+    </>
   )
 }

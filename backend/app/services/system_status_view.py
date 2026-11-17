@@ -31,6 +31,7 @@ IMPACT = {
     "decision_desk": "机会页的候选可能不是最新的",
     "evidence": "规则依据的数据可能不是最新的",
     "realtime_source": "实时价格可能来自备用源",
+    "assistant_health": "AI 助手的部分查询会失败或答错（不影响交易）",
 }
 ACTION = {
     "data_freshness": "检查所列个股的数据源是否有数据、是否新上市；盘后同步会补齐全部自选的 30 分钟数据",
@@ -45,6 +46,7 @@ ACTION = {
     "earnings": "查看日志中财报日历的刷新错误",
     "corporate_actions": "查看日志中公司行动的刷新错误",
     "alpaca_mirror": "在持仓页查看镜像的最近错误",
+    "assistant_health": "在「设置 › AI 技能」点「运行体检」查看每个工具的失败原因",
 }
 
 

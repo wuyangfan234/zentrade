@@ -90,7 +90,7 @@ def test_assistant_only_recommends_registered_tools_and_us_examples():
     mentioned = set(re.findall(r"\b(?:get|list|run)_[a-z_]+\b", text))
     assert mentioned <= registered
     visible = json.dumps(schemas + tools.QUICK_SUGGESTS, ensure_ascii=False)
-    for token in ("涨停", "连板", "情绪雷达", "MCD", "上证", "get_financials"):
+    for token in ("涨停", "连板", "情绪雷达", "MCD", "上证"):
         assert token not in visible
     assert "美股" in visible and "USD" in visible
     assert "缺失" in text and "无午休" in text

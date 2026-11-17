@@ -67,6 +67,7 @@ export const JOB_LABEL: Record<string, string> = {
   zen_ls_rank: '今日多空名单补生成 · 08:20 / 17:20 ET',
   zen_market_mood_score_retry: '大盘判断补记分',
   zen_fundamentals_sync: '财务数据同步 · 18:30 ET',
+  zen_assistant_health: 'AI 助手体检 · 08:00 ET',
   zen_notification_outbox: '通知发送 · 60 秒',
   zen_resonance_shadow: '信号共振记录 · 盘中每 5 分钟',
   zen_resonance_settle: '信号共振结算 · 16:45 ET',

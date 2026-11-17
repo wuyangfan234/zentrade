@@ -6,6 +6,7 @@ docs/secondary-development.md 的扩展契约。
 
 事件流协议(NDJSON, 每行一个 JSON):
     {"type":"notice","message":"..."}                       历史截断等提示
+    {"type":"skill","name","title"}                          本轮命中技能 (消息以触发词开头)
     {"type":"tool_call","call_id","name","args"}            工具调用开始(前端足迹卡)
     {"type":"tool_result","call_id","name","ok","summary","elapsed_ms","charts?"}
                                                             charts=可绘图数据列表(分时/日K, 前端自动附图)

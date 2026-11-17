@@ -30,11 +30,15 @@ def test_builder_step1_reference_no_longer_teaches_price_limit_signals():
     assert "上次涨停价" not in text
 
 
-def test_assistant_prompt_does_not_invent_financial_tool_or_limit_mechanism():
+def test_assistant_prompt_routes_financials_to_registered_tool_and_no_limit_mechanism():
+    """财务只能来自已注册的 get_financials (SEC 公告); 没查到就说没有, 不按量价推测。"""
+    from app.custom.assistant import tools as assistant_tools
+
     text = prompt.build_system_prompt(None)
     assert "美元" in text and "美东" in text
-    assert "缺失" in text and "财务" in text
-    assert "get_financials" not in text  # 注册表中没有这个工具
+    assert "get_financials" in text and "不按量价推测" in text
+    assert "财务数据当前缺失" not in text  # 旧口径: 本地已有财务数据, 不能再对用户说缺失
+    assert "get_financials" in {s["function"]["name"] for s in assistant_tools.build_tool_schemas()}
     assert "触及涨跌停直接写" not in text
     assert "元 →" not in text
 
@@ -74,8 +78,9 @@ def test_overview_uses_us_breadth_and_does_not_read_depth_or_report_limit_stats(
     assert result["breadth"]["flat"] == 0
     assert result["breadth"]["unknown"] == 1
     assert result["breadth"]["up_pct"] == 50
-    assert result["financials"]["status"] == "unavailable"
-    assert "缺失" in result["financials"]["note"]
+    # 总览不按量价推断基本面: 财务明确标为「按个股另查」, 不再谎称财务数据源缺失
+    assert result["financials"]["status"] == "per_symbol"
+    assert "不含基本面" in result["financials"]["note"]
     for field in ("limit", "boards", "emotion", "radar"):
         assert field not in result
     text = json.dumps(result, ensure_ascii=False, allow_nan=False)

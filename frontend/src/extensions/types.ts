@@ -14,6 +14,10 @@ export interface FrontendSlotContextMap {
     name: string | null
     view: 'daily' | 'intraday' | 'news' | 'options' | 'earnings'
   }
+  /** 设置页「AI 技能」标签内容 (有注册时设置页才出现这个标签; 卸载扩展即消失) */
+  'settings.skills': {
+    highlight: string
+  }
   /** 自选页工具栏扩展区 (按钮行末尾) */
   'watchlist.toolbar': {
     /** 当前筛选/排序后视图中的标的 */

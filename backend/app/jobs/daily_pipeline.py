@@ -1599,6 +1599,22 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         trigger=CronTrigger(day_of_week="mon-fri", hour=18, minute=30, timezone="America/New_York"),
         id="zen_fundamentals_sync", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
 
+    # 2026-11-17 AI 助手体检: 每天 08:00 ET 用真实数据把助手全部工具各调一次, 结果写 ops/assistant_health.json,
+    # 系统状态页展示一行。只记录、不推送。扩展模块缺失时跳过。
+    async def _assistant_health():
+        try:
+            from app.custom.assistant import health as assistant_health
+        except ImportError:
+            return None
+        st = _get_app_state()
+        if st is None or getattr(st, "repo", None) is None:
+            return None
+        return await assistant_health.run(st)
+
+    scheduler.add_job(_assistant_health,
+        trigger=CronTrigger(day_of_week="mon-sun", hour=8, minute=0, timezone="America/New_York"),
+        id="zen_assistant_health", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)
+
     # 5 秒热报价 (持仓/活跃卡/自选/正在看的个股, ≤50 只): 持仓现价与分时实时拼接。不撮合、不落盘。
     def _hot_quotes_tick():
         from app.services import hot_quotes
