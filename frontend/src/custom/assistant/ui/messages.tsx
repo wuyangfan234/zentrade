@@ -9,6 +9,7 @@ import { memo, useState } from 'react'
 import { motion } from 'framer-motion'
 import {
   AlertCircle,
+  BookOpen,
   CheckCircle2,
   ChevronDown,
   Loader2,
@@ -20,9 +21,15 @@ import { cn } from '@/lib/cn'
 import type { ChatMessage, ToolCallRecord } from '../store'
 import { DailyChartCard } from './DailyChartCard'
 
-export const UserBubble = memo(function UserBubble({ content }: { content: string }) {
+export const UserBubble = memo(function UserBubble({ content, skill }: { content: string; skill?: { name: string; title: string } }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex flex-col items-end gap-1">
+      {skill && (
+        <span data-skill-tag={skill.name} className="inline-flex items-center gap-1 rounded-[4px] bg-accent/10 px-1.5 text-[11px] leading-5 text-accent dark:text-blue-400">
+          <BookOpen className="h-3 w-3" />
+          技能 · {skill.title}
+        </span>
+      )}
       <div className="max-w-[85%] rounded-card bg-elevated px-3 py-2 text-sm leading-relaxed text-foreground">
         {content}
       </div>
@@ -94,16 +101,24 @@ const TOOL_LABELS: Record<string, string> = {
   get_stock_analysis: '个股关键价位分析',
   get_watchlist: '查询自选列表',
   get_market_overview: '查询市场总览',
-  get_indices: '查询指数行情',
+  get_indices: '查询参考ETF行情',
+  get_portfolio: '查询模拟持仓',
   get_lots: '查询持仓提醒',
+  get_earnings: '查询财报日历',
+  get_financials: '查询财务指标',
+  get_news: '查询个股新闻',
+  get_opportunities: '查询机会板',
   list_signals: '检索信号库',
   run_strategy: '执行选股策略',
   get_factor_values: '查询因子排名',
 }
 
 function toolLabel(name: string): string {
-  return TOOL_LABELS[name]
+  // 后端新增工具而前端没有中文名时不显示英文名 (TOOL_LABELS 由测试与后端注册表对齐)
+  return TOOL_LABELS[name] ?? '查询数据'
 }
+
+export const ASSISTANT_TOOL_LABELS: Readonly<Record<string, string>> = TOOL_LABELS
 
 /** 足迹组: 工具足迹卡 + 附带可绘图数据的走势小卡(始终可见, 不藏在展开区)。 */
 export const FootprintGroup = memo(function FootprintGroup({ calls }: { calls: ToolCallRecord[] }) {
@@ -251,7 +266,7 @@ export const NoticeMessage = memo(function NoticeMessage({ content }: { content:
 export function AssistantMessageView({ message, onRetry }: { message: ChatMessage; onRetry?: () => void }) {
   switch (message.role) {
     case 'user':
-      return <UserBubble content={message.content} />
+      return <UserBubble content={message.content} skill={message.skill} />
     case 'assistant':
       return <AssistantMessage content={message.content} streaming={message.streaming} />
     case 'footprint':

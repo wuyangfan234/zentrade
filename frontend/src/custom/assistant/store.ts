@@ -27,7 +27,7 @@ export interface ToolCallRecord {
 }
 
 export type ChatMessage =
-  | { id: string; role: 'user'; content: string; ts: number }
+  | { id: string; role: 'user'; content: string; ts: number; skill?: { name: string; title: string } }
   | { id: string; role: 'assistant'; content: string; ts: number; streaming: boolean }
   | { id: string; role: 'footprint'; calls: ToolCallRecord[]; ts: number }
   | { id: string; role: 'error'; kind: string; message: string; hint?: string; ts: number }
@@ -241,6 +241,17 @@ function applyEvent(event: AssistantEvent, footprintId: string, assistantId: str
     case 'notice':
       add({ id: uid(), role: 'notice', content: event.message, ts: Date.now() })
       break
+    case 'skill':
+      // 后端确认本轮命中技能: 标到最后一条用户消息上 (气泡显示技能名)
+      write(session => {
+        const idx = findLastIndex(session.messages, m => m.role === 'user')
+        if (idx < 0) return session
+        const messages = session.messages.slice()
+        const target = messages[idx]
+        if (target.role === 'user') messages[idx] = { ...target, skill: { name: event.name, title: event.title } }
+        return { ...session, messages }
+      })
+      break
     default:
       break
   }
@@ -309,6 +320,10 @@ export function deleteSession(id: string) {
 /** 页面上下文由插槽组件上报(仅影响后续轮次), 用户可见于足迹中由后端回显。 */
 export function setPageContext(context: AssistantContext) {
   pageContext = context
+}
+
+export function currentPage(): string {
+  return pageContext.page ?? ''
 }
 
 function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {

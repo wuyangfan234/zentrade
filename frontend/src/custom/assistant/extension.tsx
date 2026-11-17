@@ -7,8 +7,15 @@
  * 文件; 复用的核心能力均为只读 import(MarkdownRenderer、cn、设计令牌)。
  * 自包含 HTTP 客户端见 client.ts 的取舍说明。
  */
-import type { FrontendExtension } from '@/extensions/types'
+import type { FrontendExtension, FrontendSlotContextMap } from '@/extensions/types'
 import { AssistantLauncher } from './AssistantLauncher'
+import { AssistantSkillsSettings } from './ui/SkillsSettings'
+
+// 插槽注册表把组件 props 定为所有插槽上下文的联合类型 (保守契约); 本组件不读上下文
+type AnySlotContext = FrontendSlotContextMap[keyof FrontendSlotContextMap]
+function SkillsSettingsSlot(_props: AnySlotContext) {
+  return <AssistantSkillsSettings />
+}
 
 const extension: FrontendExtension = {
   id: 'assistant.chat',
@@ -19,6 +26,12 @@ const extension: FrontendExtension = {
       id: 'assistant-entry',
       order: 10,
       component: AssistantLauncher,
+    },
+    {
+      name: 'settings.skills',
+      id: 'assistant-skills',
+      order: 10,
+      component: SkillsSettingsSlot,
     },
   ],
 }

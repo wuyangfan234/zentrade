@@ -1,8 +1,8 @@
 """AI 助手工具层 — 核心工具目录透传 + 面向各页面能力的本地查询工具。
 
 设计原则(为项目服务、只读、有界):
-- 每个工具对应已注册的本地查询能力(行情/自选/总览/参考ETF/持仓提醒/
-  信号库/个股分析/因子值/跑策略), 全部只读。
+- 每个工具对应已注册的本地查询能力(行情/自选/总览/参考ETF/模拟持仓/持仓提醒/
+  财报/财务/新闻/机会板/信号库/个股分析/因子值/跑策略), 全部只读。
 - 返回体有界: rows 全部带 limit 钳制, enriched 大表先 filter 再取
   少量行; 数值统一四舍五入 4 位, 日期转 ISO 字符串, 保证 JSON 可序列化。
 - 未知的工具名回退到核心 services.tool_catalog(因子/策略/数据能力/回测)。
@@ -24,6 +24,7 @@ from typing import Any
 
 import polars as pl
 
+from app.custom.assistant import tools_extra
 from app.market_time import cn_today
 from app.services import tool_catalog
 
@@ -35,6 +36,11 @@ QUICK_SUGGESTS: list[dict[str, str]] = [
         "id": "market-overview",
         "label": "今天市场怎么样？",  # noqa: RUF001 — 面向用户中文文案含全角问号
         "prompt": "帮我看看今天的美股样本总览: 涨跌广度、美元成交额、均线趋势、参考ETF与领涨领跌榜，并说明日期、覆盖范围和缺失数据。",
+    },
+    {
+        "id": "portfolio-check",
+        "label": "我的持仓怎么样",
+        "prompt": "查一下我的模拟账户持仓: 每只的成本、最近收盘、止损、浮动盈亏和距止损, 标出已跌破止损或待离场的, 并说明数据时点。",
     },
     {
         "id": "watchlist-check",
@@ -170,7 +176,9 @@ def _asset_quote_frame(ctx: ToolContext, symbols: list[str]) -> pl.DataFrame:
     if missing and ctx.repo is not None:
         by_asset: dict[str, list[str]] = {}
         for symbol in missing:
-            asset_type = ctx.repo.resolve_asset_type(symbol)
+            # 参考 ETF (SPY/QQQ/DIA/IWM) 盘中不在股票缓存, ETF/指数名单又可能为空 (resolve 判成 stock):
+            # 固定走指数表, 与侧栏指数条同一份数据
+            asset_type = "index" if tools_extra.is_core_index(symbol) else ctx.repo.resolve_asset_type(symbol)
             if asset_type != "stock":
                 by_asset.setdefault(asset_type, []).append(symbol)
         for asset_type, members in by_asset.items():
@@ -323,13 +331,26 @@ def _daily_kline_chart_payload(symbol: str, name: str, rows: list[dict[str, Any]
     return {"kind": "daily_kline", "symbol": symbol, "name": name, "points": points[-120:]}
 
 
+def _daily_frame(repo: Any, symbol: str, start: date, end: date) -> pl.DataFrame:
+    """日线: 参考 ETF 在股票表与指数表各有一份, 盘中股票表缺当日 → 取最后日期更新的那份。"""
+    df = repo.get_daily_asset(repo.resolve_asset_type(symbol), symbol, start, end)
+    if not tools_extra.is_core_index(symbol):
+        return df
+    alt = repo.get_daily_asset("index", symbol, start, end)
+    if alt is None or alt.is_empty():
+        return df
+    if df is None or df.is_empty() or alt["date"].max() > df["date"].max():
+        return alt
+    return df
+
+
 def _get_stock_daily(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     repo = _require_repo(ctx)
     symbol = _validate_symbol(args.get("symbol"))
     days = _clamp(args.get("days"), 10, 500, 60)
     end = cn_today()
     start = end - timedelta(days=int(days * 1.9) + 20)
-    df = repo.get_daily_asset(repo.resolve_asset_type(symbol), symbol, start, end)
+    df = _daily_frame(repo, symbol, start, end)
     if df is None or df.is_empty():
         return {"symbol": symbol, "rows": [], "note": "本地没有该标的的日线数据。"}
     keep = [
@@ -359,7 +380,7 @@ def _get_stock_analysis(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any
     repo = _require_repo(ctx)
     symbol = _validate_symbol(args.get("symbol"))
     end = cn_today()
-    df = repo.get_daily_asset(repo.resolve_asset_type(symbol), symbol, end - timedelta(days=500), end)
+    df = _daily_frame(repo, symbol, end - timedelta(days=500), end)
     if df is None or df.is_empty():
         return {"symbol": symbol, "note": "本地没有该标的的日线数据, 无法分析。"}
     recent = df.tail(120)
@@ -415,13 +436,14 @@ def _get_market_overview(args: dict[str, Any], ctx: ToolContext) -> dict[str, An
 
 
 def _get_indices(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
-    if ctx.quote_service is None:
-        raise ValueError("实时行情服务未启用, 无法查询指数。")
-    df = ctx.quote_service.get_index_quotes()
-    rows = _rows(df, 60)
+    """参考 ETF: 实时缓存优先; 为空 (重启后到开盘前、休市) 回退本地指数日K收盘, 行内 date 标收盘日。"""
+    rows, source = tools_extra.index_rows(ctx.repo, ctx.quote_service)
     if not rows:
-        return {"count": 0, "rows": [], "note": "指数实时缓存为空。"}
-    return {"count": len(rows), "rows": rows}
+        return {"count": 0, "rows": [], "source": "unavailable",
+                "note": "实时缓存与本地指数日K都没有数据, 请检查数据页的指数同步。"}
+    note = ("盘中实时快照。" if source == "realtime"
+            else f"实时行情未在运行 (休市或开盘前), 以下为 {rows[0].get('date')} 收盘数据。")
+    return {"count": len(rows), "rows": rows, "source": source, "note": note}
 
 
 
@@ -433,7 +455,8 @@ def _get_lots(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         raise ValueError("数据目录未就绪。")
     lots = load_all(ctx.data_dir)
     if not lots:
-        return {"count": 0, "rows": [], "note": "暂无持仓提醒记录。"}
+        return {"count": 0, "rows": [],
+                "note": "持仓提醒为空。持仓提醒是用户手动记录的提醒, 不是模拟账户持仓; 模拟持仓请用 get_portfolio。"}
     symbols = [str(lot.get("symbol") or "") for lot in lots if lot.get("symbol")]
     quotes = _quotes_map(ctx, symbols)
     names = ctx.repo.get_name_map(symbols) if ctx.repo is not None else {}
@@ -474,6 +497,12 @@ def _run_strategy(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
     strategy_id = str(args.get("strategy_id") or "").strip()
     if not strategy_id:
         raise ValueError("strategy_id 不能为空, 可先用 list_strategies 查看。")
+    meta = next((m for m in ctx.engine.list_strategies(include_research=True) if m.get("id") == strategy_id), None)
+    if meta is None:
+        raise ValueError(f"没有 id 为 {strategy_id} 的策略, 可先用 list_strategies 查看。")
+    unavailable = tool_catalog.strategy_unavailable_reason(meta)
+    if unavailable:
+        raise ValueError(f"策略 {meta.get('name') or strategy_id} {unavailable}。")
     svc = ScreenerService(repo)
     as_of = svc.latest_date()
     if as_of is None:
@@ -483,9 +512,10 @@ def _run_strategy(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]:
         ctx.engine, as_of, [strategy_id], overrides_map={strategy_id: overrides},
     )
     result = ctx.engine.run(strategy_id, context, overrides=overrides or None)
-    rows = [_clean_obj(r) for r in (getattr(result, "rows", None) or [])][:30]
+    rows = [_clean_obj(tools_extra.slim_strategy_row(r)) for r in (getattr(result, "rows", None) or [])[:30]]
     return {
         "strategy_id": strategy_id,
+        "name": meta.get("name") or "",
         "as_of": _clean_value(getattr(result, "as_of", as_of)),
         "total": int(getattr(result, "total", 0) or 0),
         "elapsed_ms": round(float(getattr(result, "elapsed_ms", 0.0) or 0.0)),
@@ -500,23 +530,28 @@ def _get_factor_values(args: dict[str, Any], ctx: ToolContext) -> dict[str, Any]
         raise ValueError("factor 不能为空, 可先用 list_factors 查看可用因子 id。")
     top = _clamp(args.get("top"), 5, 50, 30)
     descending = str(args.get("direction") or "desc") != "asc"
-    df, as_of = repo.get_enriched_latest()
-    if df is None or df.is_empty():
-        raise ValueError("本地暂无行情数据, 无法读取因子值。")
-    if factor not in df.columns:
-        raise ValueError(f"因子 {factor} 不在物化列中, 请先用 list_factors 确认因子 id。")
-    keep = [c for c in ("symbol", factor, "change_pct") if c in df.columns]
-    sub = (
-        df.select(keep)
-        .drop_nulls(subset=[factor])
-        .sort(factor, descending=descending)
-        .head(top)
-    )
+    df, as_of, method = tools_extra.factor_frame(repo, factor)
+    valid = df.drop_nulls(subset=[factor]).filter(pl.col(factor).is_not_nan() if df.schema[factor].is_float() else pl.lit(True))
+    sub = valid.sort(factor, descending=descending).head(top)
     names = repo.get_name_map(sub["symbol"].to_list()) if sub.height else {}
     rows = _rows(sub, top)
     for row in rows:
         row.setdefault("name", names.get(row.get("symbol"), ""))
-    return {"factor": factor, "as_of": _clean_value(as_of), "count": len(rows), "rows": rows}
+        if "_chg" in row:
+            row.pop("_chg")
+    from app.factors.registry import get_factor
+
+    spec = get_factor(factor)
+    return {
+        "factor": factor,
+        "label": spec.label if spec else "",
+        "as_of": _clean_value(as_of),
+        "valid": valid.height,
+        "method": {"materialized": "已物化", "computed": "现算", "computed_history": "按历史窗口现算",
+                   "fundamental": "财务公告门控"}.get(method, method),
+        "count": len(rows),
+        "rows": rows,
+    }
 
 
 _LOCAL_TOOLS: dict[str, Callable[[dict[str, Any], ToolContext], Any]] = {
@@ -530,6 +565,11 @@ _LOCAL_TOOLS: dict[str, Callable[[dict[str, Any], ToolContext], Any]] = {
     "list_signals": _list_signals,
     "run_strategy": _run_strategy,
     "get_factor_values": _get_factor_values,
+    "get_portfolio": tools_extra.get_portfolio,
+    "get_earnings": tools_extra.get_earnings,
+    "get_financials": tools_extra.get_financials,
+    "get_news": tools_extra.get_news,
+    "get_opportunities": tools_extra.get_opportunities,
 }
 
 
@@ -591,13 +631,47 @@ def _local_tool_schemas() -> list[dict[str, Any]]:
         ),
         _schema(
             "get_indices",
-            "查询美股参考ETF实时行情(SPY/QQQ/DIA/IWM), 返回美元价格与百分数涨跌幅；缺缓存明确说明。",
+            "查询美股参考ETF行情(SPY/QQQ/DIA/IWM), 返回美元价格与百分数涨跌幅。盘中为实时快照; 休市或开盘前回退最近收盘, 行内 date 为收盘日。",
+            {},
+            [],
+        ),
+        _schema(
+            "get_portfolio",
+            "查询模拟账户(纸面交易台账)的持仓: 股数、成本、止损、最近收盘、浮动盈亏、距止损、待执行的离场意向, 以及净值/现金/计划风险。问「我的持仓/持有哪些股票/离止损多远」用这个。",
             {},
             [],
         ),
         _schema(
             "get_lots",
-            "查询用户的持仓提醒(lots): 持仓数量、成本、目标/止损幅度, 合并最新价与今日涨跌幅。",
+            "查询用户手动记录的持仓提醒(lots, 持仓提醒页): 不是模拟账户持仓。只有用户明确问「持仓提醒」时才用。",
+            {},
+            [],
+        ),
+        _schema(
+            "get_earnings",
+            "查询财报日历(约未来两周)与历史财报反应(财报后首日涨跌幅中位/最大、超预期次数)。symbols 为空时查自选+模拟持仓。",
+            {"symbols": {"type": "array", "items": {"type": "string"}, "description": "美股代码数组, 可空"}},
+            [],
+        ),
+        _schema(
+            "get_financials",
+            "查询个股最近 4 期已公告财务: ROE、毛利率、净利率、营收/净利同比、资产负债率、营收与净利(十亿美元)、EPS, 附报告期与公告日。",
+            {"symbol": {"type": "string", "description": "美股代码, 如 NVDA"}},
+            ["symbol"],
+        ),
+        _schema(
+            "get_news",
+            "查询个股近 N 天的主角新闻(已翻译打标): 标题、摘要、事件类型、利多/利空、重要度, 按重要度与时间排序。",
+            {
+                "symbol": {"type": "string", "description": "美股代码"},
+                "days": {"type": "integer", "description": "天数 1-14, 默认 7"},
+                "limit": {"type": "integer", "description": "条数 1-30, 默认 12"},
+            },
+            ["symbol"],
+        ),
+        _schema(
+            "get_opportunities",
+            "查询机会板(策略命中、会进入纸面模拟下单的卡: 方向、状态、进场区、止损、目标、股数)与今日多空模型名单、大盘判断(这两项仅参考、不下单)。",
             {},
             [],
         ),
@@ -609,13 +683,13 @@ def _local_tool_schemas() -> list[dict[str, Any]]:
         ),
         _schema(
             "run_strategy",
-            "以最新交易日报酬面执行一个选股策略并返回命中标的列表(≤30 行)。strategy_id 可先用 list_strategies 查询。",
+            "以最新交易日数据执行一个选股策略并返回命中标的(≤30 行精简字段)。strategy_id 先用 list_strategies 查询; 标了 unavailable 的策略不能在日线选股里运行。",
             {"strategy_id": {"type": "string", "description": "策略 id"}},
             ["strategy_id"],
         ),
         _schema(
             "get_factor_values",
-            "查询某因子在最新交易日的全市场取值排名(Top N), 附股票名称与今日涨跌幅。factor 用因子 id, 可先用 list_factors 查询。",
+            "查询某因子在最新交易日的全市场取值排名(Top N), 附股票名称与今日涨跌幅。未物化的因子会现算(需历史窗口的按近 300 天计算, 财务因子按公告日门控)。factor 用因子 id, 可先用 list_factors 查询。",
             {
                 "factor": {"type": "string", "description": "因子 id"},
                 "top": {"type": "integer", "description": "返回前 N 名 (5-50, 默认 30)"},
@@ -652,7 +726,14 @@ async def execute_assistant_tool(name: str, args: dict[str, Any], ctx: ToolConte
 
 
 def summarize_tool_result(name: str, payload: dict[str, Any]) -> str:
-    """把工具返回压缩成一行人类可读摘要, 用于前端足迹卡。"""
+    """把工具返回压缩成一行人类可读摘要, 用于前端足迹卡。摘要只是展示, 载荷形状意外时退回通用文案, 不抛错。"""
+    try:
+        return _summarize(name, payload)
+    except Exception:
+        return "完成" if payload.get("ok") else "失败"
+
+
+def _summarize(name: str, payload: dict[str, Any]) -> str:
     if not payload.get("ok"):
         error = str(payload.get("error") or "执行失败")
         return f"失败: {error[:80]}"
@@ -703,11 +784,23 @@ def summarize_tool_result(name: str, payload: dict[str, Any]) -> str:
             summary += f" · 涨跌幅缺失 {breadth['unknown']} 只"
         if result.get("data_status") == "partial":
             summary += " · 部分数据缺失"
-        if (result.get("financials") or {}).get("status") == "unavailable":
-            summary += " · 财务缺失"
         return summary
     if name == "get_indices":
-        return f"返回 {_count()} 条指数行情"
+        src = {"realtime": "实时", "close": "收盘"}.get(str(result.get("source")), "")
+        return f"返回 {_count()} 条参考ETF行情" + (f" · {src}" if src else "")
+    if name == "get_portfolio":
+        pend = sum(1 for r in result.get("rows") or [] if isinstance(r, dict) and r.get("pending_exit"))
+        return f"模拟持仓 {_count()} 只" + (f" · 待离场 {pend}" if pend else "") + (f" · 收盘 {result['as_of']}" if result.get("as_of") else "")
+    if name == "get_earnings":
+        return f"检查 {result.get('checked', 0)} 只 · 两周内财报 {result.get('upcoming', 0)} 场"
+    if name == "get_financials":
+        periods = result.get("periods") or []
+        return f"{result.get('symbol', '')} 财务 {len(periods)} 期" + (f" · 最近公告 {result['latest_announce']}" if result.get("latest_announce") else "")
+    if name == "get_news":
+        return f"{result.get('symbol', '')} 近 {result.get('days', 7)} 日主角新闻 {result.get('main', 0)} 条"
+    if name == "get_opportunities":
+        c = result.get("board_counts") or {}
+        return f"机会板 {c.get('total', 0)} 张 · 持仓 {c.get('holding', 0)} · 等进场 {c.get('waiting', 0)}"
     if name == "get_lots":
         return f"返回持仓提醒 {_count()} 条"
     if name == "list_signals":
@@ -715,6 +808,6 @@ def summarize_tool_result(name: str, payload: dict[str, Any]) -> str:
     if name == "run_strategy":
         return f"命中 {result.get('total', 0)} 只 · 耗时 {result.get('elapsed_ms', '-')}ms"
     if name == "get_factor_values":
-        return f"返回因子 {result.get('factor', '-')} Top{_count()}"
+        return f"因子 {result.get('label') or result.get('factor', '-')} Top{_count()} · 有效 {result.get('valid', 0)} 只"
 
     return f"返回 {_count()} 行" if _count() else "完成"

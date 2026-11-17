@@ -423,5 +423,6 @@ def build_market_overview(repo, quote_service=None, depth_service=None, as_of: d
         "turnover_leaders": _top_rows(rows, 'amount', True), "active_leaders": _top_rows(rows, 'turnover_rate', True),
         "concept_rank": _dimension_rank(rows, repo, 'concept'),
         "industry_rank": _dimension_rank(rows, repo, 'industry', level=2),
-        "financials": {"status": "unavailable", "note": "财务数据源缺失，不能依据量价数据编造基本面"},
+        # 总览只汇总量价样本; 个股财务另有查询入口 (SEC EDGAR 落盘), 不在这里按量价推断基本面
+        "financials": {"status": "per_symbol", "note": "总览只含量价样本，不含基本面；个股财务需按代码单独查询"},  # noqa: RUF001
     })

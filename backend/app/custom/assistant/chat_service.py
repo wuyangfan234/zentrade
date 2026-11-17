@@ -18,6 +18,7 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.custom.assistant import skills as assistant_skills
 from app.custom.assistant import tools as assistant_tools
 from app.custom.assistant.prompt import build_system_prompt
 from app.custom.assistant.streaming import stream_openai_round
@@ -150,8 +151,19 @@ async def chat_stream(
     if was_truncated:
         yield _line({"type": "notice", "message": f"对话较长, 已仅保留最近 {_MAX_HISTORY_MESSAGES // 2} 轮作为上下文。"})
 
+    # 技能: 本轮用户消息以触发词开头 (/持仓 …) → 把技能步骤并入 system prompt (只描述流程, 不加工具权限)
+    skill = None
+    last_user = next((m["content"] for m in reversed(truncated) if m["role"] == "user"), "")
+    try:
+        skill = assistant_skills.match(data_dir, last_user)
+    except Exception:
+        skill = None
+    system_prompt = build_system_prompt(context)
+    if skill is not None:
+        system_prompt += assistant_skills.instruction(skill)
+        yield _line({"type": "skill", "name": skill.name, "title": skill.title})
     req_messages: list[dict[str, Any]] = [
-        {"role": "system", "content": build_system_prompt(context)},
+        {"role": "system", "content": system_prompt},
         *truncated,
     ]
     schemas = assistant_tools.build_tool_schemas()
@@ -165,6 +177,7 @@ async def chat_stream(
 
     queue: asyncio.Queue = asyncio.Queue()
     sentinel: object = object()
+    run_stats = {"tools": 0, "ok": False, "started": time.monotonic()}
 
     async def execute(name: str, args: dict[str, Any]) -> dict[str, Any]:
         call_id = uuid.uuid4().hex[:8]
@@ -176,6 +189,7 @@ async def chat_stream(
         })
         started = time.monotonic()
         result = await assistant_tools.execute_assistant_tool(name, args, tool_ctx)
+        run_stats["tools"] += 1
         elapsed_ms = int((time.monotonic() - started) * 1000)
         event = {
             "type": "tool_result",
@@ -211,6 +225,8 @@ async def chat_stream(
                 if not tool_calls:
                     if not round_text and not text_seen:
                         await queue.put(_error_event("model", "本轮未产出回答, 请重试。"))
+                    else:
+                        run_stats["ok"] = True
                     return
 
                 tool_rounds += 1
@@ -256,6 +272,12 @@ async def chat_stream(
         except Exception as exc:  # 单轮失败收敛为 error 事件, 不打断流
             await queue.put(_classify_exception(exc))
         finally:
+            if skill is not None:
+                with contextlib.suppress(Exception):  # 运行记录只是元数据, 写失败不影响回答
+                    assistant_skills.record_run(
+                        data_dir, skill.name, ok=bool(run_stats["ok"]), tools=int(run_stats["tools"]),
+                        ms=int((time.monotonic() - run_stats["started"]) * 1000),
+                    )
             await queue.put({"type": "done"})
             await queue.put(sentinel)
 

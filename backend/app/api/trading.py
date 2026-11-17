@@ -447,6 +447,14 @@ def system_status(request: Request):
     from app.services import fundamentals_sync as _fs
     _fst, _fsum = safe(lambda: _fs.status_component(data_dir), ('error', '读取同步状态失败'))
     add('fundamentals', '财务数据同步', _fst, _fsum, 'data/financials/_last_run.json')
+    # 2026-11-17 AI 助手体检 (扩展模块; 卸载扩展时这一行不出现)
+    try:
+        from app.custom.assistant import health as _ah
+    except ImportError:
+        _ah = None
+    if _ah is not None:
+        _ahs, _ahsum = safe(lambda: _ah.status_row(data_dir), ('error', '读取体检结果失败'))
+        add('assistant_health', 'AI 助手体检', _ahs, _ahsum, 'data/ops/assistant_health.json')
     add('paper_loop', '模拟交易', 'error' if st.get('last_error') else ('ok' if st.get('booted') else 'idle'),
         f"最近运行 {_et(st.get('last_run_at'))} · 报价 {st.get('last_quote_count', 0)} 只 · 入场拦截 {len(st.get('entry_blockers') or [])} 条"
         + (f"；错误 {_redact(st['last_error'])}" if st.get('last_error') else ''), '/api/trading/status')

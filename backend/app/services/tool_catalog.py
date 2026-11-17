@@ -153,11 +153,24 @@ def list_factors(asset_type: str | None = None, stable_only: bool = False) -> di
     return {"factors": factors}
 
 
+def strategy_unavailable_reason(meta: dict[str, Any]) -> str | None:
+    """日线选股里跑不了的策略给人话原因 (目录标注 + AI 助手 run_strategy 提前拦)。"""
+    timeframes = list(meta.get("timeframes") or ["1d"])
+    if "1d" not in timeframes:
+        names = {"1h": "1 小时", "4h": "4 小时", "1m": "1 分钟", "30m": "30 分钟"}
+        return "只支持 " + "、".join(names.get(t, t) for t in timeframes) + " 周期, 不能在日线选股里运行"
+    # 研究模板: 评分映射为空时引擎拒绝运行 (需要先在策略页配好评分字段)
+    if meta.get("research_only") and "scoring" in meta and not meta.get("scoring"):
+        return "是研究模板, 需要先在策略页配置评分字段"
+    return None
+
+
 def list_strategies(engine) -> dict[str, Any]:
     """序列化策略目录: StrategyEngine.list_strategies(include_research=True) 精简视图。"""
     strategies = []
     for meta in engine.list_strategies(include_research=True):
         strategies.append({
+            "unavailable": strategy_unavailable_reason(meta),
             "id": meta.get("id"),
             "name": meta.get("name", ""),
             "description": meta.get("description", ""),
@@ -180,18 +193,40 @@ def list_strategies(engine) -> dict[str, Any]:
 
 
 def list_data_capabilities() -> dict[str, Any]:
-    """序列化数据源能力目录: capabilities.py 的 CAPABILITY_REGISTRY 精简视图。"""
+    """序列化数据源能力目录: 每项能力的中文名、说明与当前是否已配置可用的数据源。
+
+    厂商档位字段 (tf_tier) 已随内置厂商源退役 (P1-1b2) 从注册表删除, 这里不再读取。
+    可用性取自设置页同一份能力矩阵; 矩阵组装失败时只返回静态目录, 不让工具整体报错。
+    """
     from app.data_providers.capabilities import CAPABILITY_REGISTRY
 
-    capabilities = [
-        {
+    usable: dict[str, dict[str, Any]] = {}
+    try:
+        from app.data_providers.capabilities import build_capability_matrix
+        from app.services import preferences
+
+        matrix = build_capability_matrix({
+            "realtime_data_provider": preferences.get_realtime_data_provider(),
+            "daily_data_provider": preferences.get_daily_data_provider(),
+            "minute_data_provider": preferences.get_minute_data_provider(),
+            "full_minute_data_provider": preferences.get_full_minute_data_provider(),
+            "adj_factor_provider": preferences.get_adj_factor_provider(),
+            "financial_data_provider": preferences.get_financial_provider(),
+        })
+        usable = {c["id"]: c for c in matrix.get("capabilities") or []}
+    except Exception:
+        usable = {}
+
+    capabilities = []
+    for cap in CAPABILITY_REGISTRY:
+        row = usable.get(cap["id"]) or {}
+        capabilities.append({
             "id": cap["id"],
-            "label": cap["label"],
-            "desc": cap["desc"],
-            "tf_tier": cap["tf_tier"],
-        }
-        for cap in CAPABILITY_REGISTRY
-    ]
+            "label": cap.get("label", ""),
+            "desc": cap.get("desc", ""),
+            "usable": row.get("usable"),
+            "source": row.get("current_display") or None,
+        })
     return {"capabilities": capabilities}
 
 

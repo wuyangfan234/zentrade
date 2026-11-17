@@ -6,7 +6,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { BarChart3, Database, Radio, SlidersHorizontal, Sparkles, Settings2, PanelLeftClose, PanelLeftOpen, Clock3, KeyRound } from 'lucide-react'
+import { BarChart3, BookOpen, Database, Radio, SlidersHorizontal, Sparkles, Settings2, PanelLeftClose, PanelLeftOpen, Clock3, KeyRound } from 'lucide-react'
 import { SettingsAIPanel } from './settings/AI'
 import { SettingsMonitoringPanel } from './settings/Monitoring'
 import { SettingsExtPagesPanel } from './settings/ExtPages'
@@ -17,6 +17,8 @@ import { SettingsDataSourcesPanel } from './settings/DataSources'
 import { SettingsApiAccessPanel } from './settings/ApiAccess'
 import { PageHeader } from '@/components/PageHeader'
 import { cn } from '@/lib/cn'
+import { ExtensionSlot } from '@/extensions/ExtensionSlot'
+import { getFrontendSlotRegistrations } from '@/extensions/registry'
 
 import type { ComponentType } from 'react'
 
@@ -30,9 +32,23 @@ type TabDef = {
   badge?: string
 }
 
-const TABS: readonly TabDef[] = [
+/** 「AI 技能」由 AI 助手扩展经 settings.skills 插槽提供; 扩展未加载时不出现这个标签 */
+function SettingsSkillsPanel({ highlight }: { highlight?: string }) {
+  return <ExtensionSlot name="settings.skills" context={{ highlight: highlight ?? '' }} />
+}
+
+function hasSkillsSlot(): boolean {
+  try {
+    return getFrontendSlotRegistrations('settings.skills').length > 0
+  } catch {
+    return false
+  }
+}
+
+const ALL_TABS: readonly TabDef[] = [
   { key: 'data-sources', label: '数据源',     icon: Database,  panel: SettingsDataSourcesPanel },
   { key: 'ai',         label: 'AI 设置',    icon: Sparkles,  panel: SettingsAIPanel },
+  { key: 'skills',     label: 'AI 技能',    icon: BookOpen,  panel: SettingsSkillsPanel },
   { key: 'monitoring', label: '实时监控',   icon: Radio,     panel: SettingsMonitoringPanel },
   { key: 'ext-pages',  label: '扩展页面',   icon: BarChart3, panel: SettingsExtPagesPanel },
   { key: 'timeout',    label: '网络设置',   icon: Clock3,    panel: SettingsTimeoutPanel },
@@ -41,9 +57,10 @@ const TABS: readonly TabDef[] = [
   { key: 'system',     label: '系统设置',   icon: Settings2, panel: SettingsSystemPanel },
 ]
 
-type TabKey = (typeof TABS)[number]['key']
+type TabKey = (typeof ALL_TABS)[number]['key']
 
 export function Settings() {
+  const TABS = ALL_TABS.filter(t => t.key !== 'skills' || hasSkillsSlot())
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab') as TabKey | null
   const activeTab = TABS.find((t) => t.key === tabParam) ?? TABS[0]
