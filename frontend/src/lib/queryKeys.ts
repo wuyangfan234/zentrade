@@ -83,6 +83,8 @@ export const QK = {
   analysisMenus:        ['analysis-menus'] as const,
   // 0.40.0 盘面情报 (不用 watchlist- / quote 前缀: 自己按时段轮询, 不随 SSE 行情失效)
   intelToday:           ['intel-today'] as const,
+  intelAsofDays:        ['intel-asof-days'] as const,
+  intelAsof:            (day: string) => ['intel-asof', day] as const,
   analysisMenu:         (id: string) => ['analysis-menu', id] as const,
 
   // Kline

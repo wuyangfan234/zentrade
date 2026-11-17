@@ -705,3 +705,121 @@ def test_manual_refresh_skips_slow_earnings_sources(tmp_path, monkeypatch):
     assert TestClient(app).post("/api/intel/refresh").status_code == 200
     assert seen["force"] is True and seen["only"] == set(panel.MANUAL_SOURCES)
     assert "etfs" in seen["only"] and not {"earnings_upcoming", "earnings_history", "options_warm"} & seen["only"]
+
+
+# ── 0.57.0 模型状态段 / 每日存档 / 历史日 ─────────────────────────────
+
+def _ls_list(data_dir: Path, day: str, *, settled_end: str | None = None, long_r: float = 0.3) -> None:
+    syms = [f"S{i:02d}" for i in range(20)]
+    rec = {"contract": "ls-rank-v1", "day": day, "as_of": "2026-10-28", "n": 20, "missing": [], "stale": [],
+           "model": {"quarter": "2026Q4", "trained_to": "2026-09-22", "rows": 1000},
+           "long": syms[:5], "short": syms[-5:], "random": {"long": syms[5:10], "short": syms[10:15]},
+           "rows": [{"symbol": s, "rank": i + 1, "atr": 2.0} for i, s in enumerate(syms)]}
+    if settled_end:
+        rec["settled"] = {"end": settled_end, "r": {s: {"long": long_r if s in syms[:5] else 0.0, "long_exit": "time",
+                                                        "short": 0.1 if s in syms[-5:] else 0.0, "short_exit": "time",
+                                                        "end": settled_end} for s in syms}}
+    p = data_dir / "opportunities" / "ls_rank" / f"{day}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(rec))
+
+
+def test_build_includes_model_section_only_when_lists_exist(tmp_path):
+    _seed(tmp_path)
+    assert panel.build(tmp_path, now=NOW)["model"] is None
+    _ls_list(tmp_path, "2026-10-29")
+    m = panel.build(tmp_path, now=NOW)["model"]
+    assert m["champion"]["name"] == "GBM 2026Q4" and m["list_day"] == "2026-10-29" and m["challenger"] is None
+
+
+def test_archive_once_after_1800_on_trading_days(tmp_path):
+    _seed(tmp_path)
+    at = lambda h, m=0, d=29: datetime(2026, 10, d, h, m, tzinfo=ET)  # noqa: E731
+    assert panel.archive_if_due(tmp_path, None, None, at(17, 59)) is False
+    assert not panel.archive_path(tmp_path, date(2026, 10, 29)).exists()
+    assert panel.archive_if_due(tmp_path, None, None, at(18, 0)) is True
+    p = panel.archive_path(tmp_path, date(2026, 10, 29))
+    saved = json.loads(p.read_text())
+    assert saved["archived_at"].startswith("2026-10-29T18:00") and saved["calendar"]["events"]
+    before = p.read_bytes()
+    assert panel.archive_if_due(tmp_path, None, None, at(19, 0)) is False       # 一天只冻结一份
+    assert p.read_bytes() == before
+    assert panel.archive_if_due(tmp_path, None, None, at(19, 0, 31)) is False   # 周六不存档
+    assert not panel.archive_path(tmp_path, date(2026, 10, 31)).exists()
+
+
+def test_tick_archives_only_on_full_rounds(tmp_path, monkeypatch):
+    _seed(tmp_path)
+    monkeypatch.setattr(src, "fetch_etfs", lambda p, now: {"rows": {}})
+    monkeypatch.setattr(panel, "_alpaca", lambda: object())
+    late = datetime(2026, 10, 29, 18, 30, tzinfo=ET)
+    panel.tick(tmp_path, None, None, now=late, only={"etfs"})                    # 手动刷新 (only) 不触发存档
+    assert not panel.archive_path(tmp_path, late.date()).exists()
+    seen = []
+    monkeypatch.setattr(panel, "archive_if_due", lambda *a: seen.append(1) or True)
+    monkeypatch.setattr(panel, "_due", lambda *a: False)
+    assert panel.tick(tmp_path, None, None, now=late) == {"archive": "2026-10-29"}
+    monkeypatch.setattr(panel, "archive_if_due", lambda *a: (_ for _ in ()).throw(OSError("disk")))
+    assert panel.tick(tmp_path, None, None, now=late) == {}                      # 存档失败不影响刷新
+
+
+def test_asof_view_reads_frozen_file_and_marks_missing_blocks(tmp_path):
+    _seed(tmp_path)
+    day = date(2026, 10, 29)
+    panel.archive_if_due(tmp_path, None, None, datetime(2026, 10, 29, 18, 5, tzinfo=ET))
+    # 存档之后缓存被改写: 历史日不受影响
+    (tmp_path / "intel" / "macro_calendar.json").write_text(json.dumps({"events": []}))
+    before = hashlib.sha256(b"".join(f.read_bytes() for f in sorted(tmp_path.rglob("*")) if f.is_file())).hexdigest()
+    out = panel.asof_view(tmp_path, day, today=date(2026, 11, 3))
+    assert hashlib.sha256(b"".join(f.read_bytes() for f in sorted(tmp_path.rglob("*")) if f.is_file())).hexdigest() == before
+    assert out["asof"] == {"day": "2026-10-29", "archived": True, "archived_at": "2026-10-29T18:05:00-04:00"}
+    assert any(e["title"] == "Advance GDP q/q" for e in out["calendar"]["events"])
+    assert out["model"] is None and out["errors"]["model"] == panel.NOT_ARCHIVED
+    assert out["post"] == {"tape": [], "news": [], "model": []}
+    miss = panel.asof_view(tmp_path, date(2026, 10, 28), today=date(2026, 11, 3))
+    assert miss["asof"]["archived"] is False
+    assert all(miss[k] is None and miss["errors"][k] == panel.NOT_ARCHIVED for k in panel.ASOF_SECTIONS)
+
+
+def test_asof_view_model_from_lists_and_post_separate(tmp_path):
+    _ls_list(tmp_path, "2026-10-29", settled_end="2026-11-04")
+    out = panel.asof_view(tmp_path, date(2026, 10, 29), today=date(2026, 11, 6))
+    assert out["asof"]["archived"] is False and out["tape"] is None
+    assert "model" not in out["errors"]
+    assert out["model"]["forward"]["days"] == 0                                 # 当天还没到期, 不进当天的成绩
+    assert out["post"]["model"] == [{"label": "当天名单 看多", "atr": 0.3}, {"label": "看空", "atr": 0.1}]
+    assert out["model"]["drift"] is None                                        # 漂移没有存档 = 不给
+
+
+def test_forward_moves_only_use_settled_days(tmp_path):
+    days = [date(2026, 10, d) for d in (26, 27, 28, 29, 30)] + [date(2026, 11, d) for d in (2, 3)]
+    _write_daily(tmp_path, days, {"SPY": [100, 101, 102, 104, 103, 110, 120]})
+    mv = panel._forward_moves(tmp_path, date(2026, 10, 27), ["SPY"], date(2026, 11, 2), (1, 5))
+    assert mv == {"SPY": {1: 0.99}}                                             # 第 5 日 (11-03) 未定版: 不给
+    mv = panel._forward_moves(tmp_path, date(2026, 10, 27), ["SPY"], date(2026, 11, 3), (1, 5))
+    assert mv == {"SPY": {1: 0.99, 5: 18.81}}
+    assert panel._forward_moves(tmp_path, date(2026, 10, 27), ["SPY"], None, (1,)) == {}
+    assert panel._forward_moves(tmp_path, date(2026, 10, 27), ["SPY"], date(2026, 10, 27), (1,)) == {}
+    assert panel._forward_moves(tmp_path, date(2026, 10, 25), ["SPY"], date(2026, 11, 3), (1,)) == {}   # 当天无K线
+
+
+def test_asof_days_and_api(tmp_path):
+    from app.api import intel
+    _seed(tmp_path)
+    panel.archive_if_due(tmp_path, None, None, datetime(2026, 10, 29, 18, 5, tzinfo=ET))
+    _ls_list(tmp_path, "2026-10-28")
+    _ls_list(tmp_path, "2099-01-05")                                            # 未来名单不列
+    assert panel.asof_days(tmp_path, date(2026, 11, 3)) == ["2026-10-29", "2026-10-28"]
+    assert panel.asof_days(tmp_path, date(2026, 10, 29)) == ["2026-10-28"]      # 今天不算历史日
+    app = FastAPI()
+    app.include_router(intel.router)
+    app.state.repo = SimpleNamespace(store=SimpleNamespace(data_dir=tmp_path), latest_settled_daily_date=lambda: None)
+    app.state.trading_loop = None
+    c = TestClient(app)
+    r = c.get("/api/intel/asof/days").json()
+    assert r["days"][:2] == ["2026-10-29", "2026-10-28"] and r["today"] not in r["days"]
+    ok = c.get("/api/intel/asof", params={"day": "2026-10-29"})
+    assert ok.status_code == 200 and ok.json()["asof"]["archived"] is True
+    assert c.get("/api/intel/asof", params={"day": "bogus"}).status_code == 422
+    assert c.get("/api/intel/asof", params={"day": r["today"]}).status_code == 422
+    assert c.get("/api/intel/asof", params={"day": "2099-01-05"}).status_code == 422

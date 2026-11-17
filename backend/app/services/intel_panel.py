@@ -406,8 +406,132 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
         "actions": _section("actions", lambda: corp_actions_view(data_dir, now, roles), errors),
         "news": _section("news", lambda: news_view(data_dir, now, roles) if (data_dir / "news").is_dir() else None, errors),
         "sentiment": _section("sentiment", lambda: sentiment_view(data_dir, now), errors),
+        # 0.57.0 模型状态: 只读名单文件与登记 (目录不在 = 没有名单, 不给)
+        "model": _section("model", lambda: model_view(data_dir, now.date()), errors),
         "watch_count": len(roles), "state": src.read_cache(data_dir, "state") or {},
     }
+    out["errors"] = errors
+    return out
+
+
+def model_view(data_dir: Path, today: date, asof: date | None = None) -> dict | None:
+    from app.services import ls_model, ls_rank
+    if not ls_rank.root(data_dir).is_dir():
+        return None
+    return ls_model.status(data_dir, today=today, asof=asof)
+
+
+# ── 每日存档与历史日 (0.57.0) ────────────────────────────────────────
+# 交易日 18:00 ET 后 (盘后管道已定版收盘、宽度与 ETF 官方日K 已更新) 把整页聚合冻结一份 intel/archive/<日>.json。
+# 历史日只读这份文件: 当天没有存档的块一律「未存档」, 不拿别的日子补; 之后才知道的结果只放 post。
+
+ARCHIVE_AFTER = dtime(18, 0)
+NOT_ARCHIVED = "not_archived"
+ASOF_SECTIONS = ("mood", "tape", "vol", "rates", "pcr", "breadth", "calendar", "earnings", "actions", "news", "sentiment")
+ASOF_MAX_DAYS = 120
+POST_STEPS = {"tape": (1, 5), "news": (1, 3)}
+
+
+def archive_path(data_dir, day: date) -> Path:
+    return Path(data_dir) / "intel" / "archive" / f"{day.isoformat()}.json"
+
+
+def archive_if_due(data_dir: Path, repo, loop, now: datetime) -> bool:
+    if not us_clock.is_trading_day(now.date()) or now.time() < ARCHIVE_AFTER:
+        return False
+    p = archive_path(data_dir, now.date())
+    if p.exists():
+        return False
+    payload = build(data_dir, repo=repo, loop=loop, now=now)
+    payload["archived_at"] = now.isoformat(timespec="seconds")
+    src.write_json(p, payload)
+    logger.info("intel: archived %s", now.date())
+    return True
+
+
+def asof_days(data_dir, today: date) -> list[str]:
+    """可回看的日子 (早于今天): 有情报存档或有模型名单的交易日, 新的在前。"""
+    from app.services import ls_rank
+    out = {d for d in ls_rank.list_days(Path(data_dir)) if d < today}
+    base = Path(data_dir) / "intel" / "archive"
+    if base.is_dir():
+        for f in base.glob("20*.json"):
+            try:
+                d = date.fromisoformat(f.stem)
+            except ValueError:
+                continue
+            if d < today:
+                out.add(d)
+    return [d.isoformat() for d in sorted(out, reverse=True)[:ASOF_MAX_DAYS]]
+
+
+def _forward_moves(data_dir: Path, day: date, syms: list[str], settled: date | None, steps: tuple[int, ...]) -> dict[str, dict[int, float]]:
+    """{票: {k: day 收盘 → 之后第 k 个交易日收盘的涨跌 %}}。只读已定版日K (settled 之后的分区可能是盘中快照, 不读)。"""
+    from app.services import ls_rank
+    if not syms or settled is None or settled <= day:
+        return {}
+    end = min(settled, day + timedelta(days=3 * max(steps) + 10))
+    d = ls_rank.load_daily(data_dir, day, end, symbols=syms, columns=("close",), priority="interactive")
+    out: dict[str, dict[int, float]] = {}
+    for (sym,), g in d.group_by(["symbol"]):
+        g = g.sort("date")
+        c = g["close"].to_list()
+        if not c or g["date"][0] != day or not c[0]:
+            continue
+        mv = {k: round((c[k] / c[0] - 1) * 100, 2) for k in steps if len(c) > k and c[k]}
+        if mv:
+            out[str(sym)] = mv
+    return out
+
+
+def _post(data_dir: Path, day: date, arc: dict | None, model: dict | None, settled: date | None) -> dict:
+    """事后 (当天之后才知道的): 标普次日 / 5 日, 重点舆情票次日 / 3 日, 当天名单的结算。算不出的不列。"""
+    out: dict[str, list[dict]] = {"tape": [], "news": [], "model": []}
+    focus = [r.get("symbol") for r in ((arc or {}).get("sentiment") or {}).get("rows") or []
+             if isinstance(r, dict) and r.get("symbol") and r.get("grade") == "A"][:2]
+    try:
+        mv = _forward_moves(data_dir, day, sorted({"SPY", *focus}), settled, tuple(sorted({*POST_STEPS["tape"], *POST_STEPS["news"]})))
+    except Exception as e:
+        logger.warning("intel asof: forward moves failed: %s", type(e).__name__)
+        mv = {}
+    for k in POST_STEPS["tape"]:
+        if k in mv.get("SPY", {}):
+            out["tape"].append({"label": "SPY 次日" if k == 1 else f"SPY {k} 日", "pct": mv["SPY"][k]})
+    for s in focus:
+        for k in POST_STEPS["news"]:
+            if k in mv.get(s, {}):
+                out["news"].append({"label": f"{s} 次日" if k == 1 else f"{s} {k} 日", "pct": mv[s][k]})
+    p = (model or {}).get("post")
+    if p:
+        out["model"] = [{"label": "当天名单 看多", "atr": p["long"]}, {"label": "看空", "atr": p["short"]}]
+    return out
+
+
+def asof_view(data_dir: Path, day: date, *, today: date, settled: date | None = None) -> dict:
+    """历史日整页 (只读)。"""
+    data_dir = Path(data_dir)
+    arc = src.read_json(archive_path(data_dir, day))
+    arc = arc if isinstance(arc, dict) else None
+    if arc:
+        out = dict(arc)
+        errors = dict(arc.get("errors") or {})
+    else:
+        out = {"contract": CONTRACT, "generated_at": None, "phase": None, "settings": load_settings(data_dir),
+               **{k: None for k in ASOF_SECTIONS}, "watch_count": None, "state": {}}
+        errors = {k: NOT_ARCHIVED for k in ASOF_SECTIONS}
+    try:
+        model = model_view(data_dir, today, asof=day)
+    except Exception as e:
+        logger.warning("intel asof: model failed: %s", type(e).__name__)
+        model = None
+    if model is not None:
+        model["drift"] = ((arc or {}).get("model") or {}).get("drift")
+        errors.pop("model", None)
+    else:
+        errors["model"] = NOT_ARCHIVED
+    out["model"] = model
+    out["asof"] = {"day": day.isoformat(), "archived": arc is not None, "archived_at": (arc or {}).get("archived_at")}
+    out["post"] = _post(data_dir, day, arc, model, settled)
     out["errors"] = errors
     return out
 
@@ -595,6 +719,12 @@ def _tick(data_dir: Path, repo, loop, *, now: datetime, force: bool, only: set[s
         sentiment_sources.kick(data_dir, loop=loop, repo=repo)
 
     run("sentiment", sentiment)
+    if only is None:
+        try:  # 0.57.0 每日存档 (18:00 ET 后一次); 失败不影响刷新, 下一轮再试
+            if archive_if_due(data_dir, repo, loop, now):
+                ran["archive"] = now.date().isoformat()
+        except Exception as e:
+            logger.warning("intel: archive failed: %s", type(e).__name__)
     if ran:
         logger.info("intel tick: %s", ran)
     return ran

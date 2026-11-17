@@ -50,6 +50,16 @@ html.dark {
   .scroll-y-visible { scrollbar-width: thin; scrollbar-color: hsl(var(--fg-muted) / 0.55) transparent; }
 }
 
+/* 情报页六宫格 (0.57.0): 列数跟内容区实际宽度走 (侧栏展开 / 收起都对), 每列不窄于 372px; 手机单列。
+ * 行高 = 两行铺满一屏, 不低于 386px; 同排卡等高。手机上卡高随内容, 由卡自己封顶。 */
+.intel-grid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 768px) {
+  .intel-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 372px), 1fr));
+    grid-auto-rows: max(386px, calc((100dvh - var(--intel-chrome, 140px)) / 2));
+  }
+}
+
 /* 全局滚动条 */
 * {
   scrollbar-width: thin;

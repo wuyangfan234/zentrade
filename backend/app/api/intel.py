@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.services import intel_panel
@@ -22,6 +22,31 @@ def _data_dir(request: Request):
 def intel_today(request: Request) -> dict:
     return intel_panel.build(_data_dir(request), repo=getattr(request.app.state, "repo", None),
                              loop=getattr(request.app.state, "trading_loop", None))
+
+
+@router.get("/asof/days")
+def intel_asof_days(request: Request) -> dict:
+    from app.market_clock import us_clock
+    today = us_clock.market_datetime(us_clock.now()).date()
+    return {"today": today.isoformat(), "days": intel_panel.asof_days(_data_dir(request), today)}
+
+
+@router.get("/asof")
+def intel_asof(request: Request, day: str = Query(..., max_length=10)) -> dict:
+    """历史日回看 (只读): 当天冻结的整页 + 模型状态; 没存档的块标未存档。"""
+    from datetime import date as _date
+
+    from app.market_clock import us_clock
+    try:
+        d = _date.fromisoformat(day)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="day 须为 YYYY-MM-DD") from None
+    today = us_clock.market_datetime(us_clock.now()).date()
+    if d >= today:
+        raise HTTPException(status_code=422, detail="只能回看今天之前的日子")
+    repo = getattr(request.app.state, "repo", None)
+    getter = getattr(repo, "latest_settled_daily_date", None)
+    return intel_panel.asof_view(_data_dir(request), d, today=today, settled=getter() if getter else None)
 
 
 class IntelSettingsIn(BaseModel):

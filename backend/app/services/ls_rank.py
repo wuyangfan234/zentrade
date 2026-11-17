@@ -9,6 +9,8 @@
   目标 = 入场日开盘 → 第 5 个交易日收盘的收益, 减当天训练池均值, 再按 1% / 99% 截尾。
   模型 = HistGradientBoostingRegressor (200 轮, 学习率 0.05, 叶子 15, 叶最少 200 样本, L2 1.0, 种子 7)。
   每季度重训一次; 训练只用季度首日 8 个自然日之前的入场日 (5 日目标已实现)。
+  0.57.0: 新季度的模型先当挑战者 (影子名单, 不上页面名单), 与现任冠军同窗对照满 25 份后裁决 (services/ls_model.py);
+    看多 − 自选全体 不低于冠军才接任, 否则名单继续由冠军出。
   上市不足 130 个交易日的自选照常排名, 但不上榜 (与扫描池 min_history_days 一致)。
 回放 (本实现在全市场日K上季度滚动样本外, 自选 2024-01 ~ 2026-10, 710 份名单; 开盘进 · 止损 2 ATR · 最多 5 日 · 扣 10bp;
   研究产物 r39_service_walkforward): 看多每笔 +0.23 ATR (随机 +0.19), 看空每笔 −0.15 ATR (随机 −0.21),
@@ -73,12 +75,14 @@ _LOCK = threading.Lock()
 
 # ── 路径与读写 ─────────────────────────────────────────────────────
 
-def root(data_dir: Path) -> Path:
-    return Path(data_dir) / "opportunities" / "ls_rank"
+def root(data_dir: Path, sub: str | None = None) -> Path:
+    """sub = 挑战者季度 (0.57.0): 影子名单放 shadow/<季度>/, 与正式名单同格式, 不进页面名单。"""
+    r = Path(data_dir) / "opportunities" / "ls_rank"
+    return r / "shadow" / sub if sub else r
 
 
-def day_path(data_dir: Path, day: date) -> Path:
-    return root(data_dir) / f"{day.isoformat()}.json"
+def day_path(data_dir: Path, day: date, sub: str | None = None) -> Path:
+    return root(data_dir, sub) / f"{day.isoformat()}.json"
 
 
 def model_path(data_dir: Path, quarter: str) -> Path:
@@ -91,8 +95,8 @@ def _write_json(p: Path, obj: dict) -> None:
     atomic_write_text(p, json.dumps(obj, ensure_ascii=False, indent=1, allow_nan=False))
 
 
-def load_day(data_dir: Path, day: date) -> dict | None:
-    p = day_path(data_dir, day)
+def load_day(data_dir: Path, day: date, sub: str | None = None) -> dict | None:
+    p = day_path(data_dir, day, sub)
     try:
         d = json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
     except (OSError, ValueError):
@@ -102,8 +106,8 @@ def load_day(data_dir: Path, day: date) -> dict | None:
     return d
 
 
-def list_days(data_dir: Path) -> list[date]:
-    r = root(data_dir)
+def list_days(data_dir: Path, sub: str | None = None) -> list[date]:
+    r = root(data_dir, sub)
     out = []
     if r.exists():
         for p in r.glob("*.json"):
@@ -377,18 +381,22 @@ def _signal_tags(data_dir: Path, as_of: date, syms: set[str]) -> dict[str, list[
     return out
 
 
-def _prev_list(data_dir: Path, before: date) -> dict | None:
-    for d in reversed(list_days(data_dir)):
+def _prev_list(data_dir: Path, before: date, sub: str | None = None) -> dict | None:
+    for d in reversed(list_days(data_dir, sub)):
         if d < before:
-            rec = load_day(data_dir, d)
+            rec = load_day(data_dir, d, sub)
             if rec is not None:
                 return rec
     return None
 
 
 def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch: list[str] | None = None,
-             daily=None, model: dict | None = None, force: bool = False) -> dict:
-    """as_of = 已定版的收盘日; 名单写给 next_day (默认下一个交易日)。已存在且非 force → 不动。"""
+             daily=None, model: dict | None = None, force: bool = False, sub: str | None = None) -> dict:
+    """as_of = 已定版的收盘日; 名单写给 next_day (默认下一个交易日)。已存在且非 force → 不动。
+    0.57.0: 正式名单由冠军模型出 (ls_model.champion_model; 换季不再直接换模型); sub = 挑战者季度时写影子名单,
+    必须显式给 model。"""
+    if sub and model is None:
+        raise ValueError("ls_rank: shadow list needs an explicit model")
     import numpy as np
     import polars as pl
 
@@ -398,7 +406,7 @@ def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch
         # 日历拉不到时 next_trading_day 退回 "工作日即交易日", 名单可能写给休市日: 不出, 等下一次补跑
         return {"status": "skipped", "reason": "calendar_unavailable"}
     nd = next_day or us_clock.next_trading_day(as_of)
-    if load_day(data_dir, nd) is not None and not force:
+    if load_day(data_dir, nd, sub) is not None and not force:
         return {"status": "exists", "day": nd.isoformat()}
     syms = sorted(set(watch if watch is not None else _watchlist()))
     if not syms:
@@ -412,14 +420,16 @@ def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch
         stale = sorted(s for s, f in feats.items() if f["last"] != as_of)
         if len(ok) < MIN_RANKED:
             return {"status": "skipped", "reason": "too_few_symbols", "n": len(ok)}
-        model = model or train(data_dir, nd, watch=syms)
+        if model is None:
+            from app.services import ls_model
+            model = ls_model.champion_model(data_dir, nd, watch=syms)
         order = sorted(ok)
         x = np.array([[ok[s][k] for k in FEATURES] for s in order], dtype=float)
         x[~np.isfinite(x)] = np.nan
         pred = model["est"].predict(x)
     ranked = sorted(zip(order, (float(p) for p in pred), strict=True), key=lambda z: (-z[1], z[0]))
     n = len(ranked)
-    prev = _prev_list(data_dir, nd)
+    prev = _prev_list(data_dir, nd, sub)
     prev_rank = {r["symbol"]: r.get("rank") for r in (prev or {}).get("rows") or [] if isinstance(r, dict) and r.get("symbol")}
     prev_long, prev_short = set((prev or {}).get("long") or []), set((prev or {}).get("short") or [])
     eligible = [s for s, _ in ranked if ok[s]["bars"] >= MIN_HISTORY]
@@ -457,8 +467,8 @@ def generate(data_dir: Path, as_of: date, *, next_day: date | None = None, watch
            "n": n, "missing": sorted(set(syms) - set(feats)), "stale": stale, "prev_day": (prev or {}).get("day"),
            "long": longs, "short": shorts, "random": {"long": pool[:TOP_N], "short": pool[TOP_N:2 * TOP_N]},
            "rows": rows}
-    _write_json(day_path(data_dir, nd), rec)
-    logger.info("ls_rank %s (as of %s): long=%s short=%s n=%d", nd, as_of, longs, shorts, n)
+    _write_json(day_path(data_dir, nd, sub), rec)
+    logger.info("ls_rank %s%s (as of %s): long=%s short=%s n=%d", nd, f" shadow {sub}" if sub else "", as_of, longs, shorts, n)
     return {"status": "ok", "day": nd.isoformat(), "long": longs, "short": shorts, "n": n}
 
 
@@ -540,11 +550,11 @@ def settle_record(rec: dict, daily, through: date | None = None) -> dict | None:
     return {**out, "__missing__": sorted(need - set(out))}
 
 
-def settle(data_dir: Path, through: date, *, daily=None) -> dict:
+def settle(data_dir: Path, through: date, *, daily=None, sub: str | None = None) -> dict:
     """结算全部 HOLD_DAYS 根 K 线已在 through (已定版收盘日) 之前齐全、还没结算的名单。幂等。"""
     from app.market_clock import us_clock
     data_dir = Path(data_dir)
-    todo = [rec for rec in (load_day(data_dir, d) for d in list_days(data_dir) if d <= through)
+    todo = [rec for rec in (load_day(data_dir, d, sub) for d in list_days(data_dir, sub) if d <= through)
             if rec is not None and not rec.get("settled")]
     if not todo:
         return {"settled": 0}
@@ -562,7 +572,7 @@ def settle(data_dir: Path, through: date, *, daily=None) -> dict:
             continue
         rec["settled"] = {"at": us_clock.now().isoformat(timespec="seconds"), "end": max(v["end"] for v in res.values()), "r": res,
                           **({"missing": missing} if missing else {})}
-        _write_json(day_path(data_dir, date.fromisoformat(rec["day"])), rec)
+        _write_json(day_path(data_dir, date.fromisoformat(rec["day"]), sub), rec)
         n += 1
     return {"settled": n, "pending": len(todo) - n}
 
@@ -869,6 +879,12 @@ def run_post_close(data_dir: Path, day: date) -> dict:
     except Exception as e:
         logger.warning("ls_rank generate failed (soft): %s: %s", type(e).__name__, e)
         out["generate"] = {"error": type(e).__name__}
+    try:  # 0.57.0 挑战者影子名单 + 同窗裁决 + 特征漂移 (只写 opportunities/ls_rank/{shadow,model}/)
+        from app.services import ls_model
+        out["model"] = ls_model.run_post_close(data_dir, day)
+    except Exception as e:
+        logger.warning("ls_model failed (soft): %s: %s", type(e).__name__, e)
+        out["model"] = {"error": type(e).__name__}
     return out
 
 
