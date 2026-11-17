@@ -361,3 +361,12 @@ async def test_financials_tool_only_returns_announced_periods(today, tmp_path) -
     p = result["periods"][0]
     assert p["gross_margin_pct"] == 70.0 and p["revenue_usd_bn"] == 90.0
     assert result["latest_announce"] == "2026-08-26"
+
+
+def test_prompt_keeps_internal_identifiers_out_of_answers() -> None:
+    """实测: 回答里出现 get_portfolio / as_of / reason=invalidation / top_gainers 等英文标识。"""
+    from app.custom.assistant import prompt
+
+    text = prompt.build_system_prompt(None)
+    assert "正文不出现工具名、英文字段名和代码式取值" in text
+    assert "「11-16 收盘」" in text
