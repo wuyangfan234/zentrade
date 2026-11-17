@@ -3090,6 +3090,9 @@ export const api = {
   /** 2026-11-15 价格尺现价 (只读): 与 /page 同源; 没价的票不返回 */
   oppQuotes: (symbols: string) => request<OppQuotesPayload>(`/api/opportunities/quotes?symbols=${encodeURIComponent(symbols)}`, { quiet: true }),
   intelToday: () => request<IntelPayload>('/api/intel/today', { quiet: true }),
+  /** 0.57.0 历史日回看 (只读): 当天冻结的整页 + 模型状态; 没存档的块 errors 里写 not_archived */
+  intelAsof: (day: string) => request<IntelPayload>(`/api/intel/asof?day=${encodeURIComponent(day)}`, { quiet: true }),
+  intelAsofDays: () => request<{ today: string; days: string[] }>('/api/intel/asof/days', { quiet: true }),
   intelSettings: (macro_impact: IntelImpactLevel) =>
     request<{ macro_impact: IntelImpactLevel }>('/api/intel/settings', { method: 'POST', body: JSON.stringify({ macro_impact }) }),
   intelRefresh: () => request<{ ran: Record<string, number | string> }>('/api/intel/refresh', { method: 'POST', timeoutMs: 180_000 }),
@@ -4365,8 +4368,46 @@ export interface IntelEarningsRow {
   implied?: { expected_move_pct: number; atm_iv: number | null; expiration: string; spot: number; spot_basis?: 'parity' | 'quote'; as_of?: string; source?: string } | null
 }
 export interface IntelNewsItem extends NewsItem { role: string | null; macro?: boolean }
+/** 0.57.0 模型状态 (排名模型的登记 / 冠军与挑战者同窗对照 / 特征漂移; 仅参考, 不进下单) */
+export type LsSeriesLite = {
+  long_minus_all: number | null; long: number | null; short: number | null; pair: number | null
+  n_lists: number; win_long: number | null; win_short: number | null; all: number | null
+}
+export interface IntelModel {
+  contract: string; asof: string | null; list_day: string; as_of: string | null
+  champion: { quarter: string | null; name: string; trained_to: string | null; rows: number | null; since: string | null }
+  forward: { days: number; check_days: number; first: string | null; last_list: string | null; total: LsSeriesLite | null; failed: boolean | null }
+  challenger: {
+    quarter: string; name: string; trained_to: string | null; since: string | null; state: 'running' | 'promoted' | 'rejected'
+    decided: string | null; n: number; gate_n: number; key: string; lists: number; champ: LsSeriesLite | null; chal: LsSeriesLite | null
+  } | null
+  gate: { n: number; key: string }
+  coverage: { ranked: number; young: number; missing: number; stale: number; total: number }
+  next_retrain: { quarter: string; train_end: string }
+  drift: {
+    as_of: string; quarter: string; warn: number; ref: { from: string; to: string; n: number }; cur: { from: string; to: string; n: number }
+    /** line = 该特征的注意线 (过去一年 20 日小窗的最高 PSI, 不低于 warn); warn = psi >= line */
+    rows: { key: string; psi: number; base?: number | null; line?: number; warn?: boolean }[]
+  } | null
+  registry: {
+    quarter: string; name: string; trained_to: string | null; rows: number | null
+    role: 'champion' | 'archived' | 'challenger' | 'promoted' | 'rejected'; first: string | null; last: string | null; days: number
+    long_minus_all: number | null
+  }[]
+  backtest: { period: string; long_minus_all?: number | null }
+  post: { day: string; end: string | null; long: number; short: number } | null
+}
+/** 历史日「事后」条的一项: 涨跌 % 或 每笔 ATR */
+export type IntelPostItem = { label: string; pct?: number; atr?: number }
+
 export interface IntelPayload {
-  contract: string; generated_at: string
+  contract: string
+  /** 历史日且当天没有存档时为 null */
+  generated_at: string | null
+  model?: IntelModel | null
+  /** 只在历史日 (GET /api/intel/asof) 里有 */
+  asof?: { day: string; archived: boolean; archived_at: string | null }
+  post?: { tape: IntelPostItem[]; news: IntelPostItem[]; model: IntelPostItem[] }
   phase: { phase: string; label: string; at: string } | null
   settings: { macro_impact: IntelImpactLevel }
   mood: MarketMoodPayload | null; tape: IntelTape | null; vol: IntelVol | null; rates: IntelRates | null
@@ -4380,7 +4421,7 @@ export interface IntelPayload {
   } | null
   /** 舆情异动: 只读 board.json (采集线程每轮写); 仅观察, 不参与下单 */
   sentiment?: IntelSentiment | null
-  watch_count: number
+  watch_count: number | null
   state: Record<string, { last_attempt_at?: string; last_ok_at?: string; error?: string | null }>
   errors: Record<string, string>
 }

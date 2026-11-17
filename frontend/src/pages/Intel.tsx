@@ -3,25 +3,30 @@
  * 只读展示, 不参与打分 / 裁决 / 下单。数据一次取齐 (GET /api/intel/today, 只读缓存);
  * 盘前 / 盘中 60 秒刷新, 其余 5 分钟。每格标来源与时点, 不是今天的数据标「非今日」。
  */
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Activity, CalendarDays, FileBarChart2, Newspaper, RefreshCw, Thermometer } from 'lucide-react'
+import { Activity, RefreshCw, X } from 'lucide-react'
 import {
   api, type IntelBreadth, type IntelCalendar, type IntelEarningsRow, type IntelEvent, type IntelNewsItem,
   type IntelPayload, type IntelQuote,
 } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { PageHeader } from '@/components/PageHeader'
-import { SectionTitle } from '@/components/data/SectionTitle'
 import { NewsRow } from '@/components/StockNews'
 import { StockPreviewDialog } from '@/components/StockPreviewDialogLazy'
 import { etToday } from '@/lib/etTime'
 import { corpActionLabel } from '@/lib/reasonLabels'
 import { eventTitleZh } from '@/lib/macroEvents'
-import { SentimentBoard } from '@/components/intel/SentimentBoard'
+import { DIR_ZH, EVENT_ZH, SentimentBoard } from '@/components/intel/SentimentBoard'
+import { GridCard, Lead, LEAD_SUB, Missing, ModelBody, ModelSheet, challengerBadge } from '@/components/intel/IntelGrid'
+import { Modal } from '@/components/Modal'
+import { badge } from '@/components/ui/badge'
 
 const ACTIVE = new Set(['premarket', 'open_wait', 'session'])
-const WRAP = 'mx-auto max-w-6xl space-y-6 px-4 pb-24 pt-4 md:px-8 md:pt-6'
+const WRAP = 'mx-auto max-w-[1440px] space-y-3 px-4 pb-24 pt-3 md:px-6 md:pb-6'
+/** 六宫格里的日历 / 新闻: 不再自带边框和固定高, 由卡片给高度; 头部筛选不动, 只有列表在卡内滚 */
+export const EMBED_CARD = 'flex min-h-0 flex-1 flex-col'
+export const EMBED_BODY = 'min-h-0 flex-1 overflow-y-auto scroll-y-visible pr-1.5'
 const CARD = 'rounded-card border border-border bg-surface'
 /**
  * 日历 / 新闻并排两卡 (0.45.0): 宽屏同一固定高度, 头部筛选与底部按钮不动, 只有中间列表在卡内滚动;
@@ -47,65 +52,353 @@ const weekday = (day: string) => WEEK[new Date(`${day}T12:00:00Z`).getUTCDay()]
 /** 盘中 60 秒, 其余 5 分钟 */
 export const intelPollMs = (d?: IntelPayload) => (ACTIVE.has(d?.phase?.phase ?? '') ? 60_000 : 300_000)
 
+export const NOT_ARCHIVED = 'not_archived'
+type CardKey = 'tape' | 'breadth' | 'calendar' | 'news' | 'earnings'
+const EXPAND_TITLE: Record<CardKey, string> = { tape: '市场概览', breadth: '市场概览', calendar: '宏观与事件日历', news: '新闻与舆情', earnings: '自选财报' }
+
+/** 历史日下拉的一项: 「11-10 周二」 */
+export const asofLabel = (day: string) => `${md(day)} ${weekday(day)}`
+
 export function Intel() {
   const qc = useQueryClient()
+  // 截至: null = 今天 (轮询); 日期 = 历史日 (只读当天冻结的那份, 不轮询)
+  const [asof, setAsof] = useState<string | null>(null)
+  const [showPost, setShowPost] = useState(false)
+  const [expand, setExpand] = useState<CardKey | null>(null)
+  const [modelOpen, setModelOpen] = useState(false)
   const q = useQuery<IntelPayload>({
-    queryKey: QK.intelToday, queryFn: api.intelToday,
+    queryKey: QK.intelToday, queryFn: api.intelToday, enabled: asof === null,
     refetchInterval: (qq) => intelPollMs(qq.state.data as IntelPayload | undefined), refetchIntervalInBackground: false,
+  })
+  const days = useQuery({ queryKey: QK.intelAsofDays, queryFn: api.intelAsofDays, staleTime: 300_000 })
+  const qa = useQuery<IntelPayload>({
+    queryKey: QK.intelAsof(asof ?? ''), queryFn: () => api.intelAsof(asof!), enabled: asof !== null, staleTime: 600_000,
   })
   const refresh = useMutation({ mutationFn: api.intelRefresh, onSuccess: () => qc.invalidateQueries({ queryKey: QK.intelToday }) })
   const [preview, setPreview] = useState<string | null>(null)
-  const d = q.data
+  const cur = asof === null ? q : qa
+  const d = cur.data
   const errs = d?.errors ?? {}
+  const dayList = days.data?.days ?? []
+  const hist = asof !== null
+  const na = (k: string) => errs[k] === NOT_ARCHIVED
+  const bad = (k: string) => k in errs && !na(k)
+  /** 一张卡的明细: 未存档 / 读取失败 / 正常 */
+  const body = (k: string, node: () => ReactNode) => (na(k) ? <Missing /> : bad(k) ? <Failed /> : node())
+  /** 结论行: 未存档时不给数 (0 会被读成「确认没有」) */
+  const lead = (k: string, node: ReactNode) => (na(k) ? <Lead big="—"><span data-lead-missing className={LEAD_SUB}>当天未存档</span></Lead> : node)
+  const post = (k: 'tape' | 'news' | 'model') => (hist && showPost ? d?.post?.[k] ?? [] : null)
+  const noPost = hist && showPost ? [] : null
 
   return (
-    <div data-page="intel" className="overflow-x-hidden">
+    <div data-page="intel" data-intel-mode={hist ? 'asof' : 'today'} className="overflow-x-hidden">
       <PageHeader
         title="情报"
-        subtitle={d ? `${d.phase?.label ?? ''} · ${d.generated_at.slice(5, 16).replace('T', ' ')} ET · 自选 ${d.watch_count} 只 · 仅观察` : '加载中'}
+        subtitle={hist
+          ? `历史日 · ${asofLabel(asof!)} 收盘 · 仅观察`
+          : d ? `${d.phase?.label ?? ''} · ${(d.generated_at ?? '').slice(5, 16).replace('T', ' ')} ET · 自选 ${d.watch_count ?? '—'} 只 · 仅观察` : '加载中'}
         right={(
-          <button type="button" data-intel-refresh disabled={refresh.isPending} onClick={() => refresh.mutate()}
-            className="inline-flex items-center gap-1.5 rounded-btn border border-border px-2.5 py-1 text-xs text-secondary hover:bg-elevated disabled:opacity-60">
-            <RefreshCw className={`h-3.5 w-3.5 ${refresh.isPending ? 'animate-spin' : ''}`} />
-            {refresh.isPending ? '刷新中' : '立即刷新'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-secondary">截至</span>
+            <div data-asof-seg role="radiogroup" aria-label="截至" className="inline-flex rounded-btn border border-border p-0.5 text-xs">
+              <button type="button" role="radio" aria-checked={!hist} data-asof-tab="today" onClick={() => setAsof(null)}
+                className={`rounded px-2 py-0.5 ${!hist ? 'bg-accent/20 font-medium text-foreground ring-1 ring-accent/50' : 'text-secondary hover:text-foreground'}`}>今天</button>
+              <button type="button" role="radio" aria-checked={hist} data-asof-tab="asof" disabled={dayList.length === 0}
+                onClick={() => !hist && dayList.length > 0 && setAsof(dayList[0])}
+                className={`rounded px-2 py-0.5 disabled:opacity-60 ${hist ? 'bg-accent/20 font-medium text-foreground ring-1 ring-accent/50' : 'text-secondary hover:text-foreground'}`}>历史日</button>
+            </div>
+            {hist ? (
+              <>
+                <select data-asof-day aria-label="历史日" value={asof!} onChange={(e) => setAsof(e.target.value)}
+                  className="h-7 rounded-btn border border-border bg-surface px-1.5 text-xs tabular-nums text-foreground">
+                  {dayList.map((x) => <option key={x} value={x}>{asofLabel(x)}</option>)}
+                </select>
+                <button type="button" data-post-toggle aria-pressed={showPost} onClick={() => setShowPost((x) => !x)}
+                  className={`inline-flex items-center rounded-btn border px-2.5 py-1 text-xs ${showPost ? 'border-warning/60 text-warning' : 'border-border text-secondary hover:bg-elevated'}`}>
+                  {showPost ? '事后 · 开' : '事后 · 关'}
+                </button>
+              </>
+            ) : (
+              <button type="button" data-intel-refresh disabled={refresh.isPending} onClick={() => refresh.mutate()}
+                className="inline-flex items-center gap-1.5 rounded-btn border border-border px-2.5 py-1 text-xs text-secondary hover:bg-elevated disabled:opacity-60">
+                <RefreshCw className={`h-3.5 w-3.5 ${refresh.isPending ? 'animate-spin' : ''}`} />
+                {refresh.isPending ? '刷新中' : '立即刷新'}
+              </button>
+            )}
+          </div>
         )}
       />
       <div data-intel-wrap className={WRAP}>
-        {q.isError && <div className={`${CARD} p-4 text-sm text-warning`}>读取失败 · {String((q.error as Error)?.message ?? '')}</div>}
+        {cur.isError && <div className={`${CARD} p-4 text-sm text-warning`}>读取失败 · {String((cur.error as Error)?.message ?? '')}</div>}
+        {hist && (
+          <div data-asof-banner className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-card border border-warning/55 px-3 py-1.5 text-xs text-secondary">
+            <span className={badge('warn')}>历史日</span>
+            <b className="font-semibold text-foreground">{`${asofLabel(asof!)} 收盘`}</b>
+            <span>{d?.asof?.archived ? `各卡同一截止 · 存档于 ${(d.asof.archived_at ?? '').slice(5, 16).replace('T', ' ')} ET` : d ? '当天情报未存档 · 只有模型状态' : '读取中'}</span>
+            <span>· 之后才知道的只放「事后」</span>
+          </div>
+        )}
         {d && (
           <>
-            <section data-intel="tape" className="space-y-3">
-              <SectionTitle icon={Thermometer}>市场概览</SectionTitle>
-              <Tape d={d} />
-            </section>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <section data-intel="calendar" className="min-w-0 space-y-3">
-                <SectionTitle icon={CalendarDays}>宏观与事件日历</SectionTitle>
-                {errs.calendar ? <Failed /> : <Calendar cal={d.calendar} level={d.settings.macro_impact} onSymbol={setPreview} />}
-              </section>
-              <section data-intel="news" className="min-w-0 space-y-3">
-                <SectionTitle icon={Newspaper}>{`自选新闻 · ${d.news?.hours ?? 36} 小时`}</SectionTitle>
-                {errs.news ? <Failed /> : <News news={d.news} onSymbol={setPreview} />}
-              </section>
+            <div data-intel-grid className="intel-grid" style={{ '--intel-chrome': hist ? '192px' : '148px' } as React.CSSProperties}>
+              <GridCard k="tape" title="大盘方向" lead={lead('tape', <TapeLead d={d} />)} post={post('tape')} onExpand={na('tape') ? undefined : () => setExpand('tape')}>
+                {body('tape', () => <TapeBody d={d} />)}
+              </GridCard>
+              <GridCard k="breadth" title="宽度与板块" lead={lead('breadth', <BreadthLead d={d} />)} post={noPost} onExpand={na('tape') ? undefined : () => setExpand('breadth')}
+                tags={d.breadth && <span data-breadth-asof className="truncate text-[11px] text-muted">{`宽度 ${md(d.breadth.as_of)} 收盘 · ${d.breadth.universe} 只`}</span>}>
+                {na('breadth') && na('tape') ? <Missing /> : <BreadthBody d={d} />}
+              </GridCard>
+              <GridCard k="calendar" title="宏观日历" lead={lead('calendar', <CalendarLead cal={d.calendar} />)} post={noPost} scroll={false}
+                onExpand={na('calendar') ? undefined : () => setExpand('calendar')}>
+                {body('calendar', () => <Calendar cal={d.calendar} level={d.settings.macro_impact} onSymbol={setPreview} embedded readOnly={hist} />)}
+              </GridCard>
+              <GridCard k="news" title="新闻与舆情" lead={lead('news', <NewsLead d={d} onSymbol={setPreview} />)} post={post('news')} scroll={false}
+                tags={<span className="text-[11px] text-muted">{`${d.news?.hours ?? 36} 小时`}</span>} onExpand={na('news') ? undefined : () => setExpand('news')}>
+                {body('news', () => <News news={d.news} onSymbol={setPreview} embedded />)}
+              </GridCard>
+              <GridCard k="earnings" title="自选财报" lead={lead('earnings', <EarningsLead rows={d.earnings?.rows ?? []} />)} post={noPost}
+                tags={hotEarnings(d.earnings?.rows ?? []) > 0 && <span data-earn-hot className={badge('warn')}>{`隐含 ≥ 1.25× 历史 · ${hotEarnings(d.earnings?.rows ?? [])} 只`}</span>}
+                onExpand={na('earnings') ? undefined : () => setExpand('earnings')}>
+                {body('earnings', () => (
+                  <>
+                    <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} compact />
+                    {(d.actions?.length ?? 0) > 0 && <div data-intel-actions className="mt-auto border-t border-border/70 pt-2 text-xs text-secondary">{actionsText(d)}</div>}
+                  </>
+                ))}
+              </GridCard>
+              <GridCard k="model" title="模型状态" tags={<span className={badge('limit')}>仅参考</span>} post={post('model')}
+                lead={d.model ? <Lead big={d.model.champion.name}><span className={LEAD_SUB}>冠军</span><span className="self-center">{challengerBadge(d.model)}</span></Lead> : <Lead big="—" />}
+                onExpand={d.model ? () => setModelOpen(true) : undefined} onBodyClick={d.model ? () => setModelOpen(true) : undefined}>
+                {bad('model') ? <Failed /> : d.model ? <ModelBody m={d.model} /> : <Missing label={hist ? '当天无名单' : '尚无名单'} />}
+              </GridCard>
             </div>
-            <SentimentBoard data={d.sentiment} failed={'sentiment' in errs} onSymbol={setPreview} />
-            <section data-intel="earnings" className="space-y-3">
-              <SectionTitle icon={FileBarChart2}>{`自选财报 · 未来 10 个交易日 · ${d.earnings?.rows.length ?? 0} 只`}</SectionTitle>
-              {errs.earnings ? <Failed /> : <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} />}
-              {(d.actions?.length ?? 0) > 0 && (
-                <div data-intel-actions className="text-xs text-secondary">
-                  公司行动 · {d.actions!.map((a) => `${a.symbol} ${md(a.date)} ${a.type === 'cash_dividend' ? `除息 $${a.rate != null ? a.rate.toFixed(2) : ''}/股` : corpActionLabel(a.type)}`).join(' · ')}
-                </div>
-              )}
-              <p className="text-[11px] text-muted">{d.earnings?.source}{d.earnings?.fetched_at ? ` · 预期取于 ${md(d.earnings.fetched_at)} ${d.earnings.fetched_at.slice(11, 16)} ET` : ''}</p>
-            </section>
             <SourceState d={d} />
           </>
         )}
       </div>
+      {expand && d && (
+        <Modal onClose={() => setExpand(null)} ariaLabel={EXPAND_TITLE[expand]}
+          panelClassName="flex max-h-[90dvh] w-[96vw] max-w-5xl flex-col rounded-card border border-border bg-base shadow-xl">
+          <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2.5">
+            <h2 className="text-[14px] font-semibold text-foreground">{EXPAND_TITLE[expand]}{hist ? ` · 历史日 ${md(asof)}` : ''}</h2>
+            <button type="button" aria-label="关闭" data-expand-close onClick={() => setExpand(null)} className="flex h-8 w-8 items-center justify-center rounded-btn text-secondary hover:bg-elevated hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div data-expand-body={expand} className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            {(expand === 'tape' || expand === 'breadth') && <Tape d={d} />}
+            {expand === 'calendar' && <Calendar cal={d.calendar} level={d.settings.macro_impact} onSymbol={setPreview} readOnly={hist} />}
+            {expand === 'news' && (
+              <>
+                <SentimentBoard data={d.sentiment} failed={bad('sentiment')} onSymbol={setPreview} />
+                <News news={d.news} onSymbol={setPreview} />
+              </>
+            )}
+            {expand === 'earnings' && (
+              <>
+                <Earnings rows={d.earnings?.rows ?? []} onSymbol={setPreview} />
+                {(d.actions?.length ?? 0) > 0 && <div className="text-xs text-secondary">{actionsText(d)}</div>}
+                <p className="text-[11px] text-muted">{d.earnings?.source}{d.earnings?.fetched_at ? ` · 预期取于 ${md(d.earnings.fetched_at)} ${d.earnings.fetched_at.slice(11, 16)} ET` : ''}</p>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+      {modelOpen && d?.model && <ModelSheet m={d.model} onClose={() => setModelOpen(false)} />}
       <StockPreviewDialog symbol={preview} onClose={() => setPreview(null)} />
     </div>
+  )
+}
+
+const actionsText = (d: IntelPayload) =>
+  `公司行动 · ${(d.actions ?? []).map((a) => `${a.symbol} ${md(a.date)} ${a.type === 'cash_dividend' ? `除息 $${a.rate != null ? a.rate.toFixed(2) : ''}/股` : corpActionLabel(a.type)}`).join(' · ')}`
+
+/** 隐含波幅 ÷ 历史反应中位数 */
+export const impliedRatio = (r: IntelEarningsRow) => {
+  const imp = r.implied?.expected_move_pct
+  return imp != null && r.hist?.median_abs_move ? imp / r.hist.median_abs_move : null
+}
+const EARN_DETAIL_MAX = 4
+export const hotEarnings = (rows: IntelEarningsRow[]) => rows.filter((r) => (impliedRatio(r) ?? 0) >= 1.25).length
+
+// ── 六宫格: 结论行 ─────────────────────────────────────────────────
+
+function TapeLead({ d }: { d: IntelPayload }) {
+  const mood = d.mood?.judgment
+  if (!d.mood || !mood) return <Lead big="—"><span className={LEAD_SUB}>无大盘判断</span></Lead>
+  const stale = !d.mood.is_today && !d.asof
+  return (
+    <Lead big={STANCE[mood.stance] ?? '—'} cls={mood.stance === 'up' ? 'text-bull' : mood.stance === 'down' ? 'text-bear' : 'text-foreground'}>
+      <span data-mood-at className={`${LEAD_SUB} ${stale ? 'text-warning' : ''}`}>{`08:35 判断${stale ? ` · ${md(mood.day)} 非当日` : ''}`}</span>
+      <span className={LEAD_SUB}>{`近 ${d.mood.stats.n} 日判对 ${d.mood.stats.hit}`}</span>
+    </Lead>
+  )
+}
+
+function BreadthLead({ d }: { d: IntelPayload }) {
+  const b = d.breadth
+  if (!b) return <Lead big="—"><span className={LEAD_SUB}>无宽度数据</span></Lead>
+  return (
+    <Lead big={`${b.up_pct?.toFixed(0) ?? '—'}%`} cls={sgnCls((b.up_pct ?? 50) - 50) === 'text-secondary' ? 'text-foreground' : sgnCls((b.up_pct ?? 50) - 50)}>
+      <span className={LEAD_SUB}>上涨家数</span>
+      <span className={LEAD_SUB}>{`新高 ${b.new_highs} / 新低 ${b.new_lows}`}</span>
+      {b.live && <span data-breadth-live className={LEAD_SUB}>{`盘中近似 ${b.live.up_pct.toFixed(0)}%`}</span>}
+    </Lead>
+  )
+}
+
+/** 当天高重要度宏观事件数 + 下一件还没发生的高重要度事件 */
+export function calendarLead(cal: IntelCalendar | null) {
+  const macro = (cal?.events ?? []).filter((e) => e.kind === 'macro' || e.kind == null)
+  const high = macro.filter((e) => e.impact === 'high')
+  return { today: high.filter((e) => e.day === cal?.today).length, next: high.find((e) => !e.past && e.day >= (cal?.today ?? '')) ?? null }
+}
+
+function CalendarLead({ cal }: { cal: IntelCalendar | null }) {
+  if (!cal) return <Lead big="—"><span className={LEAD_SUB}>无日历数据</span></Lead>
+  const { today, next } = calendarLead(cal)
+  return (
+    <Lead big={today}>
+      <span className={LEAD_SUB}>件高重要度 · 当天</span>
+      {next && <span data-cal-next className="min-w-0 basis-full truncate text-xs text-secondary" title={next.title}>{`下一件 ${md(next.day)} ${next.time || '全天'} ${next.title_zh ?? eventTitleZh(next.title)}`}</span>}
+    </Lead>
+  )
+}
+
+/** 结论行第二行列几只舆情异动 (其余记 +N, 全量在「展开」) */
+const SENT_CHIPS = 3
+
+function NewsLead({ d, onSymbol }: { d: IntelPayload; onSymbol: (s: string) => void }) {
+  const rows = d.sentiment?.rows ?? []
+  const focus = rows.filter((r) => r.grade === 'A').length
+  return (
+    <Lead big={d.sentiment ? d.sentiment.total : '—'}>
+      <span className={LEAD_SUB}>只舆情异动</span>
+      <span data-sent-focus className={`${LEAD_SUB} ${focus ? 'text-warning' : ''}`}>{`重点 ${focus}`}</span>
+      <span data-sent-chips className="flex min-w-0 basis-full gap-x-3 overflow-hidden text-xs text-secondary">
+        {rows.slice(0, SENT_CHIPS).map((r) => (
+          <button key={r.symbol} type="button" data-sent-chip={r.symbol} onClick={() => onSymbol(r.symbol)}
+            title={r.event_type ? (EVENT_ZH[r.event_type] ?? '其他消息') : undefined}
+            className={`shrink-0 whitespace-nowrap hover:text-accent ${r.grade === 'A' ? 'text-warning' : ''}`}>
+            <b className={r.grade === 'A' ? 'font-semibold' : 'font-semibold text-foreground'}>{r.symbol}</b>{` ${DIR_ZH[r.direction] ?? '方向不明'}`}
+          </button>
+        ))}
+        {rows.length > SENT_CHIPS && <span data-sent-more className="shrink-0 whitespace-nowrap text-muted">{`+${rows.length - SENT_CHIPS}`}</span>}
+      </span>
+    </Lead>
+  )
+}
+
+function EarningsLead({ rows }: { rows: IntelEarningsRow[] }) {
+  const first = rows[0]
+  return (
+    <Lead big={rows.length}>
+      <span className={LEAD_SUB}>只 · 10 个交易日内</span>
+      {first && <span data-earn-next className="min-w-0 basis-full truncate text-xs text-secondary">{`最近 ${first.symbol} ${md(first.date)} ${TIMING_ZH[first.timing] ?? ''} · ${first.days === 0 ? '当天' : `T+${first.days}`}`}</span>}
+    </Lead>
+  )
+}
+
+// ── 六宫格: 明细 ───────────────────────────────────────────────────
+
+function Gauge({ k, label, sub, children, warn }: { k: string; label: string; sub?: ReactNode; children: ReactNode; warn?: boolean }) {
+  return (
+    <div data-intel-cell={k} className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-1.5 rounded-btn border border-border px-2 py-1">
+      <span className="truncate text-[11px] text-secondary">{label}</span>
+      <span className={`whitespace-nowrap text-right text-[11px] tabular-nums ${warn ? 'text-warning' : 'text-muted'}`}>{sub}</span>
+      <span className="col-span-2 whitespace-nowrap text-[14px] font-bold tabular-nums text-foreground">{children}</span>
+    </div>
+  )
+}
+
+function TapeBody({ d }: { d: IntelPayload }) {
+  const today = d.asof?.day ?? etToday()
+  const v = d.vol
+  const ratioWarn = (v?.ratio ?? 0) > 1.05
+  const bp = (x?: number | null) => (x == null ? '' : ` ${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(x)}bp`)
+  return (
+    <>
+      <div data-intel-indexes className="flex min-h-0 flex-1 flex-col">
+        {(d.tape?.indexes ?? []).map((r) => {
+          const stale = !r.live && r.day !== today && ACTIVE.has(d.phase?.phase ?? '')
+          return (
+            <div key={r.symbol} data-intel-cell={r.symbol} className="grid min-h-7 flex-1 grid-cols-[auto_minmax(0,1fr)_4.25rem_3.75rem] items-center gap-x-2 border-t border-border/55 text-[13px] first:border-t-0 md:max-h-14">
+              <span className="whitespace-nowrap text-foreground">{r.name} <span className="text-xs text-muted">{r.symbol}</span></span>
+              <span data-quote-sub title={quoteSub(r, today)} className={`truncate text-[11px] ${stale ? 'text-warning' : 'text-muted'}`}>{quoteSubShort(r, today)}</span>
+              <span data-price className="text-right font-semibold tabular-nums">{r.price != null ? r.price.toFixed(2) : '—'}</span>
+              <span className={`text-right font-semibold tabular-nums ${sgnCls(r.chg_pct)}`}>{fmtPct(r.chg_pct)}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div data-intel-gauges className="grid shrink-0 grid-cols-2 gap-1.5 pt-2">
+        <Gauge k="vix" label="VIX" warn={ratioWarn} sub={v?.ratio != null ? `比 VIX3M ${v.ratio.toFixed(2)}${ratioWarn ? ' 倒挂' : ''}` : '延迟 15 分'}>
+          {v ? <>{v.vix.value.toFixed(2)} <span className={`text-xs font-medium ${sgnCls(v.vix.chg_pct)}`}>{fmtPct(v.vix.chg_pct)}</span></> : '—'}
+        </Gauge>
+        <Gauge k="rates" label="美债 10Y" sub={d.rates ? md(d.rates.as_of) : '—'}>
+          {d.rates?.us10y != null ? <>{`${d.rates.us10y.toFixed(2)}%`}<span className="text-xs font-medium text-secondary">{bp(d.rates.us10y_chg_bp)}</span></> : '—'}
+        </Gauge>
+        <Gauge k="pcr" label="个股 Put/Call" sub={d.pcr ? md(d.pcr.day) : '—'}>
+          {d.pcr?.equity != null ? <>{d.pcr.equity.toFixed(2)}<span className="text-xs font-medium text-secondary">{` 20日均 ${d.pcr.equity_avg20?.toFixed(2) ?? '—'}`}</span></> : '—'}
+        </Gauge>
+        <Gauge k="hy" label="高收益债利差" sub={d.rates?.hy_as_of ? md(d.rates.hy_as_of) : '—'}>
+          {d.rates?.hy_oas != null ? <>{`${d.rates.hy_oas.toFixed(2)}%`}<span className="text-xs font-medium text-secondary">{bp(d.rates.hy_chg_bp)}</span></> : '—'}
+        </Gauge>
+      </div>
+    </>
+  )
+}
+
+/** 六宫格指数行的副文字: 只留时段与时刻 (「对官方前收」在悬停里); 不是当天的照旧写明 */
+export function quoteSubShort(r: IntelQuote, today: string) {
+  if (r.live) return r.session ? `${SESSION_ZH[r.session] ?? ''}${r.time_et ? ` ${r.time_et}` : ''}` : '实时'
+  return quoteSub(r, today)
+}
+
+/** 六宫格里的色块: 一行 (名称 + 当日涨跌); 5 日与代码在悬停和「展开」里 */
+function HeatMini({ r }: { r: IntelQuote }) {
+  return (
+    <div data-heat={r.symbol} title={`${r.symbol} ${r.live ? '盘中' : `${md(r.day)} 收盘`}${r.d5 != null ? ` · 5日 ${fmtPct(r.d5, 1)}` : ''}`}
+      className={`flex h-5 min-w-0 items-center justify-between gap-1 rounded-btn px-1.5 text-[11px] tabular-nums ${heatCls(r.chg_pct)}`}>
+      <span className="truncate">{r.name}</span>
+      <span className="shrink-0 font-semibold">{fmtPct(r.chg_pct, 1)}</span>
+    </div>
+  )
+}
+
+function BreadthBody({ d }: { d: IntelPayload }) {
+  const b = d.breadth
+  const t = d.tape
+  const bars: { k: string; label: string; v?: number | null }[] = b ? [
+    { k: 'ma20', label: '站上 20 日线', v: b.above_ma20_pct }, { k: 'ma50', label: '站上 50 日线', v: b.above_ma50_pct }, { k: 'ma200', label: '站上 200 日线', v: b.above_ma200_pct },
+  ] : []
+  const when = t?.indexes?.[0] ? (t.indexes[0].live ? '盘中' : `${md(t.indexes[0].day)} 收盘`) : ''
+  return (
+    <>
+      <div data-intel-breadth>
+        {!b && <div className="py-1 text-xs text-muted">{d.errors.breadth === NOT_ARCHIVED ? '宽度未存档' : '无宽度数据'}</div>}
+        {bars.map((x) => (
+          <div key={x.k} data-breadth={x.k} className="grid h-5 grid-cols-[5.25rem_minmax(0,1fr)_2.5rem] items-center gap-2 text-xs">
+            <span className="whitespace-nowrap text-secondary">{x.label}</span>
+            <span className="block h-1.5 overflow-hidden rounded-full bg-muted/30"><i className="block h-full rounded-full bg-secondary" style={{ width: `${Math.max(0, Math.min(100, x.v ?? 0))}%` }} /></span>
+            <span className="text-right font-semibold tabular-nums text-foreground">{x.v != null ? `${x.v.toFixed(0)}%` : '—'}</span>
+          </div>
+        ))}
+      </div>
+      {t ? (
+        <>
+          <div className="mb-1 mt-1.5 text-[11px] leading-4 text-secondary">{`板块 ETF${when ? ` · ${when}` : ''}`}</div>
+          <div data-intel-sectors className="grid grid-cols-3 gap-1">{t.sectors.map((r) => <HeatMini key={r.symbol} r={r} />)}</div>
+          <div className="mb-1 mt-1.5 text-[11px] leading-4 text-secondary">跨资产</div>
+          <div data-intel-cross className="grid grid-cols-3 gap-1">{t.cross.map((r) => <HeatMini key={r.symbol} r={r} />)}</div>
+        </>
+      ) : (
+        <>
+          <div className="mb-1 mt-2 flex items-center gap-1.5 text-[11px] text-secondary">板块 ETF<span className={badge('limit')}>未存档</span></div>
+          <Missing />
+        </>
+      )}
+    </>
   )
 }
 
@@ -282,7 +575,9 @@ export function surpriseLabel(e: IntelEvent) {
   return ''
 }
 
-function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: string; onSymbol: (s: string) => void }) {
+function Calendar({ cal, level, onSymbol, embedded, readOnly }: {
+  cal: IntelCalendar | null; level: string; onSymbol: (s: string) => void; embedded?: boolean; readOnly?: boolean
+}) {
   const qc = useQueryClient()
   const save = useMutation({ mutationFn: api.intelSettings, onSuccess: () => qc.invalidateQueries({ queryKey: QK.intelToday }) })
   const [showAll, setShowAll] = useState(false)
@@ -308,12 +603,12 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
   const visible = showAll ? groups : groups.filter(([day, evs]) => day >= today && !isLook(evs)).slice(0, 3)
   const ahead = showAll || ffUntil === null ? [] : (cal.events ?? []).filter((e) => e.source === 'tradingview' && e.impact === 'high' && e.day >= today && e.day > ffUntil)
   return (
-    <div data-pair-card="calendar" className={PAIR_CARD}>
+    <div data-pair-card="calendar" className={embedded ? EMBED_CARD : PAIR_CARD}>
       <div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-2">
         <div data-intel-levels role="radiogroup" aria-label="宏观事件重要度" className="inline-flex rounded-btn border border-border p-0.5 text-[11px]">
           {LEVELS.map((l) => (
-            <button key={l.k} type="button" role="radio" aria-checked={level === l.k} disabled={save.isPending}
-              onClick={() => level !== l.k && save.mutate(l.k)}
+            <button key={l.k} type="button" role="radio" aria-checked={level === l.k} disabled={save.isPending || readOnly}
+              onClick={() => level !== l.k && !readOnly && save.mutate(l.k)}
               className={`rounded px-2 py-0.5 ${level === l.k ? 'bg-accent/20 font-medium text-foreground ring-1 ring-accent/50' : 'text-secondary hover:text-foreground'}`}>
               {l.label}
             </button>
@@ -322,7 +617,7 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
         <span className="text-[11px] text-muted">ET · {cal.source}</span>
       </div>
       {cal.error && <div className="mb-2 shrink-0 text-[11px] text-warning">日历源上次刷新失败，显示的是上一份</div>}
-      <div ref={bodyRef} data-pair-body="calendar" className={`${PAIR_BODY} space-y-3`}>
+      <div ref={bodyRef} data-pair-body="calendar" className={`${embedded ? EMBED_BODY : PAIR_BODY} space-y-3`}>
         {visible.map(([day, evs]) => (
           <div key={day} data-cal-day={day}>
             <div className={`mb-1 text-[11px] font-medium ${day === today ? 'text-accent' : 'text-secondary'}`}>
@@ -356,7 +651,8 @@ function Calendar({ cal, level, onSymbol }: { cal: IntelCalendar | null; level: 
         {cal.lookahead_error && <div className="text-[11px] text-muted">前瞻日历上次刷新失败，显示的是上一份</div>}
       </div>
       {groups.length > visible.length || showAll ? (
-        <button type="button" data-cal-more onClick={() => setShowAll((x) => !x)} className="mt-2 shrink-0 self-start text-[11px] text-accent hover:underline">
+        <button type="button" data-cal-more onClick={() => setShowAll((x) => !x)}
+          className={`shrink-0 text-[11px] text-accent hover:underline ${embedded ? 'w-full border-t border-border/70 pt-1.5 text-left' : 'mt-2 self-start'}`}>
           {showAll ? '收起' : `全部 ${groups.length} 天（含已过与未来）`}
         </button>
       ) : null}
@@ -415,8 +711,62 @@ export const rev30 = (r: IntelEarningsRow) => {
   return q?.eps_change_30d_pct != null && (q.eps_avg ?? 0) > 0 ? q.eps_change_30d_pct : null
 }
 
-function Earnings({ rows, onSymbol }: { rows: IntelEarningsRow[]; onSymbol: (s: string) => void }) {
-  if (!rows.length) return <div className={`${CARD} p-4 text-xs text-muted`}>未来 10 个交易日自选无财报</div>
+function Earnings({ rows, onSymbol, compact }: { rows: IntelEarningsRow[]; onSymbol: (s: string) => void; compact?: boolean }) {
+  if (!rows.length) return <div className={compact ? 'py-1 text-xs text-muted' : `${CARD} p-4 text-xs text-muted`}>未来 10 个交易日自选无财报</div>
+  // 六宫格: 四列 (股票 / 公布 / 隐含波幅 × 历史 / 上次反应); EPS 预期、修正、超预期次数在「展开」里
+  if (compact) {
+    return (
+      <table data-intel-earnings="compact" className="w-full text-xs tabular-nums">
+        <thead className="text-[11px] text-secondary">
+          <tr className="border-b border-border text-left">
+            <th className="py-1 pr-1 font-normal">股票</th>
+            <th className="px-1 py-1 font-normal">公布</th>
+            <th className="px-1 py-1 text-right font-normal" title="财报后第一个到期日的平值跨式 / 现价；「×历史」= 隐含波幅 ÷ 历史反应中位数">隐含波幅</th>
+            <th className="py-1 pl-1 text-right font-normal" title="上一次财报的反应日涨跌">上次反应</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => {
+            const imp = r.implied?.expected_move_pct
+            const cmp = impliedRatio(r)
+            const main = (
+              <tr key={r.symbol} data-earn={r.symbol} className={rows.length > EARN_DETAIL_MAX ? 'border-b border-border/60 last:border-0' : ''}>
+                <td className="whitespace-nowrap py-1.5 pr-1">
+                  <button type="button" onClick={() => onSymbol(r.symbol)} className="font-medium text-foreground hover:text-accent">{r.symbol}</button>
+                  {r.role === '持仓' && <span className="ml-1 rounded bg-accent/10 px-1 text-[11px] text-accent dark:text-blue-400">持仓</span>}
+                </td>
+                <td className="whitespace-nowrap px-1 py-1.5 text-secondary">
+                  {`${md(r.date)} ${TIMING_ZH[r.timing] ?? ''}`}
+                  {r.date_conflict
+                    ? <span data-date-conflict className="ml-1 text-warning" title={`日期待确认 · Finnhub 为 ${r.date_conflict}`}>待确认</span>
+                    : <span className="ml-1 text-muted">{r.days === 0 ? '今天' : `T+${r.days}`}</span>}
+                </td>
+                <td data-implied className="whitespace-nowrap px-1 py-1.5 text-right"
+                  title={imp == null ? '期权链未更新 · 09:35 ET 后可用' : `到期 ${r.implied?.expiration}${r.hist?.median_abs_move != null ? ` · 历史中位 ±${r.hist.median_abs_move.toFixed(1)}%` : ''}`}>
+                  {imp != null ? `±${imp.toFixed(1)}%` : '—'}
+                  <span className={`ml-1 ${cmp != null && cmp >= 1.25 ? 'text-warning' : 'text-muted'}`}>{cmp != null ? `${cmp.toFixed(1)}×历史` : ''}</span>
+                </td>
+                <td className={`whitespace-nowrap py-1.5 pl-1 text-right ${sgnCls(r.last?.move_pct)}`}>{r.last ? fmtPct(r.last.move_pct, 1) : '—'}</td>
+              </tr>
+            )
+            // 行少 (≤ EARN_DETAIL_MAX) 时每只多给一行: EPS 预期 / 历史中位 / 超预期次数, 不留空卡
+            return rows.length > EARN_DETAIL_MAX ? main : (
+              <Fragment key={r.symbol}>
+                {main}
+                <tr data-earn-detail={r.symbol} className="border-b border-border/60 text-[11px] text-secondary last:border-0">
+                  <td colSpan={4} className="whitespace-nowrap pb-1.5">
+                    {[`EPS 预期 ${fmtUsd(r.eps_consensus ?? r.eps_forecast)}`,
+                      r.hist?.median_abs_move != null ? `历史中位 ±${r.hist.median_abs_move.toFixed(1)}%` : '',
+                      r.hist?.surprise_n ? `超预期 ${r.hist.beat_n}/${r.hist.surprise_n}` : ''].filter(Boolean).join(' · ')}
+                  </td>
+                </tr>
+              </Fragment>
+            )
+          })}
+        </tbody>
+      </table>
+    )
+  }
   return (
     <div className={`${CARD} overflow-x-auto`}>
       <table data-intel-earnings className="w-full min-w-[760px] text-xs tabular-nums">
@@ -486,14 +836,14 @@ export function filterNews(items: IntelNewsItem[], f: NewsFilter) {
   return items
 }
 
-function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: string) => void }) {
+function News({ news, onSymbol, embedded }: { news: IntelPayload['news']; onSymbol: (s: string) => void; embedded?: boolean }) {
   const [f, setF] = useState<NewsFilter>('all')
   if (!news) return <div className={`${CARD} p-4 text-xs text-muted`}>无新闻数据</div>
   const limit = news.limit ?? 40
   const items = filterNews(news.items, f).slice(0, limit)
   const tone = Object.entries(news.tone).sort((a, b) => (b[1].bullish + b[1].bearish) - (a[1].bullish + a[1].bearish)).slice(0, 8)
   return (
-    <div data-pair-card="news" className={PAIR_CARD}>
+    <div data-pair-card="news" className={embedded ? EMBED_CARD : PAIR_CARD}>
       <div className="mb-2 flex shrink-0 flex-wrap items-center gap-1.5">
         {NEWS_FILTERS.map((x) => (
           <button key={x.k} type="button" data-news-filter={x.k} aria-pressed={f === x.k} onClick={() => setF(x.k)}
@@ -502,7 +852,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
           </button>
         ))}
       </div>
-      {tone.length > 0 && (
+      {tone.length > 0 && !embedded && (
         <div data-news-tone className="mb-2 flex shrink-0 flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums">
           {tone.map(([s, t]) => (
             <button key={s} type="button" onClick={() => onSymbol(s)} className="text-secondary hover:text-accent">
@@ -511,7 +861,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
           ))}
         </div>
       )}
-      <div data-news-list data-pair-body="news" className={PAIR_BODY}>
+      <div data-news-list data-pair-body="news" className={embedded ? EMBED_BODY : PAIR_BODY}>
         {items.map((i) => (
           <div key={i.id} data-news-row={i.symbol} className="relative">
             <button type="button" onClick={() => onSymbol(i.symbol)}
@@ -523,7 +873,7 @@ function News({ news, onSymbol }: { news: IntelPayload['news']; onSymbol: (s: st
         ))}
         {items.length === 0 && <div className="py-3 text-xs text-muted">无</div>}
       </div>
-      <p className="mt-1 shrink-0 text-[11px] text-muted">{news.disclaimer}</p>
+      {!embedded && <p className="mt-1 shrink-0 text-[11px] text-muted">{news.disclaimer}</p>}
     </div>
   )
 }
@@ -537,14 +887,15 @@ const SRC_ZH: Record<string, string> = {
 }
 
 function SourceState({ d }: { d: IntelPayload }) {
-  const bad = Object.entries(d.state).filter(([, v]) => v.error)
+  const bad = Object.entries(d.state ?? {}).filter(([, v]) => v.error)
+  const failed = Object.entries(d.errors).filter(([, v]) => v !== NOT_ARCHIVED).map(([k]) => k)
   return (
     <section data-intel="sources" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
       <Activity className="h-3.5 w-3.5" />
       {bad.length === 0
         ? <span>数据源正常</span>
         : bad.map(([k, v]) => <span key={k} className="text-warning" title={v.error ?? ''}>{`${SRC_ZH[k] ?? k} 上次刷新失败 (${(v.last_ok_at ?? '').slice(5, 16).replace('T', ' ') || '从未成功'})`}</span>)}
-      {Object.keys(d.errors).length > 0 && <span className="text-warning">{`区块读取失败: ${Object.keys(d.errors).join('、')}`}</span>}
+      {failed.length > 0 && <span className="text-warning">{`区块读取失败: ${failed.join('、')}`}</span>}
     </section>
   )
 }
