@@ -107,19 +107,24 @@ def test_evaluate_reports_mining_segment_only(lab):
 
 
 def test_search_admits_by_novelty_not_by_backtest(lab):
-    res = fm.search(lab, slots=2, seed="run-a", budget=40)
+    res = fm.search(lab, slots=2, seed="run-a", budget=120)
     f = res["funnel"]
-    assert f["generated"] == 40 and f["new"] == f["evaluated"] == 40 and f["admitted"] == len(res["chosen"]) == 2
-    assert f["errors"] + f["thin"] + f["same_as_alive"] + f["same_as_retired"] + f["eligible"] == f["evaluated"]
+    assert f["generated"] == 120 and f["new"] == f["evaluated"] == 120 and f["admitted"] == len(res["chosen"]) == 2
+    assert f["errors"] + f["thin"] + f["negative"] + f["same_as_alive"] + f["same_as_retired"] + f["eligible"] == f["evaluated"]
+    assert f["negative"] > 0
     trials = fm.read_trials(lab)
-    assert len(trials) == 40 and {t["run"] for t in trials} == {"run-a"}
+    assert len(trials) == 120 and {t["run"] for t in trials} == {"run-a"}
     elig = [t for t in trials if t["outcome"] in ("eligible", "admitted")]
     # 选中的两条里没有“回测超额最高”这个条件: 至少存在一条没入席、超额却更高的
     worst_admitted = min(c["mining"]["excess"] for c in res["chosen"])
     assert any(t["outcome"] == "eligible" and t["mining"]["excess"] > worst_admitted for t in elig)
+    # 回放超额为负的不入席, 也不算可用
+    assert all(c["mining"]["excess"] >= 0 for c in res["chosen"])
+    assert all(t["mining"]["excess"] >= 0 for t in elig)
+    assert all(t["mining"]["excess"] < 0 for t in trials if t["outcome"] == "negative")
     # 再跑同一个种子: 全部试过, 不再评估
-    again = fm.search(lab, slots=2, seed="run-a", budget=40)
-    assert again["funnel"]["new"] == 0 and again["chosen"] == [] and len(fm.read_trials(lab)) == 40
+    again = fm.search(lab, slots=2, seed="run-a", budget=120)
+    assert again["funnel"]["new"] == 0 and again["chosen"] == [] and len(fm.read_trials(lab)) == 120
 
 
 def test_search_rejects_what_alive_rankers_already_pick(lab):
@@ -143,7 +148,7 @@ def test_search_without_pool(tmp_path):
 # ── 一轮: 退席 -> 生成 -> 入席 ───────────────────────────────────────
 
 def _stub(lab):
-    return lambda data_dir, cfg: fm.search(data_dir, slots=cfg["slots"], seed=cfg["seed"], budget=30)
+    return lambda data_dir, cfg: fm.search(data_dir, slots=cfg["slots"], seed=cfg["seed"], budget=120)
 
 
 def test_run_admits_challengers_as_rankers(lab, cal, monkeypatch):
@@ -157,7 +162,7 @@ def test_run_admits_challengers_as_rankers(lab, cal, monkeypatch):
         assert rk["parity"]["checked"] and rk["parity"]["match"]          # 入席前后两次评估逐位相同
     v = fm.view(lab, today=DAY)
     assert [x["id"] for x in v["bench"]] and len(v["bench"]) == 2 and v["selected"] == [] and v["retired"] == []
-    assert v["totals"]["tried"] == 30 and v["totals"]["admitted"] == 2 and v["bench"][0]["forward"]["verdict"] == "thin"
+    assert v["totals"]["tried"] == 120 and v["totals"]["admitted"] == 2 and v["bench"][0]["forward"]["verdict"] == "thin"
     assert v["bench"][0]["replay"]["mining"]["n"] >= fm.MIN_MINING_N and v["last_run"]["run_id"] == rec["run_id"]
 
 
@@ -202,6 +207,22 @@ def test_retire_on_forward_verdict_timeout_and_keep_selected(lab, cal, monkeypat
     rl.remove_ranker(lab, good, enabled_long=[])
     assert [(x["id"], x["reason"]) for x in fm.retire(lab, today=date(2026, 9, 2))] == [(good, "removed")]
     assert fm.read_state(lab)["members"][sel]["status"] == "bench"
+
+
+def test_formula_taken_over_by_external_system_is_released_not_retired(lab, cal, monkeypatch):
+    """同一条公式之后被外部研究系统导入 (登记出处被改写): 让出席位, 之后垫底 / 到期都不由这里移除。"""
+    monkeypatch.setattr(rl, "backfill_latest", lambda d, r: {"added": []})
+    a, b = (x["id"] for x in fm.run(lab, object(), today=date(2026, 9, 1), searcher=_stub(lab))["admitted"])
+    rk = rl.read_rankers(lab)[a]
+    rl.import_ranker(lab, name="外部导入", formula=rk["formula"], direction=rk["direction"], source={"system": "external-miner"})
+    _forward(lab, [_fw(a, "below", -0.3), _fw(b, "unclear")])
+    assert fm.retire(lab, today=DAY) == [{"id": b, "name": fm.read_state(lab)["members"][b]["name"], "reason": "timeout"}]
+    m = fm.read_state(lab)["members"][a]
+    assert m["status"] == "released" and m["released_to"] == "external-miner" and a in rl.read_rankers(lab)
+    assert fm.bench_count(fm.read_state(lab)) == 0
+    v = fm.view(lab, today=DAY)
+    assert a not in {x["id"] for x in v["bench"] + v["selected"] + v["retired"]} and v["totals"]["released"] == 1
+    assert fm.retire(lab, today=DAY) == []                                    # 之后不再碰它
 
 
 def test_retired_formula_is_never_tried_again(lab, cal, monkeypatch):

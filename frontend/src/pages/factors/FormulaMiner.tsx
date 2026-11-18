@@ -1,6 +1,6 @@
 /** 公式挖掘: 自动写排序公式 -> 候补席 -> 规则前向记分 -> 自动选策略。
  * 数字全部来自后端 formula_miner.view; 这里只展示, 开关与立即挖掘各走一个接口。
- * 席位按“与在席公式选出的票差多少”分配, 回放超额只作参考 (不参与排序), 好坏由前向成绩判定。 */
+ * 席位按“与在席公式选出的票差多少”分配; 回放超额为负不入席, 不为负的也不按它排序, 好坏由前向成绩判定。 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, ApiError, type FormulaMinerRow, type FormulaMinerRun, type FormulaMinerView } from '@/lib/api'
 import { VERDICT_ZH } from '@/components/opportunities/AutoSelect'
@@ -63,7 +63,7 @@ function Table({ title, rows, need, empty }: { title: string; rows: FormulaMiner
       <div className={`grid items-center gap-x-3 border-b border-border/70 bg-elevated/40 px-3 py-1.5 text-[12px] text-muted ${COLS}`}>
         <span className="font-semibold text-foreground">{title}</span>
         <span className="max-md:hidden">公式</span>
-        <span className="text-right" title="挖掘段卡回放 · 比同日随机多的 R · 只作参考 · 不参与席位排序">回放 R</span>
+        <span className="text-right" title="挖掘段卡回放 · 比同日随机多的 R · 为负不入席 · 不参与席位排序">回放 R</span>
         <span className="text-right" title="上线后成交卡比同日同向其余成交卡多出的 R · 样本不足时写信号日进度">前向 R</span>
         <span className="text-right">状态</span>
       </div>
@@ -111,7 +111,7 @@ export function FormulaMinerPanel() {
       </div>
       <div data-miner-rules className="mt-2 flex flex-wrap items-center gap-1.5 text-[12px]">
         <span className="text-muted">规则</span>
-        {['席位给选股不同的公式', '回放不参与排序', `前向满 ${v.caps.need_days} 个信号日评定`, `${v.caps.tenure_days} 个交易日未领先退席`, `每轮至多入席 ${v.caps.per_run} 条`].map((t) => <span key={t} className={badge('limit')}>{t}</span>)}
+        {['席位给选股不同的公式', '回放为负不入席', '回放不参与排序', `前向满 ${v.caps.need_days} 个信号日评定`, `${v.caps.tenure_days} 个交易日未领先退席`, `每轮至多入席 ${v.caps.per_run} 条`].map((t) => <span key={t} className={badge('limit')}>{t}</span>)}
       </div>
       <div className="mt-3 grid gap-3">
         <Table title={`在席 ${live.length}`} rows={live} need={v.caps.need_days} empty="无在席公式" />

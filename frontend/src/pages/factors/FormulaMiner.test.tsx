@@ -70,6 +70,7 @@ it('renders live rows first, retired below, with Chinese states only', async () 
   const facts = q('[data-miner-facts]')!.textContent!
   expect(facts).toContain('2 / 6')
   expect(facts).toContain('120 条')
+  expect(q('[data-miner-rules]')!.textContent).toContain('回放为负不入席')
   const rows = [...host.querySelectorAll('[data-miner-row]')]
   expect(rows.map((r) => r.getAttribute('data-miner-row'))).toEqual(['s', 'a', 'b', 'r'])
   expect(rows.map((r) => r.lastElementChild!.textContent)).toEqual(['入选', '攒样本', '领先', '前向落后'])

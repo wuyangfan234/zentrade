@@ -906,7 +906,7 @@ export interface FormulaMinerRun {
   day: string
   skipped?: string
   error?: string
-  funnel?: { generated: number; new: number; evaluated: number; errors: number; thin: number; same_as_alive: number; same_as_retired: number; eligible: number; admitted: number }
+  funnel?: { generated: number; new: number; evaluated: number; errors: number; thin: number; negative?: number; same_as_alive: number; same_as_retired: number; eligible: number; admitted: number }
   admitted?: { id: string; name: string }[]
   retired?: { id: string; name: string; reason: string }[]
 }
@@ -917,7 +917,7 @@ export interface FormulaMinerView {
   bench: FormulaMinerRow[]
   selected: FormulaMinerRow[]
   retired: FormulaMinerRow[]
-  totals: { tried: number; admitted: number; retired: number; selected: number; above: number; outcomes: Record<string, number> }
+  totals: { tried: number; admitted: number; retired: number; selected: number; released?: number; above: number; outcomes: Record<string, number> }
   caps: { bench: number; per_run: number; tenure_days: number; need_days: number; need_filled: number }
   last_run: FormulaMinerRun | null
   runs: FormulaMinerRun[]

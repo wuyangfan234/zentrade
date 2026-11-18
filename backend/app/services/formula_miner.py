@@ -4,17 +4,21 @@
   - 同一把卡回放尺子上, 挖掘段前一半的超额对后一半的相关 = -0.10; 前一半最好的 5% (+0.16R) 后一半 -0.02R, 与全体无差别;
   - 全市场 1300 只流动股上 2021-22 的 5 日 Rank IC, 对同一条公式 2023 起在自选上的 IC 相关 = +0.02。
   回测排名不带来信息, 所以这里的回测只做三件事: 公式能不能算、够不够笔数、选出来的票和已有的是不是一回事。
+  另有一道产品决策的底线: 挖掘段回放超额为负的不入席 (不提高命中率, 只是不让回放亏的公式占席位); 过了底线之后仍不按超额排序。
   席位给“行为不一样”的公式, 好坏只由上线后的前向成绩 (rule_forward) 判定。
 
 流程 (每个交易日 17:40 ET 候选池重导之后):
   1. 退席: 候补里前向成绩垫底 (below) 或坐满 MAX_TENURE_DAYS 个交易日仍未过线的, 标记移除; 入选中的不动。
   2. 有空席才生成: 结构模板 + 窗口变异出 GEN_PER_RUN 条, 试过的 (含已退席的) 不再试。
-  3. 评估 (子进程, 只看挖掘段): 可算 + 覆盖率 + 成交笔数 >= MIN_MINING_N。
+  3. 评估 (子进程, 只看挖掘段): 可算 + 覆盖率 + 成交笔数 >= MIN_MINING_N + 回放超额不为负。
   4. 查重: 每日前 5 与在席 / 已退席公式的重合度, 超线不收; 剩下的按“最不像已有的”优先入席, 每轮至多 ADMIT_PER_RUN 条。
   5. 入席 = rank_lab.import_ranker (登记排序因子 + 因子库草稿 + 三段回放) 并补最近一份信号表; 当晚起进入前向记分。
 
 借鉴: alphagen LinearAlphaPool (定容池, 新因子与池内互相关超线即拒, 满员挤掉最弱) / AlphaAgent FactorZoo 截面相关查重 /
 WS-GP (只在已知有效的结构里搜, 不做无约束随机树) / gplearn point mutation (只改常数与同类算子)。
+
+与外部研究系统共用排序因子登记: 候补只认自己登记的 (source.system = SYSTEM)。同一条公式之后被外部系统导入
+(登记的出处被改写) -> 记为 released, 让出席位, 不再由这里退席。
 
 边界: 只写 research/formula_miner/ 与 rank_lab 的登记 (经 rank_lab 自己的函数); 不改入选策略、下单簿、台账、交易环。
 """
@@ -328,7 +332,7 @@ def search(data_dir: Path, *, slots: int, seed: str, budget: int = GEN_PER_RUN, 
                 if m.get("status") == "retired" and rid in every and rid not in alive][:DEAD_COMPARE]
     dead_sets = {rid: s for rid in dead_ids if (s := sets_of(every[rid])) is not None}
     items = generate(seed, budget, [{**rk, "id": rid} for rid, rk in alive.items()])
-    funnel = {"generated": len(items), "new": 0, "evaluated": 0, "errors": 0, "thin": 0, "same_as_alive": 0,
+    funnel = {"generated": len(items), "new": 0, "evaluated": 0, "errors": 0, "thin": 0, "negative": 0, "same_as_alive": 0,
               "same_as_retired": 0, "eligible": 0, "admitted": 0}
     t0, rows, ok = time.monotonic(), [], []
     now = datetime.now().astimezone().isoformat(timespec="seconds")
@@ -349,6 +353,9 @@ def search(data_dir: Path, *, slots: int, seed: str, budget: int = GEN_PER_RUN, 
         elif (rec["mining"].get("n") or 0) < MIN_MINING_N:
             rec["outcome"] = "thin"
             funnel["thin"] += 1
+        elif not isinstance(rec["mining"].get("excess"), (int, float)) or rec["mining"]["excess"] < 0:
+            rec["outcome"] = "negative"
+            funnel["negative"] += 1
         else:
             oa = max((overlap(sets, s) for s in alive_sets.values()), default=0.0)
             od = max((overlap(sets, s) for s in dead_sets.values()), default=0.0)
@@ -400,7 +407,8 @@ def _long_ids(data_dir: Path) -> list[str]:
 
 
 def retire(data_dir: Path, *, today: date) -> list[dict]:
-    """退席判定: 前向垫底 / 坐满期限仍未过线 / 已被人工移除。入选中的不动 (状态记 selected)。返回本次退席的。"""
+    """退席判定: 前向垫底 / 坐满期限仍未过线 / 已被人工移除。入选中的不动 (状态记 selected);
+    被外部研究系统接手的记 released (不移除)。返回本次退席的。"""
     from app.market_clock import us_clock
     from app.services import rank_lab as rl
     data_dir = Path(data_dir)
@@ -409,11 +417,16 @@ def retire(data_dir: Path, *, today: date) -> list[dict]:
     with _STATE_LOCK:
         st = read_state(data_dir)
         for rid, m in st["members"].items():
-            if m.get("status") == "retired":
+            if m.get("status") in ("retired", "released"):
                 continue
             reason = None
             if rid not in alive:
                 reason = "removed"
+            elif ((alive[rid].get("source") or {}).get("system") or SYSTEM) != SYSTEM:
+                # 同一条公式被外部研究系统导入, 登记归它: 让出席位, 之后的去留不归这里管
+                m.update(status="released", released_day=today.isoformat(),
+                         released_to=str((alive[rid].get("source") or {}).get("system"))[:40])
+                continue
             elif rid in long_ids:
                 m["status"] = "selected"
                 continue
@@ -572,7 +585,7 @@ def view(data_dir: Path, *, today: date | None = None) -> dict:
                            for seg in ("mining", "holdout") if isinstance(res.get(seg), dict)} or None,
                 "forward": {**{k: (fw or {}).get(k) for k in keep}, "verdict": (fw or {}).get("verdict") or "thin"}}
     members = sorted(st["members"].items(), key=lambda x: x[1].get("admitted_day") or "", reverse=True)
-    live = [row(r, m) for r, m in members if m.get("status") != "retired"]
+    live = [row(r, m) for r, m in members if m.get("status") not in ("retired", "released")]
     gone = [row(r, m) for r, m in members if m.get("status") == "retired"]
     trials = read_trials(data_dir)
     outcomes: dict[str, int] = {}
@@ -584,6 +597,7 @@ def view(data_dir: Path, *, today: date | None = None) -> dict:
             "retired": gone[:20],
             "totals": {"tried": len(trials), "admitted": len(st["members"]), "retired": len(gone),
                        "selected": sum(1 for x in live if x["status"] == "selected"),
+                       "released": sum(1 for m in st["members"].values() if m.get("status") == "released"),
                        "above": sum(1 for x in live if x["forward"]["verdict"] == "above"), "outcomes": outcomes},
             "caps": {"bench": BENCH_CAP, "per_run": ADMIT_PER_RUN, "tenure_days": MAX_TENURE_DAYS,
                      "need_days": rf.VERDICT_DAYS, "need_filled": rf.MIN_FILLED},
