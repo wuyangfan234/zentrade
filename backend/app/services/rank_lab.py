@@ -232,6 +232,20 @@ def _pit_panels() -> tuple[pl.DataFrame, pl.DataFrame]:
 
 _PIT_CACHE: dict[str, str] = {}
 
+# 出值清理: 滚动求和 / 均值是增量累加的, 窗口内全是 0 时累加器不回到精确的 0, 留下 1e-17 级的残差
+# (if_else(条件, 值, 0) 外套 ts_mean / ts_sum 的公式几乎每条都有)。残差参与排名, 本该并列的票被它分出先后:
+# R008 的名次检验因此把与复权无关的公式判成名次改变 (实测: 一批 168 条 R008 拒收里约 150 条属此),
+# 机会板并列时也不按代码顺序而按残差挑。出值与检验共用这一处清理, 两边看到的是同一份值。
+# 12 位有效数字抹掉相对残差, 绝对值低于 1e-12 的记 0; 比值 / 收益率类公式的真值远大于这个量级。
+CLEAN_SIG_FIGS = 12
+CLEAN_ZERO_ABS = 1e-12
+
+
+def clean_values(v: pl.Expr) -> pl.Expr:
+    """抹掉浮点残差后的公式值 (空值、非有限值原样传下去, 由调用方处理)。"""
+    r = v.round_sig_figs(CLEAN_SIG_FIGS)
+    return pl.when(r.abs() < CLEAN_ZERO_ABS).then(pl.lit(0.0)).otherwise(r)
+
 
 def _adjustment_leak(text: str, compiled) -> str:
     """'' = 与复权基准无关; 否则返回说明。只比较预热期之后的行 (预热期的空值兜底不算)。按公式文本缓存。"""
@@ -251,7 +265,7 @@ def _adjustment_leak(text: str, compiled) -> str:
     # 只看预热期之后, 且比的是每天 6 只的截面名次 (机会板只用名次挑前 5): 嵌套滚动算子会把预热期的大数
     # 带进 polars 的滚动累加器, 留下 1e-6 级的浮点残差, 按数值逐位比会误报 (实测 ts_corr(收益, 量比))。
     keep = pl.int_range(pl.len()).over("symbol") >= compiled.warmup_bars + 1
-    v = pl.col(FACTOR_COLUMN).cast(pl.Float64)
+    v = clean_values(pl.col(FACTOR_COLUMN).cast(pl.Float64))         # 与 factor_frame 出值同一处清理
 
     def ranks(df: pl.DataFrame) -> pl.DataFrame:
         return (df.select("symbol", "date", pl.when(v.is_finite()).then(v).otherwise(None).alias("v")).filter(keep)
@@ -280,7 +294,7 @@ def factor_frame(panel: pl.DataFrame, formula: str, direction: str) -> pl.DataFr
     out = compiled.frame_transform(panel)
     if out is None:
         raise RankFormulaError("E013", "面板缺少公式所需列")
-    v = pl.col(FACTOR_COLUMN).cast(pl.Float64)
+    v = clean_values(pl.col(FACTOR_COLUMN).cast(pl.Float64))
     v = v if direction == "high" else -v
     warm = pl.int_range(pl.len()).over("symbol") >= max(compiled.warmup_bars - 1, 0)
     return out.select("symbol", "date", pl.when(warm & v.is_finite()).then(v).otherwise(None).alias("value"))
