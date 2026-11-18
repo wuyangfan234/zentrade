@@ -18,6 +18,9 @@
   POST /api/factor-lab/rankers/import             导入一条排序因子 (研究投递密钥可调; 导入 ≠ 启用, 只写 research/rank_lab/)
   POST /api/factor-lab/rankers/{id}/remove        移除 (正在机会板做多 3 条里的拒绝)
   POST /api/factor-lab/rankers/rebuild            立即重导候选池并复核 (盘中拒绝; 平时每个交易日 17:40 ET 自动)
+  GET  /api/factor-lab/miner                      公式挖掘: 开关 + 候补席 + 前向成绩 + 试验计数
+  POST /api/factor-lab/miner                      开 / 关
+  POST /api/factor-lab/miner/run                  立即跑一轮 (盘中拒绝; 平时每个交易日候选池重导后自动)
 """
 from __future__ import annotations
 
@@ -352,4 +355,43 @@ def rankers_rebuild(request: Request) -> dict:
             import logging
             logging.getLogger(__name__).warning("rank lab rebuild failed: %s", type(e).__name__)
     threading.Thread(target=run, name="rank-lab-rebuild", daemon=True).start()
+    return {"started": True, "running": True}
+
+
+# ── 公式挖掘 (自动写排序公式 -> 候补席 -> 前向记分) ─────────────────────────────
+
+class MinerSwitchIn(BaseModel):
+    enabled: bool = Field(..., strict=True)
+
+
+@router.get("/miner")
+def miner(request: Request) -> dict:
+    from app.services import formula_miner
+    return formula_miner.view(_data_dir(request))
+
+
+@router.post("/miner")
+def miner_switch(request: Request, body: MinerSwitchIn) -> dict:
+    from app.services import formula_miner
+    formula_miner.set_enabled(_data_dir(request), body.enabled)
+    return formula_miner.view(_data_dir(request))
+
+
+@router.post("/miner/run")
+def miner_run(request: Request) -> dict:
+    from app.services import formula_miner
+    from app.services import swing_candidates as sc
+    if not sc.can_run_now():
+        raise HTTPException(status_code=409, detail="立即挖掘失败 · 交易日 09:00-17:00 (美东) 不运行")
+    if formula_miner.is_running():
+        return {"started": False, "running": True}
+    data_dir, repo = _data_dir(request), _repo(request)
+
+    def run():
+        try:
+            formula_miner.run(data_dir, repo, force=True)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("formula miner run failed: %s", type(e).__name__)
+    threading.Thread(target=run, name="formula-miner-run", daemon=True).start()
     return {"started": True, "running": True}

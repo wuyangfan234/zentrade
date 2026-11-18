@@ -9,6 +9,7 @@ import { FactorEditor } from './factors/FactorEditor'
 import { FactorLibrary } from './factors/FactorLibrary'
 import { FactorMatrix, FactorSlots, pendingCount } from './factors/FactorSlots'
 // 0.47.2: 检验 / 挖掘 / 候选方案三块带 echarts 图表 (约 340KB gzip), 按需加载, 默认的「发现」页不再等它们
+const FormulaMinerPanel = lazy(() => import('./factors/FormulaMiner').then(m => ({ default: m.FormulaMinerPanel })))
 const FactorDiscovery = lazy(() => import('./backtest/FactorDiscovery').then(m => ({ default: m.FactorDiscovery })))
 const MiningWorkbench = lazy(() => import('./backtest/MiningWorkbench').then(m => ({ default: m.MiningWorkbench })))
 const ResearchCandidatesDialog = lazy(() => import('./backtest/ResearchCandidatesDialog').then(m => ({ default: m.ResearchCandidatesDialog })))
@@ -149,6 +150,7 @@ export function Factors() {
             {activeTab === 'composite' && <FactorComposite />}
             {activeTab === 'mining' && (
               <div className="h-full min-h-0 xl:overflow-y-auto">
+                <FormulaMinerPanel />
                 <MiningWorkbench />
               </div>
             )}
