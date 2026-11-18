@@ -58,7 +58,7 @@ def _mining_run() -> Lifecycle:
 
     labels = {
         "queued": "排队中", "running": "运行中", "cancelling": "取消中", "succeeded": "已完成",
-        "succeeded_with_budget_exhausted": "已完成（预算用尽）", "failed": "失败", "cancelled": "已取消",
+        "succeeded_with_budget_exhausted": "已完成（预算用尽）", "failed": "失败", "cancelled": "已取消",  # noqa: RUF001
         "interrupted": "被中断", "skipped_prerequisite": "前置条件不足 · 已跳过",
     }
     order = list(labels)
@@ -131,8 +131,8 @@ def _build() -> dict[str, Lifecycle]:
             State("alpaca_canceled", "Alpaca 已撤单", terminal=True),
             State("alpaca_expired", "Alpaca 已过期", terminal=True),
             State("alpaca_rejected", "Alpaca 拒单", terminal=True, note="受理后被 Alpaca 拒绝"),
-            State("skipped_not_mirrored", "未镜像（开启前的持仓）", terminal=True),
-            State("skipped_internal_exit", "未提交（内部已平仓）", terminal=True,
+            State("skipped_not_mirrored", "未镜像（开启前的持仓）", terminal=True),  # noqa: RUF001
+            State("skipped_internal_exit", "未提交（内部已平仓）", terminal=True,  # noqa: RUF001
                   note="开仓单还没发出, 内部这一轮已经平仓"),
             State("superseded_by_final_close", "已并入全平", terminal=True,
                   note="减仓单还没发出, 后面的全平单一并处理"),
@@ -226,7 +226,7 @@ def observe(lifecycle_id: str, src: object, dst: object, **context: object) -> b
             _SEEN.add(key)
             logger.warning("lifecycle %s: transition %s -> %s is not in the registry %s", lifecycle_id, a, b, context or "")
         return False
-    except Exception:  # noqa: BLE001 — 登记表出任何问题都不能影响调用方
+    except Exception:  # 登记表出任何问题都不能影响调用方
         return True
 
 
