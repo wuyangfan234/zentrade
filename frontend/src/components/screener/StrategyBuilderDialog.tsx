@@ -1,11 +1,32 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Modal } from '@/components/Modal'
-import { X, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Settings2, FileText, Copy, Check, Terminal } from 'lucide-react'
+import { X, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Settings2, FileText, Copy, Check, Terminal, ExternalLink } from 'lucide-react'
 import { api, friendlyStreamError } from '@/lib/api'
 import type { AiIterateRound } from '@/lib/api'
 import { storage, type DefaultStrategyBasicFilter } from '@/lib/storage'
 import { cn } from '@/lib/cn'
 import { loadDefaultBasicFilter } from './DefaultStrategyParamsDialog'
+import { CodeEditor } from './CodeEditor'
+import { DOC_LINKS } from '@/lib/docsLinks'
+
+/** 停笔多久后自动校验 (毫秒) */
+export const AUTO_VALIDATE_MS = 900
+export type AutoCheck = { state: 'idle' | 'checking' | 'ok' | 'bad'; error?: string }
+
+/** 指南与语法标准: 跳到开源仓库里的文档 (新标签页) */
+export function StrategyDocLinks() {
+  const cls = 'inline-flex items-center gap-1 text-accent hover:underline dark:text-blue-400'
+  return (
+    <span data-strategy-docs className="ml-auto inline-flex items-center gap-3">
+      <a data-doc-link="guide" href={DOC_LINKS.strategyGuide} target="_blank" rel="noopener noreferrer" className={cls}>
+        <FileText className="h-3 w-3" />开发指南<ExternalLink className="h-3 w-3" />
+      </a>
+      <a data-doc-link="standard" href={DOC_LINKS.strategyStandard} target="_blank" rel="noopener noreferrer" className={cls}>
+        <FileText className="h-3 w-3" />语法标准<ExternalLink className="h-3 w-3" />
+      </a>
+    </span>
+  )
+}
 
 // ===== 工具函数 =====
 
@@ -223,6 +244,22 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
   const [strategyId, setStrategyId] = useState('')
   const [source, setSource] = useState<'ai' | 'custom'>('ai')
   const [validated, setValidated] = useState(false)
+  // 手写页签: 停笔后自动校验一次 (只读结果, 不改代码; 「校验代码」按钮仍会按后端返回规范化代码)
+  const [autoCheck, setAutoCheck] = useState<AutoCheck>({ state: 'idle' })
+  useEffect(() => {
+    if (!open || tab !== 'custom' || !code.trim()) { setAutoCheck({ state: 'idle' }); return }
+    let stale = false
+    setAutoCheck({ state: 'checking' })
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.strategyValidateCode({ code }, { quiet: true })
+        if (!stale) setAutoCheck(res.valid ? { state: 'ok' } : { state: 'bad', error: res.error ?? '代码校验失败' })
+      } catch {
+        if (!stale) setAutoCheck({ state: 'idle' })   // 网络问题不当成代码错误
+      }
+    }, AUTO_VALIDATE_MS)
+    return () => { stale = true; clearTimeout(timer) }
+  }, [open, tab, code])
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -517,19 +554,13 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
               <div className="flex items-center gap-2 text-[11px]">
                 <Sparkles className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
                 <span className="text-amber-700 dark:text-amber-400/80">步骤 1 描述策略规则 → 步骤 2 预览代码 → 保存</span>
-                <span className="inline-flex items-center gap-1 text-muted"
-                      title="项目内文档: backend/app/strategy/prompts/strategy-guide.md">
-                  <FileText className="h-3 w-3" />策略开发指南见项目文档
-                </span>
+                <StrategyDocLinks />
               </div>
             ) : (
               <div className="flex items-center gap-2 text-[11px]">
                 <Terminal className="h-3.5 w-3.5 text-accent shrink-0" />
                 <span className="text-muted">手动编写 Python 策略文件</span>
-                <span className="inline-flex items-center gap-1 text-muted"
-                      title="项目内文档: backend/app/strategy/prompts/strategy-guide.md">
-                  <FileText className="h-3 w-3" />策略开发指南见项目文档
-                </span>
+                <StrategyDocLinks />
               </div>
             )}
           </div>
@@ -750,6 +781,11 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
                       <Terminal className="h-4 w-4 text-accent" />
                       <span className="text-sm font-medium text-foreground">自定义策略代码</span>
                       {validated && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">已校验</span>}
+                      {!validated && autoCheck.state !== 'idle' && (
+                        <span data-auto-check={autoCheck.state} className={cn('text-[11px]', autoCheck.state === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : autoCheck.state === 'bad' ? 'text-warning' : 'text-muted')}>
+                          {autoCheck.state === 'checking' ? '校验中' : autoCheck.state === 'ok' ? '自动校验通过' : '自动校验未通过'}
+                        </span>
+                      )}
                     </div>
                     <button onClick={() => { navigator.clipboard.writeText(code || (executionBackend === 'matrix_native' ? MATRIX_TEMPLATE : CUSTOM_TEMPLATE)); setCustomCopied(true); setTimeout(() => setCustomCopied(false), 2000) }}
                       className={cn('inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all cursor-pointer', customCopied ? 'bg-emerald-400/10 text-emerald-700 dark:text-emerald-400' : 'bg-elevated text-muted hover:text-foreground hover:bg-accent/10')}>
@@ -757,12 +793,10 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
                       {customCopied ? '已复制' : '复制代码'}
                     </button>
                   </div>
-                  <textarea
-                    value={code}
-                    onChange={e => { setCode(e.target.value); setValidated(false) }}
-                    spellCheck={false}
-                    className="w-full h-[420px] rounded-xl border border-border/40 bg-base p-4 text-[11px] leading-relaxed font-mono text-foreground/80 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30"
-                  />
+                  <CodeEditor value={code} onChange={(v) => { setCode(v); setValidated(false) }} className="h-[420px] w-full" />
+                  {autoCheck.state === 'bad' && !error && (
+                    <div data-auto-check-error className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning">{autoCheck.error}</div>
+                  )}
                   <div className="text-[11px] text-muted leading-relaxed">
                     新建自定义策略会保存到 <code className="px-1 py-0.5 rounded bg-base text-xs font-mono text-foreground/80">data/strategies/custom/</code>；修改已有策略会保存回原文件。
                   </div>
