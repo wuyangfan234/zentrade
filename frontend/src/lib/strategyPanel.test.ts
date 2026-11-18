@@ -57,7 +57,7 @@ it('入选标签写清是哪一面', () => {
 
 it('R 的写法: 带正负号, 四舍五入到 0 时不带负号, 没有数给破折号', () => {
   expect(fmtR(0.2494)).toBe('+0.25R')
-  expect(fmtR(-1.0567)).toBe('-1.06R')
+  expect(fmtR(-1.0567)).toBe('−1.06R')
   expect(fmtR(-0.004)).toBe('0.00R')
   expect(fmtR(7.61, 1)).toBe('+7.6R')
   expect(fmtR(null)).toBe('—')

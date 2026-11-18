@@ -582,7 +582,8 @@ def auto_select_undo(body: AutoSelectUndoIn, request: Request) -> dict:
         except KeyError:
             raise HTTPException(404, "没有这条换入记录") from None
         except ValueError as e:
-            raise HTTPException(409, "已撤回" if str(e) == "already_undone" else "入选策略已另行修改，不能撤回") from None  # noqa: RUF001
+            msg = {"already_undone": "已撤回", "out_removed": "被换出的排序因子已退席，不能撤回"}.get(str(e), "入选策略已另行修改，不能撤回")  # noqa: RUF001
+            raise HTTPException(409, msg) from None
     return ras.view(data_dir)
 
 

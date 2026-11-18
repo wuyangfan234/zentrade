@@ -247,7 +247,8 @@ def _notify(data_dir: Path, done: list[dict]) -> None:
 
 
 def undo(data_dir: Path, swap_id: str) -> dict:
-    """撤回一次换入: 把换入的那条换回被换出的那条。换入的已不在入选里 / 被换出的已在 -> ValueError。"""
+    """撤回一次换入: 把换入的那条换回被换出的那条。换入的已不在入选里 / 被换出的已在 -> ValueError("changed_since");
+    被换出的是排序因子且已被移除 (公式挖掘退席 / 手动移除) -> ValueError("out_removed"): 写回去信号表不会再给它算值。"""
     from app.services import swing_desk as sd
     data_dir = Path(data_dir)
     log = read_log(data_dir)
@@ -261,6 +262,9 @@ def undo(data_dir: Path, swap_id: str) -> dict:
     side = s["side"]
     if s["in"] not in cur[side] or s["out"] in cur[side]:
         raise ValueError("changed_since")
+    from app.services import rank_lab
+    if rank_lab.is_ranker(s["out"]) and s["out"] not in rank_lab.read_rankers(data_dir):
+        raise ValueError("out_removed")
     cur[side] = [s["out"] if x == s["in"] else x for x in cur[side]]
     sd.save_strategies(data_dir, cur["long"], cur["short"])
     s["undone_at"] = datetime.now().astimezone().isoformat(timespec="seconds")

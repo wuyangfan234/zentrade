@@ -122,3 +122,6 @@ export function capSub(s: RadarSlot): string {
   if (s.state === 'tight') return `余 ${s.free} · 候选 ${s.waiting.length}`
   return ''
 }
+
+/** 等进场卡的距离: 不到 0.05% 的写「<0.1%」, 不写成「还差 0.0%」(价格没到进场区) */
+export const gapText = (gap: number): string => `还差 ${gap > 0 && gap < 0.05 ? '<0.1' : gap.toFixed(1)}%`

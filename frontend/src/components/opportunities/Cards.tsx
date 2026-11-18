@@ -4,7 +4,7 @@
  * 模型打分只作「模型反向」提示, 不改方向、不合成分数。只展示: 交易环 / 准入 / 下单簿 / 台账不变。 */
 import type { ReactNode } from 'react'
 import type { LsRankPayload, OppCardCtx, OppQuote, OppRadarView, RadarBlip, SwingBoardCard, SwingBoardsPayload } from '@/lib/api'
-import { cardVerdict, dayTag, md, SIDE_ARROW, setupKind, usdS, zonePos } from '@/components/opportunities/terms'
+import { cardVerdict, dayTag, gapText, md, SIDE_ARROW, setupKind, usdS, zonePos } from '@/components/opportunities/terms'
 import { PriceRuler, RulerLegend } from '@/components/opportunities/PriceRuler'
 import { badge } from '@/components/ui/badge'
 
@@ -102,7 +102,7 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
       <div data-card-state className="mt-1 flex min-h-[22px] flex-wrap items-center gap-1.5">
         {hot ? <span className={badge('action')}>已到进场价</span>
           : zp.pos === 'past' ? <><span className={badge('warn')}>已穿过进场区</span><span className="text-[12px] text-warning">{`偏离 ${zp.gap!.toFixed(1)}%`}</span></>
-            : <><span className={badge('status')}>等进场</span>{fin(zp.gap) && <span className="text-[12px] text-secondary">{`还差 ${zp.gap.toFixed(1)}%`}</span>}</>}
+            : <><span className={badge('status')}>等进场</span>{fin(zp.gap) && <span className="text-[12px] text-secondary">{gapText(zp.gap)}</span>}</>}
         <Conflict model={model} sym={c.symbol} side={c.side} />
         {earn && <span data-card-earn className={badge('warn')}>{`财报 ${md(earn.date)}`}</span>}
       </div>

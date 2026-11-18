@@ -103,7 +103,7 @@ it('做多那一面用做多的回放与命中, 没有模拟成交时给空状�
   expect(q('[data-detail-name]')!.textContent).toBe('HalfTrend 翻多')
   expect(q('[data-detail-base]')).toBeNull()
   expect(q('[data-kpi="replay-mean"]')!.textContent).toContain('+0.04R')
-  expect(q('[data-kpi="replay-excess"]')!.textContent).toContain('-0.10R')
+  expect(q('[data-kpi="replay-excess"]')!.textContent).toContain('−0.10R')
   expect(q('[data-kpi="paper-mean"]')!.textContent).toContain('暂无成交')
   expect(q('[data-curve-empty]')!.textContent).toBe('暂无成交')
   expect(q('[data-trades-empty]')!.textContent).toBe('暂无成交')
@@ -195,7 +195,7 @@ it('背离与区间: 有区间时写出区间, 区间不含回放值标背离', 
   }
   renderDetail({ entry: diverged })
   expect(q('[data-paper-state="diverged"]')!.textContent).toBe('背离')
-  expect(q('[data-paper-ci]')!.textContent).toBe('每笔均值 95% 区间 -1.20R ~ -0.40R')
+  expect(q('[data-paper-ci]')!.textContent).toBe('每笔均值 95% 区间 −1.20R ~ −0.40R')
 })
 
 it('参数显示现值 (含已保存的覆盖), 布尔写开 / 关', () => {

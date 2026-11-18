@@ -43,11 +43,11 @@ export function hasFullReplay(r?: StrategyPanelReplay | null): r is StrategyPane
 const absFixed = (v: number, digits: number) => Math.abs(v).toFixed(digits)
 const rounded = (v: number, digits: number) => Number(v.toFixed(digits))
 
-/** +0.25R / -1.06R / 0.00R; 没有数 → — */
+/** +0.25R / −1.06R / 0.00R; 没有数 → —。负号用 U+2212, 与机会页 / 因子页一致 */
 export function fmtR(v: number | null | undefined, digits = 2): string {
   if (v == null || !Number.isFinite(v)) return '—'
   const x = rounded(v, digits)
-  return `${x > 0 ? '+' : x < 0 ? '-' : ''}${absFixed(x, digits)}R`
+  return `${x > 0 ? '+' : x < 0 ? '−' : ''}${absFixed(x, digits)}R`
 }
 
 /** 红涨绿跌的文字色类; 没有数或为 0 不着色 */

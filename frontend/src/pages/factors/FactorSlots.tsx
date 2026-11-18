@@ -28,6 +28,7 @@ import {
   type WatchlistRuleCatalogItem,
 } from '@/lib/api'
 import { weeklyText } from './weeklySchedule'
+import { navTicks } from './navTicks'
 import { maturityTitle } from './FactorLibrary'
 import { QK } from '@/lib/queryKeys'
 import { RETIRED_MARKET_FIELDS } from '@/lib/retired-market-fields'
@@ -38,11 +39,14 @@ const DASH = '—'
 const MINUS = '−'
 const WEEKS_SHOWN = 4
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
-const signed = (v: number, digits: number) => `${v > 0 ? '+' : v < 0 ? MINUS : ''}${Math.abs(v).toFixed(digits)}`
+/** 符号按四舍五入后的数字给: 舍入成 0 的不带正负号 (不出现 −0.00) */
+const signed = (v: number, digits: number) => { const a = Math.abs(v).toFixed(digits); return `${Number(a) === 0 ? '' : v > 0 ? '+' : MINUS}${a}` }
 export const fmtR = (v: number | null | undefined) => (fin(v) ? `${signed(v, 2)}R` : DASH)
 export const fmtIc = (v: number | null | undefined) => (fin(v) ? signed(v, 3) : DASH)
 export const fmtPct = (v: number | null | undefined) => (fin(v) ? `${signed(v * 100, 1)}%` : DASH)
 const rTone = (v: number | null | undefined) => (!fin(v) || v === 0 ? 'text-foreground' : v > 0 ? 'text-bull' : 'text-bear')
+/** R 值 (两位小数) 的取色: 舍入成 0.00 的按平处理, 不染涨跌色 */
+const rToneR = (v: number | null | undefined) => rTone(fin(v) && Math.abs(v) < 0.005 ? 0 : v)
 
 // ---------------------------------------------------------------- model (纯函数, 单测守着)
 export type Fam = '突破' | '趋势' | '回踩' | '反转'
@@ -178,6 +182,7 @@ export interface BoardRow {
   id: string; name: string; role: 'champ' | 'ch'; kind: string
   n: number | null; excess: number | null; lo: number | null; hi: number | null; p: number | null; passed: boolean; note: string | null
 }
+export { navTicks }
 const KIND_LABEL: Record<string, string> = { ranker: '排序因子', custom: '挖掘', ai: 'AI', builtin: '内置', ported: '移植' }
 export const boardKind = (k: string) => KIND_LABEL[k] ?? k
 
@@ -188,6 +193,15 @@ export function boardRows(longIds: string[], catalog: WatchlistRuleCatalogItem[]
   for (const id of longIds) {
     const c = byId.get(id)
     const h = c?.history
+    const d = c?.candidate
+    // 入选的排序因子 / 挖掘 / AI 策略没有离线回放 history, 成绩在 candidate (与挑战者同一把尺子): 不能写成「无回放 · 0 笔」
+    if (!h && c && ['ranker', 'custom', 'ai'].includes(c.kind) && d && !d.error && fin(d.n)) {
+      const enough = d.n >= 30
+      rows.push({ id, name: displayStrategyName(c.name), role: 'champ', kind: c.kind, n: d.n,
+        excess: enough ? (d.excess ?? null) : null, lo: enough ? (d.excess_ci?.[0] ?? null) : null, hi: enough ? (d.excess_ci?.[1] ?? null) : null,
+        p: null, passed: false, note: d.n === 0 ? '0 笔' : !enough ? `样本少 ${d.n} 笔` : null })
+      continue
+    }
     const thin = !h || h.thin || !fin(h.mean_r)
     rows.push({ id, name: displayStrategyName(c?.name ?? id), role: 'champ', kind: c?.kind ?? 'builtin',
       n: h?.n ?? null, excess: thin ? null : (h?.excess ?? null), lo: null, hi: null, p: fin(h?.p) ? h!.p! : null, passed: false,
@@ -379,7 +393,7 @@ function NavLines({ dates, series }: { dates: string[]; series: { key: string; v
   const x = (i: number) => xt(ts[i] ?? t0)
   const y = (v: number) => T + (H - T - B) * (1 - (v - mn) / (mx - mn || 1))
   const path = (vals: (number | null)[]) => vals.map((v, i) => (v == null ? '' : `${i && vals[i - 1] != null ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`)).join('')
-  const ticks = [1, 2, 3, 4, 5, 6].filter(t => t > mn && t < mx)
+  const ticks = navTicks(mn, mx)
   const years = Array.from(new Set(dates.map(d => d.slice(0, 4)))).slice(1)
   const ends = series.map(s => { const last = [...s.values].reverse().find(fin); return { y: last == null ? 0 : y(last), v: last, color: s.color } })
     .filter(e => e.v != null).sort((a, b) => a.y - b.y)
@@ -429,9 +443,9 @@ function BoardSlot({ d }: { d: SlotData }) {
           <span className="truncate text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
           {r.passed && <Tag tone="ok">过验收</Tag>}
         </div>
-        <div className="truncate text-[11px] text-secondary">{`${r.role === 'champ' ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</div>
+        <div className="truncate text-[11px] text-secondary">{`${r.role === 'champ' && !['ranker', 'custom', 'ai'].includes(r.kind) ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</div>
       </td>
-      <td className={`whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[13px] font-semibold tabular-nums ${rTone(r.excess)}`}>{r.note ?? fmtR(r.excess)}</td>
+      <td className={`whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[13px] font-semibold tabular-nums ${rToneR(r.excess)}`}>{r.note ?? fmtR(r.excess)}</td>
       <td className="whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[12px] tabular-nums text-secondary">
         {r.lo != null && r.hi != null ? `${fmtR(r.lo).replace('R', '')} ~ ${fmtR(r.hi).replace('R', '')}` : r.p != null ? `p ${r.p.toFixed(3)}` : DASH}
       </td>

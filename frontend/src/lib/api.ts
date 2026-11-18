@@ -4,7 +4,11 @@
 // Prod:同源(FastAPI 托管前端 dist)
 
 import { toast } from '@/components/Toast'
-import { cleanDeskNames } from './strategyDisplay'
+import { canonicalStrategyName, cleanDeskNames } from './strategyDisplay'
+
+/** 策略名统一 (显示层): 接口返回的策略条目在进页面之前换成全站统一的名字 */
+const canonNames = <T extends { name: string }>(xs: T[] | null | undefined): T[] =>
+  (xs ?? []).map((x) => (typeof x?.name === 'string' ? { ...x, name: canonicalStrategyName(x.name) } : x))
 
 const BASE = ''
 
@@ -528,6 +532,8 @@ export interface StrategyPanelSide {
 export interface StrategyPanelEntry {
   short_capable: boolean
   name_short: string | null
+  /** 入选的排序因子 (不是策略引擎里的策略): 策略页只读条目, 没有扫描 / 监控 / 参数 / 回测 */
+  ranker?: { name: string; formula: string; direction: 'high' | 'low' } | null
   sides: { long: StrategyPanelSide; short?: StrategyPanelSide }
 }
 
@@ -886,7 +892,7 @@ export interface AutoSelectSwap {
   id: string; day: string; side: 'long' | 'short'; out: string; in: string; out_name: string; in_name: string
   out_excess: number | null; in_excess: number | null; undone_at: string | null
 }
-/** 公式挖掘 (formula_miner.view): 自动写的排序公式在候补席上的前向成绩 */
+/** 公式挖掘 (formula_miner.view): 自动写的排序公式在挖掘席位上的前向成绩 */
 export interface FormulaMinerSeg { n?: number | null; excess?: number | null; excess_ci?: [number, number] | null }
 export interface FormulaMinerRow {
   id: string
@@ -3220,7 +3226,7 @@ export const api = {
   cardSettlement: () => request<SettlementPayload>('/api/opportunities/settlement', { quiet: true }),
   swingSettlement: () => request<SwingSettlePayload>('/api/opportunities/swing-settlement', { quiet: true }),
   settlementCards: () => request<SettlementCardsPayload>('/api/opportunities/settlement/cards', { quiet: true }),
-  watchlistRules: () => request<WatchlistRulesPayload>('/api/opportunities/rules'),
+  watchlistRules: () => request<WatchlistRulesPayload>('/api/opportunities/rules').then((d) => ({ ...d, catalog: canonNames(d.catalog) })),
   /** 2026-11-18 自动选策略: 视图 / 开关 / 撤回一次换入 */
   autoSelect: () => request<AutoSelectView>('/api/opportunities/auto-select', { quiet: true }),
   setAutoSelect: (enabled: boolean) => request<AutoSelectView>('/api/opportunities/auto-select', { method: 'POST', quiet: true, body: JSON.stringify({ enabled }) }),
@@ -3340,7 +3346,7 @@ export const api = {
     const data = await request<{ strategies: StrategyDetail[]; load_errors?: StrategyLoadError[] }>(
       `/api/strategies?${assetType ? `asset_type=${assetType}&` : ''}${timeframe !== 'all' ? `timeframe=${timeframe}` : ''}`,
     )
-    return { presets: data.strategies, load_errors: data.load_errors }
+    return { presets: canonNames(data.strategies), load_errors: data.load_errors }
   },
   screenerRunPreset: (strategy_id: string, pool?: string[], asOf?: string, extColumns?: string, assetType: 'stock' | 'etf' = 'stock', timeframe: '1d' | '1m' | '1h' = '1d') =>
     request<ScreenerResult>('/api/screener/run_preset', {
@@ -3564,7 +3570,8 @@ export const api = {
   researchCandidates: () =>
     request<{ items: ResearchCandidate[] }>('/api/backtest/candidates'),
 
-  factorLabPage: () => request<FactorLabPage>('/api/factor-lab/page'),
+  factorLabPage: () => request<FactorLabPage>('/api/factor-lab/page').then((d) => (d.week?.engine?.legs
+    ? { ...d, week: { ...d.week, engine: { ...d.week.engine, legs: canonNames(d.week.engine.legs) } } } : d)),
   factorLabDecide: (week: string, signature: string, action: 'save' | 'discard' | 'reset') =>
     request<{ candidate_id?: string; removed_candidate_id?: string }>('/api/factor-lab/candidates/decide', { method: 'POST', body: JSON.stringify({ week, signature, action }) }),
   factorLabRecalc: (payload: { signature: string; pool: 'watchlist' | 'theme' | 'custom'; symbols?: string[]; start: string; end: string }) =>
@@ -3845,11 +3852,11 @@ export const api = {
     const qs = params.toString()
     return request<{ strategies: StrategyDetail[]; load_errors?: StrategyLoadError[] }>(
       `/api/strategies${qs ? `?${qs}` : ''}`,
-    )
+    ).then((d) => ({ ...d, strategies: canonNames(d.strategies) }))
   },
 
   strategyGet: (id: string) =>
-    request<StrategyDetail>(`/api/strategies/${id}`),
+    request<StrategyDetail>(`/api/strategies/${id}`).then((d) => canonNames([d])[0]),
 
   /** 挖掘发布策略改名 (只改显示名) */
   strategyRename: (strategyId: string, name: string) =>

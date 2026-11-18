@@ -144,10 +144,20 @@ export function StrategyDetail({
   // 看做空那一面时, 标题用做空名 (做多名是「…翻多」, 配着「入选 · 空」会读反), 原名放在后面
   const shortName = side === 'short' ? entry?.name_short ?? null : null
   const title = shortName ?? strategy.name
+  // 入选的排序因子: 只读条目 (没有全市场扫描 / 监控 / 参数 / 回测, 只留去机会页规则设置的链接)
+  const ranker = entry?.ranker ?? null
 
   // 参数卡 (只读; 改参数点「参数设置」)。成交多时叠在自选命中下面补齐左列; 成交少时通栏放在最下面, 不留缺角
   const stackParams = trades.length > 2
-  const paramsCard = (
+  const paramsCard = ranker ? (
+    <div className={CARD}>
+      <div className={CARD_HEAD}>
+        <h3 className="whitespace-nowrap font-semibold text-foreground">公式</h3>
+        <span className="whitespace-nowrap text-muted">{`方向 ${ranker.direction === 'low' ? '低' : '高'} · 每日取前 5`}</span>
+      </div>
+      <code data-ranker-formula className="block break-all px-3 py-2 font-mono text-[12px] text-secondary">{ranker.formula}</code>
+    </div>
+  ) : (
     <div className={CARD}>
       <div className={CARD_HEAD}>
         <h3 className="whitespace-nowrap font-semibold text-foreground">参数</h3>
@@ -198,7 +208,7 @@ export function StrategyDetail({
             </button>
           )}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className={badge('limit')}>{SOURCE_LABEL[strategy.source] ?? '内置'}</span>
+            <span className={badge('limit')}>{ranker ? '排序因子' : SOURCE_LABEL[strategy.source] ?? '内置'}</span>
             <span className={badge('limit')}>{timeframeLabel(strategy.timeframes)}</span>
             {sel.length > 0 && <span data-detail-selected className={badge('status')} title="入选策略 · 在机会页生成机会">{selectedLabel(sel)}</span>}
             {shortName && <span data-detail-base className="whitespace-nowrap text-xs text-secondary">{strategy.name}</span>}
@@ -223,8 +233,8 @@ export function StrategyDetail({
               ))}
             </div>
           )}
-          <Switch name="pool" on={inPool} label="全市场扫描" title={inPool ? '移出策略池' : '加入策略池'} onClick={onTogglePool} />
-          <Switch name="monitor" on={monitored} label="监控" title={monitored ? '取消策略监控' : '开启策略监控'} onClick={onToggleMonitor} />
+          {!ranker && <Switch name="pool" on={inPool} label="全市场扫描" title={inPool ? '移出策略池' : '加入策略池'} onClick={onTogglePool} />}
+          {!ranker && <Switch name="monitor" on={monitored} label="监控" title={monitored ? '取消策略监控' : '开启策略监控'} onClick={onToggleMonitor} />}
           <div className="flex flex-wrap items-center gap-2 md:ml-auto">
             <Link
               to="/?rules=1"
@@ -235,7 +245,7 @@ export function StrategyDetail({
               <SlidersHorizontal className="h-3.5 w-3.5 shrink-0" />
               入选策略
             </Link>
-            <button
+            {!ranker && <button
               type="button"
               data-detail-settings
               onClick={onSettings}
@@ -243,8 +253,8 @@ export function StrategyDetail({
             >
               <Settings2 className="h-3.5 w-3.5 shrink-0" />
               参数设置
-            </button>
-            <Link
+            </button>}
+            {!ranker && <Link
               to={backtestHref(strategy.id)}
               data-detail-backtest
               title="回测页选中该策略并开始回测"
@@ -252,7 +262,7 @@ export function StrategyDetail({
             >
               <History className="h-3.5 w-3.5 shrink-0" />
               回测
-            </Link>
+            </Link>}
           </div>
         </div>
       </div>
@@ -271,7 +281,7 @@ export function StrategyDetail({
           title={panel?.replay_meta.window ? `机会板同一张卡的历史回放 · ${panel.replay_meta.window[0]} 起` : undefined}
           value={full ? fmtR(replay.mean_r) : '—'}
           tone={full ? toneClass(replay.mean_r) : undefined}
-          sub={replay ? (full ? `${replay.n.toLocaleString('en-US')} 笔 · 成交率 ${fmtRate(replay.fill)}` : `样本少 · ${replay.n} 笔`) : (panelLoading ? '加载中' : '暂无回放')}
+          sub={replay ? (full ? `${replay.n.toLocaleString('en-US')} 笔${replay.fill == null ? '' : ` · 成交率 ${fmtRate(replay.fill)}`}` : `样本少 · ${replay.n} 笔`) : (panelLoading ? '加载中' : '暂无回放')}
         />
         <Kpi
           name="replay-excess"

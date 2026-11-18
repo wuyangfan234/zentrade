@@ -23,6 +23,7 @@ import {
 } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { RUN_NOW_ZH, weeklyText } from './weeklySchedule'
+import { navTicks } from './navTicks'
 
 const DASH = '—'
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -230,8 +231,7 @@ function NavChart({ dates, series }: { dates: string[]; series: Series[] }) {
   const x = (i: number) => L + (W - L - R) * i / (n - 1)
   const y = (v: number) => T + (H - T - B) * (1 - (v - mn) / (mx - mn))
   const path = (vals: (number | null)[]) => vals.map((v, i) => v == null ? '' : `${i && vals[i - 1] != null ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('')
-  const ticks: number[] = []
-  for (let t = 1; t <= mx; t++) ticks.push(t)
+  const ticks = navTicks(mn, mx + 1e-9)
   const years = Array.from(new Set(dates.map(d => d.slice(0, 4)))).slice(1)
   const yi = years.map(yy => dates.findIndex(d => d >= yy)).filter(i => i > 0)
   const ends = series.map(s => {
@@ -420,9 +420,9 @@ function Detail({ page, sel, onDecide, onIntake }: {
             <Seg value={pool} onChange={setPool} options={[['watchlist', `自选 ${w.symbols}`], ['theme', `主题 ${w.funnel.pool ?? ''}`], ['custom', '自定义']]} />
             {pool === 'custom' && <input value={customSymbols} onChange={e => setCustomSymbols(e.target.value)} placeholder="AAPL, NVDA" aria-label="自定义股票" className="h-7 w-36 rounded-input border border-border bg-surface px-2 text-xs" />}
             <span className="text-[11px] text-secondary">区间</span>
-            <input value={start} onChange={e => setStart(e.target.value)} className="h-7 w-[92px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
+            <input value={start} onChange={e => setStart(e.target.value)} className="h-7 w-[104px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
             <span className="text-muted">→</span>
-            <input value={end} onChange={e => setEnd(e.target.value)} className="h-7 w-[92px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
+            <input value={end} onChange={e => setEnd(e.target.value)} className="h-7 w-[104px] rounded-input border border-border bg-surface px-2 text-xs tabular-nums" />
             <Btn primary disabled={recalc.isPending || !canRecalc} onClick={() => recalc.mutate({ key: selKey })}>{recalc.isPending ? '重算中' : '重算'}</Btn>
           </>}
         </div>
@@ -562,7 +562,7 @@ function IntakeCards({ page, sel, setSel, filter, onIntake }: {
   const cards = page.intake.cards.filter(c => filter === 'all' || (filter === 'pending' && c.stage === 'pending') || (filter === 'archived' && c.stage !== 'pending'))
   if (!cards.length) return <div className="p-6 text-center text-xs text-muted">暂无</div>
   return (
-    <div className="grid grid-cols-1" data-intake-cards="" data-layout="list">
+    <div className="scroll-y-visible grid max-h-[560px] grid-cols-1 overflow-y-auto" data-intake-cards="" data-layout="list">
       {cards.map(c => <IntakeCardView key={c.id} c={c} active={sel.kind === 'intake' && sel.id === c.id} onOpen={i => setSel({ kind: 'intake', id: c.id, formula: i })} onIntake={onIntake} />)}
     </div>
   )
@@ -927,7 +927,8 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
           onOpen={(id, formula) => openSel({ kind: 'intake', id, formula })}
           onRetry={id => retryIntake.mutate(id)} onIntake={(id, action, formula) => intake.mutate({ id, action, formula })} />
       </div>
-      <Card className="mt-3">
+      {/* 通栏列表卡: 限高, 条目在卡内滚动 (不把下面的「近 4 周」推出屏外) */}
+      <Card className="mt-3 overflow-hidden">
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border px-3.5 py-2.5 text-xs text-secondary" data-funnel="">
           {!it && <span className="text-warning">采集读取失败{page.errors.intake ? ` · ${page.errors.intake}` : ''}</span>}
           {it && ([['抓取', funnel?.fetched], ['送模型', funnel?.llm], ['美股个股', funnel?.us_stock], ['定义', funnel?.defined], ['公式', funnel?.formulas], ['待审', funnel?.pending]] as [string, number | undefined][]).map(([k, v], i, arr) => (
