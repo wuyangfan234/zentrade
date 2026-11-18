@@ -228,7 +228,7 @@ def run_weekly(data_dir: Path, engine, *, day: date, force: bool = False) -> dic
 
 
 def _fmt(v) -> str:
-    return "—" if not isinstance(v, (int, float)) else f"{v:+.2f}".replace("-", "−")
+    return "—" if not isinstance(v, (int, float)) else f"{v:+.2f}".replace("-", "−")  # noqa: RUF001
 
 
 def _notify(data_dir: Path, done: list[dict]) -> None:
@@ -236,9 +236,9 @@ def _notify(data_dir: Path, done: list[dict]) -> None:
         from app.services.notify_opportunity import enqueue_global
         lines = []
         for s in done:
-            lines.append(f"- **{'做多' if s['side'] == 'long' else '做空'}**：{s['out_name']} → {s['in_name']}"
-                         f"（超额 {_fmt(s['out_excess'])} → {_fmt(s['in_excess'])} R，{s['in_days']} 个信号日 {s['in_filled']} 笔）")
-        lines.append("下一个信号日起生效；机会页齿轮可撤回或关闭自动选策略。")
+            lines.append(f"- **{'做多' if s['side'] == 'long' else '做空'}**：{s['out_name']} → {s['in_name']}"  # noqa: RUF001
+                         f"（超额 {_fmt(s['out_excess'])} → {_fmt(s['in_excess'])} R，{s['in_days']} 个信号日 {s['in_filled']} 笔）")  # noqa: RUF001
+        lines.append("下一个信号日起生效；机会页齿轮可撤回或关闭自动选策略。")  # noqa: RUF001
         enqueue_global(data_dir, "auto-select:" + ",".join(s["id"] for s in done),
                        {"title": "ZenTrade · 入选策略自动调整", "subtitle": done[0]["day"], "body": "\n".join(lines)},
                        event_type="auto_select", data={"swaps": done})
