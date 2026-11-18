@@ -1,0 +1,391 @@
+{
+ "now_utc": "2026-11-18T20:20:59+00:00",
+ "lab_files": {
+  ".lock": {
+   "mtime": "2026-11-06T04:21:06.241+00:00",
+   "size": 0
+  },
+  "meta.json": {
+   "mtime": "2026-11-17T22:41:57.559+00:00",
+   "size": 18366
+  },
+  "panel.parquet": {
+   "mtime": "2026-11-17T22:41:57.545+00:00",
+   "size": 2231731
+  },
+  "pool.parquet": {
+   "mtime": "2026-11-17T22:41:57.523+00:00",
+   "size": 79551
+  },
+  "rankers.json": {
+   "mtime": "2026-11-18T09:53:51.108+00:00",
+   "size": 5397
+  },
+  "results.json": {
+   "mtime": "2026-11-18T09:53:51.101+00:00",
+   "size": 8370
+  }
+ },
+ "meta": {
+  "contract": "rank-lab-v2",
+  "pool_sha": "63623aea1adae7b5",
+  "data_end": "2026-11-16",
+  "generated_at": "2026-11-18T06:41:57+08:00",
+  "split": {
+   "mining_end": "2025-06-30",
+   "holdout_start": "2025-07-01"
+  },
+  "counts": {
+   "cells": 13870,
+   "filled": 8702,
+   "gate_per_day": 14.27
+  },
+  "window": [
+   "2023-01-03",
+   "2026-11-16"
+  ],
+  "watchlist_n": 47,
+  "card_contract": "swing-desk-tight-v1",
+  "n_days": 972,
+  "n_symbols": 47
+ },
+ "results_doc": {
+  "contract": "rank-lab-v2",
+  "split": {
+   "mining_end": "2025-06-30",
+   "holdout_start": "2025-07-01"
+  },
+  "pool_sha": "63623aea1adae7b5",
+  "data_end": "2026-11-16",
+  "generated_at": "2026-11-18T17:53:51+08:00",
+  "n": 5
+ },
+ "rankers_by_system": {
+  "oasis-rank": {
+   "alive": 3,
+   "removed": 0
+  },
+  "zentrade-miner": {
+   "alive": 2,
+   "removed": 0
+  }
+ },
+ "rankers": [
+  {
+   "id": "rank_6355620756",
+   "system": "oasis-rank",
+   "src_status": "scored",
+   "imported_at": "2026-11-06T12:21:06+08:00",
+   "updated_at": "2026-11-11T01:48:46+08:00",
+   "removed_at": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null,
+    "split_checked": true
+   },
+   "src_pool_sha": "56275ae9e9f8c0f3",
+   "src_split": {
+    "mining_end": "2025-06-30",
+    "holdout_start": "2025-07-01"
+   },
+   "result": {
+    "pool_sha": "63623aea1adae7b5",
+    "split_ok": true,
+    "evaluated_at": "2026-11-18T06:41:57+08:00",
+    "passed": false,
+    "stale_split": null
+   }
+  },
+  {
+   "id": "rank_ff1e802bd0",
+   "system": "oasis-rank",
+   "src_status": "composite",
+   "imported_at": "2026-11-10T16:58:28+08:00",
+   "updated_at": "2026-11-11T01:48:20+08:00",
+   "removed_at": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null,
+    "split_checked": true
+   },
+   "src_pool_sha": "56275ae9e9f8c0f3",
+   "src_split": {
+    "mining_end": "2025-06-30",
+    "holdout_start": "2025-07-01"
+   },
+   "result": {
+    "pool_sha": "63623aea1adae7b5",
+    "split_ok": true,
+    "evaluated_at": "2026-11-18T06:41:58+08:00",
+    "passed": false,
+    "stale_split": null
+   }
+  },
+  {
+   "id": "rank_59ae3b44ef",
+   "system": "oasis-rank",
+   "src_status": "research_pass",
+   "imported_at": "2026-11-11T03:08:13+08:00",
+   "updated_at": "2026-11-11T03:08:13+08:00",
+   "removed_at": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null,
+    "split_checked": true
+   },
+   "src_pool_sha": "56275ae9e9f8c0f3",
+   "src_split": {
+    "mining_end": "2025-06-30",
+    "holdout_start": "2025-07-01"
+   },
+   "result": {
+    "pool_sha": "63623aea1adae7b5",
+    "split_ok": true,
+    "evaluated_at": "2026-11-18T06:41:58+08:00",
+    "passed": false,
+    "stale_split": null
+   }
+  },
+  {
+   "id": "rank_ab395be465",
+   "system": "zentrade-miner",
+   "src_status": "challenger",
+   "imported_at": "2026-11-18T17:53:50+08:00",
+   "updated_at": "2026-11-18T17:53:50+08:00",
+   "removed_at": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null,
+    "split_checked": true
+   },
+   "src_pool_sha": "63623aea1adae7b5",
+   "src_split": {
+    "mining_end": "2025-06-30",
+    "holdout_start": "2025-07-01"
+   },
+   "result": {
+    "pool_sha": "63623aea1adae7b5",
+    "split_ok": true,
+    "evaluated_at": "2026-11-18T17:53:50+08:00",
+    "passed": false,
+    "stale_split": null
+   }
+  },
+  {
+   "id": "rank_18c1621b9b",
+   "system": "zentrade-miner",
+   "src_status": "challenger",
+   "imported_at": "2026-11-18T17:53:50+08:00",
+   "updated_at": "2026-11-18T17:53:50+08:00",
+   "removed_at": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null,
+    "split_checked": true
+   },
+   "src_pool_sha": "63623aea1adae7b5",
+   "src_split": {
+    "mining_end": "2025-06-30",
+    "holdout_start": "2025-07-01"
+   },
+   "result": {
+    "pool_sha": "63623aea1adae7b5",
+    "split_ok": true,
+    "evaluated_at": "2026-11-18T17:53:51+08:00",
+    "passed": false,
+    "stale_split": null
+   }
+  }
+ ],
+ "alive_without_result": [],
+ "results_for_unknown": [],
+ "swing_json": {
+  "long": [
+   "ibs_mean_reversion",
+   "tv_zlsma_cross",
+   "rank_59ae3b44ef"
+  ],
+  "short": [
+   "tv_smc_structure",
+   "tv_halftrend",
+   "tv_ut_bot"
+  ],
+  "updated_at": "2026-11-16T22:16:11+08:00",
+  "note": "swing-desk 3+3; 可手动改"
+ },
+ "auto_select_switch": {},
+ "auto_select_log": {
+  "evals": [],
+  "swaps": []
+ },
+ "formula_miner": {
+  "settings": {},
+  "members": {
+   "rank_ab395be465": {
+    "status": "bench",
+    "admitted_day": "2026-11-18",
+    "retired_day": null,
+    "reason": null,
+    "released_day": null,
+    "released_to": null
+   },
+   "rank_18c1621b9b": {
+    "status": "bench",
+    "admitted_day": "2026-11-18",
+    "retired_day": null,
+    "reason": null,
+    "released_day": null,
+    "released_to": null
+   }
+  },
+  "last_runs": [
+   {
+    "run_id": "fm-2026-11-18-1",
+    "day": "2026-11-18",
+    "at": "2026-11-18T17:53:33+08:00",
+    "skipped": null,
+    "error": null,
+    "admitted": [
+     {
+      "id": "rank_ab395be465",
+      "name": "距 20 日低点 低"
+     },
+     {
+      "id": "rank_18c1621b9b",
+      "name": "40 日加权隔夜跳空 低"
+     }
+    ],
+    "retired": []
+   }
+  ]
+ },
+ "signal_files": [
+  {
+   "file": "2026-11-12.json",
+   "mtime": "2026-11-12T21:55:16.521+00:00",
+   "size": 30799,
+   "rank_values_n": 3,
+   "backfilled": [],
+   "missing_alive": [
+    "rank_18c1621b9b",
+    "rank_ab395be465"
+   ]
+  },
+  {
+   "file": "2026-11-13.json",
+   "mtime": "2026-11-13T21:48:51.577+00:00",
+   "size": 28762,
+   "rank_values_n": 3,
+   "backfilled": [],
+   "missing_alive": [
+    "rank_18c1621b9b",
+    "rank_ab395be465"
+   ]
+  },
+  {
+   "file": "2026-11-16.json",
+   "mtime": "2026-11-16T21:46:36.676+00:00",
+   "size": 70720,
+   "rank_values_n": 3,
+   "backfilled": [],
+   "missing_alive": [
+    "rank_18c1621b9b",
+    "rank_ab395be465"
+   ]
+  },
+  {
+   "file": "2026-11-17.json",
+   "mtime": "2026-11-18T09:53:53.325+00:00",
+   "size": 52066,
+   "rank_values_n": 5,
+   "backfilled": [
+    "rank_18c1621b9b",
+    "rank_ab395be465"
+   ],
+   "missing_alive": []
+  }
+ ],
+ "cells_last": [
+  {
+   "file": "2026-11-13.json",
+   "mtime": "2026-11-18T06:58:16.619+00:00",
+   "size": 18331
+  },
+  {
+   "file": "2026-11-16.json",
+   "mtime": "2026-11-18T06:58:19.922+00:00",
+   "size": 20564
+  },
+  {
+   "file": "2026-11-17.json",
+   "mtime": "2026-11-18T06:58:23.050+00:00",
+   "size": 19627
+  }
+ ],
+ "oasis_imports": {
+  "rank_6355620756": {
+   "at": "2026-11-10T17:48:47+00:00",
+   "forced": null,
+   "gate": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null
+   },
+   "zt_system_now": "oasis-rank",
+   "zt_removed_at": null,
+   "removed_at": null,
+   "zentrade_missing": null
+  },
+  "rank_ff1e802bd0": {
+   "at": "2026-11-10T17:48:21+00:00",
+   "forced": null,
+   "gate": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null
+   },
+   "zt_system_now": "oasis-rank",
+   "zt_removed_at": null,
+   "removed_at": null,
+   "zentrade_missing": null
+  },
+  "rank_59ae3b44ef": {
+   "at": "2026-11-10T19:08:14+00:00",
+   "forced": null,
+   "gate": null,
+   "parity": {
+    "checked": true,
+    "match": true,
+    "reason": null
+   },
+   "zt_system_now": "oasis-rank",
+   "zt_removed_at": null,
+   "removed_at": null,
+   "zentrade_missing": null
+  }
+ },
+ "oasis_status": {
+  "state": "idle",
+  "task": null,
+  "pool_sha": "63623aea1adae7b5",
+  "code_sha": "0c8f0e22f498",
+  "next_run_at": 1795041805.294443,
+  "updated_at": "2026-11-18T19:44:57+00:00"
+ },
+ "oasis_program": {
+  "checked": {
+   "pool_sha": "63623aea1adae7b5",
+   "code_sha": "0c8f0e22f498"
+  },
+  "forward_start": "2026-11-10",
+  "select_day": "2026-11-18",
+  "confirm_week": "2026-W46"
+ }
+}
