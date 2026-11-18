@@ -2,16 +2,17 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Modal } from '@/components/Modal'
 import { X, Sparkles, Save, Loader2, ChevronLeft, ChevronRight, AlertTriangle, Settings2, FileText, Copy, Check, Terminal, ExternalLink } from 'lucide-react'
 import { api, friendlyStreamError } from '@/lib/api'
-import type { AiIterateRound } from '@/lib/api'
+import type { AiIterateRound, StrategyCodeKit, StrategyTemplate } from '@/lib/api'
 import { storage, type DefaultStrategyBasicFilter } from '@/lib/storage'
 import { cn } from '@/lib/cn'
 import { loadDefaultBasicFilter } from './DefaultStrategyParamsDialog'
-import { CodeEditor } from './CodeEditor'
+import { CodeEditor, type CodeEditorHandle } from './CodeEditor'
+import { CheckColumn, StandardDrawer, TemplateColumn, TAG_MUTED, TAG_OK, TAG_WARN, type AutoCheck, type DrawerTarget } from './StrategyAuthoring'
 import { DOC_LINKS } from '@/lib/docsLinks'
 
 /** 停笔多久后自动校验 (毫秒) */
 export const AUTO_VALIDATE_MS = 900
-export type AutoCheck = { state: 'idle' | 'checking' | 'ok' | 'bad'; error?: string }
+export type { AutoCheck } from './StrategyAuthoring'
 
 /** 指南与语法标准: 跳到开源仓库里的文档 (新标签页) */
 export function StrategyDocLinks() {
@@ -42,6 +43,11 @@ function parsePyValue(v: string): any {
   } catch {
     return s
   }
+}
+
+/** 代码行数: 与后端口径一致, 文件末尾的换行不多算一行 */
+export function countLines(code: string): number {
+  return code ? code.replace(/\r?\n$/, '').split('\n').length : 0
 }
 
 function slugId(prefix: 'ai' | 'custom' = 'ai'): string {
@@ -244,22 +250,34 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
   const [strategyId, setStrategyId] = useState('')
   const [source, setSource] = useState<'ai' | 'custom'>('ai')
   const [validated, setValidated] = useState(false)
-  // 手写页签: 停笔后自动校验一次 (只读结果, 不改代码; 「校验代码」按钮仍会按后端返回规范化代码)
+  // 手写页签: 停笔后自动做一次分项校验 (只读结果, 不改代码; 「校验代码」按钮仍会按后端返回规范化代码)
   const [autoCheck, setAutoCheck] = useState<AutoCheck>({ state: 'idle' })
   useEffect(() => {
     if (!open || tab !== 'custom' || !code.trim()) { setAutoCheck({ state: 'idle' }); return }
     let stale = false
-    setAutoCheck({ state: 'checking' })
+    setAutoCheck(prev => ({ state: 'checking', result: prev.result }))   // 保留上一次结果, 不闪
     const timer = setTimeout(async () => {
       try {
-        const res = await api.strategyValidateCode({ code }, { quiet: true })
-        if (!stale) setAutoCheck(res.valid ? { state: 'ok' } : { state: 'bad', error: res.error ?? '代码校验失败' })
+        const res = await api.strategyCheckCode(code, { quiet: true })
+        if (stale) return
+        const firstBad = res.items.find(i => i.state === 'bad')
+        setAutoCheck(res.valid ? { state: 'ok', result: res } : { state: 'bad', result: res, error: firstBad?.detail || firstBad?.text || '代码校验失败' })
       } catch {
         if (!stale) setAutoCheck({ state: 'idle' })   // 网络问题不当成代码错误
       }
     }, AUTO_VALIDATE_MS)
     return () => { stale = true; clearTimeout(timer) }
   }, [open, tab, code])
+  // 模板库与语法标准摘要: 打开后取一次
+  const [kit, setKit] = useState<StrategyCodeKit | null>(null)
+  useEffect(() => {
+    if (!open || kit) return
+    let gone = false
+    api.strategyCodeKit().then(k => { if (!gone) setKit(k) }).catch(() => {})
+    return () => { gone = true }
+  }, [open, kit])
+  const [drawer, setDrawer] = useState<DrawerTarget | null>(null)
+  const editorRef = useRef<CodeEditorHandle>(null)
 
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -351,6 +369,16 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
     if (tab === 'custom' && (!code || code === CUSTOM_TEMPLATE || code === MATRIX_TEMPLATE)) {
       setCode(backend === 'matrix_native' ? MATRIX_TEMPLATE : CUSTOM_TEMPLATE)
     }
+  }
+
+  const applyTemplate = (t: StrategyTemplate) => {
+    const names = (kit?.templates ?? []).map(x => parseMetaField(x.code, 'name'))
+    const descs = (kit?.templates ?? []).map(x => parseMetaField(x.code, 'description'))
+    // 名称 / 描述是空的或还是上一个模板带来的, 才跟着换; 用户自己写的不动
+    if (!name.trim() || names.includes(name)) setName(parseMetaField(t.code, 'name'))
+    if (!description.trim() || descs.includes(description)) setDescription(parseMetaField(t.code, 'description'))
+    if (t.backend === 'polars_expr' || t.backend === 'matrix_native') setExecutionBackend(t.backend)
+    setCode(t.code); setStrategyId(''); setSource('custom'); setValidated(false); setError('')
   }
 
   // Step 1: 生成
@@ -510,6 +538,12 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
   const codeStopLoss = stopMatch ? (stopMatch[1] === 'None' ? null : parseFloat(stopMatch[1])) : null
   const holdMatch = code.match(/MAX_HOLD_DAYS\s*=\s*(-?[0-9.]+|None)/)
   const codeHoldDays = holdMatch ? (holdMatch[1] === 'None' ? null : parseInt(holdMatch[1])) : null
+  // 分项校验报出的行 (校验中不标: 行号会随输入移动)
+  const errorLines = autoCheck.state === 'bad'
+    ? [...new Set((autoCheck.result?.items ?? []).filter(i => i.state === 'bad' && i.line !== null).map(i => i.line as number))].sort((x, y) => x - y)
+    : []
+  // 用户写过自己的代码 (不是空的, 也不是任何一个模板原文): 换模板前要确认
+  const codeDirty = !!code.trim() && code !== CUSTOM_TEMPLATE && code !== MATRIX_TEMPLATE && !(kit?.templates ?? []).some(t => t.code === code)
   const hasParams = params.length > 0 || entrySignals.length > 0 || exitSignals.length > 0 || Object.keys(scoring).length > 0
 
   return (
@@ -517,13 +551,16 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
       onClose={handleClose}
       labelledBy="strategy-builder-title"
       overlayClassName="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
-      panelClassName="w-[820px] max-h-[88vh] bg-surface/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+      panelClassName={cn('bg-surface/95 backdrop-blur-xl border border-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden',
+        tab === 'custom'
+          ? 'h-[min(780px,calc(100dvh-40px))] w-[min(1240px,calc(100vw-40px))] max-md:h-[100dvh] max-md:w-screen max-md:rounded-none max-md:border-0'
+          : 'w-[820px] max-w-[calc(100vw-16px)] max-h-[88vh]')}
     >
 
-          {/* 标题 */}
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center px-5 py-2.5 border-b border-border/50">
-            {/* 左侧：Tab 切换 */}
-            <div className="flex rounded-lg bg-elevated p-0.5 w-fit">
+          {/* 标题: 窄屏自动折行 (页签与标题一行, 文档入口与关闭一行), 页签文字不折 */}
+          <div data-builder-head className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/50 px-5 py-2.5 max-md:px-3">
+            {/* 页签切换 */}
+            <div className="flex w-fit shrink-0 whitespace-nowrap rounded-lg bg-elevated p-0.5">
               <button onClick={() => { setTab('ai'); if (mode === 'create') setSource('ai') }} className={cn('px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer', tab === 'ai' ? 'bg-amber-400/15 text-amber-700 dark:text-amber-400' : 'text-muted hover:text-foreground')}>
                 <Sparkles className="h-3 w-3 inline mr-1" />AI 生成
               </button>
@@ -531,12 +568,10 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
                 <FileText className="h-3 w-3 inline mr-1" />自定义编写
               </button>
             </div>
-            {/* 中间：标题 */}
-            <span id="strategy-builder-title" className="text-sm font-semibold text-foreground">
+            <span id="strategy-builder-title" className="whitespace-nowrap text-sm font-semibold text-foreground">
               {mode === 'modify' ? '修改策略' : '创建策略'}
             </span>
-            {/* 右侧：步骤 + 关闭 */}
-            <div className="flex items-center justify-end gap-2">
+            <div className="ml-auto flex items-center gap-3 max-md:order-last max-md:ml-0 max-md:basis-full">
               {tab === 'ai' && (
                 <div className="flex items-center gap-1">
                   <span className={'w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ' + (step === 1 ? 'bg-amber-400/20 text-amber-700 dark:text-amber-400' : 'bg-emerald-400/20 text-emerald-700 dark:text-emerald-400')}>1</span>
@@ -544,30 +579,30 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
                   <span className={'w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ' + (step === 2 ? 'bg-amber-400/20 text-amber-700 dark:text-amber-400' : 'bg-border/50 text-muted')}>2</span>
                 </div>
               )}
-              <button aria-label="关闭" onClick={handleClose} className="p-1.5 rounded-lg hover:bg-elevated"><X className="h-4 w-4 text-muted" /></button>
+              {tab === 'custom' && (
+                <span data-strategy-docs className="inline-flex items-center gap-3 whitespace-nowrap text-[12px]">
+                  <button type="button" data-doc-open="guide" onClick={() => setDrawer({ tab: 'guide', section: null })} className="inline-flex cursor-pointer items-center gap-1 text-accent hover:underline dark:text-blue-400"><FileText className="h-3 w-3" />开发指南</button>
+                  <button type="button" data-doc-open="standard" onClick={() => setDrawer({ tab: 'standard', section: null })} className="inline-flex cursor-pointer items-center gap-1 text-accent hover:underline dark:text-blue-400"><FileText className="h-3 w-3" />语法标准</button>
+                </span>
+              )}
+            </div>
+            <button aria-label="关闭" onClick={handleClose} className="p-1.5 rounded-lg hover:bg-elevated max-md:ml-auto"><X className="h-4 w-4 text-muted" /></button>
+          </div>
+
+          {/* AI 页签的步骤说明 (自定义页签的文档入口在标题栏) */}
+          {tab === 'ai' && (
+          <div className="px-5 py-2 border-b border-border/30 bg-elevated/30">
+            <div className="flex items-center gap-2 text-[11px]">
+              <Sparkles className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
+              <span className="text-amber-700 dark:text-amber-400/80">步骤 1 描述策略规则 → 步骤 2 预览代码 → 保存</span>
+              <StrategyDocLinks />
             </div>
           </div>
-
-          {/* Tab 描述 */}
-          <div className="px-5 py-2 border-b border-border/30 bg-elevated/30">
-            {tab === 'ai' ? (
-              <div className="flex items-center gap-2 text-[11px]">
-                <Sparkles className="h-3.5 w-3.5 text-amber-700 dark:text-amber-400 shrink-0" />
-                <span className="text-amber-700 dark:text-amber-400/80">步骤 1 描述策略规则 → 步骤 2 预览代码 → 保存</span>
-                <StrategyDocLinks />
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-[11px]">
-                <Terminal className="h-3.5 w-3.5 text-accent shrink-0" />
-                <span className="text-muted">手动编写 Python 策略文件</span>
-                <StrategyDocLinks />
-              </div>
-            )}
-          </div>
+          )}
 
           {/* 内容 */}
+          {tab === 'ai' ? (
           <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
-            {tab === 'ai' ? (<>
             {aiStatus && !aiStatus.configured && (
               <div className="rounded-xl border border-amber-400/30 bg-amber-400/5 px-4 py-3 flex items-center gap-3">
                 <AlertTriangle className="h-4 w-4 text-amber-700 dark:text-amber-400 shrink-0" />
@@ -760,67 +795,68 @@ export function StrategyBuilderDialog({ open, onClose, onSavedId, mode = 'create
                 <p className="text-[11px] text-muted">可调整参数、信号、评分等 · 确认后保存策略</p>
               </>
             )}
-            </>
-            ) : (
-              /* 自定义编写 */
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="策略名称，如：我的反包策略"
-                    className="h-9 px-3 rounded-lg bg-base border-0 ring-1 ring-border/30 text-sm font-medium text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30" />
-                  <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="一句话描述策略逻辑"
-                    className="h-9 px-3 rounded-lg bg-base border-0 ring-1 ring-border/30 text-sm text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30" />
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="mr-2 text-[11px] text-muted uppercase tracking-wider">执行后端</span>
-                  <button onClick={() => selectExecutionBackend('polars_expr')} className={'px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ' + (executionBackend === 'polars_expr' ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400' : 'border-border bg-base text-muted')}>Polars 表达式</button>
-                  <button onClick={() => selectExecutionBackend('matrix_native')} className={'px-2.5 py-1 rounded text-[11px] font-medium border transition-colors ' + (executionBackend === 'matrix_native' ? 'border-accent/40 bg-accent/10 text-accent dark:text-blue-400' : 'border-border bg-base text-muted')}>矩阵原生</button>
-                </div>
-                <div className="rounded-xl border border-border/40 bg-elevated/50 p-4 space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Terminal className="h-4 w-4 text-accent" />
-                      <span className="text-sm font-medium text-foreground">自定义策略代码</span>
-                      {validated && <span className="text-[11px] text-emerald-700 dark:text-emerald-400">已校验</span>}
-                      {!validated && autoCheck.state !== 'idle' && (
-                        <span data-auto-check={autoCheck.state} className={cn('text-[11px]', autoCheck.state === 'ok' ? 'text-emerald-700 dark:text-emerald-400' : autoCheck.state === 'bad' ? 'text-warning' : 'text-muted')}>
-                          {autoCheck.state === 'checking' ? '校验中' : autoCheck.state === 'ok' ? '自动校验通过' : '自动校验未通过'}
-                        </span>
-                      )}
-                    </div>
-                    <button onClick={() => { navigator.clipboard.writeText(code || (executionBackend === 'matrix_native' ? MATRIX_TEMPLATE : CUSTOM_TEMPLATE)); setCustomCopied(true); setTimeout(() => setCustomCopied(false), 2000) }}
-                      className={cn('inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-all cursor-pointer', customCopied ? 'bg-emerald-400/10 text-emerald-700 dark:text-emerald-400' : 'bg-elevated text-muted hover:text-foreground hover:bg-accent/10')}>
-                      {customCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                      {customCopied ? '已复制' : '复制代码'}
-                    </button>
-                  </div>
-                  <CodeEditor value={code} onChange={(v) => { setCode(v); setValidated(false) }} className="h-[420px] w-full" />
-                  {autoCheck.state === 'bad' && !error && (
-                    <div data-auto-check-error className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-[11px] text-warning">{autoCheck.error}</div>
-                  )}
-                  <div className="text-[11px] text-muted leading-relaxed">
-                    新建自定义策略会保存到 <code className="px-1 py-0.5 rounded bg-base text-xs font-mono text-foreground/80">data/strategies/custom/</code>；修改已有策略会保存回原文件。
-                  </div>
-                  {error && <div className="text-[11px] text-danger bg-danger/10 border border-danger/20 rounded-lg px-3 py-2">{error}</div>}
-                  <div className="flex items-center justify-end gap-2">
-                    <button onClick={() => { setCode(executionBackend === 'matrix_native' ? MATRIX_TEMPLATE : CUSTOM_TEMPLATE); setStrategyId(''); setSource('custom'); setValidated(false) }}
-                      className="h-8 px-3 rounded-lg border border-border text-xs text-secondary hover:text-foreground">
-                      使用模板
-                    </button>
-                    <button onClick={handleValidateCode} disabled={loading || !code.trim()}
-                      className="h-8 px-3 rounded-lg border border-accent/30 bg-accent/10 text-accent dark:text-blue-400 text-xs font-medium hover:bg-accent/15 disabled:opacity-40 flex items-center gap-1.5">
-                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                      校验代码
-                    </button>
-                    <button onClick={handleSave} disabled={saving || loading || !code.trim()}
-                      className="h-8 px-3 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5">
-                      <Save className="h-3.5 w-3.5" />
-                      {saving ? '保存中' : mode === 'modify' ? '保存修改' : '保存自定义策略'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
+          ) : (
+          /* 自定义编写: 左模板 · 中代码 · 右校验 (窄屏上下堆叠: 模板 → 校验 → 代码) */
+          <div data-builder-custom className="flex min-h-0 flex-1 flex-col max-md:overflow-y-auto">
+            <div className="flex shrink-0 gap-2 border-b border-border/40 px-4 py-2.5 max-md:flex-col max-md:px-3">
+              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="策略名称"
+                className="h-[30px] min-w-0 rounded-md border border-border bg-base px-2.5 text-[13px] font-medium text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 md:w-[220px]" />
+              <input type="text" value={description} onChange={e => setDescription(e.target.value)} placeholder="一句话描述策略逻辑"
+                className="h-[30px] min-w-0 flex-1 rounded-md border border-border bg-base px-2.5 text-[13px] text-foreground placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-accent/30 max-md:flex-none" />
+            </div>
+            <div data-builder-cols className="grid min-h-0 flex-1 grid-cols-[236px_minmax(0,1fr)_292px] max-[1100px]:grid-cols-[200px_minmax(0,1fr)_260px] max-md:flex max-md:flex-none max-md:flex-col">
+              <TemplateColumn templates={kit?.templates ?? []} code={code} dirty={codeDirty} onUse={applyTemplate} />
+              <section data-col="editor" className="flex min-h-0 min-w-0 flex-col max-md:order-3">
+                <div className="flex h-[38px] shrink-0 items-center gap-2 border-b border-border/40 px-3 text-[13px] font-semibold text-foreground">
+                  代码
+                  <span data-code-file className="truncate text-[11px] font-normal text-muted">{(parseMetaField(code, 'id') || 'custom_…') + '.py'}</span>
+                  {validated && <span className={TAG_OK}>已校验</span>}
+                  {!validated && autoCheck.state === 'checking' && <span data-auto-check="checking" className={TAG_MUTED}>校验中</span>}
+                  {!validated && autoCheck.state === 'ok' && <span data-auto-check="ok" className={TAG_OK}>已通过</span>}
+                  {!validated && autoCheck.state === 'bad' && <span data-auto-check="bad" className={TAG_WARN}>{errorLines.length > 0 ? `${errorLines.length} 行有误` : '未通过'}</span>}
+                  <button type="button" onClick={() => { navigator.clipboard.writeText(code); setCustomCopied(true); setTimeout(() => setCustomCopied(false), 2000) }}
+                    className={cn('ml-auto inline-flex cursor-pointer items-center gap-1 whitespace-nowrap text-[12px] font-normal', customCopied ? 'text-emerald-700 dark:text-emerald-400' : 'text-accent hover:underline dark:text-blue-400')}>
+                    {customCopied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                    {customCopied ? '已复制' : '复制'}
+                  </button>
+                </div>
+                <CodeEditor ref={editorRef} value={code} onChange={(v) => { setCode(v); setValidated(false) }} errorLines={errorLines}
+                  className="min-h-0 w-full flex-1 rounded-none border-0 focus-within:ring-0 max-md:h-[420px] max-md:flex-none" />
+                <div data-code-foot className="flex shrink-0 items-center gap-2 border-t border-border/40 px-3 py-1 text-[11px] text-secondary">
+                  <span data-code-lines className="tabular-nums">共 {countLines(code)} 行</span>
+                  {errorLines.map(n => (
+                    <button type="button" key={n} data-jump-line={n} onClick={() => editorRef.current?.focusLine(n)} className="cursor-pointer tabular-nums text-warning hover:underline">第 {n} 行</button>
+                  ))}
+                </div>
+              </section>
+              <CheckColumn check={autoCheck} onJump={(n) => editorRef.current?.focusLine(n)} onSection={(n) => setDrawer({ tab: 'standard', section: n })} className="max-md:order-2" />
+            </div>
+            <div data-builder-foot className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border/50 px-4 py-2.5 max-md:px-3">
+              {error
+                ? <span data-builder-error title={error} className="min-w-0 flex-1 truncate text-[12px] text-danger max-md:basis-full max-md:whitespace-normal">{error}</span>
+                : autoCheck.state === 'bad'
+                  ? <span data-builder-blocked className="min-w-0 flex-1 truncate text-[12px] text-warning max-md:basis-full">校验未通过 · 改好后可保存</span>
+                  : <span className="min-w-0 flex-1 truncate text-[11px] text-muted max-md:basis-full">{mode === 'modify' ? '保存回原文件' : '保存到 custom 目录'}</span>}
+              <button onClick={() => { setCode(executionBackend === 'matrix_native' ? MATRIX_TEMPLATE : CUSTOM_TEMPLATE); setStrategyId(''); setSource('custom'); setValidated(false) }}
+                className="h-8 px-3 rounded-lg border border-border text-xs text-secondary hover:text-foreground whitespace-nowrap">
+                使用模板
+              </button>
+              <button onClick={handleValidateCode} disabled={loading || !code.trim()}
+                className="h-8 px-3 rounded-lg border border-accent/30 bg-accent/10 text-accent dark:text-blue-400 text-xs font-medium hover:bg-accent/15 disabled:opacity-40 flex items-center gap-1.5 whitespace-nowrap">
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                校验代码
+              </button>
+              <button data-builder-save onClick={handleSave} disabled={saving || loading || !code.trim() || autoCheck.state === 'bad'}
+                title={autoCheck.state === 'bad' ? '校验未通过' : undefined}
+                className="h-8 px-3 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-50 flex items-center gap-1.5 whitespace-nowrap">
+                <Save className="h-3.5 w-3.5" />
+                {saving ? '保存中' : mode === 'modify' ? '保存修改' : '保存'}
+              </button>
+            </div>
+            {drawer && <StandardDrawer target={drawer} digest={kit?.standard ?? null} onClose={() => setDrawer(null)} onTab={(t) => setDrawer({ tab: t, section: null })} />}
+          </div>
+          )}
 
           {/* 底部 */}
           {tab === 'ai' && (

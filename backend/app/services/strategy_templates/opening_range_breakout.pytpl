@@ -1,0 +1,65 @@
+"""开盘区间突破: 开盘前 N 根 1 分钟线定出区间, 之后收盘价放量越过区间上沿。"""
+import polars as pl
+
+META = {
+    "id": "custom_opening_range_breakout",
+    "name": "开盘区间突破",
+    "description": "开盘前 N 根 1 分钟线的最高价为上沿, 之后最新收盘价越过上沿且区间后均量放大。",
+    "tags": ["分钟", "突破"],
+    "asset_types": ["stock"],
+    "timeframes": ["1m"],
+    "params": [
+        {"id": "range_bars", "label": "开盘区间根数", "type": "int",
+         "default": 15, "min": 5, "max": 60, "step": 5},
+        {"id": "min_break_pct", "label": "最小突破幅度", "type": "float",
+         "default": 0.002, "min": 0.0, "max": 0.03, "step": 0.001},
+        {"id": "min_volume_ratio", "label": "最小量比", "type": "float",
+         "default": 1.2, "min": 0.5, "max": 5.0, "step": 0.1},
+    ],
+    "order_by": "break_pct",
+    "descending": True,
+    "limit": 100,
+}
+
+EXECUTION_BACKEND = "minute_filter"
+ENTRY_SIGNALS: list[str] = []
+EXIT_SIGNALS: list[str] = []
+
+RULES = """
+1. 每只股票按时间取当日最早 N 根 1 分钟线, 最高价为区间上沿; 不足 N 根不触发。
+2. 区间之后至少有 1 根线, 最新收盘价高出上沿不少于最小突破幅度。
+3. 区间之后每根均量不低于区间内每根均量的设定倍数。
+"""
+
+
+def filter_minute_history(df: pl.DataFrame, params: dict) -> pl.DataFrame:
+    bars = int(params.get("range_bars") or 15)
+    min_break = float(params.get("min_break_pct") or 0.0)
+    min_vol = float(params.get("min_volume_ratio") or 0.0)
+    ranked = df.sort(["symbol", "datetime"]).with_columns(
+        _i=pl.int_range(pl.len()).over("symbol"),
+    )
+    opening = ranked.filter(pl.col("_i") < bars).group_by("symbol").agg(
+        range_bars=pl.len(),
+        range_high=pl.col("high").max(),
+        range_low=pl.col("low").min(),
+        range_volume=pl.col("volume").mean(),
+    )
+    after = ranked.filter(pl.col("_i") >= bars).group_by("symbol").agg(
+        last_datetime=pl.col("datetime").max(),
+        close=pl.col("close").sort_by("datetime").last(),
+        after_volume=pl.col("volume").mean(),
+    )
+    return (
+        opening.join(after, on="symbol", how="inner")
+        .filter(pl.col("range_bars") >= bars)
+        .with_columns(
+            break_pct=pl.col("close") / pl.col("range_high") - 1,
+            volume_ratio=pl.col("after_volume") / pl.col("range_volume"),
+        )
+        .filter(
+            (pl.col("break_pct") >= min_break)
+            & (pl.col("volume_ratio") >= min_vol)
+        )
+        .drop("range_bars")
+    )
