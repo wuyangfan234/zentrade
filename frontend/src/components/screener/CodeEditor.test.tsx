@@ -282,7 +282,9 @@ it('auto check restarts on every edit, ignores stale answers, hides marks while 
   await settle()
   expect(check).toHaveBeenCalledTimes(2)
   expect(q('[data-auto-check]')?.textContent).toBe('2 行有误')
+  expect(q('[data-check-rows]')!.dataset.stale).toBeUndefined()
   await typeInto(input, input.value + '#')                             // 再改: 旧结果留着看, 但行标先撤 (行号会随输入移动)
+  expect(q('[data-check-rows]')!.dataset.stale).toBe('true')            // 压暗: 说的是改动前的代码
   expect(qa('[data-check]').map((r) => r.dataset.state)).toEqual(['bad', 'bad', 'ok', 'skip'])
   expect(q('[data-error-line], [data-mark-line], [data-jump-line]')).toBeNull()
   expect(q<HTMLButtonElement>('[data-builder-save]')!.disabled).toBe(false)

@@ -110,6 +110,7 @@ export function CheckColumn({ check, onJump, onSection, className }: {
   const result = check.result
   const nBad = result ? result.items.filter(i => i.state === 'bad').length : 0
   const ov = result?.overview
+  const stale = check.state === 'checking' && !!result
   const facts: [string, string][] = [
     ['行数', ov ? String(ov.lines) : '—'],
     ['参数', ov && ov.params !== null ? String(ov.params) : '—'],
@@ -125,7 +126,8 @@ export function CheckColumn({ check, onJump, onSection, className }: {
         {check.state === 'bad' && <span data-check-badge className={TAG_WARN}>{nBad > 0 ? `${nBad} 项未通过` : '未通过'}</span>}
         <span className="ml-auto text-[11px] font-normal text-muted">停笔自动</span>
       </div>
-      <div className="px-3 pb-2 pt-1">
+      {/* 校验中: 上一次的结果先留着 (不闪), 但压暗, 表示它说的是改动前的代码 */}
+      <div data-check-rows data-stale={stale || undefined} className={cn('px-3 pb-2 pt-1 transition-opacity', stale && 'opacity-45')}>
         {ROW_KEYS.map((row, k) => {
           const item = result?.items.find(i => i.key === row.key)
           const state = item?.state ?? 'skip'
@@ -155,7 +157,7 @@ export function CheckColumn({ check, onJump, onSection, className }: {
         })}
       </div>
       <div className={cn(HEAD, 'border-t')}>概览</div>
-      <div data-check-facts className="grid shrink-0 grid-cols-2 gap-x-3 gap-y-2 px-3 pb-3 pt-2.5">
+      <div data-check-facts className={cn('grid shrink-0 grid-cols-2 gap-x-3 gap-y-2 px-3 pb-3 pt-2.5 transition-opacity', stale && 'opacity-45')}>
         {facts.map(([k, v]) => (
           <div key={k} className="flex flex-col">
             <span className="text-[11px] text-muted">{k}</span>
