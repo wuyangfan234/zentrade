@@ -556,6 +556,57 @@ export interface StrategyBuildResult {
   error: string | null
 }
 
+/** 分项校验的一项: bad 尽量带行号, skip = 前项未过无法判断 */
+export interface StrategyCheckItem {
+  key: 'safety' | 'meta' | 'entry' | 'fields'
+  label: string
+  state: 'ok' | 'bad' | 'skip'
+  text: string
+  line: number | null
+  detail: string
+  /** 对应《策略语法标准》的章节号, 只在 bad 时给 */
+  section: number | null
+}
+
+export interface StrategyCheckResult {
+  valid: boolean
+  items: StrategyCheckItem[]
+  overview: {
+    lines: number
+    params: number | null
+    backend: string | null
+    backend_label: string | null
+    stop_loss: number | null
+    max_hold_days: number | null
+  }
+}
+
+export interface StrategyTemplate {
+  id: string
+  name: string
+  level: string
+  order: number
+  backend: string
+  kind: string
+  lines: number
+  params: number
+  code: string
+}
+
+export interface StrategyStandardDigest {
+  toc: { n: number; title: string }[]
+  backends: { id: string; label: string; must: string; forbid: string }[]
+  allowed_imports: string[]
+  forbidden_calls: string[]
+  forbidden_attrs: string[]
+  errors: { sample: string; meaning: string; fix: string }[]
+}
+
+export interface StrategyCodeKit {
+  templates: StrategyTemplate[]
+  standard: StrategyStandardDigest
+}
+
 export type StrategyBuildStreamEvent =
   | { type: 'meta'; strategy_id?: string; step?: number }
   | { type: 'delta'; content: string }
@@ -3923,6 +3974,17 @@ export const api = {
       body: JSON.stringify(payload),
       quiet: opts?.quiet,
     }),
+
+  /** 分项校验 (只读): 安全 / META / 入口 / 字段, 带行号 */
+  strategyCheckCode: (code: string, opts?: { quiet?: boolean }) =>
+    request<StrategyCheckResult>('/api/strategies/code/check', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+      quiet: opts?.quiet,
+    }),
+
+  /** 模板库 + 语法标准摘要 */
+  strategyCodeKit: () => request<StrategyCodeKit>('/api/strategies/code/kit', { quiet: true }),
 
   strategySaveCodeV2: (payload: {
     strategy_id: string

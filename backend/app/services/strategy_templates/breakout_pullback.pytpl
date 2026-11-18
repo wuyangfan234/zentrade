@@ -1,0 +1,60 @@
+"""突破后回踩：20 日新高后 5 日内缩量回踩 MA10。"""
+import polars as pl
+
+META = {
+    "id": "custom_breakout_pullback",
+    "name": "突破后回踩 MA10",
+    "description": "过去 5 个交易日内收盘创 20 日新高，随后缩量回踩 MA10 并收盘站回。",
+    "tags": ["突破", "回踩", "缩量"],
+    "asset_types": ["stock"],
+    "timeframes": ["1d"],
+    "basic_filter": {"price_min": 5, "amount_min": 2e7},
+    "params": [
+        {"id": "breakout_window", "label": "突破后有效天数", "type": "int",
+         "default": 5, "min": 1, "max": 20},
+        {"id": "max_volume_ratio", "label": "最大量比", "type": "float",
+         "default": 0.8, "min": 0.2, "max": 2.0, "step": 0.1},
+    ],
+    "scoring": {"momentum_20d": 0.6, "vol_ratio_5d": 0.4},
+    "order_by": "score",
+    "descending": True,
+    "limit": 100,
+}
+
+LOOKBACK_DAYS = 30
+EXECUTION_BACKEND = "python_history_legacy"
+STOP_LOSS = -0.06
+MAX_HOLD_DAYS = 7
+
+RULES = """
+1. 前一交易日收盘价创 20 日新高（用截至前一日的 20 日最高收盘比较）。
+2. 该次突破发生在最近 N 个交易日内。
+3. 当日最低价回踩 MA10，收盘仍在 MA10 上方，成交量低于前一日为止的 5 日均量。
+"""
+
+
+def filter_history(df: pl.DataFrame, params: dict) -> pl.DataFrame:
+    if df.is_empty() or "date" not in df.columns:
+        return df
+    window = int(params.get("breakout_window", 5))
+    max_vol = float(params.get("max_volume_ratio", 0.8))
+    hist = (
+        df.sort(["symbol", "date"])
+        .with_columns([
+            pl.col("close").rolling_max(20, min_samples=20).shift(1).over("symbol").alias("_hh20_prev"),
+            pl.col("volume").rolling_mean(5, min_samples=5).shift(1).over("symbol").alias("_volma5_prev"),
+        ])
+        .with_columns(
+            (pl.col("close").shift(1).over("symbol") >= pl.col("_hh20_prev")).alias("_breakout_prev")
+        )
+        .with_columns(
+            pl.col("_breakout_prev").cast(pl.Int8)
+            .rolling_max(window, min_samples=1).shift(1).over("symbol").alias("_broke_recently")
+        )
+    )
+    return hist.filter(
+        (pl.col("_broke_recently") == 1)
+        & (pl.col("low") <= pl.col("ma10") * 1.01)
+        & (pl.col("close") >= pl.col("ma10"))
+        & (pl.col("volume") <= pl.col("_volma5_prev") * max_vol)
+    )

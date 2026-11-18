@@ -1,0 +1,23 @@
+"""两策略加权: 把两个已有策略的结果合在一起, 不写业务代码。"""
+META = {
+    "id": "custom_two_strategy_blend",
+    "name": "两策略加权",
+    "description": "趋势突破与均线金叉两个策略的结果按权重合并。",
+    "asset_types": ["stock"],
+    "timeframes": ["1d"],
+    "params": [
+        {"id": "merge_mode", "label": "合并模式", "type": "select",
+         "options": ["union", "intersect"], "default": "union"},
+        {"id": "min_confirm", "label": "交集最少确认数", "type": "int",
+         "default": 0, "min": 0},
+    ],
+    "scoring": {},
+    "order_by": "score",
+    "descending": True,
+    "limit": 100,
+    "children": [
+        {"strategy_id": "trend_breakout", "weight": 0.6},
+        {"strategy_id": "ma_golden_cross", "weight": 0.4},
+    ],
+}
+EXECUTION_BACKEND = "composite"

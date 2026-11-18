@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from app.backtest.minute_trigger import MINUTE_EXIT_TRIGGER_SIGNALS
 from app.services.fs_utils import atomic_write_text
 from app.services.ndjson_heartbeat import with_heartbeat
+from app.services.strategy_check import check_code, list_templates, standard_digest, translate_error
 from app.strategy import config as strategy_config
 from app.strategy.ai_generator import AIStrategyGenerator, find_meta_assignment
 from app.strategy.engine import StrategyDef, StrategyEngine
@@ -1098,12 +1099,24 @@ def validate_strategy_code(req: StrategyCodeValidateRequest, request: Request):
         return {"valid": False, "error": str(e), "code": req.code, "meta": {}}
 
 
+@router.post("/code/check")
+def check_strategy_code(req: StrategyCodeValidateRequest):
+    """分项校验 (安全 / META / 入口 / 字段), 带行号; 只读, 不改代码也不落盘。"""
+    return _safe(check_code(req.code))
+
+
+@router.get("/code/kit")
+def strategy_code_kit():
+    """创建策略弹窗用的模板库与语法标准摘要。"""
+    return _safe({"templates": list(list_templates()), "standard": standard_digest()})
+
+
 @router.post("/code/save")
 def save_strategy_code(req: StrategyCodeSaveRequest, request: Request):
     try:
         return _save_strategy_code(req, request)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=translate_error(str(e))) from e
 
 
 def _render_composite_code(

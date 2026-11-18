@@ -42,6 +42,7 @@ READ_SCOPE_POST_ALLOW = frozenset({
     "/api/backtest/factor/batch",
     "/api/strategies/run",
     "/api/strategies/code/validate",
+    "/api/strategies/code/check",
     "/api/screener/run",
     "/api/kline/daily-batch",
     "/api/kline/minute-batch",

@@ -1,0 +1,80 @@
+"""矩阵写法：放量突破 20 日最高收盘。"""
+import numpy as np
+
+from app.backtest.matrix import (
+    MarketDataMatrix,
+    SignalMatrix,
+    make_signal_matrix,
+    matrix_feature,
+    valid_rolling_max,
+    valid_shift,
+)
+
+META = {
+    "id": "custom_matrix_breakout",
+    "name": "放量突破 20 日高点",
+    "description": "收盘价高于此前 20 个交易日的最高收盘，且成交量不低于 5 日均量的设定倍数。",
+    "tags": ["突破", "放量", "矩阵"],
+    "asset_types": ["stock"],
+    "timeframes": ["1d"],
+    "basic_filter": {"price_min": 5, "amount_min": 2e7},
+    "params": [
+        {"id": "window", "label": "突破窗口", "type": "int",
+         "default": 20, "min": 5, "max": 120},
+        {"id": "min_volume_ratio", "label": "最小量比", "type": "float",
+         "default": 1.5, "min": 0.5, "max": 5.0, "step": 0.1},
+    ],
+    "scoring": {},
+    "order_by": "score",
+    "descending": True,
+    "limit": 100,
+}
+
+EXECUTION_BACKEND = "matrix_native"
+ENTRY_SIGNALS = ["signal_custom_matrix_breakout"]
+EXIT_SIGNALS = []
+STOP_LOSS = -0.06
+MAX_HOLD_DAYS = 7
+
+RULES = """
+1. 收盘价高于截至前一交易日的 N 日最高收盘。
+2. 当日成交量不低于 5 日均量的设定倍数。
+3. 按 20 日动量从高到低排序。
+"""
+
+
+class CustomMatrixBreakout:
+    def required_fields(self) -> frozenset[str]:
+        return frozenset({"close", "volume"})
+
+    def required_warmup_bars(self, params: dict) -> int:
+        return int(params.get("window", 20)) + 5
+
+    def compute_signals(self, market: MarketDataMatrix, params: dict) -> SignalMatrix:
+        window = int(params.get("window", 20))
+        min_ratio = float(params.get("min_volume_ratio", 1.5))
+        close = market.close
+        valid = np.isfinite(close)
+
+        # 先算「截至当日」的 N 日最高收盘, 再后移一根: 当日收盘不参与自己的突破线
+        prior_high = valid_shift(valid_rolling_max(close, valid, window), 1, valid)
+        vol_ratio = matrix_feature(market, "vol_ratio_5d")
+        momentum = matrix_feature(market, "momentum_20d")
+
+        entry = (
+            np.isfinite(prior_high) & (close > prior_high)
+            & np.isfinite(vol_ratio) & (vol_ratio >= min_ratio)
+        )
+        # 分数必须全部是有限值: 预热区和缺数据的格子填 0
+        score = np.where(np.isfinite(momentum), momentum, 0.0).astype(np.float32)
+
+        return make_signal_matrix(
+            market.shape,
+            entry=entry.astype(np.uint8),
+            score=score,
+            entry_signal_code=np.where(entry, 0, -1).astype(np.int16),
+            entry_signal_ids=("signal_custom_matrix_breakout",),
+        )
+
+
+MATRIX_STRATEGY = CustomMatrixBreakout()
