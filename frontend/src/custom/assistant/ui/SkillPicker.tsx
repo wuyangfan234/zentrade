@@ -136,7 +136,7 @@ export function SkillPalette({ skills, query, page, active, onActive, onPick, on
   const steps = skillSteps(detail?.body ?? '')
 
   return (
-    <div data-skill-palette className="grid min-h-0 shrink-0 grid-cols-1 border-t border-border bg-surface md:max-h-[420px] md:grid-cols-2">
+    <div data-skill-palette className="grid min-h-0 shrink-0 grid-cols-1 border-t border-border bg-surface md:h-[420px] md:grid-cols-2">
       <div className="max-h-[30vh] overflow-y-auto border-b border-border p-2 md:max-h-none md:border-b-0 md:border-r">
         {groups.map(g => (
           <div key={g.group} className="mb-1.5 last:mb-0">

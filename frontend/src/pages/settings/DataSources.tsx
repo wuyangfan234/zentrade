@@ -39,6 +39,7 @@ import {
 } from '@/lib/api'
 import { QverisUsageCard } from '@/components/QverisUsageCard'
 import { SetupChecklistCard } from '@/components/SetupChecklist'
+import { DOC_LINKS } from '@/lib/docsLinks'
 import { QK } from '@/lib/queryKeys'
 import { usePreferences } from '@/lib/useSharedQueries'
 import { AnchorWrap } from '@/lib/useCardFlash'
@@ -706,7 +707,7 @@ export function SettingsDataSourcesPanel({ highlight }: { highlight?: string } =
           <div className="text-[11px] leading-relaxed text-muted">
             <span className="text-secondary">支持自定义数据源</span>
             {' · '}
-            <span className="cursor-help underline decoration-dotted underline-offset-2" title="docs/custom-data-source.md（自有 HTTP 接口）· docs/plugin-development.md（插件开发）">接入文档</span>
+            <a data-doc-link="data-source" href={DOC_LINKS.dataSource} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline dark:text-blue-400">接入文档<ExternalLink className="h-3 w-3" /></a>
           </div>
         </div>
 
@@ -956,6 +957,8 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
   servingSet: Set<string>
 }) {
   const declared = new Set(plugin.datasets)
+  // 左栏 (状态 / Key 配置 / 用量) 没有内容时不占位, 能力表占满整行
+  const hasLeft = !!plugin.api_key_env || !plugin.available || plugin.name === 'qveris'
   return (
     <section className="rounded-card border border-border bg-surface p-6">
       {/* 介绍 */}
@@ -985,8 +988,8 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
       </div>
 
       {/* 主体: 操作 + Key 配置 (左) | 能力适配表 (右), 布局对齐 TickFlow 详情 */}
-      <div className="mt-5 pt-5 border-t border-border grid grid-cols-1 lg:grid-cols-[1fr_1.15fr] gap-6 items-start">
-        <div className="min-w-0">
+      <div className={`mt-5 pt-5 border-t border-border grid grid-cols-1 gap-6 items-start ${hasLeft ? 'lg:grid-cols-[1fr_1.15fr]' : ''}`}>
+        {hasLeft && <div className="min-w-0">
           {/* 独立状态行仅用于无 Key 配置区的插件; 有 Key 区时「状态」行已展示, 避免重复 */}
           {!plugin.available && !plugin.api_key_env && (
             <div className="flex items-center gap-3">
@@ -1007,7 +1010,7 @@ function PluginDetail({ plugin, isActive, matrixCaps, servingSet }: {
               <QverisUsageCard />
             </div>
           )}
-        </div>
+        </div>}
 
         {/* 能力适配表: 全部能力 × 该源适配状态 (样式对齐 TickFlow 能力档位表) */}
         <div className="min-w-0">
