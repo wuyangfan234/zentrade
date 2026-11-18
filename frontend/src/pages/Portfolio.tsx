@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Wallet } from 'lucide-react'
 import { api, type StopMove, type AlpacaMirrorPayload, type ClosedTrip, type LivePosition, type PortfolioLive, type SetupStatusRow } from '@/lib/api'
 import { corpActionLabel, reasonLabel } from '@/lib/reasonLabels'
+import { lifecycleLabel } from '@/lib/lifecycles.generated'
 import { formatScheduleDatePart, formatScheduleTimePart } from '@/lib/format'
 import { etToday } from '@/lib/etTime'
 import { cn } from '@/lib/cn'
@@ -658,11 +659,6 @@ function LedgerPane({ rows, desktop }: { rows: EventRow[]; desktop: boolean }) {
 
 /* ── Alpaca 镜像 ─────────────────────────────────────── */
 
-const MIRROR_STATUS: Record<string, string> = {
-  new: '待提交', submitted: '已提交', filled: '已成交', rejected: '被拒', skipped_not_mirrored: '未镜像（开启前的持仓）',
-  skipped_zero_qty: '数量为 0', blocked_daily_cap: '超过每日上限', expired_out_of_session: '超时未提交',
-}
-
 /** Alpaca 纸面账户镜像: 内部成交原样发到 Alpaca 纸面账户, 对比真实成交价。 */
 function AlpacaMirrorPanel({ data }: { data?: AlpacaMirrorPayload }) {
   const qc = useQueryClient()
@@ -698,7 +694,7 @@ function AlpacaMirrorPanel({ data }: { data?: AlpacaMirrorPayload }) {
               <span>{`${o.side === 'buy' ? '买' : '卖'} ${o.symbol} ${o.qty ?? o.ledger_qty} 股`}</span>
               <span>{`内部 $${fmt(o.ledger_price)} → Alpaca ${o.filled_price ? `$${fmt(o.filled_price)}` : '—'}`}</span>
               <span>{o.deviation_bps != null ? `${o.deviation_bps > 0 ? '+' : ''}${o.deviation_bps} 基点` : ''}</span>
-              <span className="text-muted">{`${o.catchup ? '补齐持仓 · ' : ''}${MIRROR_STATUS[o.status] ?? o.status}`}</span>
+              <span className="text-muted">{`${o.catchup ? '补齐持仓 · ' : ''}${lifecycleLabel('mirror_order', o.status)}`}</span>
             </div>
           ))}
         </div>

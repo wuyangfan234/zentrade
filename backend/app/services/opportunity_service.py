@@ -11,6 +11,7 @@ from pathlib import Path
 import polars as pl
 from app.market_clock import us_clock
 from app.services import entry_guard
+from app import lifecycles
 from app.opportunity.card import TERMINAL_STATES, CardState, OpportunityCard
 from app.opportunity.engine import ScanResult, load_params, scan, universe_filter
 
@@ -220,6 +221,7 @@ class OpportunityService:
     def _transition(self, card, state, reason, now):
         if self.ledger is None or card.state == state:
             return
+        lifecycles.observe('opportunity_card', card.state, state, card_id=card.id)  # 只记日志, 不拦截
         self.ledger.append('opportunity', {'card_id':card.id,'symbol':card.symbol,
             'state':str(state),'reason':reason,'trade_date':now.date().isoformat()}, at=now.isoformat())
 

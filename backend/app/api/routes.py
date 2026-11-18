@@ -29,6 +29,13 @@ def health() -> dict:
     }
 
 
+@router.get("/api/lifecycles")
+def lifecycles_registry() -> dict:
+    """状态机登记表 (只读): 每个落盘状态的代码、中文名、是否终态、允许的转换。"""
+    from app import lifecycles
+    return lifecycles.as_payload()
+
+
 @router.get("/api/capabilities")
 def capabilities() -> dict:
     """前端用来决定哪些功能可用、哪些灰显 (厂商探测已退役: 从自定义源推导)。"""
