@@ -606,7 +606,18 @@ def rules_get(request: Request) -> dict:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("rank lab catalog skipped: %s", type(e).__name__)
+    # 规则前向成绩 (全格子记分, 只读摘要): 每条规则上线后比“同日同向随手挑”多出的 R; 没有摘要 = 全部 None
+    try:
+        from app.services import rule_forward as _rf
+        rf_sum = _rf.read_summary(data_dir) or {}
+        rf_all, rf_gate = _rf.by_rule(rf_sum, "all"), _rf.by_rule(rf_sum, "gate")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("rule forward summary skipped: %s", type(e).__name__)
+        rf_sum, rf_all, rf_gate = {}, {}, {}
     for r in catalog:
+        r["cell_forward"] = {"all": rf_all.get(r["id"]), "gate": rf_gate.get(r["id"]),
+                             "all_short": rf_all.get(f"{r['id']}:short"), "gate_short": rf_gate.get(f"{r['id']}:short")}
         r["show"] = r["id"] in disp["long"] or r["enabled"]
         r["short_capable"] = wv.short_capable(r["id"])
         r["show_short"] = r["short_capable"] and r["id"] in disp["short"]
@@ -636,6 +647,8 @@ def rules_get(request: Request) -> dict:
             "evo": _evo_panel(data_dir, rs, names),
             "candidates": _sc.status(data_dir),
             "history_meta": _rule_history_meta(data_dir),
+            "cell_forward_meta": {k: rf_sum.get(k) for k in ("contract", "window", "days", "cells", "as_of", "built_at",
+                                                             "min_filled", "min_days")} if rf_sum else None,
             "params_default": wv.DEFAULT_PARAMS}
 
 
