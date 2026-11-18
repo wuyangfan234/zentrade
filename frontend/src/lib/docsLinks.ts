@@ -6,4 +6,5 @@ export const DOC_LINKS = {
   strategyGuide: doc('strategy-development.md'),
   strategyStandard: doc('strategy-standard.md'),
   strategyOverview: doc('strategy.md'),
+  dataSource: doc('custom-data-source.md'),
 } as const
