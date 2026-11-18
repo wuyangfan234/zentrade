@@ -253,9 +253,13 @@ def build(data_dir: Path, *, repo=None, loop=None, now: datetime | None = None) 
     # 2026-11-15 主题压力 (只显示, 不拦单; 分组读不到只空这一块)
     from app.services import theme_exposure
     themes = _section("themes", lambda: theme_exposure.view(data_dir, repo=repo, loop=loop, swing=swing), errors)
+    # 2026-11-18 自动选策略 (只读视图: 开关 / 入选策略的前向成绩 / 上次与下次评定); 读不到只空这一块
+    from app.services import rule_auto_select
+    auto = _section("auto", lambda: rule_auto_select.view(data_dir, today=now.date()), errors)
     return {"contract": CONTRACT, "generated_at": now.isoformat(timespec="seconds"), "phase": phase, "stage": stage,
             "swing": swing, "intraday": intraday, "radar": radar, "gaps": gaps, "mood": mood, "ctx": ctx,
-            "settings": settings, "radar_view": radar_view, "desk": desk, "ls_rank": lsr, "themes": themes, "errors": errors}
+            "settings": settings, "radar_view": radar_view, "desk": desk, "ls_rank": lsr, "themes": themes, "auto": auto,
+            "errors": errors}
 
 
 def _watch_symbols() -> set[str]:

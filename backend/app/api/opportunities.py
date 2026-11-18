@@ -546,6 +546,46 @@ def opportunities_settings(body: OppSettingsIn, request: Request) -> dict:
                                       theme_stress_pct=body.theme_stress_pct)
 
 
+class AutoSelectIn(BaseModel):
+    enabled: bool = Field(..., strict=True)
+
+
+class AutoSelectUndoIn(BaseModel):
+    id: str = Field(..., min_length=1, max_length=40)
+
+
+@router.get("/auto-select")
+def auto_select_get(request: Request) -> dict:
+    """自动选策略: 开关、入选与候补的前向成绩、评定与换入记录 (只读)。"""
+    from app.services import rule_auto_select as ras
+    return ras.view(request.app.state.repo.store.data_dir)
+
+
+@router.post("/auto-select")
+def auto_select_set(body: AutoSelectIn, request: Request) -> dict:
+    """手动开关。关 = 照常记分与评定, 只是不再写入选策略。"""
+    from app.services import rule_auto_select as ras
+    data_dir = request.app.state.repo.store.data_dir
+    with _SETTINGS_LOCK:
+        ras.set_enabled(data_dir, body.enabled)
+    return ras.view(data_dir)
+
+
+@router.post("/auto-select/undo")
+def auto_select_undo(body: AutoSelectUndoIn, request: Request) -> dict:
+    """撤回一次自动换入 (换回被换出的那条)。入选策略此后被改过 -> 409。"""
+    from app.services import rule_auto_select as ras
+    data_dir = request.app.state.repo.store.data_dir
+    with _SETTINGS_LOCK:
+        try:
+            ras.undo(data_dir, body.id)
+        except KeyError:
+            raise HTTPException(404, "没有这条换入记录") from None
+        except ValueError as e:
+            raise HTTPException(409, "已撤回" if str(e) == "already_undone" else "入选策略已另行修改，不能撤回") from None  # noqa: RUF001
+    return ras.view(data_dir)
+
+
 @router.get("/swing")
 def swing_boards(request: Request) -> dict:
     """第一性原理机会板: LONG | SHORT (4h 门 + 3+3 打分)。只读最近自选信号快照。"""
@@ -606,7 +646,18 @@ def rules_get(request: Request) -> dict:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("rank lab catalog skipped: %s", type(e).__name__)
+    # 规则前向成绩 (全格子记分, 只读摘要): 每条规则上线后比“同日同向随手挑”多出的 R; 没有摘要 = 全部 None
+    try:
+        from app.services import rule_forward as _rf
+        rf_sum = _rf.read_summary(data_dir) or {}
+        rf_all, rf_gate = _rf.by_rule(rf_sum, "all"), _rf.by_rule(rf_sum, "gate")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("rule forward summary skipped: %s", type(e).__name__)
+        rf_sum, rf_all, rf_gate = {}, {}, {}
     for r in catalog:
+        r["cell_forward"] = {"all": rf_all.get(r["id"]), "gate": rf_gate.get(r["id"]),
+                             "all_short": rf_all.get(f"{r['id']}:short"), "gate_short": rf_gate.get(f"{r['id']}:short")}
         r["show"] = r["id"] in disp["long"] or r["enabled"]
         r["short_capable"] = wv.short_capable(r["id"])
         r["show_short"] = r["short_capable"] and r["id"] in disp["short"]
@@ -636,6 +687,8 @@ def rules_get(request: Request) -> dict:
             "evo": _evo_panel(data_dir, rs, names),
             "candidates": _sc.status(data_dir),
             "history_meta": _rule_history_meta(data_dir),
+            "cell_forward_meta": {k: rf_sum.get(k) for k in ("contract", "window", "days", "cells", "as_of", "built_at",
+                                                             "min_filled", "min_days")} if rf_sum else None,
             "params_default": wv.DEFAULT_PARAMS}
 
 

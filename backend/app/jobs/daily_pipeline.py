@@ -716,6 +716,13 @@ def _run_zen_post_close(repo, day: _date) -> dict:
         logger.info("swing settle %s: %s", day, swing_settlement.run_daily(repo.store.data_dir, repo, day=day))
     except Exception as e:
         logger.warning("swing settle failed (soft): %s", type(e).__name__)
+    try:  # 2026-11-18 自动选策略: 每周最后一个交易日按规则前向成绩评一次入选策略 (只写 rules/swing.json 与评定记录)
+        from app.services import rule_auto_select
+        res = rule_auto_select.run_weekly(repo.store.data_dir, _get_app_state_attr("strategy_engine"), day=day)
+        if res is not None:
+            logger.info("auto select %s: %s", day, {k: v.get("action") for k, v in (res.get("sides") or {}).items()})
+    except Exception as e:
+        logger.warning("auto select failed (soft): %s", type(e).__name__)
     try:  # 0.51.0 今日多空: 结算到期名单 + 出下一交易日名单 (只写 opportunities/ls_rank/; 不进交易环、不推送)
         from app.services import ls_rank
         logger.info("ls_rank %s: %s", day, ls_rank.run_post_close(repo.store.data_dir, day))

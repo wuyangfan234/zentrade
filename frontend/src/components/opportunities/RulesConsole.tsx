@@ -15,9 +15,10 @@
  *  每档写回放频率 (后端 levels 给数); 与 3+3 / 风险同一个保存按钮, 只改推送不建规则集版本; 渠道 = 系统设置 → 推送通道。 */
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { api, type OppSettings, type OppSettingsPreview, type RadarPushSettings, type SwingCandidatesStatus, type WatchlistRuleCatalogItem, type WatchlistRuleHistory, type WatchlistRulesPayload } from '@/lib/api'
+import { api, type AutoSelectView, type OppSettings, type OppSettingsPreview, type RadarPushSettings, type SwingCandidatesStatus, type WatchlistRuleCatalogItem, type WatchlistRuleHistory, type WatchlistRulesPayload } from '@/lib/api'
 import { displayStrategyName } from '@/lib/strategyDisplay'
 import { Sheet } from '@/components/opportunities/Sheet'
+import { AutoPanel } from '@/components/opportunities/AutoSelect'
 import { hm, rr } from '@/components/opportunities/format'
 import { rulerLabel } from '@/components/opportunities/RulerTag'
 import { ApiError } from '@/lib/api'
@@ -217,7 +218,7 @@ export function RadarPushEditor({ cur, enabled, minRvol, onEnabled, onMinRvol }:
   )
 }
 
-export function RulesConsole({ settings, onClose }: { settings: OppSettings | null; onClose: () => void }) {
+export function RulesConsole({ settings, auto, onClose }: { settings: OppSettings | null; auto?: AutoSelectView | null; onClose: () => void }) {
   const qc = useQueryClient()
   const q = useQuery<WatchlistRulesPayload>({
     queryKey: ['opportunities', 'rules'], queryFn: () => api.watchlistRules(),
@@ -331,6 +332,8 @@ export function RulesConsole({ settings, onClose }: { settings: OppSettings | nu
         </>
       )}>
       {preview && <SettingsPreview p={preview} nameOf={nameOf} />}
+      {!preview && <AutoPanel fallback={auto} />}
+      <h3 data-manual-head className="mb-1 border-t border-border pt-3 text-[14px] font-semibold text-foreground">手动调整</h3>
       <div data-swing-explain className="mb-3 text-xs text-muted">{`${settings?.gate?.name ?? '方向门'}定方向 · 多空各至多 3 条策略 · 模拟账户仅执行机会板`}</div>
       <div data-forward-summary className="mb-3 flex flex-wrap items-end gap-3 rounded-card border border-border bg-base p-3 text-xs">
         <div className="min-w-0 flex-1">

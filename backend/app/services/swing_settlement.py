@@ -973,6 +973,12 @@ def run_daily(data_dir: Path, repo, *, day: date) -> dict:
     except Exception as e:
         logger.warning("swing shadow settle failed (soft): %s", type(e).__name__)
         res["shadow_error"] = type(e).__name__
+    try:   # 规则前向成绩: 全部规则的格子卡只结算不下单 (失败不影响板卡结算与对账)
+        from app.services import rule_forward
+        res["cells"] = rule_forward.run_daily(data_dir, repo, day=day)
+    except Exception as e:
+        logger.warning("rule forward failed (soft): %s", type(e).__name__)
+        res["cells_error"] = type(e).__name__
     try:
         from app.services.fs_utils import atomic_write_text
         t = table(data_dir)
