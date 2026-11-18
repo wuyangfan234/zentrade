@@ -35,11 +35,17 @@ function Line({ k, v, sub, warn, bar, ...rest }: { k: string; v: ReactNode; sub?
   )
 }
 
+/** 今日还能开几笔 = 当日开仓上限的余量与持仓名额的余量取小 (交易环两道都拦; 读不到持仓上限时只按当日上限) */
+export function opensLeft(c: OppRadarView['caps']): number {
+  const day = Math.max(c.opens.cap - c.opens.used, 0)
+  return c.positions.cap === null ? day : Math.min(day, Math.max(c.positions.cap - c.positions.used, 0))
+}
+
 /** 账户名额: 今日还能开几笔 / 持仓 / 止损全触发 / 最紧的板块名额 */
 export function AccountCard({ view, nav }: { view: OppRadarView; nav: number | null }) {
   const c = view.caps
   const today = view.clock.et.slice(0, 10)
-  const left = Math.max(c.opens.cap - c.opens.used, 0)
+  const left = opensLeft(c)
   const openK = c.opens.day !== today ? `${dayTag(c.opens.day, today)}还能开` : '今日还能开'
   const pr = c.portfolio_risk
   // 止损全触发 = Σ 股数 × 成本到当前止损 (与持仓卡同一份台账数, 不用四舍五入后的比例反推); 没持仓时按比例
@@ -51,7 +57,7 @@ export function AccountCard({ view, nav }: { view: OppRadarView; nav: number | n
   const hit = (code: string) => view.blips.filter((b) => b.kind === 'blocked' && (b.codes ?? [])[0] === code).length
   return (
     <Card data-account title="账户" tags={<span className="ml-auto text-[12px] text-muted">名额</span>}>
-      <Line data-acct="opens" k={openK} v={`${left} 笔`} sub={`上限 ${c.opens.cap}${hit('daily_open_cap') ? ` · 受限 ${hit('daily_open_cap')}` : ''}`} warn={left === 0 || hit('daily_open_cap') > 0} />
+      <Line data-acct="opens" k={openK} v={`${left} 笔`} sub={`${left < c.opens.cap - c.opens.used ? '受持仓名额限制 · ' : ''}上限 ${c.opens.cap}${hit('daily_open_cap') ? ` · 受限 ${hit('daily_open_cap')}` : ''}`} warn={left === 0 || hit('daily_open_cap') > 0} />
       <Line data-acct="positions" k="持仓" v={`${c.positions.used}${c.positions.cap !== null ? ` / ${c.positions.cap}` : ''} 只`}
         bar={c.positions.cap ? c.positions.used / c.positions.cap : null} warn={hit('max_positions') > 0} />
       <Line data-acct="risk" k="止损全触发" v={riskUsd !== null ? <span className="text-bear">{usdS(-riskUsd)}</span> : fin(pr.used) ? `${(pr.used * 100).toFixed(1)}%` : '—'}

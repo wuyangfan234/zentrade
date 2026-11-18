@@ -1,4 +1,4 @@
-/** 公式挖掘: 自动写排序公式 -> 候补席 -> 规则前向记分 -> 自动选策略。
+/** 公式挖掘: 自动写排序公式 -> 挖掘席位 -> 规则前向记分 -> 自动选策略。
  * 数字全部来自后端 formula_miner.view; 这里只展示, 开关与立即挖掘各走一个接口。
  * 席位按“与在席公式选出的票差多少”分配; 回放超额为负不入席, 不为负的也不按它排序, 好坏由前向成绩判定。 */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -12,7 +12,7 @@ const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 const ex = (v?: number | null) => (!fin(v) ? '—' : Math.abs(v) < 0.005 ? '0.00' : `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`)
 const exCls = (v?: number | null) => (!fin(v) || Math.abs(v) < 0.005 ? 'text-secondary' : v > 0 ? 'text-bull dark:text-red-400' : 'text-bear')
 const REASON_ZH: Record<string, string> = { below: '前向落后', timeout: '到期未领先', removed: '已手动移除' }
-const SKIP_ZH: Record<string, string> = { bench_full: '候补席已满', no_pool: '候选池未导出', disabled: '已关闭', running: '运行中' }
+const SKIP_ZH: Record<string, string> = { bench_full: '挖掘席位已满', no_pool: '候选池未导出', disabled: '已关闭', running: '运行中' }
 const COLS = 'grid-cols-[minmax(0,1.3fr)_minmax(0,2fr)_64px_84px_64px] max-md:gap-x-2 max-md:grid-cols-[minmax(0,1fr)_44px_44px_56px]'
 
 /** 前向一栏: 样本不足写进度, 够了写超额 */
@@ -57,9 +57,12 @@ function Row({ r, need }: { r: FormulaMinerRow; need: number }) {
   )
 }
 
-function Table({ title, rows, need, empty }: { title: string; rows: FormulaMinerRow[]; need: number; empty: string }) {
+/** 操作报错: 后端已写明「<动作>失败 · <原因>」的原样显示, 不再套一层「操作失败」 */
+export const opErrorText = (msg: string) => (msg.includes('失败 · ') ? msg : `操作失败 · ${msg}`)
+
+function Table({ title, rows, need, empty, capped }: { title: string; rows: FormulaMinerRow[]; need: number; empty: string; capped?: boolean }) {
   return (
-    <div className="overflow-hidden rounded-card border border-border">
+    <div data-miner-retired={capped ? '' : undefined} className="overflow-hidden rounded-card border border-border">
       <div className={`grid items-center gap-x-3 border-b border-border/70 bg-elevated/40 px-3 py-1.5 text-[12px] text-muted ${COLS}`}>
         <span className="font-semibold text-foreground">{title}</span>
         <span className="max-md:hidden">公式</span>
@@ -67,7 +70,10 @@ function Table({ title, rows, need, empty }: { title: string; rows: FormulaMiner
         <span className="text-right" title="上线后成交卡比同日同向其余成交卡多出的 R · 样本不足时写信号日进度">前向 R</span>
         <span className="text-right">状态</span>
       </div>
-      {rows.length === 0 ? <div className="px-3 py-2 text-[12px] text-muted">{empty}</div> : rows.map((r) => <Row key={r.id} r={r} need={need} />)}
+      {/* 已退席只增不减: 限高, 卡内滚动 */}
+      <div data-miner-body className={capped ? 'scroll-y-visible max-h-[260px] overflow-y-auto' : undefined}>
+        {rows.length === 0 ? <div className="px-3 py-2 text-[12px] text-muted">{empty}</div> : rows.map((r) => <Row key={r.id} r={r} need={need} />)}
+      </div>
     </div>
   )
 }
@@ -83,7 +89,7 @@ export function FormulaMinerPanel() {
   const err = sw.error ?? run.error
   const live = [...v.selected, ...v.bench]
   const facts: [string, string][] = [
-    ['候补席', `${v.bench.length} / ${v.caps.bench}`], ['已试公式', `${v.totals.tried} 条`],
+    ['挖掘席位', `${v.bench.length} / ${v.caps.bench}`], ['已试公式', `${v.totals.tried} 条`],
     ['入选中', `${v.totals.selected} 条`], ['已退席', `${v.totals.retired} 条`],
   ]
   return (
@@ -115,9 +121,9 @@ export function FormulaMinerPanel() {
       </div>
       <div className="mt-3 grid gap-3">
         <Table title={`在席 ${live.length}`} rows={live} need={v.caps.need_days} empty="无在席公式" />
-        {v.retired.length > 0 && <Table title={`已退席 ${v.totals.retired}`} rows={v.retired} need={v.caps.need_days} empty="" />}
+        {v.retired.length > 0 && <Table capped title={v.totals.retired > v.retired.length ? `已退席 · 最近 ${v.retired.length} / ${v.totals.retired}` : `已退席 ${v.retired.length}`} rows={v.retired} need={v.caps.need_days} empty="" />}
       </div>
-      {err && <div data-miner-op-error className="mt-2 text-xs text-danger">{`操作失败 · ${err instanceof ApiError ? err.message : (err as Error).message}`}</div>}
+      {err && <div data-miner-op-error className="mt-2 text-xs text-danger">{opErrorText(err instanceof ApiError ? err.message : (err as Error).message)}</div>}
     </section>
   )
 }

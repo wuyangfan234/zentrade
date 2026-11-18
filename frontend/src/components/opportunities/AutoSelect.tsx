@@ -11,7 +11,8 @@ const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 const SCALE = 0.6
 export const VERDICT_ZH: Record<string, string> = { thin: '攒样本', early: '观察中', above: '领先', unclear: '未定', below: '落后' }
 const verdictCls = (v: string) => (v === 'above' ? badge('status') : v === 'below' ? badge('warn') : v === 'early' ? badge('status', 'neutral') : badge('limit'))
-const ex = (v?: number | null) => (fin(v) ? `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}` : '—')
+/** 四舍五入后为 0 的不带符号 (不出现 −0.00) */
+const ex = (v?: number | null) => (!fin(v) ? '—' : Math.abs(v) < 0.005 ? '0.00' : `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`)
 const exCls = (v?: number | null) => (!fin(v) || Math.abs(v) < 0.005 ? 'text-secondary' : v > 0 ? 'text-bull dark:text-red-400' : 'text-bear')
 const day = (iso?: string | null) => (iso ? `${md(iso)} ${weekday(iso)}` : '—')
 /** 行内用短名: 去掉括号里的解释 (全名在悬停) */
@@ -94,10 +95,10 @@ export function AutoCard({ v, onOpen }: { v: AutoSelectView; onOpen: () => void 
   )
 }
 
-const REASON_ZH: Record<string, string> = {
-  no_candidate: '无达标候补', incumbents_hold: '入选策略不低于候补', cooldown: '调整后 20 个交易日内不动',
+const reasonZh = (cooldownDays: number): Record<string, string> => ({
+  no_candidate: '无达标候补', incumbents_hold: '入选策略不低于候补', cooldown: `调整后 ${cooldownDays} 个交易日内不动`,
   catalog_unavailable: '策略目录未就绪', no_scores: '当日记分未完成',
-}
+})
 
 function Bench({ v, side }: { v: AutoSelectView; side: 'long' | 'short' }) {
   const rows = v.bench.filter((r) => r.side === side)
@@ -155,7 +156,7 @@ export function AutoPanel({ fallback }: { fallback?: AutoSelectView | null }) {
           {(['long', 'short'] as const).map((k) => {
             const s = last.sides[k]
             if (!s) return null
-            const txt = s.action === 'swap' ? `${displayStrategyName(s.out_name ?? '')} → ${displayStrategyName(s.in_name ?? '')}${s.applied ? '' : ' · 未执行'}` : REASON_ZH[s.reason ?? ''] ?? '未调整'
+            const txt = s.action === 'swap' ? `${displayStrategyName(s.out_name ?? '')} → ${displayStrategyName(s.in_name ?? '')}${s.applied ? '' : ' · 未执行'}` : reasonZh(v.cooldown_days)[s.reason ?? ''] ?? '未调整'
             return <span key={k} data-auto-eval={k} className="whitespace-nowrap">{`${SIDE_ARROW[k]} · ${txt}`}</span>
           })}
         </div>

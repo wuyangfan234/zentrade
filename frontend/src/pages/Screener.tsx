@@ -20,6 +20,7 @@ import { WatchlistAddMenu } from '@/components/WatchlistAddMenu'
 import { useStrategyPool } from '@/lib/useStrategyPool'
 import { StrategyRail } from '@/components/screener/StrategyRail'
 import { StrategyDetail } from '@/components/screener/StrategyDetail'
+import { humanizeFactorIds } from '@/lib/strategyDisplay'
 import { buildRailRow, defaultSide, filterRailRows, md, sortRailRows, type PanelSideKey, type RailFilter } from '@/lib/strategyPanel'
 import { ScreenerTable } from '@/components/screener/ScreenerTable'
 import { ScreenerFilter as ScreenerFilterType, defaultFilter, filterActive, countActiveFilters, applyFilter, FilterPanel } from '@/components/screener/ScreenerFilter'
@@ -221,10 +222,30 @@ export function Screener() {
   })
   const panel = panelQuery.data ?? null
 
-  const strategyPresets = useMemo(
-    () => (strategies.data?.presets ?? []).filter(s => s.asset_types.includes(assetType)),
-    [strategies.data, assetType],
+  // 策略名里夹带的英文因子 id (挖掘发布的「因子组合 · annual_vol_20d」) 换成因子库中文名; 库没到之前原样显示
+  const factorLib = useQuery({ queryKey: QK.factorLibrary('stock'), queryFn: () => api.factorLibrary('stock'), staleTime: 300_000 })
+  const factorLabels = useMemo(
+    () => new Map((factorLib.data?.factors ?? []).map(f => [f.id, f.label] as [string, string])),
+    [factorLib.data],
   )
+  const strategyPresets = useMemo(
+    () => (strategies.data?.presets ?? []).filter(s => s.asset_types.includes(assetType))
+      .map(s => (factorLabels.size ? { ...s, name: humanizeFactorIds(s.name, factorLabels) } : s)),
+    [strategies.data, assetType, factorLabels],
+  )
+
+  // 入选的排序因子 (不是策略引擎里的策略): 面板接口各给一条只读条目, 这里配一份只够详情用的元数据。
+  // 不进 strategyMap / 策略池 / 扫描 / 监控 —— 它没有全市场扫描, 也没有参数。
+  const rankerMetas = useMemo(() => {
+    const map = new Map<string, StrategyMeta>()
+    if (assetType !== 'stock') return map
+    for (const [id, e] of Object.entries(panel?.strategies ?? {})) {
+      if (!e.ranker) continue
+      map.set(id, { id, name: e.ranker.name, description: '', tags: [], source: 'builtin', asset_types: ['stock'], timeframes: ['1d'],
+        params: [], params_defaults: {} } as unknown as StrategyMeta)
+    }
+    return map
+  }, [panel, assetType])
 
   // 策略 ID → 名称映射
   const strategyIdToName = useMemo(() => {
@@ -248,8 +269,9 @@ export function Screener() {
   const detailMap = useMemo(() => {
     const map = new Map<string, StrategyMeta>()
     for (const p of strategyPresets) map.set(p.id, p)
+    for (const [id, m] of rankerMetas) if (!map.has(id)) map.set(id, m)
     return map
-  }, [strategyPresets])
+  }, [strategyPresets, rankerMetas])
 
   const allStrategyIds = useMemo(
     () => new Set((strategies.data?.presets ?? []).map(s => s.id)),
@@ -678,6 +700,20 @@ export function Screener() {
     if (scan && visiblePool.includes(s.id)) runStrategy(s)
   }
 
+  // 排序因子的只读条目: 只切换详情, 不扫描、不读缓存
+  const selectRanker = (id: string) => {
+    setActiveStrategy(id)
+    setShowAll(false)
+    setResult(null)
+    if (searchParams.get('s') !== id) {
+      setSearchParams(prev => {
+        const next = new URLSearchParams(prev)
+        next.set('s', id)
+        return next
+      }, { replace: true })
+    }
+  }
+
   // 详情里的「全市场扫描」开关 = 进出策略池; 新进池的日线策略立即扫一次
   const togglePool = (id: string) => {
     if (pool.includes(id)) {
@@ -787,8 +823,8 @@ export function Screener() {
 
   // 策略列表: 一个策略一行, 按 入选 → 扫描 / 监控 → 未启用 排; 周期筛选只影响列表显示
   const poolSet = useMemo(() => new Set(visiblePool), [visiblePool])
-  const railAll = useMemo(() => sortRailRows(
-    strategyPresets
+  const railAll = useMemo(() => sortRailRows([
+    ...strategyPresets
       .filter(s => {
         if (tfFilter === 'all') return true
         const isMinute = s.timeframes?.includes('1m') ?? false
@@ -798,7 +834,11 @@ export function Screener() {
         inPool: poolSet.has(s.id),
         monitored: strategyMonitorMap.has(`${assetType}:${s.id}`),
       })),
-  ), [strategyPresets, tfFilter, panel, poolSet, strategyMonitorMap, assetType])
+    // 入选的排序因子 (日线): 只读条目, 与入选策略排在一起
+    ...(tfFilter === '1m' ? [] : [...rankerMetas.values()]
+      .filter(m => !strategyMap.has(m.id))
+      .map(m => buildRailRow(m, panel?.strategies[m.id], { inPool: false, monitored: false }))),
+  ]), [strategyPresets, tfFilter, panel, poolSet, strategyMonitorMap, assetType, rankerMetas, strategyMap])
   const railCounts = useMemo(() => ({
     selected: railAll.filter(r => r.group === 'selected').length,
     active: railAll.filter(r => r.group !== 'idle').length,
@@ -824,10 +864,12 @@ export function Screener() {
     if (activeStrategy && detailMap.has(activeStrategy)) return
     const first = strategyMap.get(railRows[0].id)
     if (first) selectStrategy(first, false)
+    else if (rankerMetas.has(railRows[0].id)) selectRanker(railRows[0].id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAll, strategies.isSuccess, panelSettled, railRows, activeStrategy, detailMap, strategyMap])
 
   const activeMeta = activeStrategy ? detailMap.get(activeStrategy) ?? null : null
+  const activeIsRanker = !!activeStrategy && !strategyMap.has(activeStrategy) && rankerMetas.has(activeStrategy)
   const activeEntry = activeStrategy ? panel?.strategies[activeStrategy] ?? null : null
   const activeSide: PanelSideKey = (activeStrategy && sideById[activeStrategy]) || defaultSide(activeEntry)
   const activeInPool = !!activeStrategy && pool.includes(activeStrategy)
@@ -853,7 +895,7 @@ export function Screener() {
     <>
       <PageHeader
         title="策略"
-        subtitle={`入选 ${railCounts.selected} · 策略池 ${visiblePool.length} · 共 ${strategyPresets.length}${panel?.signals.day ? ` · 信号日 ${md(panel.signals.day)}` : ''}`}
+        subtitle={`入选 ${railCounts.selected} · 策略池 ${visiblePool.length} · 共 ${strategyPresets.length + [...rankerMetas.keys()].filter(id => !strategyMap.has(id)).length}${panel?.signals.day ? ` · 信号日 ${md(panel.signals.day)}` : ''}`}
         right={
           <div aria-label="策略工具栏" className="flex min-w-0 max-w-full flex-wrap items-center gap-2 whitespace-nowrap [&>div]:shrink-0 [&>button]:shrink-0 [&_button]:whitespace-nowrap [&_svg]:shrink-0">
             {/* 资产类型切换: 股票 / ETF (分钟策略 asset_types 仅股票, ETF 列表自然不含) */}
@@ -996,6 +1038,7 @@ export function Screener() {
             onSelect={id => {
               const s = strategyMap.get(id)
               if (s) selectStrategy(s)
+              else if (rankerMetas.has(id)) selectRanker(id)
             }}
             marketHits={hitCounts}
             computing={computingIds}
@@ -1244,7 +1287,7 @@ export function Screener() {
             </motion.div>
           )}
 
-          {!showAll && !result && activeMeta && (
+          {!showAll && !result && activeMeta && !activeIsRanker && (
             <div data-market-idle className="flex min-h-[46px] flex-wrap items-center gap-x-3 gap-y-2 rounded-card border border-dashed border-border px-3 py-2 text-xs">
               <span className="font-medium text-foreground">全市场命中</span>
               {activeBusy || run.isPending ? (

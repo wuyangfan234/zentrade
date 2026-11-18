@@ -5,6 +5,8 @@
 - 自选命中: 自选信号表 (opportunities/watchlist/<信号日>.json), 当日名单 + 近 20 个信号日的命中次数。
 - 机会板现状: 现在板上的卡 (挂单 / 入场区内 / 持仓 / 不下单), 按卡上的入选策略挂到对应策略名下。
 - 模拟成绩: 已结算的机会板卡 (research/swing_settle), 按卡上的 rules 归到策略名下, 与回放并排。
+- 入选的排序因子 (rank_lab 登记, 不是引擎里的策略): 各补一条只读条目, 带 ranker = {name, formula, direction};
+  回放读 rank_lab 复核的全窗, 自选命中读规则前向成绩的格子卡 (opportunities/cells/<信号日>.json)。
 
 只读文件与进程内状态: 不算新指标、不出网、不写任何文件。某一段读失败只空那一段 (errors), 不拖垮整页。
 面板数字只展示, 不参与下单、许可、排序。
@@ -194,6 +196,63 @@ def _paper(data_dir: Path, hist: dict) -> tuple[dict[str, dict], str | None]:
     return out, (min(days)[:10] if days else None)
 
 
+# ── 入选的排序因子 (只读条目) ────────────────────────────────
+
+def _ranker_signals(data_dir: Path, days: list[str], target: str | None) -> dict[str, dict]:
+    """排序因子的自选命中。信号表里没有它们的行 (命中是按值取前 5 算出来的), 读规则前向成绩当天落盘的格子卡。
+    返回 {规则 id: {"hits": 所选信号日的代码, "hist": 与 days 对齐的命中次数}}。"""
+    from app.services import rank_lab
+    from app.services import rule_forward as rf
+    out: dict[str, dict] = {}
+    for i, d in enumerate(days):
+        try:
+            raw = json.loads(rf.cells_path(data_dir, date.fromisoformat(d)).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        for c in (raw.get("cards") if isinstance(raw, dict) else None) or []:
+            if not isinstance(c, dict) or c.get("side") != "long" or not isinstance(c.get("symbol"), str):
+                continue
+            for rule in c.get("rules") or []:
+                if not rank_lab.is_ranker(rule):
+                    continue
+                e = out.setdefault(rule, {"hits": set(), "hist": [0] * len(days)})
+                e["hist"][i] += 1
+                if d == target:
+                    e["hits"].add(c["symbol"])
+    return {k: {"hits": sorted(v["hits"]), "hist": v["hist"]} for k, v in out.items()}
+
+
+def _ranker_replay(res: dict | None) -> dict | None:
+    """排序因子自己的卡回放 (rank_lab 复核的全窗), 给成与内置策略回放同样的字段; 没有成交率。"""
+    full = (res or {}).get("full") if isinstance(res, dict) and not (res or {}).get("error") else None
+    if not isinstance(full, dict) or _num(full.get("n")) is None:
+        return None
+    n = int(full["n"])
+    if n < 5 or _num(full.get("mean_r")) is None or _num(full.get("excess")) is None:
+        return {"n": n, "thin": True}
+    return {"n": n, "mean_r": _num(full["mean_r"]), "excess": _num(full["excess"]), "p": _num(full.get("p"))}
+
+
+def _rankers(data_dir: Path, selected_long: list[str], known: set[str], days: list[str], target: str | None) -> dict[str, dict]:
+    """入选做多里不属于策略引擎的排序因子: 名称 / 公式 / 回放 / 命中。未入选的排序因子不列 (策略页只补入选的缺口)。"""
+    from app.services import rank_lab
+    ids = [r for r in selected_long if rank_lab.is_ranker(r) and r not in known]
+    if not ids:
+        return {}
+    reg = rank_lab.read_rankers(data_dir, include_removed=True)
+    results = rank_lab.read_results(data_dir).get("rankers")
+    results = results if isinstance(results, dict) else {}
+    sig = _ranker_signals(data_dir, days, target)
+    out = {}
+    for rid in ids:
+        r = reg.get(rid) or {}
+        out[rid] = {"meta": {"name": f"排序 · {r.get('name') or rid}", "formula": str(r.get("formula") or ""),
+                             "direction": r.get("direction") if r.get("direction") in ("high", "low") else "high"},
+                    "replay": _ranker_replay(results.get(rid)),
+                    "hits": (sig.get(rid) or {}).get("hits") or [], "hist": (sig.get(rid) or {}).get("hist")}
+    return out
+
+
 # ── 组装 ──────────────────────────────────────────────────────
 
 def build(data_dir: Path, *, strategy_ids: list[str], repo=None, loop=None, day: date | None = None,
@@ -235,6 +294,13 @@ def build(data_dir: Path, *, strategy_ids: list[str], repo=None, loop=None, day:
             sides["short"] = side_view(sid, "short")
         strategies[sid] = {"short_capable": short_ok,
                            "name_short": sd.strategy_name(sid, "short") if short_ok else None, "sides": sides}
+
+    # 入选的排序因子不是引擎里的策略, 上面的循环列不到: 各补一条只读条目 (模拟成绩 / 机会板现状与内置策略同一来源)
+    extra = _section("rankers", lambda: _rankers(data_dir, list(sel[0]), set(strategies), sig["days"], sig["day"]), errors, {}) or {}
+    for rid, x in extra.items():
+        view = side_view(rid, "long")
+        view.update({"replay": x["replay"], "hits": x["hits"], "hist": x["hist"] or [0] * n_days})
+        strategies[rid] = {"short_capable": False, "name_short": None, "ranker": x["meta"], "sides": {"long": view}}
 
     win = hist_file.get("window") or []
     return {"contract": CONTRACT, "generated_at": now.isoformat(timespec="seconds"),

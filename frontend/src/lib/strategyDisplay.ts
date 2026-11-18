@@ -20,6 +20,17 @@ const ZH_ALIASES: Array<[RegExp, string]> = [
   [/Phantom/, '幻影'],
 ]
 
+/** 同一条策略全站一个名字: 策略文件里的名字是证据指纹不能改, 只在显示层换。 */
+const CANONICAL: Record<string, string> = { 'QS-IBS': 'IBS 均值回归' }
+export function canonicalStrategyName(name: string): string {
+  return CANONICAL[name.trim()] ?? name
+}
+
+/** 名称里夹带的因子 id (如「因子组合 · annual_vol_20d」) 换成因子库中文名; 库里没有的原样保留 */
+export function humanizeFactorIds(name: string, labels: Map<string, string>): string {
+  return name.replace(/\b[a-z][a-z0-9_]*_[a-z0-9_]+\b/g, (id) => labels.get(id) ?? id)
+}
+
 export function stripProvenance(name: string): string {
   return name.replace(PROVENANCE_RE, '').replace(ORIGINAL_RE, '').trim()
 }
@@ -31,7 +42,7 @@ export function strategyZh(name: string): string | null {
 
 /** 去出处名，再在英文指标名后面紧跟中文名（已带过就不重复）。 */
 export function displayStrategyName(name: string): string {
-  const clean = stripProvenance(name)
+  const clean = canonicalStrategyName(stripProvenance(name))
   for (const [re, zh] of ZH_ALIASES) {
     const m = re.exec(clean)
     if (!m) continue

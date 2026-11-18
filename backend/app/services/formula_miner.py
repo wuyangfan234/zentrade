@@ -168,7 +168,7 @@ def _simple(rng: random.Random) -> tuple[str, str]:
         return _level(rng)
     k = rng.choice(sorted(ATOMS))
     n = rng.choice(WINDOWS[:6])
-    return f"ts_mean({ATOMS[k][0]},{n})", f"{n} 日{ATOMS[k][1]}"
+    return f"ts_mean({ATOMS[k][0]},{n})", f"{ATOMS[k][1]} {n} 日均值"
 
 
 def _fresh(rng: random.Random) -> dict:
@@ -178,9 +178,9 @@ def _fresh(rng: random.Random) -> dict:
     ax, al = ATOMS[a]
     n = rng.choice(WINDOWS)
     if t == "smooth":
-        f, name = f"ts_mean({ax},{n})", f"{n} 日{al}"
+        f, name = f"ts_mean({ax},{n})", f"{al} {n} 日均值"
     elif t == "std":
-        f, name = f"ts_std({ax},{max(n, 5)})", f"{max(n, 5)} 日{al}波动"
+        f, name = f"ts_std({ax},{max(n, 5)})", f"{al} {max(n, 5)} 日标准差"
     elif t == "ratio":
         s, lg = sorted(rng.sample(WINDOWS, 2))
         f, name = f"ts_mean({ax},{s})/max(ts_mean(abs({ax}),{lg}),0.0001)", f"{al} {s}/{lg} 日比"
@@ -197,7 +197,7 @@ def _fresh(rng: random.Random) -> dict:
         c = rng.choice(sorted(CONDS))
         m = max(n, 10)
         f = f"ts_sum(if_else({CONDS[c][0]},{ATOMS[s][0]},0),{m})/max(ts_sum(abs({ATOMS[s][0]}),{m}),0.0001)"
-        name = f"{CONDS[c][1]}{ATOMS[s][1]}占比 {m} 日"
+        name = f"{CONDS[c][1]}的{ATOMS[s][1]}占比 {m} 日"
     elif t == "cond_count":
         c1, c2 = rng.sample(sorted(CONDS), 2)
         m = max(n, 5)
@@ -224,6 +224,16 @@ def _fresh(rng: random.Random) -> dict:
 
 
 _WIN_RE = re.compile(r",(\d+)\)")
+_WIN_NOTE_RE = re.compile(r"\s*·\s*窗口 \d+→\d+$")
+
+
+def _mutant_name(parent_name: str, old: str, new: str) -> str:
+    """变异公式的名字 = 母公式的名字 + 实际改动的窗口 (名字上屏、进推送, 不能还写着母公式的窗口)。至多 40 字, 截母名不截窗口。"""
+    wo, wn = _WIN_RE.findall(old), _WIN_RE.findall(new)
+    a, b = next(((x, y) for x, y in zip(wo, wn, strict=False) if x != y), ("", ""))
+    note = f" · 窗口 {a}→{b}"
+    base = _WIN_NOTE_RE.sub("", parent_name).removesuffix(" 变体").strip() or "公式"
+    return base[:40 - len(note)].rstrip() + note
 
 
 def mutate(formula: str, rng: random.Random) -> str | None:
@@ -250,7 +260,8 @@ def generate(seed: str, n: int, parents: list[dict] | None = None) -> list[dict]
             f = mutate(p["formula"], rng)
             if f is None:
                 continue
-            item = {"formula": f, "name": f"{p.get('name') or '变体'} 变体"[:40], "template": "mutate", "parent": p.get("id"),
+            item = {"formula": f, "name": _mutant_name(str(p.get("name") or ""), p["formula"], f), "template": "mutate",
+                    "parent": p.get("id"),
                     "direction": p.get("direction") if p.get("direction") in ("high", "low") else "high"}
         else:
             item = {**_fresh(rng), "direction": rng.choice(("high", "low"))}

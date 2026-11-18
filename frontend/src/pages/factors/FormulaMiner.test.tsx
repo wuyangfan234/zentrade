@@ -60,7 +60,7 @@ it('row title carries sample sizes and keeps holdout replay out of the main laye
 it('run line is plain numbers or a plain reason', () => {
   expect(runLine(null)).toBe('尚未运行')
   expect(runLine(view().last_run)).toBe('11-18 · 生成 120 · 新公式 119 · 可用 82 · 入席 2')
-  expect(runLine({ run_id: 'x', day: '2026-11-19', skipped: 'bench_full' })).toBe('11-19 · 候补席已满')
+  expect(runLine({ run_id: 'x', day: '2026-11-19', skipped: 'bench_full' })).toBe('11-19 · 挖掘席位已满')
   expect(runLine({ run_id: 'x', day: '2026-11-19', error: 'Boom' })).toBe('11-19 · 运行失败')
 })
 
