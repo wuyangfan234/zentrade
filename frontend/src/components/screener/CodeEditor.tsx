@@ -163,7 +163,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
         className="shrink-0 select-none overflow-hidden border-r border-border/40 py-3 pl-2 pr-2 text-right font-mono text-[12px] leading-5 text-muted tabular-nums">
         {Array.from({ length: lines }, (_, k) => (
           <div key={k} data-error-line={markedSet.has(k + 1) ? k + 1 : undefined}
-            className={markedSet.has(k + 1) ? '-mx-2 bg-warning/20 px-2 font-bold text-foreground' : undefined}>{k + 1}</div>
+            className={markedSet.has(k + 1) ? '-mx-2 bg-warning/10 px-2 font-bold text-foreground dark:bg-warning/20' : undefined}>{k + 1}</div>
         ))}
       </div>
       <div className="relative min-w-0 flex-1">
@@ -171,7 +171,7 @@ export const CodeEditor = forwardRef<CodeEditorHandle, {
         <div data-code-marks aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={marksRef} className="relative">
             {marked.map(n => (
-              <div key={n} data-mark-line={n} className="absolute inset-x-0 bg-warning/15 shadow-[inset_3px_0_0_hsl(var(--warning))]"
+              <div key={n} data-mark-line={n} className="absolute inset-x-0 bg-warning/[0.07] shadow-[inset_3px_0_0_hsl(var(--warning))] dark:bg-warning/15"
                 style={{ top: EDITOR_PAD_PX + (n - 1) * EDITOR_LINE_PX, height: EDITOR_LINE_PX }} />
             ))}
           </div>
