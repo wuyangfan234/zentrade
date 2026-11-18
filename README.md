@@ -195,6 +195,7 @@ FastAPI API
 - [部署指南](docs/deployment.md)
 - [配置规范](docs/configuration.md)
 - [架构说明](docs/architecture.md)
+- [状态机一览](docs/state-machines.md)
 - [策略指南](docs/strategy.md)
 - [因子与策略挖掘](docs/mining.md)
 - [数据源插件开发](docs/plugin-development.md)
