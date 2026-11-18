@@ -12,7 +12,7 @@ it('机会页源码里的中文字面量不含禁用词 (注释不算)', () => {
   const files = ['components/opportunities/Desk.tsx', 'components/opportunities/StatusRail.tsx', 'components/opportunities/terms.ts',
     'pages/Opportunities.tsx', 'components/opportunities/RulesConsole.tsx', 'components/opportunities/LsRank.tsx',
     'components/opportunities/MarketHero.tsx', 'components/opportunities/Cards.tsx', 'components/opportunities/SideRail.tsx',
-    'components/opportunities/PriceRuler.tsx']
+    'components/opportunities/PriceRuler.tsx', 'components/opportunities/AutoSelect.tsx']
   for (const f of files) {
     const src = readFileSync(resolve(__dirname, '..', '..', f), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '')

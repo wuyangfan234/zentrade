@@ -19,6 +19,7 @@ import { LsRankEmpty, ModelCard } from '@/components/opportunities/LsRank'
 import { MarketHero } from '@/components/opportunities/MarketHero'
 import { BoardCards, HoldCards, modelSides } from '@/components/opportunities/Cards'
 import { AccountCard, ConcRisk } from '@/components/opportunities/SideRail'
+import { AutoCard } from '@/components/opportunities/AutoSelect'
 import { AsOfView } from '@/components/opportunities/AsOfView'
 import { ACTIVE_PHASES, useOppPage, useOppQuotes } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
@@ -124,6 +125,7 @@ export function Opportunities() {
             <aside data-opp-rail className="min-w-0">
               {view && <AccountCard view={view} nav={nav} />}
               {errs.themes ? <SectionError name="集中风险" err={errs.themes} /> : d.themes ? <ConcRisk t={d.themes} /> : null}
+              {errs.auto ? <SectionError name="入选策略" err={errs.auto} /> : d.auto ? <AutoCard v={d.auto} onOpen={() => setConsoleOpen(true)} /> : null}
               {errs.ls_rank ? <SectionError name="模型打分" err={errs.ls_rank} /> : d.ls_rank ? <ModelCard d={d.ls_rank} onOpen={setOpen} /> : <LsRankEmpty />}
             </aside>
           </div>
@@ -136,7 +138,7 @@ export function Opportunities() {
           <StockPreviewDialog symbol={open} onClose={() => setOpen(null)} navList={navList.length ? navList : [{ symbol: open }]} onNavigate={setOpen} />
         </Suspense>
       )}
-      {consoleOpen && <RulesConsole settings={d?.settings ?? null} onClose={() => setConsoleOpen(false)} />}
+      {consoleOpen && <RulesConsole settings={d?.settings ?? null} auto={d?.auto ?? null} onClose={() => setConsoleOpen(false)} />}
     </div>
   )
 }

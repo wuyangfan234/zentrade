@@ -54,7 +54,10 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
   )
 }
 
-const GRID = 'grid gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]'
+/** 同一网格的卡等高 (auto-rows-fr: 不只同一行, 换行后的各行也一样高); 卡内最后一行贴底, 多出的高度留在价格尺下方 */
+export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]'
+export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
+export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
 const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 text-[13px] text-muted">{t}</div>
 
 /** 现价时点: 报价有时写报价时刻; 没有时按页面价的来源写 (收盘价写哪天) */
@@ -86,7 +89,7 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
   return (
     <div role="button" tabIndex={0} data-board-card={c.symbol} data-zone={zp.pos ?? 'none'} onClick={() => onOpen(c.symbol)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(c.symbol) } }}
-      className={`min-w-0 cursor-pointer rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated ${hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
+      className={`${CARD} ${hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
       <div className="flex items-center gap-2">
         <b className="text-[14px] font-bold text-foreground">{c.symbol}</b>
         <Side side={c.side} />
@@ -106,7 +109,7 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
       <PriceRuler data-ruler="board" geo={{ stop: c.stop, target: c.target, price, zone: c.entry_zone, side: c.side }}
         lossText={`止损亏 ${usdS(loss === null ? null : -loss)}`} gainText={`目标赚 ${usdS(gain)}`} lossCls="text-bear"
         stopLabel={`止损 ${px(c.stop)}`} targetLabel={`目标 ${px(c.target)}`} />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary">
+      <div data-card-foot className={CARD_FOOT}>
         {kind && <span data-card-kind title={c.strategies.map((s) => s.name).join(' · ')} className="rounded-[4px] bg-elevated px-1.5 text-[11px] leading-[18px] text-secondary">{kind}</span>}
         <span className="whitespace-nowrap">{`进场 ${px(lo)} ~ ${px(hi)}`}</span>
         <span className="whitespace-nowrap">{fin(qty) ? `${qty} 股` : '股数 —'}</span>
@@ -227,7 +230,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
             return (
               <div key={b.symbol} role="button" tabIndex={0} data-hold={b.symbol} data-urgent={tags.warn.length ? '' : undefined} onClick={() => onOpen(b.symbol)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(b.symbol) } }}
-                className={`min-w-0 cursor-pointer rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated ${tags.warn.length ? 'border-warning/50' : 'border-border'}`}>
+                className={`${CARD} ${tags.warn.length ? 'border-warning/50' : 'border-border'}`}>
                 <div className="flex items-center gap-2">
                   <b className="text-[14px] font-bold text-foreground">{b.symbol}</b>
                   <Side side={b.side ?? 'long'} />
@@ -245,7 +248,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
                     stopLabel={<>{`止损 ${px(h.stop_now)}`}{h.stop_moved && <span data-stop-initial className="text-muted">{` · 原 ${px(h.stop_initial)}`}</span>}</>}
                     targetLabel={`目标 ${px(h.target)}`} />
                 ) : <div className="my-2 text-[12px] text-muted">止损 —</div>}
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary">
+                <div data-card-foot className={CARD_FOOT}>
                   {kind && <span className="rounded-[4px] bg-elevated px-1.5 text-[11px] leading-[18px] text-secondary">{kind}</span>}
                   <span className="whitespace-nowrap">{`${h.qty} 股`}</span>
                   <span className="whitespace-nowrap">{`成本 ${px(h.avg)}`}</span>

@@ -876,6 +876,24 @@ export interface DeskOverviewPayload {
 export interface WatchlistForward { n: number; months: number; excess: number | null; p: number | null; threshold: number | null; promoted: boolean; abs_mean?: number | null; tradable_rules?: string[] }
 /** 规则面板回放 (tight-v1)。thin = 成交不足 5 笔, 只有 n (成交) / signals (过 4h 门的卡) / raw (门前命中), 没有 R (0.30.0) */
 export interface WatchlistRuleHistory { n: number; mean_r?: number; excess?: number; p?: number; signals?: number; raw?: number; thin?: boolean }
+/** 2026-11-18 规则前向成绩的一行 (超额 = 成交卡比同日同向其余成交卡多出的 R) */
+export interface AutoSelectRow {
+  id: string; side: 'long' | 'short'; name: string; verdict: 'thin' | 'early' | 'above' | 'unclear' | 'below'
+  hits?: number | null; filled?: number | null; days?: number | null; fill?: number | null; mean_r?: number | null
+  excess?: number | null; ci?: number[] | null
+}
+export interface AutoSelectSwap {
+  id: string; day: string; side: 'long' | 'short'; out: string; in: string; out_name: string; in_name: string
+  out_excess: number | null; in_excess: number | null; undone_at: string | null
+}
+export interface AutoSelectView {
+  enabled: boolean; picks: Record<'long' | 'short', AutoSelectRow[]>; bench: AutoSelectRow[]
+  scored: number; days: number; cells: number; window: string[] | null; as_of: string | null
+  need_days: number; need_filled: number; cooldown_days: number; next_eval: string
+  last_eval: { day: string; enabled: boolean; sides: Partial<Record<'long' | 'short', { action: string; reason?: string; out_name?: string; in_name?: string; applied?: boolean }>> } | null
+  swaps: AutoSelectSwap[]
+}
+
 export interface WatchlistRuleCatalogItem {
   id: string; name: string; kind: string; enabled: boolean; forward: { n: number; mean_r: number; excess: number } | null; history?: WatchlistRuleHistory | null
   /** 机会卡显示 (看, 2026-10-09): 看多出卡 / 能出看空 / 看空出卡 / 卖出当做空的回测 */
@@ -1174,6 +1192,8 @@ export type OppPagePayload = {
   ls_rank?: LsRankPayload | null
   /** 2026-11-15 主题压力 */
   themes?: ThemeExposure | null
+  /** 2026-11-18 自动选策略 (只读视图); 旧后端没有这一段 */
+  auto?: AutoSelectView | null
   errors: Record<string, string>
 }
 /** 今日多空 (契约 ls-rank-v1): 自选排名 → 看多 5 / 看空 5; settle = 前向结算 (单位 ATR, 1 ATR = risk_usd / stop_atr 美元) */
@@ -3164,6 +3184,10 @@ export const api = {
   swingSettlement: () => request<SwingSettlePayload>('/api/opportunities/swing-settlement', { quiet: true }),
   settlementCards: () => request<SettlementCardsPayload>('/api/opportunities/settlement/cards', { quiet: true }),
   watchlistRules: () => request<WatchlistRulesPayload>('/api/opportunities/rules'),
+  /** 2026-11-18 自动选策略: 视图 / 开关 / 撤回一次换入 */
+  autoSelect: () => request<AutoSelectView>('/api/opportunities/auto-select', { quiet: true }),
+  setAutoSelect: (enabled: boolean) => request<AutoSelectView>('/api/opportunities/auto-select', { method: 'POST', quiet: true, body: JSON.stringify({ enabled }) }),
+  undoAutoSelect: (id: string) => request<AutoSelectView>('/api/opportunities/auto-select/undo', { method: 'POST', quiet: true, body: JSON.stringify({ id }) }),
   /** 0.30.0 挖掘 / AI 策略重新按卡回放: 收盘后立即跑, 交易时段排队到盘后管道之后 */
   runSwingCandidates: () =>
     request<{ started: boolean; queued: boolean; running: boolean; requested_at?: string }>('/api/opportunities/rules/candidates/run', { method: 'POST' }),
