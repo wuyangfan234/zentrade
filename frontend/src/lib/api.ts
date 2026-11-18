@@ -3917,10 +3917,11 @@ export const api = {
     }
   },
 
-  strategyValidateCode: (payload: { code: string; strategy_id?: string; name?: string; description?: string }) =>
+  strategyValidateCode: (payload: { code: string; strategy_id?: string; name?: string; description?: string }, opts?: { quiet?: boolean }) =>
     request<StrategyBuildResult>('/api/strategies/code/validate', {
       method: 'POST',
       body: JSON.stringify(payload),
+      quiet: opts?.quiet,
     }),
 
   strategySaveCodeV2: (payload: {

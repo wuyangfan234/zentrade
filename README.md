@@ -197,6 +197,8 @@ FastAPI API
 - [架构说明](docs/architecture.md)
 - [状态机一览](docs/state-machines.md)
 - [策略指南](docs/strategy.md)
+- [手动策略开发指南](docs/strategy-development.md)
+- [策略语法标准](docs/strategy-standard.md)
 - [因子与策略挖掘](docs/mining.md)
 - [数据源插件开发](docs/plugin-development.md)
 - [自定义 HTTP 数据源](docs/custom-data-source.md)

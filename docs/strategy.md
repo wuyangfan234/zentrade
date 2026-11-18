@@ -65,6 +65,8 @@
 
 手写策略需遵循 [`strategy-guide.md`](../backend/app/strategy/prompts/strategy-guide.md) 的文件结构(META / basic_filter / scoring / ENTRY_SIGNALS / filter 等),完整规范见该文档。
 
+完整操作流程（放哪、怎么保存、怎么验证、进 3+3 出卡的边界）见 [手动策略开发指南](./strategy-development.md)；只查「必须 / 禁止」的规则清单见 [策略语法标准](./strategy-standard.md)。
+
 ---
 
 ## 策略文件结构(简述)
@@ -74,8 +76,9 @@
 | 部分 | 作用 |
 | :--- | :--- |
 | `META` | 策略元信息(名称、参数、方向等),用户可在 UI 调整阈值 |
-| `basic_filter(df, params)` | 模式 A:单日过滤,返回 `pl.Expr` |
+| `filter(df, params)` | 模式 A:单日过滤,返回 `pl.Expr` |
 | `filter_history(df, params)` | 模式 B:历史窗口过滤,返回 `pl.DataFrame`(配 `LOOKBACK_DAYS`) |
+| `MATRIX_STRATEGY` | 模式 C:矩阵写法,在「时间 × 股票」数组上直接算信号;内置策略均为此写法 |
 | `scoring` | 评分权重,总和 = 1.0 |
 | `ENTRY_SIGNALS` / `EXIT_SIGNALS` | 进出场信号列(回测用) |
 
@@ -85,4 +88,4 @@
 
 ## 新增内置策略(贡献者)
 
-如果你想为项目贡献一个内置策略:在 `backend/app/strategy/builtin/` 参照现有文件实现 `StrategyDef`,引擎会自动发现并加载。欢迎提交 PR。
+如果你想为项目贡献一个内置策略:在 `backend/app/strategy/builtin/` 参照现有文件(均为矩阵写法:`META` + `MATRIX_STRATEGY`)实现,并声明 `asset_types` / `timeframes`,引擎会自动发现并加载。欢迎提交 PR。
