@@ -161,6 +161,11 @@ def make_worker_task(kind: str, data_dir: Path, config) -> dict[str, Any]:
         if not isinstance(config, dict):
             raise TypeError("rank_lab worker config must be a dict")
         encoded = dict(config)
+    elif kind == "formula_miner":
+        # 公式挖掘: 生成排序公式并按候选池评估 (子进程跑, 几百条公式的面板计算不占主进程)
+        if not isinstance(config, dict):
+            raise TypeError("formula_miner worker config must be a dict")
+        encoded = dict(config)
     else:
         raise ValueError(f"unsupported worker task kind: {kind}")
     return {
@@ -250,6 +255,9 @@ def _worker_entry(task: dict[str, Any], event_queue, cancel_event) -> None:
         elif kind == "rank_lab":
             from app.services import rank_lab
             result = rank_lab.worker_run(data_dir, repo, task["config"])
+        elif kind == "formula_miner":
+            from app.services import formula_miner
+            result = formula_miner.worker_run(data_dir, repo, task["config"])
         elif kind == "mining":
             from app.backtest.mining_runtime import run_mining_runtime
 

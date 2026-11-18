@@ -1487,6 +1487,12 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
             return None
         res = rank_lab.run_nightly(r.store.data_dir, r)
         logger.info("rank lab nightly: %s", res)
+        # 公式挖掘: 候选池重导之后退席 / 生成 / 入席 (失败不影响上面的重导结果)
+        try:
+            from app.services import formula_miner
+            logger.info("formula miner nightly: %s", formula_miner.run_nightly(r.store.data_dir, r))
+        except Exception as e:
+            logger.warning("formula miner nightly failed (soft): %s", type(e).__name__)
         return res
 
     scheduler.add_job(_rank_lab_nightly,

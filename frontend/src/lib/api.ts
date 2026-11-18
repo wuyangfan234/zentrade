@@ -886,6 +886,43 @@ export interface AutoSelectSwap {
   id: string; day: string; side: 'long' | 'short'; out: string; in: string; out_name: string; in_name: string
   out_excess: number | null; in_excess: number | null; undone_at: string | null
 }
+/** 公式挖掘 (formula_miner.view): 自动写的排序公式在候补席上的前向成绩 */
+export interface FormulaMinerSeg { n?: number | null; excess?: number | null; excess_ci?: [number, number] | null }
+export interface FormulaMinerRow {
+  id: string
+  name: string
+  formula: string
+  direction: 'high' | 'low'
+  status: 'bench' | 'selected' | 'retired'
+  reason?: 'below' | 'timeout' | 'removed' | null
+  admitted_day?: string | null
+  retired_day?: string | null
+  sat_days: number
+  replay?: { mining?: FormulaMinerSeg; holdout?: FormulaMinerSeg } | null
+  forward: { hits?: number | null; filled?: number | null; days?: number | null; excess?: number | null; ci?: [number, number] | null; verdict: string }
+}
+export interface FormulaMinerRun {
+  run_id: string
+  day: string
+  skipped?: string
+  error?: string
+  funnel?: { generated: number; new: number; evaluated: number; errors: number; thin: number; negative?: number; same_as_alive: number; same_as_retired: number; eligible: number; admitted: number }
+  admitted?: { id: string; name: string }[]
+  retired?: { id: string; name: string; reason: string }[]
+}
+export interface FormulaMinerView {
+  enabled: boolean
+  running: boolean
+  pool_ready: boolean
+  bench: FormulaMinerRow[]
+  selected: FormulaMinerRow[]
+  retired: FormulaMinerRow[]
+  totals: { tried: number; admitted: number; retired: number; selected: number; released?: number; above: number; outcomes: Record<string, number> }
+  caps: { bench: number; per_run: number; tenure_days: number; need_days: number; need_filled: number }
+  last_run: FormulaMinerRun | null
+  runs: FormulaMinerRun[]
+}
+
 export interface AutoSelectView {
   enabled: boolean; picks: Record<'long' | 'short', AutoSelectRow[]>; bench: AutoSelectRow[]
   scored: number; days: number; cells: number; window: string[] | null; as_of: string | null
@@ -3535,6 +3572,9 @@ export const api = {
   factorLabRun: () => request<{ started: boolean }>('/api/factor-lab/run', { method: 'POST' }),
   /** 2026-11-15 立即跑一轮周度挖掘 (本周编号), 跑完自动接着跑发现页回测 */
   factorLabRunNow: () => request<{ status: string; run_id?: string }>('/api/factor-lab/weekly/run-now', { method: 'POST' }),
+  formulaMiner: () => request<FormulaMinerView>('/api/factor-lab/miner', { quiet: true }),
+  setFormulaMiner: (enabled: boolean) => request<FormulaMinerView>('/api/factor-lab/miner', { method: 'POST', quiet: true, body: JSON.stringify({ enabled }) }),
+  runFormulaMiner: () => request<{ started: boolean; running: boolean }>('/api/factor-lab/miner/run', { method: 'POST', quiet: true }),
   factorMaturityRun: () => request<{ started: boolean }>('/api/factor-lab/maturity/run', { method: 'POST' }),
   intakeRun: () => request<{ started: boolean }>('/api/factor-lab/intake/run', { method: 'POST' }),
   intakeMerge: (id: string, formula = 0) =>
