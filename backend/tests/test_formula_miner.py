@@ -4,10 +4,12 @@ import random
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+import polars as pl
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from test_rank_lab import _write_pool
+from test_rank_lab import _days, _write_pool
 
 from app.market_clock import us_clock
 from app.services import formula_miner as fm
@@ -62,6 +64,34 @@ def test_every_template_compiles_as_a_ranker():
             rl.check_formula(it["formula"])
     assert seen >= {"smooth", "std", "ratio", "level", "corr", "cond_share", "cond_count", "spread", "rank_sum", "ts_rank",
                     "rsi", "decay", "zscore"}
+
+
+def test_cond_count_never_pairs_conditions_that_cannot_hold_on_the_same_day():
+    """「A 且 B 占比」: 互斥的两个条件 (上涨/下跌、高开/低开、放量/缩量) 同一天不会同时成立, 公式恒为 0,
+    当天前 5 只剩股票代码顺序。固定种子大量生成 (旧写法约五分之一抽到互斥的一对), 每条在面板上取值都不能全为 0。
+    面板自造: test_rank_lab 的夹具开盘价 = 收盘价, 高开 / 低开与涨跌分不开, 合法的「上涨日且低开日」在那里也全为 0。"""
+    rng = np.random.default_rng(1)
+    rows = []
+    for s in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF"):
+        close = 50.0
+        for d in _days(300):
+            o = close * float(np.exp(rng.normal(0, 0.01)))
+            close = o * float(np.exp(rng.normal(0, 0.02)))
+            rows.append({"symbol": s, "date": d, "open": o, "high": max(o, close) * 1.01, "low": min(o, close) * 0.99,
+                         "close": close, "volume": float(rng.integers(100_000, 1_000_000)), "amount": close * 1e5})
+    panel = rl.prepare_panel(pl.DataFrame(rows))
+    made = {}
+    for seed in range(10):
+        for it in fm.generate(f"cc{seed}", 120):
+            if it["template"] == "cond_count":
+                made.setdefault(it["formula"], it["name"])
+    assert len(made) >= 30
+    flat = []
+    for f, name in made.items():
+        v = rl.factor_frame(panel, f, "high")["value"].drop_nulls()
+        if v.len() == 0 or bool((v == 0).all()):
+            flat.append(name)
+    assert flat == []
 
 
 def test_mutate_moves_one_window_one_step():

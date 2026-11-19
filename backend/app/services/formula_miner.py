@@ -155,6 +155,8 @@ CONDS = {
     "heavy": ("volume>ts_mean(volume,20)", "放量日"),
     "light": ("volume<ts_mean(volume,20)", "缩量日"),
 }
+# 同一天不会同时成立的一对: 「A 且 B 占比」配上它们恒为 0, 当天前 5 只剩股票代码顺序
+OPPOSITE = {"up": "down", "down": "up", "gap_up": "gap_down", "gap_down": "gap_up", "heavy": "light", "light": "heavy"}
 
 
 def _level(rng: random.Random) -> tuple[str, str]:
@@ -200,7 +202,8 @@ def _fresh(rng: random.Random) -> dict:
         f = f"ts_sum(if_else({CONDS[c][0]},{ATOMS[s][0]},0),{m})/max(ts_sum(abs({ATOMS[s][0]}),{m}),0.0001)"
         name = f"{CONDS[c][1]}的{ATOMS[s][1]}占比 {m} 日"
     elif t == "cond_count":
-        c1, c2 = rng.sample(sorted(CONDS), 2)
+        c1 = rng.choice(sorted(CONDS))
+        c2 = rng.choice([k for k in sorted(CONDS) if k not in (c1, OPPOSITE.get(c1))])
         m = max(n, 5)
         f = f"ts_sum(if_else(({CONDS[c1][0]}) and ({CONDS[c2][0]}),1,0),{m})/{m}"
         name = f"{CONDS[c1][1]}且{CONDS[c2][1]}占比 {m} 日"
