@@ -18,7 +18,8 @@
 WS-GP (只在已知有效的结构里搜, 不做无约束随机树) / gplearn point mutation (只改常数与同类算子)。
 
 与外部研究系统共用排序因子登记: 候补只认自己登记的 (source.system = SYSTEM)。同一条公式之后被外部系统导入
-(登记的出处被改写) -> 记为 released, 让出席位, 不再由这里退席。
+(登记的出处被改写) -> 记为 released, 让出席位, 不再由这里退席。入席时它已被别的系统登记 (搜索期间导入的)
+-> 不入席、不改写出处, 本轮记录列进 taken。
 
 边界: 只写 research/formula_miner/ 与 rank_lab 的登记 (经 rank_lab 自己的函数); 不改入选策略、下单簿、台账、交易环。
 """
@@ -154,6 +155,8 @@ CONDS = {
     "heavy": ("volume>ts_mean(volume,20)", "放量日"),
     "light": ("volume<ts_mean(volume,20)", "缩量日"),
 }
+# 同一天不会同时成立的一对: 「A 且 B 占比」配上它们恒为 0, 当天前 5 只剩股票代码顺序
+OPPOSITE = {"up": "down", "down": "up", "gap_up": "gap_down", "gap_down": "gap_up", "heavy": "light", "light": "heavy"}
 
 
 def _level(rng: random.Random) -> tuple[str, str]:
@@ -199,12 +202,15 @@ def _fresh(rng: random.Random) -> dict:
         f = f"ts_sum(if_else({CONDS[c][0]},{ATOMS[s][0]},0),{m})/max(ts_sum(abs({ATOMS[s][0]}),{m}),0.0001)"
         name = f"{CONDS[c][1]}的{ATOMS[s][1]}占比 {m} 日"
     elif t == "cond_count":
-        c1, c2 = rng.sample(sorted(CONDS), 2)
+        c1 = rng.choice(sorted(CONDS))
+        c2 = rng.choice([k for k in sorted(CONDS) if k not in (c1, OPPOSITE.get(c1))])
         m = max(n, 5)
         f = f"ts_sum(if_else(({CONDS[c1][0]}) and ({CONDS[c2][0]}),1,0),{m})/{m}"
         name = f"{CONDS[c1][1]}且{CONDS[c2][1]}占比 {m} 日"
     elif t == "spread":
         (f1, n1), (f2, n2) = _level(rng), _level(rng)
+        while f2 == f1:  # 两项抽到同一项时公式是 x - x, 恒为 0, 当天前 5 只剩股票代码顺序; 第二项重抽
+            f2, n2 = _level(rng)
         f, name = f"{f1}-{f2}", f"{n1} 减 {n2}"
     elif t == "rank_sum":
         (f1, n1), (f2, n2) = _simple(rng), _simple(rng)
@@ -472,8 +478,10 @@ def bench_count(st: dict) -> int:
     return sum(1 for m in st["members"].values() if m.get("status") == "bench")
 
 
-def admit(data_dir: Path, repo, chosen: list[dict], *, run_id: str, today: date, pool_sha: str | None, split: dict | None) -> list[dict]:
-    """把选中的公式登记成排序因子 (候补)。单条失败只跳过。"""
+def admit(data_dir: Path, repo, chosen: list[dict], *, run_id: str, today: date, pool_sha: str | None, split: dict | None,
+          taken: list[dict] | None = None) -> list[dict]:
+    """把选中的公式登记成排序因子 (候补)。单条失败只跳过。
+    搜索期间别的系统已登记了同一条公式 (含已移除): 不改写它的出处、不记成候补, 列进 taken (rank_lab 锁内判断)。"""
     from app.services import rank_lab as rl
     data_dir = Path(data_dir)
     done = []
@@ -482,9 +490,16 @@ def admit(data_dir: Path, repo, chosen: list[dict], *, run_id: str, today: date,
             res = rl.import_ranker(data_dir, name=c["name"], formula=c["formula"], direction=c["direction"],
                                    idea=f"公式挖掘 · {c['name']}",
                                    source={"system": SYSTEM, "id": c["id"], "run_id": run_id, "status": "challenger",
-                                           "mining": c.get("mining"), "pool_sha": pool_sha, "split": split})
+                                           "mining": c.get("mining"), "pool_sha": pool_sha, "split": split},
+                                   only_new=True)
         except Exception as e:
             logger.warning("formula miner: admit %s failed: %s", c.get("id"), type(e).__name__)
+            continue
+        if res.get("skipped"):
+            who = (res["ranker"].get("source") or {}).get("system")
+            logger.info("formula miner: %s already registered by %s, not admitted", c.get("id"), who)
+            if taken is not None:
+                taken.append({"id": c.get("id"), "name": c.get("name"), "system": who})
             continue
         rid = res["ranker"]["id"]
         with _STATE_LOCK:
@@ -545,8 +560,11 @@ def run(data_dir: Path, repo, *, today: date | None = None, force: bool = False,
                 rec["skipped"] = res["skipped"]
             else:
                 rec["funnel"] = res.get("funnel")
+                taken: list[dict] = []
                 rec["admitted"] = admit(data_dir, repo, res.get("chosen") or [], run_id=run_id, today=today,
-                                        pool_sha=res.get("pool_sha"), split=res.get("split"))
+                                        pool_sha=res.get("pool_sha"), split=res.get("split"), taken=taken)
+                if taken:
+                    rec["taken"] = taken
         with _STATE_LOCK:
             st = read_state(data_dir)
             st["runs"] = (st["runs"] + [rec])[-KEEP_RUNS:]

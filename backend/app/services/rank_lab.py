@@ -22,7 +22,8 @@ v1 → v2 (2026-11-10) 只改了分段: v1 是挖掘段到 2024-12-31、留出�
   research/rank_lab/rankers.json   已导入的排序因子;  results.json = ZenTrade 自己对它们的复核结果
 外部挖掘端 (研究系统) 只读挂载本目录与 backend 源码, 用本模块的纯函数打分; 导入走
 POST /api/factor-lab/rankers/import (研究投递密钥), ZenTrade 用同一份池重算后才在齿轮显示数字。
-导入 ≠ 启用: 只有在机会页齿轮把它勾进做多 3 条并保存, 盘后扫描才按它出卡 (纸面)。
+导入后进规则前向记分 (rule_forward)。进做多 3 条有两条路: 机会页齿轮勾选保存; 每周自动选策略 (rule_auto_select,
+可关) 按前向成绩换入, 外部导入与公式挖掘登记的同样参与。只有进了做多 3 条, 盘后扫描才按它出卡 (纸面)。
 """
 from __future__ import annotations
 
@@ -638,9 +639,11 @@ def ranker_names(data_dir: Path) -> dict[str, str]:
 
 
 def import_ranker(data_dir: Path, *, name: str, formula: str, direction: str, idea: str = "",
-                  source: dict | None = None) -> dict:
+                  source: dict | None = None, only_new: bool = False) -> dict:
     """导入一条排序因子 (幂等: 同公式同方向 = 同一个 id)。公式不合格抛 RankFormulaError。
-    做三件事: ① 登记 rankers.json ② 写进因子库 (自定义因子 uf_rk_*, 草稿) ③ 用当前候选池立即复核一次。"""
+    做三件事: ① 登记 rankers.json ② 写进因子库 (自定义因子 uf_rk_*, 草稿) ③ 用当前候选池立即复核一次。
+    only_new=True (公式挖掘入席用): 这个 id 已登记过 (含已移除) 就什么都不写, 返回 skipped = "registered"。
+    判断与登记在同一把锁里: 挖掘搜索要跑十几分钟, 这期间别的系统导入的同一条公式不能被改写成挖掘的候补。"""
     formula = (formula or "").strip()
     check_formula(formula)
     if direction not in ("high", "low"):
@@ -656,6 +659,8 @@ def import_ranker(data_dir: Path, *, name: str, formula: str, direction: str, id
         p = lab_dir(data_dir) / "rankers.json"
         doc = _read_json(p, {})
         allr = doc.get("rankers") if isinstance(doc.get("rankers"), dict) else {}
+        if only_new and rid in allr:
+            return {"ranker": allr[rid] if isinstance(allr[rid], dict) else {}, "created": False, "skipped": "registered"}
         prev = allr.get(rid) or {}
         entry = {"id": rid, "name": name, "formula": formula, "direction": direction, "idea": (idea or "")[:400],
                  "factor_id": fid, "source": src or prev.get("source") or {},

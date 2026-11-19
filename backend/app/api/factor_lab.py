@@ -15,7 +15,7 @@
   DELETE /api/factor-lab/intake/sources/{id}      删除自建来源 (内置只能关)
   POST /api/factor-lab/intake/settings            每日模型调用上限
   GET  /api/factor-lab/rankers                    机会板排序因子: 候选池状态 + 已导入的排序因子 + ZenTrade 复核结果 (0.52.0)
-  POST /api/factor-lab/rankers/import             导入一条排序因子 (研究投递密钥可调; 导入 ≠ 启用, 只写 research/rank_lab/)
+  POST /api/factor-lab/rankers/import             导入一条排序因子 (研究投递密钥可调; 导入后进前向记分, 进不进做多 3 条由齿轮或每周自动选策略定)
   POST /api/factor-lab/rankers/{id}/remove        移除 (正在机会板做多 3 条里的拒绝)
   POST /api/factor-lab/rankers/rebuild            立即重导候选池并复核 (盘中拒绝; 平时每个交易日 17:40 ET 自动)
   GET  /api/factor-lab/miner                      公式挖掘: 开关 + 候补席 + 前向成绩 + 试验计数

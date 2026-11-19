@@ -50,7 +50,7 @@ READ_SCOPE_POST_ALLOW = frozenset({
     "/api/factors/validate",
 })
 # research 档 (0.52.0, 给外部研究系统): read 的全部 + 投递排序因子 (只写 research/rank_lab/,
-# 导入 ≠ 启用, 不能改 3+3 / 交易 / 规则集)
+# 不能改 3+3 / 交易 / 规则集; 导入的排序因子进前向记分, 进不进做多 3 条由齿轮或每周自动选策略定)
 RESEARCH_SCOPE_POST_ALLOW = READ_SCOPE_POST_ALLOW | frozenset({"/api/factor-lab/rankers/import"})
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 

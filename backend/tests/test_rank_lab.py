@@ -400,6 +400,24 @@ def test_import_idempotent_registers_factor_and_parity(tmp_path, monkeypatch):
     assert rid not in rl.read_rankers(data_dir)
 
 
+def test_import_only_new_leaves_an_existing_registration_untouched(tmp_path, monkeypatch):
+    """only_new=True (公式挖掘入席用): 同一个 id 已登记过 (含已移除) 就什么都不写, 出处不改、已移除的不复活。"""
+    data_dir, _, _ = _write_pool(tmp_path)
+    from app.factors import registry
+    monkeypatch.setattr(registry, "_REGISTRY", dict(registry._REGISTRY))
+    f = "ts_delta(close,5)/ts_delay(close,5)"
+    rid = rl.import_ranker(data_dir, name="外部", formula=f, direction="high", source={"system": "external-miner"})["ranker"]["id"]
+    lab = rl.lab_dir(data_dir)
+    before = {n: (lab / n).read_bytes() for n in ("rankers.json", "results.json")}
+    out = rl.import_ranker(data_dir, name="挖掘", formula=f, direction="high", source={"system": "zentrade-miner"}, only_new=True)
+    assert out["skipped"] == "registered" and out["created"] is False and out["ranker"]["source"]["system"] == "external-miner"
+    assert {n: (lab / n).read_bytes() for n in before} == before
+    rl.remove_ranker(data_dir, rid, enabled_long=[])
+    gone = (lab / "rankers.json").read_bytes()
+    assert rl.import_ranker(data_dir, name="挖掘", formula=f, direction="high", only_new=True)["skipped"] == "registered"
+    assert (lab / "rankers.json").read_bytes() == gone and rid not in rl.read_rankers(data_dir)
+
+
 def test_evaluate_without_pool_reports_no_pool(tmp_path):
     rl.lab_dir(tmp_path).mkdir(parents=True)
     out = rl.import_ranker(tmp_path, name="x", formula="close/ts_mean(close,20)", direction="low")

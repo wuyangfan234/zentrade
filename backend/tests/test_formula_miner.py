@@ -4,10 +4,12 @@ import random
 from datetime import date
 from pathlib import Path
 
+import numpy as np
+import polars as pl
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from test_rank_lab import _write_pool
+from test_rank_lab import _days, _write_pool
 
 from app.market_clock import us_clock
 from app.services import formula_miner as fm
@@ -62,6 +64,48 @@ def test_every_template_compiles_as_a_ranker():
             rl.check_formula(it["formula"])
     assert seen >= {"smooth", "std", "ratio", "level", "corr", "cond_share", "cond_count", "spread", "rank_sum", "ts_rank",
                     "rsi", "decay", "zscore"}
+
+
+def _flat_formulas(template: str, seeds: int) -> tuple[int, list[str]]:
+    """固定种子批量生成, 挑出一个模板的公式逐条在面板上算值 -> (公式条数, 取值全为 0 的公式名)。
+    面板自造: test_rank_lab 的夹具开盘价 = 收盘价, 高开 / 低开与涨跌分不开, 合法的「上涨日且低开日」在那里也全为 0。"""
+    rng = np.random.default_rng(1)
+    rows = []
+    for s in ("AAA", "BBB", "CCC", "DDD", "EEE", "FFF"):
+        close = 50.0
+        for d in _days(300):
+            o = close * float(np.exp(rng.normal(0, 0.01)))
+            close = o * float(np.exp(rng.normal(0, 0.02)))
+            rows.append({"symbol": s, "date": d, "open": o, "high": max(o, close) * 1.01, "low": min(o, close) * 0.99,
+                         "close": close, "volume": float(rng.integers(100_000, 1_000_000)), "amount": close * 1e5})
+    panel = rl.prepare_panel(pl.DataFrame(rows))
+    made = {}
+    for seed in range(seeds):
+        for it in fm.generate(f"cc{seed}", 120):
+            if it["template"] == template:
+                made.setdefault(it["formula"], it["name"])
+    flat = []
+    for f, name in made.items():
+        v = rl.factor_frame(panel, f, "high")["value"].drop_nulls()
+        if v.len() == 0 or bool((v == 0).all()):
+            flat.append(name)
+    return len(made), flat
+
+
+def test_cond_count_never_pairs_conditions_that_cannot_hold_on_the_same_day():
+    """「A 且 B 占比」: 互斥的两个条件 (上涨/下跌、高开/低开、放量/缩量) 同一天不会同时成立, 公式恒为 0,
+    当天前 5 只剩股票代码顺序。固定种子大量生成 (旧写法约五分之一抽到互斥的一对), 每条在面板上取值都不能全为 0。"""
+    n, flat = _flat_formulas("cond_count", 10)
+    assert n >= 30
+    assert flat == []
+
+
+def test_spread_never_subtracts_a_level_from_itself():
+    """「A 减 B」: 两项抽到同一项 (同一个指标、同一个窗口) 时公式是 x - x, 恒为 0, 当天前 5 只剩股票代码顺序。
+    固定种子大量生成 (旧写法约 3% 抽到同一项), 每条在面板上取值都不能全为 0。"""
+    n, flat = _flat_formulas("spread", 40)
+    assert n >= 200
+    assert flat == []
 
 
 def test_mutate_moves_one_window_one_step():
@@ -223,6 +267,28 @@ def test_formula_taken_over_by_external_system_is_released_not_retired(lab, cal,
     v = fm.view(lab, today=DAY)
     assert a not in {x["id"] for x in v["bench"] + v["selected"] + v["retired"]} and v["totals"]["released"] == 1
     assert fm.retire(lab, today=DAY) == []                                    # 之后不再碰它
+
+
+def test_admit_skips_a_formula_another_system_imported_during_the_search(lab, cal, monkeypatch):
+    """搜索在子进程里跑 (最长 15 分钟), 这期间外部研究系统导入了同一条公式: 入席时不改写它的登记出处、不记成候补
+    (否则之后垫底 / 到期会把这条外部导入移除), 本轮记录列进 taken。判断与登记在 rank_lab 的同一把锁里。"""
+    monkeypatch.setattr(rl, "backfill_latest", lambda d, r: {"added": []})
+    seen = {}
+
+    def searcher(data_dir, cfg):
+        res = fm.search(data_dir, slots=cfg["slots"], seed=cfg["seed"], budget=120)
+        c = seen["c"] = res["chosen"][0]
+        rl.import_ranker(data_dir, name="外部导入", formula=c["formula"], direction=c["direction"],
+                         source={"system": "external-miner"})
+        return res
+    rec = fm.run(lab, object(), today=DAY, searcher=searcher)
+    taken = seen["c"]["id"]
+    assert rl.read_rankers(lab)[taken]["source"]["system"] == "external-miner"
+    assert taken not in fm.read_state(lab)["members"]
+    assert len(rec["admitted"]) == fm.ADMIT_PER_RUN - 1 and taken not in {a["id"] for a in rec["admitted"]}
+    assert rec["taken"] == [{"id": taken, "name": seen["c"]["name"], "system": "external-miner"}]
+    _forward(lab, [_fw(taken, "below", -0.3)])
+    assert fm.retire(lab, today=DAY) == [] and taken in rl.read_rankers(lab)
 
 
 def test_retired_formula_is_never_tried_again(lab, cal, monkeypatch):
