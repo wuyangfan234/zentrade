@@ -59,6 +59,8 @@ export const JOB_LABEL: Record<string, string> = {
   zen_weekly_review: '周报 · 周日 09:00 ET',
   zen_ops_check: '运行巡检 · 3 分钟',
   zen_market_mood: '大盘判断 · 08:35 ET',
+  zen_market_mood_preopen: '大盘判断开盘前更新 · 09:25 ET',
+  zen_market_mood_intraday: '大盘判断整点更新 · 10:00–15:00 ET 每小时',
   zen_corporate_actions: '公司行动',
   zen_earnings_premarket: '财报日历 · 盘前',
   zen_earnings_postclose: '财报日历 · 盘后',

@@ -1332,7 +1332,7 @@ export type IntradayPayload = {
 
 export type MoodSide = 'up' | 'down' | 'range'
 export interface MarketMoodItem {
-  key: 'trend' | 'overnight' | 'calendar' | 'rates' | 'sectors' | 'panic'
+  key: 'trend' | 'overnight' | 'calendar' | 'rates' | 'sectors' | 'panic' | 'live'
   label: string
   text: string
   status: 'ok' | 'stale' | 'missing'
@@ -1352,6 +1352,10 @@ export interface MarketMoodJudgment {
   summary?: string
   items: MarketMoodItem[]
 }
+/** 整点更新快照 (09:25 与 10:00–15:00 ET; 同一清单 + QQQ 现价, 只追加, 不改写 08:35 原判) */
+export interface MarketMoodUpdate extends MarketMoodJudgment { slot: string }
+/** 各时点近 N 日记分: 判对次数 + 三档概率打分 (越低越准) 与同一批日子的固定分布对照 */
+export interface MarketMoodSlotStat { slot: string; n: number; hit: number; brier: number | null; brier_base: number | null }
 export interface MarketMoodScore { day: string; chg_pct: number; outcome: MoodSide; main: MoodSide; hit: boolean }
 export interface MarketMoodPayload {
   now: string
@@ -1364,7 +1368,13 @@ export interface MarketMoodPayload {
   missing_items: string[]
   score?: MarketMoodScore | null
   last_score: MarketMoodScore | null
-  stats: { n: number; hit: number; hit_rate: number | null }
+  stats: { n: number; hit: number; hit_rate: number | null; brier?: number | null; brier_base?: number | null; slots?: MarketMoodSlotStat[] }
+  /** 判断日最新一次整点快照 (没有 = 只有原判) */
+  latest?: MarketMoodUpdate | null
+  updates?: Pick<MarketMoodUpdate, 'slot' | 'generated_at' | 'probs' | 'main' | 'stance' | 'stars'>[]
+  next_update_at?: string | null
+  /** 当日某个检查点过 30 分钟仍无快照 (HH:MM) */
+  update_missing?: string | null
 }
 
 /** 方向 A 卡结局表 (GET /api/opportunities/settlement, 只读) */

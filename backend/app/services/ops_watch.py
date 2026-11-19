@@ -28,6 +28,8 @@ WATCHED = {
     "zen_corporate_actions": "公司行动",
     "zen_earnings_premarket": "财报日历（盘前）",
     "zen_market_mood": "大盘判断",
+    "zen_market_mood_preopen": "大盘判断开盘前更新",
+    "zen_market_mood_intraday": "大盘判断整点更新",
     "zen_qveris_estimates": "财报预期查询",
     "zen_premarket_gap": "盘前跳空预警",
     "zen_swing_pm_check": "盘前越止损检查",
@@ -44,7 +46,7 @@ WATCHED = {
     "zen_ls_rank": "今日多空名单补生成",
 }
 # 可补跑的幂等任务 → 最晚补跑时刻 (ET); None 表示当天任何时候都可补。
-# daily_pipeline 有自己的开机补跑, 不在这里重复。
+# daily_pipeline 有自己的开机补跑, 不在这里重复。大盘判断整点更新不补跑 (迟到的整点判断没有意义, 过窗口自己也不写)。
 CATCHUP = {
     "zen_corporate_actions": None,
     "zen_earnings_premarket": None,
