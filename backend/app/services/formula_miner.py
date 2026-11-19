@@ -209,6 +209,8 @@ def _fresh(rng: random.Random) -> dict:
         name = f"{CONDS[c1][1]}且{CONDS[c2][1]}占比 {m} 日"
     elif t == "spread":
         (f1, n1), (f2, n2) = _level(rng), _level(rng)
+        while f2 == f1:  # 两项抽到同一项时公式是 x - x, 恒为 0, 当天前 5 只剩股票代码顺序; 第二项重抽
+            f2, n2 = _level(rng)
         f, name = f"{f1}-{f2}", f"{n1} 减 {n2}"
     elif t == "rank_sum":
         (f1, n1), (f2, n2) = _simple(rng), _simple(rng)

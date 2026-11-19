@@ -66,9 +66,8 @@ def test_every_template_compiles_as_a_ranker():
                     "rsi", "decay", "zscore"}
 
 
-def test_cond_count_never_pairs_conditions_that_cannot_hold_on_the_same_day():
-    """「A 且 B 占比」: 互斥的两个条件 (上涨/下跌、高开/低开、放量/缩量) 同一天不会同时成立, 公式恒为 0,
-    当天前 5 只剩股票代码顺序。固定种子大量生成 (旧写法约五分之一抽到互斥的一对), 每条在面板上取值都不能全为 0。
+def _flat_formulas(template: str, seeds: int) -> tuple[int, list[str]]:
+    """固定种子批量生成, 挑出一个模板的公式逐条在面板上算值 -> (公式条数, 取值全为 0 的公式名)。
     面板自造: test_rank_lab 的夹具开盘价 = 收盘价, 高开 / 低开与涨跌分不开, 合法的「上涨日且低开日」在那里也全为 0。"""
     rng = np.random.default_rng(1)
     rows = []
@@ -81,16 +80,31 @@ def test_cond_count_never_pairs_conditions_that_cannot_hold_on_the_same_day():
                          "close": close, "volume": float(rng.integers(100_000, 1_000_000)), "amount": close * 1e5})
     panel = rl.prepare_panel(pl.DataFrame(rows))
     made = {}
-    for seed in range(10):
+    for seed in range(seeds):
         for it in fm.generate(f"cc{seed}", 120):
-            if it["template"] == "cond_count":
+            if it["template"] == template:
                 made.setdefault(it["formula"], it["name"])
-    assert len(made) >= 30
     flat = []
     for f, name in made.items():
         v = rl.factor_frame(panel, f, "high")["value"].drop_nulls()
         if v.len() == 0 or bool((v == 0).all()):
             flat.append(name)
+    return len(made), flat
+
+
+def test_cond_count_never_pairs_conditions_that_cannot_hold_on_the_same_day():
+    """「A 且 B 占比」: 互斥的两个条件 (上涨/下跌、高开/低开、放量/缩量) 同一天不会同时成立, 公式恒为 0,
+    当天前 5 只剩股票代码顺序。固定种子大量生成 (旧写法约五分之一抽到互斥的一对), 每条在面板上取值都不能全为 0。"""
+    n, flat = _flat_formulas("cond_count", 10)
+    assert n >= 30
+    assert flat == []
+
+
+def test_spread_never_subtracts_a_level_from_itself():
+    """「A 减 B」: 两项抽到同一项 (同一个指标、同一个窗口) 时公式是 x - x, 恒为 0, 当天前 5 只剩股票代码顺序。
+    固定种子大量生成 (旧写法约 3% 抽到同一项), 每条在面板上取值都不能全为 0。"""
+    n, flat = _flat_formulas("spread", 40)
+    assert n >= 200
     assert flat == []
 
 
