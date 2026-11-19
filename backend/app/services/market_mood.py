@@ -5,7 +5,11 @@
   前两档并列一律"观望", VIX/VIX3M > 1.05 只降档 ("收紧多头"), 缺数据不触发, 每项必须引用原始值。
 - 每天只生成一次, 生成后锁定不改写 (judgments/<日>.json); 记分追加到 scores.jsonl
   (16:10 可能是盘中快照价; 18:00 按定版收盘补记, 收盘价不同则追加覆盖行, 读时同日后写的生效)。
-- 记分口径: QQQ 当日收盘 vs 前一交易日收盘, > +0.3% 涨, < -0.3% 跌, 其余震荡。
+- 整点更新: 09:25 与 10:00-15:00 每个整点 (半日市只到收盘前) 按同一清单加第 7 项 "QQQ 现价" 重跑一次,
+  只追加快照 (updates/<日>.jsonl), 原判与已写快照都不改写; 过了检查点 15 分钟不补, 模型失败不写、不退回经验分布。
+  收盘后与原判用同一收盘价逐时点记分 (update_scores.jsonl, 键 = 日 + 时点, 规则同原判)。
+- 记分口径: QQQ 当日收盘 vs 前一交易日收盘, > +0.3% 涨, < -0.3% 跌, 其余震荡; 两档并列 (观望) 不算判对。
+  另记三档概率打分 (Brier: 各档 (概率 - 是否发生)^2 之和, 0 = 全对, 越低越准)。
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ import csv
 import io
 import json
 import logging
+import math
 import re
 import threading
 import urllib.request
@@ -40,8 +45,17 @@ ITEMS = (("trend", "趋势"), ("overnight", "隔夜"), ("calendar", "日历"),
          ("rates", "利率"), ("sectors", "板块与宽度"), ("panic", "恐慌"))
 LEAN = {"up": "涨", "down": "跌", "range": "震荡"}
 STANCE = {"up": "偏多", "down": "偏空", "range": "观望"}
+# 整点更新 (只展示): 检查点 (ET) = 开盘前 09:25 + 10:00-15:00 每个整点; 半日市只留收盘前的点
+UPDATE_PROMPT_VERSION = "mmu-1"
+UPDATE_SLOTS = (time(9, 25), time(10, 0), time(11, 0), time(12, 0), time(13, 0), time(14, 0), time(15, 0))
+UPDATE_WINDOW = timedelta(minutes=15)       # 检查点后 15 分钟内才跑, 迟到不补
+UPDATE_MISS_AFTER = timedelta(minutes=30)   # 检查点过 30 分钟仍无快照 = 页面标 "未更新"
+LIVE_ITEM = ("live", "QQQ 现价")
+LIVE_STALE = timedelta(minutes=10)          # 最新成交早于 10 分钟前 = 非最新
 _UA = {"User-Agent": PUBLIC_HTTP_USER_AGENT}
 _LOCK = threading.Lock()
+_UPDATE_LOCK = threading.Lock()             # 整点更新: 同一时点只写一条
+_LLM_LOCK = threading.Lock()                # 模块级事件循环同一时刻只给一个调用用 (原判补跑与整点更新可能并发)
 
 
 # ── 存储 ─────────────────────────────────────────────────────────────
@@ -80,6 +94,62 @@ def load_scores(data_dir) -> dict[str, dict]:
             except ValueError:
                 continue
             out[r["day"]] = r
+    return out
+
+
+def _read_jsonl(path: Path) -> list[dict]:
+    """只读 (不建目录); 坏行跳过。"""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return []
+    out = []
+    for line in text.splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(r, dict):
+            out.append(r)
+    return out
+
+
+def _append_jsonl(path: Path, rows: list[dict]) -> None:
+    """追加若干行 (调用方持锁)。上一行没写完 (结尾不是换行) 时先补一个换行, 坏行不连累新行。"""
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    head = ""
+    try:
+        if path.stat().st_size > 0:
+            with path.open("rb") as f:
+                f.seek(-1, 2)
+                head = "" if f.read(1) == b"\n" else "\n"
+    except OSError:
+        pass
+    with path.open("a", encoding="utf-8") as f:
+        f.write(head + "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+
+
+def _updates_path(data_dir, day: date) -> Path:
+    return Path(data_dir) / "market_mood" / "updates" / f"{day.isoformat()}.jsonl"
+
+
+def load_updates(data_dir, day: date) -> list[dict]:
+    """当日整点快照, 按时点升序; 同一时点先写的生效 (不改写)。只读, 不建目录。"""
+    seen: dict[str, dict] = {}
+    for r in _read_jsonl(_updates_path(data_dir, day)):
+        if r.get("day") == day.isoformat() and isinstance(r.get("slot"), str) and isinstance(r.get("probs"), dict):
+            seen.setdefault(r["slot"], r)
+    return [seen[k] for k in sorted(seen)]
+
+
+def load_update_scores(data_dir) -> dict[str, dict]:
+    """逐时点记分 {"<日> <时点>": 行}, 同键后写的生效。只读, 不建目录。"""
+    out: dict[str, dict] = {}
+    for r in _read_jsonl(Path(data_dir) / "market_mood" / "update_scores.jsonl"):
+        if isinstance(r.get("day"), str) and isinstance(r.get("slot"), str):
+            out[f"{r['day']} {r['slot']}"] = r
     return out
 
 
@@ -194,8 +264,16 @@ def fetch_trend(repo, now: datetime) -> dict:
     return out
 
 
+def _official_closes(part: Path):
+    """一个日K分区里已定版的收盘: 丢掉盘中快照行 (quote_ts 非空); 早期分区没有这一列。"""
+    import polars as pl
+    cols = ["symbol", "close", *(["quote_ts"] if "quote_ts" in pl.read_parquet_schema(part) else [])]
+    df = pl.read_parquet(part, columns=cols)
+    return df.filter(pl.col("quote_ts").is_null()).drop("quote_ts") if "quote_ts" in cols else df
+
+
 def fetch_sectors(provider, data_dir, now: datetime) -> dict:
-    """板块 ETF (Alpaca SIP 日K, 不进日K库) 1 日/5 日涨跌 + 全市场宽度 (日K库最近一日上涨家数占比)。"""
+    """板块 ETF (Alpaca SIP 日K, 不进日K库) 1 日/5 日涨跌 + 全市场宽度 (日K库前一交易日上涨家数占比)。"""
     import polars as pl
     out: dict = {}
     end = us_clock.previous_trading_day(now.date())
@@ -211,10 +289,13 @@ def fetch_sectors(provider, data_dir, now: datetime) -> dict:
             if rows:
                 out["etfs"] = rows
                 out["etf_as_of"] = str(df["date"].max())[:10]
-    parts = sorted((Path(data_dir) / "kline_daily").glob("date=*/part.parquet"))
+    # 只认前一交易日及更早的分区, 并丢掉快照行: 盘中当天分区一直在写盘中快照 (11-19 生产 14:00 ET 实测 7032 行全是快照),
+    # 前一交易日分区也会留下少量未定版的快照行 (同日 162 行)。整点更新在盘中重跑, 不能把盘中价当成昨日宽度。
+    parts = [p for p in sorted((Path(data_dir) / "kline_daily").glob("date=*/part.parquet"))
+             if p.parent.name.split("=", 1)[1] <= end.isoformat()]
     if len(parts) >= 2:
-        a = pl.read_parquet(parts[-2], columns=["symbol", "close"])
-        b = pl.read_parquet(parts[-1], columns=["symbol", "close"])
+        a = _official_closes(parts[-2])
+        b = _official_closes(parts[-1])
         j = b.join(a, on="symbol", suffix="_prev").filter(pl.col("close_prev") > 0)
         if j.height:
             up = j.filter(pl.col("close") > pl.col("close_prev")).height
@@ -224,6 +305,22 @@ def fetch_sectors(provider, data_dir, now: datetime) -> dict:
         raise ValueError("no sector/breadth data")
     out["as_of"] = min(x for x in (out.get("etf_as_of"), (out.get("breadth") or {}).get("as_of")) if x)
     return out
+
+
+def fetch_live(data_dir, now: datetime) -> dict:
+    """第 7 项 (只给整点更新): QQQ 此刻最新成交对官方前收 = 盘面情报温度带缓存 (Alpaca IEX 最新成交 · SIP 官方前收,
+    情报任务盘前盘中每 60 秒刷新)。只读缓存, 不出网; 缓存里没有今天的成交 = 没有现价。"""
+    from app.services import intel_calc, intel_panel
+    tape = intel_panel.tape_view(Path(data_dir), now)
+    row = next((r for r in tape.get("indexes") or [] if r.get("symbol") == SCORE_SYMBOL), None)
+    if not row or not row.get("live") or row.get("day") != now.date().isoformat():
+        raise ValueError("no live QQQ quote today")
+    at = intel_calc._parse_iso(row.get("as_of"))
+    price, chg = row.get("price"), row.get("chg_pct")
+    if at is None or not isinstance(price, (int, float)) or not isinstance(chg, (int, float)):
+        raise ValueError("bad QQQ tape row")
+    return {"price": float(price), "chg_pct": float(chg), "session": row.get("session"), "time_et": at.strftime("%H:%M"),
+            "source": tape.get("source"), "as_of": at.isoformat(timespec="seconds")}
 
 
 # ── 清单 ─────────────────────────────────────────────────────────────
@@ -263,13 +360,22 @@ def _item_text(key: str, v: dict | None) -> str:
         return "  ".join(parts) or "缺数据"
     if key == "panic":
         return f"VIX {v['vix']:.2f} / VIX3M {v['vix3m']:.2f} = {v['ratio']:.3f}"
+    if key == "live":
+        when = " ".join(x for x in ({"pre": "盘前", "regular": "盘中", "post": "盘后"}.get(v.get("session") or ""),
+                                    v.get("time_et"), "ET") if x)
+        return f"QQQ {v['price']:.2f} {_fmt_pct(v['chg_pct'])}（对官方前收，{when}）"
     return json.dumps(v, ensure_ascii=False)
 
 
 def _stale(key: str, v: dict | None, day: date, now: datetime) -> bool:
-    """非最新: 日频数据早于前一交易日; 隔夜报价早于生成时刻 30 分钟。"""
+    """非最新: 日频数据早于前一交易日; 隔夜报价早于生成时刻 30 分钟; QQQ 现价的最新成交早于 10 分钟。"""
     if not v:
         return False
+    if key == "live":
+        try:
+            return datetime.fromisoformat(str(v.get("as_of"))) < now - LIVE_STALE
+        except (TypeError, ValueError):
+            return True
     if key == "overnight":
         stamps = [x["as_of"] for x in v.values() if isinstance(x, dict) and x.get("as_of")] or (
             [v["as_of"]] if v.get("as_of") else [])
@@ -286,7 +392,9 @@ def _stale(key: str, v: dict | None, day: date, now: datetime) -> bool:
     return str(v["as_of"])[:10] < us_clock.previous_trading_day(day).isoformat()
 
 
-def collect(repo, provider, data_dir, now: datetime, fetchers: dict[str, Callable] | None = None) -> list[dict]:
+def collect(repo, provider, data_dir, now: datetime, fetchers: dict[str, Callable] | None = None, *,
+            live: bool = False) -> list[dict]:
+    """六项清单逐项取数 (每项失败只记缺数据); live=True (整点更新) 时追加第 7 项 QQQ 现价。"""
     default = {
         "trend": lambda: fetch_trend(repo, now),
         "overnight": lambda: fetch_overnight(now),
@@ -294,10 +402,12 @@ def collect(repo, provider, data_dir, now: datetime, fetchers: dict[str, Callabl
         "rates": lambda: fetch_rates(now),
         "sectors": lambda: fetch_sectors(provider, data_dir, now),
         "panic": lambda: fetch_vix(now),
+        "live": lambda: fetch_live(data_dir, now),
     }
     default.update(fetchers or {})
+    spec = (*ITEMS, LIVE_ITEM) if live else ITEMS
     items = []
-    for key, label in ITEMS:
+    for key, label in spec:
         try:
             v = default[key]()
             status = "ok"
@@ -353,7 +463,8 @@ def guard(llm: dict | None, items: list[dict]) -> dict:
         guards.append("tie_to_range")
     by_key = {i["key"]: i for i in items}
     leans = {}
-    for key, _ in ITEMS:
+    base_keys = [k for k, _ in ITEMS]                      # 六项照旧; 整点更新多出的项 (QQQ 现价) 接在后面
+    for key in base_keys + [k for k in by_key if k not in base_keys]:
         it = by_key.get(key) or {}
         raw = (llm.get("items") or {}).get(key) or {}
         lean = raw.get("lean") if raw.get("lean") in ("up", "down", "range") else "range"
@@ -399,6 +510,36 @@ def _prompt(items: list[dict], day: date) -> list[dict]:
     return [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": "\n".join(lines)}]
 
 
+# 整点更新用的提示词: 同一清单加 QQQ 现价; 不给经验分布起点, 也不把 08:35 原判喂回去 (各时点独立判断、独立记分)
+_SYSTEM_UPDATE = (
+    "你是美股盘中分析员。根据给定清单, 判断今天 QQQ 收盘相对昨收的三档概率: "
+    f"涨(>+{SCORE_BAND_PCT}%)、跌(<-{SCORE_BAND_PCT}%)、震荡(其余)。记分只看今天收盘, 不看此刻涨跌。"
+    "清单第 7 项 live 是 QQQ 此刻最新成交相对官方前收的涨跌 (开盘前为盘前成交); 离收盘越近, 剩余可波动的时间越短。"
+    "其余六项与盘前同一口径, 每项标了截至时点。只用清单里的数字, 不要编造。"
+    "每项给倾向 up/down/range 和一句引用原始值的理由; 标了缺数据的项写 range。"
+    "只输出 JSON: {\"probs\":{\"up\":int,\"down\":int,\"range\":int},\"stars\":1-5,"
+    "\"summary\":\"一句话 ≤30 字\",\"items\":{\"trend\":{\"lean\":..,\"note\":..},...,\"live\":{\"lean\":..,\"note\":..}}}"
+)
+
+
+def _asof_short(v) -> str:
+    s = str(v or "")
+    return s[5:10] + " " + s[11:16] if len(s) >= 16 else s[:10]
+
+
+def _prompt_update(items: list[dict], now: datetime) -> list[dict]:
+    day = now.date()
+    close = datetime.combine(day, us_clock.session_close(day), tzinfo=us_clock.tz)
+    left = max(0, round((close - now).total_seconds() / 60))
+    pre = "（未开盘）" if now.time() < us_clock.sessions[0].open else ""
+    lines = [f"日期 {day.isoformat()}（美东），此刻 {now.strftime('%H:%M')} ET{pre}，距收盘 {left} 分钟"]
+    for it in items:
+        flag = {"missing": "（缺数据）", "stale": "（非最新）"}.get(it["status"], "")
+        asof = f"（截至 {_asof_short(it.get('as_of'))}）" if it.get("as_of") and it["status"] != "missing" else ""
+        lines.append(f"- {it['key']} {it['label']}: {it['text']}{flag}{asof}")
+    return [{"role": "system", "content": _SYSTEM_UPDATE}, {"role": "user", "content": "\n".join(lines)}]
+
+
 def parse_llm(text: str) -> dict:
     body = re.sub(r"^```(?:json)?\s*|\s*```$", "", (text or "").strip(), flags=re.MULTILINE)
     start, end = body.find("{"), body.rfind("}")
@@ -419,10 +560,11 @@ def _default_llm(messages) -> str:
 
     from app.services.ai_provider import OPENAI_REQUEST_TIMEOUT_S, generate_ai_text
     global _LOOP
-    if _LOOP is None or _LOOP.is_closed():
-        _LOOP = asyncio.new_event_loop()
-    return _LOOP.run_until_complete(
-        generate_ai_text(messages, temperature=0.2, max_tokens=None, timeout=OPENAI_REQUEST_TIMEOUT_S, task=TASK))
+    with _LLM_LOCK:     # 同一个循环不能被两个线程同时 run_until_complete
+        if _LOOP is None or _LOOP.is_closed():
+            _LOOP = asyncio.new_event_loop()
+        return _LOOP.run_until_complete(
+            generate_ai_text(messages, temperature=0.2, max_tokens=None, timeout=OPENAI_REQUEST_TIMEOUT_S, task=TASK))
 
 
 def _model_label() -> str:
@@ -465,6 +607,77 @@ def generate(data_dir, repo, provider, *, now: datetime | None = None, llm: Call
         return out
 
 
+# ── 整点更新 ─────────────────────────────────────────────────────────
+
+def update_slots(day: date) -> list[time]:
+    """当日整点更新检查点 (ET): 非交易日为空; 半日市只留收盘前的点 (13:00 收盘 = 到 12:00)。"""
+    if not us_clock.is_trading_day(day):
+        return []
+    close = us_clock.session_close(day)
+    return [s for s in UPDATE_SLOTS if s < close]
+
+
+def due_slot(now: datetime) -> time | None:
+    """now 落在哪个检查点的执行窗口 [检查点, 检查点 + 15 分钟); 都不在 = None (迟到不补)。"""
+    now = us_clock.market_datetime(now)
+    for s in update_slots(now.date()):
+        start = datetime.combine(now.date(), s, tzinfo=us_clock.tz)
+        if start <= now < start + UPDATE_WINDOW:
+            return s
+    return None
+
+
+def _usable_probs(p) -> bool:
+    """模型给的三档概率能用 (至少一档是正的有限数)。不能用就不写快照, 不像原判那样退回经验分布。"""
+    if not isinstance(p, dict):
+        return False
+    total = 0.0
+    for k in ("up", "down", "range"):
+        try:
+            v = float(p.get(k, 0))
+        except (TypeError, ValueError):
+            continue
+        if not math.isfinite(v):
+            return False
+        total += max(v, 0.0)
+    return total > 0
+
+
+def update(data_dir, repo, provider, *, now: datetime | None = None, llm: Callable | None = None,
+           fetchers: dict | None = None) -> dict | None:
+    """09:25 与 10:00-15:00 整点: 同一清单 + QQQ 现价重跑一次, 追加一条快照 (updates/<日>.jsonl)。
+    不在检查点窗口 / 非交易日 / 当日没有 08:35 原判 = None; 同一时点已有快照直接返回 (不再调模型);
+    模型失败或没给出可用概率 = 不写。08:35 原判与已写的快照都不改写。只展示, 不推送。"""
+    now = us_clock.market_datetime(now or us_clock.now())
+    day = now.date()
+    slot = due_slot(now)
+    if slot is None:
+        return None
+    key = slot.strftime("%H:%M")
+    with _UPDATE_LOCK:
+        if load_judgment(data_dir, day) is None:
+            return None
+        done = {u["slot"]: u for u in load_updates(data_dir, day)}
+        if key in done:
+            return done[key]
+        items = collect(repo, provider, data_dir, now, fetchers, live=True)
+        try:
+            raw = parse_llm((llm or _default_llm)(_prompt_update(items, now)))
+            if not _usable_probs(raw.get("probs")):
+                raise ValueError("no usable probs in model output")
+            g = guard(raw, items)
+        except Exception as e:
+            logger.warning("market mood update %s %s skipped (model unavailable): %s", day, key, type(e).__name__)
+            return None
+        out = {"day": day.isoformat(), "slot": key, "generated_at": now.isoformat(timespec="seconds"),
+               "prompt_version": UPDATE_PROMPT_VERSION, "model": _model_label(), "mode": "llm", "error": None, **g,
+               "items": [{**it, **g["leans"].get(it["key"], {})} for it in items]}
+        out.pop("leans", None)
+        _append_jsonl(_updates_path(data_dir, day), [out])
+        logger.info("market mood update %s %s: %s %s stars=%d", day, key, out["probs"], out["stance"], out["stars"])
+        return out
+
+
 def outcome(chg_pct: float) -> str:
     if chg_pct > SCORE_BAND_PCT:
         return "up"
@@ -482,35 +695,71 @@ def _official(repo, day: date) -> bool:
     return isinstance(got, date) and got >= day
 
 
+def brier(probs, res: str | None) -> float | None:
+    """三档概率打分 (Brier): 各档 (概率 - 是否发生)^2 之和。0 = 全对, 越低越准, 最差 2。概率或结果读不到 = None。"""
+    try:
+        ps = {k: float(probs[k]) / 100 for k in ("up", "down", "range")}
+    except (KeyError, TypeError, ValueError):
+        return None
+    if res not in ps or not all(math.isfinite(v) for v in ps.values()):
+        return None
+    return round(sum((v - (1.0 if k == res else 0.0)) ** 2 for k, v in ps.items()), 4)
+
+
+def _score_base(day: date, close: float, chg: float, res: str, j: dict, slot: str | None = None) -> dict:
+    """一行记分 (原判与各时点同一口径)。两档并列 (观望) 不押方向, 不算判对。"""
+    probs = j.get("probs") or {}
+    tie = "tie_to_range" in (j.get("guards") or [])
+    return {"day": day.isoformat(), **({"slot": slot} if slot else {}), "close": close, "chg_pct": chg, "outcome": res,
+            "main": j.get("main"), "stance": j.get("stance"), "hit": not tie and j.get("main") == res,
+            "p_outcome": probs.get(res), "probs": probs, "brier": brier(probs, res)}
+
+
+def _settle(old: dict | None, base: dict, close: float, final: bool, at: str) -> dict | None:
+    """记分规则 (原判与各时点共用): 已定版不再改; 收盘价没变 = 只在这次定版时补 final (结果不动), 否则不写;
+    收盘价变了 = 按新价重算 (带 rescored_from)。返回要追加的行, 不用写 = None。"""
+    if old and old.get("final"):
+        return None
+    if old and old.get("close") == close:
+        return {**old, "final": True} if final else None
+    return {**base, "scored_at": at, "final": final, **({"rescored_from": old.get("close")} if old else {})}
+
+
 def score(data_dir, repo, *, day: date | None = None) -> dict | None:
     """16:10 ET 记分: 用日K库 QQQ 当日收盘。日K未到 / 当日无判断 → None (盘后管道后会再调一次)。
     16:10 那次可能还是盘中快照价 (收盘竞价没进); 18:00 补记分按定版收盘重算, 收盘价不同就覆盖 (追加一行, 读时后写的生效)。
-    已按定版收盘记过 (final) 的不再改。"""
+    已按定版收盘记过 (final) 的不再改。当日整点快照用同一收盘价逐时点各记一行 (update_scores.jsonl, 规则相同)。
+    返回原判那一行; 已写的行不回补、不改写。"""
     day = day or us_clock.today()
     j = load_judgment(data_dir, day)
     if not j:
         return None
     old = load_scores(data_dir).get(day.isoformat())
-    if old and old.get("final"):
+    prefix = f"{day.isoformat()} "
+    old_u = {k[len(prefix):]: r for k, r in load_update_scores(data_dir).items() if k.startswith(prefix)}
+    pending = [u for u in load_updates(data_dir, day) if not (old_u.get(u["slot"]) or {}).get("final")]
+    if old and old.get("final") and not pending:
         return old
     df = repo.get_daily(SCORE_SYMBOL, day - timedelta(days=10), day, columns=["date", "close"])
     if df is None or df.height < 2 or str(df["date"][-1])[:10] != day.isoformat():
         return old
     c0, c1 = float(df["close"][-2]), float(df["close"][-1])
     final = _official(repo, day)
-    if old and old.get("close") == c1 and not final:
-        return old
     chg = round((c1 / c0 - 1) * 100, 2)
     res = outcome(chg)
-    row = {"day": day.isoformat(), "close": c1, "chg_pct": chg, "outcome": res, "main": j["main"],
-           "stance": j["stance"], "hit": j["main"] == res, "p_outcome": j["probs"].get(res),
-           "scored_at": us_clock.now().isoformat(timespec="seconds"), "final": final,
-           **({"rescored_from": old.get("close")} if old else {})}
-    if old and old.get("close") == c1:
-        row = {**old, "final": True}
-    with _LOCK, (_root(data_dir) / "scores.jsonl").open("a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-    return row
+    at = us_clock.now().isoformat(timespec="seconds")
+    row = _settle(old, _score_base(day, c1, chg, res, j), c1, final, at)
+    urows = [r for u in pending
+             if (r := _settle(old_u.get(u["slot"]), _score_base(day, c1, chg, res, u, u["slot"]), c1, final, at))]
+    with _LOCK:
+        if row is not None:
+            _append_jsonl(_root(data_dir) / "scores.jsonl", [row])
+        _append_jsonl(_root(data_dir) / "update_scores.jsonl", urows)
+    return row if row is not None else old
+
+
+def _mean3(xs: list[float]) -> float | None:
+    return round(sum(xs) / len(xs), 3) if xs else None
 
 
 def weekly_stats(data_dir, *, end: date | None = None, days: int = 20) -> dict:
@@ -524,8 +773,36 @@ def weekly_stats(data_dir, *, end: date | None = None, days: int = 20) -> dict:
     for k in ("up", "down", "range"):
         sub = [r for r in rows if r["main"] == k]
         by_main[k] = {"n": len(sub), "hit": sum(1 for r in sub if r["hit"])}
+    # 概率打分: 原判 (较早的记分行没存概率 = 读当天判断文件) 与同一批日子的固定分布对照; 各时点只算同一批日子
+    pairs = []
+    for r in rows:
+        b = r.get("brier") if isinstance(r.get("brier"), (int, float)) else None
+        if b is None:
+            probs = r.get("probs")
+            if not isinstance(probs, dict):
+                try:
+                    probs = (load_judgment(data_dir, date.fromisoformat(r["day"])) or {}).get("probs")
+                except ValueError:
+                    probs = None
+            b = brier(probs, r.get("outcome"))
+        base = brier(BASE_RATES, r.get("outcome"))
+        if b is not None and base is not None:
+            pairs.append((b, base))
+    window = {r["day"] for r in rows}
+    by_slot: dict[str, list[dict]] = {}
+    for r in load_update_scores(data_dir).values():
+        if r.get("day") in window:
+            by_slot.setdefault(r["slot"], []).append(r)
+    slots = []
+    for s in sorted(by_slot):
+        rs = by_slot[s]
+        bs = [(r["brier"], base) for r in rs if isinstance(r.get("brier"), (int, float))
+              and (base := brier(BASE_RATES, r.get("outcome"))) is not None]
+        slots.append({"slot": s, "n": len(rs), "hit": sum(1 for r in rs if r.get("hit")),
+                      "brier": _mean3([b for b, _ in bs]), "brier_base": _mean3([x for _, x in bs])})
     return {"n": n, "hit": hits, "hit_rate": round(hits / n * 100) if n else None, "by_main": by_main,
-            "outcomes": {k: sum(1 for r in rows if r["outcome"] == k) for k in ("up", "down", "range")}}
+            "outcomes": {k: sum(1 for r in rows if r["outcome"] == k) for k in ("up", "down", "range")},
+            "brier": _mean3([b for b, _ in pairs]), "brier_base": _mean3([x for _, x in pairs]), "slots": slots}
 
 
 def message(j: dict) -> dict:
@@ -545,9 +822,38 @@ def message(j: dict) -> dict:
             "body": "\n".join(lines)}
 
 
+def _next_update_at(now: datetime) -> str | None:
+    """下一个整点更新检查点 (今天还没到的; 否则下一个交易日 09:25)。"""
+    today = now.date()
+    for s in update_slots(today):
+        at = datetime.combine(today, s, tzinfo=us_clock.tz)
+        if at > now:
+            return at.isoformat(timespec="minutes")
+    try:
+        nxt = us_clock.next_trading_day(today)
+    except ValueError:
+        return None
+    slots = update_slots(nxt)
+    return datetime.combine(nxt, slots[0], tzinfo=us_clock.tz).isoformat(timespec="minutes") if slots else None
+
+
+def _update_missing(j: dict | None, ups: list[dict], now: datetime) -> str | None:
+    """当日某个检查点过了 30 分钟仍无快照, 且晚于最新一次快照 → 该时点 (页面标 "未更新"); 否则 None。"""
+    today = now.date()
+    if not j or j.get("day") != today.isoformat():
+        return None
+    due = [s.strftime("%H:%M") for s in update_slots(today)
+           if datetime.combine(today, s, tzinfo=us_clock.tz) + UPDATE_MISS_AFTER <= now]
+    if not due:
+        return None
+    last = ups[-1]["slot"] if ups else ""
+    return due[-1] if due[-1] not in {u["slot"] for u in ups} and due[-1] > last else None
+
+
 def view(data_dir, *, now: datetime | None = None) -> dict:
-    """机会页读: 最新判断 + 是否今日 + 是否最新 + 昨日结果 + 近 20 日命中。"""
-    now = now or us_clock.now()
+    """机会页读: 最新判断 (08:35 原判) + 当日整点快照 (latest = 最新一次) + 是否今日 + 是否最新 + 昨日结果
+    + 近 20 日命中与打分。原有字段口径不变 (情报页、历史日回看、复盘照旧读 08:35 原判)。"""
+    now = us_clock.market_datetime(now or us_clock.now())
     today = now.date()
     j = latest_judgment(data_dir)
     scores = load_scores(data_dir)
@@ -556,7 +862,8 @@ def view(data_dir, *, now: datetime | None = None) -> dict:
     expected = today if is_td and now.time() >= GENERATE_AT else us_clock.previous_trading_day(today)
     out: dict = {"now": now.isoformat(timespec="minutes"), "expected_day": expected.isoformat(),
                  "next_at": None, "judgment": None, "is_today": False, "is_latest": False,
-                 "stale_items": [], "missing_items": [], "last_score": None, "stats": weekly_stats(data_dir)}
+                 "stale_items": [], "missing_items": [], "last_score": None, "stats": weekly_stats(data_dir),
+                 "latest": None, "updates": [], "next_update_at": _next_update_at(now), "update_missing": None}
     nxt = today if us_clock.is_trading_day(today) and now.time() < GENERATE_AT else us_clock.next_trading_day(today)
     out["next_at"] = datetime.combine(nxt, GENERATE_AT, tzinfo=us_clock.tz).isoformat(timespec="minutes")
     if j:
@@ -566,6 +873,15 @@ def view(data_dir, *, now: datetime | None = None) -> dict:
         out["stale_items"] = [i["label"] for i in j.get("items", []) if i.get("status") == "stale"]
         out["missing_items"] = [i["label"] for i in j.get("items", []) if i.get("status") == "missing"]
         out["score"] = scores.get(j["day"])
+        try:
+            ups = load_updates(data_dir, date.fromisoformat(str(j["day"])))
+        except ValueError:
+            ups = []
+        if ups:
+            out["latest"] = ups[-1]
+            out["updates"] = [{k: u.get(k) for k in ("slot", "generated_at", "probs", "main", "stance", "stars")}
+                              for u in ups]
+        out["update_missing"] = _update_missing(j, ups, now)
     prev = sorted((r for r in scores.values() if not j or r["day"] != j["day"]), key=lambda r: r["day"])
     if prev:
         out["last_score"] = prev[-1]

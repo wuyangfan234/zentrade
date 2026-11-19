@@ -1356,17 +1356,20 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         id="zen_alpaca_mirror", max_instances=1, coalesce=True, misfire_grace_time=10, replace_existing=True)
 
     # 盘前大盘情绪: 08:35 ET 生成当日判断并锁定 (只展示, 不碰交易环)
+    def _market_mood_provider():
+        try:
+            from app.data_providers.custom import get_provider
+            return get_provider("alpaca")
+        except Exception as e:
+            logger.warning("market mood: alpaca provider unavailable: %s", type(e).__name__)
+            return None
+
     def _market_mood_generate():
         from app.market_clock import us_clock as _clk
         if not _clk.is_trading_day(_clk.today()):
             return None
         from app.services import market_mood
-        provider = None
-        try:
-            from app.data_providers.custom import get_provider
-            provider = get_provider("alpaca")
-        except Exception as e:
-            logger.warning("market mood: alpaca provider unavailable: %s", type(e).__name__)
+        provider = _market_mood_provider()
         try:
             res = market_mood.generate(repo.store.data_dir, repo, provider)
         except Exception as e:
@@ -1391,9 +1394,27 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
             logger.warning("market mood score failed (soft): %s", type(e).__name__)
             return None
 
+    # 整点更新: 09:25 与 10:00-15:00 每个整点按同一清单 + QQQ 现价重跑一次, 只追加快照 (原判不改写); 不推送
+    def _market_mood_update():
+        from app.market_clock import us_clock as _clk
+        if not _clk.is_trading_day(_clk.today()):
+            return None
+        from app.services import market_mood
+        try:
+            return market_mood.update(repo.store.data_dir, repo, _market_mood_provider())
+        except Exception as e:
+            logger.warning("market mood update failed (soft): %s", type(e).__name__)
+            return None
+
     scheduler.add_job(_market_mood_generate,
         trigger=CronTrigger(day_of_week="mon-fri", hour=8, minute=35, timezone="America/New_York"),
         id="zen_market_mood", max_instances=1, coalesce=True, misfire_grace_time=1200, replace_existing=True)
+    scheduler.add_job(_market_mood_update,
+        trigger=CronTrigger(day_of_week="mon-fri", hour=9, minute=25, timezone="America/New_York"),
+        id="zen_market_mood_preopen", max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True)
+    scheduler.add_job(_market_mood_update,
+        trigger=CronTrigger(day_of_week="mon-fri", hour="10-15", minute=0, timezone="America/New_York"),
+        id="zen_market_mood_intraday", max_instances=1, coalesce=True, misfire_grace_time=600, replace_existing=True)
     scheduler.add_job(_market_mood_score,
         trigger=CronTrigger(day_of_week="mon-fri", hour=16, minute=10, timezone="America/New_York"),
         id="zen_market_mood_score", max_instances=1, coalesce=True, misfire_grace_time=3600, replace_existing=True)

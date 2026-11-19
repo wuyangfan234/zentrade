@@ -238,6 +238,48 @@ it('大盘方向: 非当日标出来; 没有判断写下次生成时刻, 盘中�
   expect(text('[data-market-hero] [data-regime]')).toBe('普涨')
 })
 
+it('大盘方向: 整点更新后大字换成最新一次并标时刻, 原判缩成一行; 悬停含现价与各时点判对; 过点未更新标出来', async () => {
+  mocks.oppPage.mockResolvedValue(page({ mood: mood() }))
+  await render()
+  expect(host.querySelector('[data-mood-stance]')!.getAttribute('data-mood-src')).toBe('origin')     // 没有快照: 与原来一致
+  expect(host.querySelector('[data-mood-origin]')).toBeNull()
+  expect(host.querySelector('[data-mood-latest]')).toBeNull()
+  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
+
+  const j = mood().judgment!
+  const latest = { ...j, slot: '10:00', generated_at: '2026-10-23T10:00:04-04:00', probs: { up: 50, down: 20, range: 30 },
+    main: 'up' as const, stance: 'up' as const, stars: 4,
+    items: [...j.items, { key: 'live' as const, label: 'QQQ 现价', text: 'x', status: 'ok' as const, lean: 'up' as const }] }
+  const updates = [{ slot: '09:25', generated_at: '2026-10-23T09:25:03-04:00', probs: { up: 30, down: 40, range: 30 }, main: 'down' as const, stance: 'down' as const, stars: 3 },
+    { slot: '10:00', generated_at: latest.generated_at, probs: latest.probs, main: 'up' as const, stance: 'up' as const, stars: 4 }]
+  const stats = { n: 17, hit: 10, hit_rate: 59, brier: 0.555, brier_base: 0.627,
+    slots: [{ slot: '09:25', n: 5, hit: 3, brier: 0.48, brier_base: 0.61 }, { slot: '10:00', n: 3, hit: 2, brier: 0.41, brier_base: 0.6 }] }
+  mocks.oppPage.mockResolvedValue(page({ mood: mood({ latest, updates, stats, next_update_at: '2026-10-23T11:00-04:00', update_missing: null }) }))
+  await render()
+  const st = host.querySelector('[data-mood-stance]')!
+  expect(st.textContent).toBe('偏多')
+  expect(st.getAttribute('data-mood-src')).toBe('latest')
+  expect(st.getAttribute('title')).toBe('趋势 跌 · 隔夜 涨 · 日历 震荡 · 利率 旧 · 板块 跌 · 恐慌 缺 · 现价 涨')
+  expect(text('[data-mood-probs]')).toBe('上涨 50%震荡 30%下跌 20%')
+  expect(text('[data-mood-stars]')).toContain('4/5')
+  expect(text('[data-mood-latest]')).toBe('最新 10-23 10:00 ET')
+  expect(host.querySelector('[data-mood-latest]')!.getAttribute('title')).toBe('08:35 原判 偏空\n09:25 偏空\n10:00 偏多\n下次 11:00 ET')
+  expect(text('[data-mood-origin]')).toBe('08:35 原判 偏空 · 涨 25% · 震荡 30% · 跌 45%')
+  expect(host.querySelector('[data-mood-missed]')).toBeNull()
+  expect(text('[data-market-hero]')).not.toContain('盘前判断 10-23')
+  const hit = host.querySelector('[data-mood-hit]')!
+  expect(hit.textContent).toBe('近 17 日判对 10 次')
+  expect(hit.getAttribute('title')).toBe(['打分越低越准', '08:35 原判 判对 10/17 · 打分 0.555 · 固定分布 0.627',
+    '09:25 判对 3/5 · 打分 0.480 · 固定分布 0.610', '10:00 判对 2/3 · 打分 0.410 · 固定分布 0.600'].join('\n'))
+  expect(text('[data-market-hero] [data-regime]')).toBe('普涨')                                    // 盘中实况照常并排
+  act(() => root.unmount()); host.innerHTML = ''; root = createRoot(host)
+
+  mocks.oppPage.mockResolvedValue(page({ mood: mood({ latest, updates, update_missing: '11:00' }) }))
+  await render()
+  expect(text('[data-mood-missed]')).toBe('11:00 未更新')
+  expect(text('[data-mood-stance]')).toBe('偏多')
+})
+
 const BOARD = () => {
   const sw = page().swing!
   return { ...sw, long: [card('BABA'), card('TSLA', { entry_zone: [384.51, 388.07], stop: 373.85, target: 412.3, price: 406.87, dist_pct: -4.62,
