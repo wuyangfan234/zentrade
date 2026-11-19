@@ -9,7 +9,8 @@
 同类做法: alphalens demean_forward_returns (按日去均值)、GrowthBook RegressionAdjustedStatistic (用协变量降方差)。
 
 边界 (守门测试锁住): 只写 opportunities/cells/ 与 research/swing_settle/cells.*.jsonl; 不进下单簿、台账、交易环、
-准入、推送; 不改 3+3, “过线”只是标记, 勾不勾由人决定。名单取信号表当天冻结的 watchlist (当时名单, 不是事后名单)。
+准入、推送; 不改 3+3, “过线”只是标记; 换不换进入选由每周自动选策略 (可关) 或齿轮决定。
+名单取信号表当天冻结的 watchlist (当时名单, 不是事后名单)。
 """
 from __future__ import annotations
 

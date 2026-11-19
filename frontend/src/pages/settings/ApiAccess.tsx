@@ -4,7 +4,7 @@
  * 生成对外 API 密钥, 让其他 agent / 脚本接入: 回测、策略增删改、自选、规则集… 全系统操作。
  * - 明文密钥只在生成后显示一次; 服务端只存摘要。
  * - 三档: 完全控制 (与网页登录同等) / 只读 (GET + 回测、选股这类不改数据的计算) /
- *   研究提交 (0.52.0: 只读 + 提交机会板排序因子; 给外部研究系统用, 导入 ≠ 启用)。
+ *   研究提交 (0.52.0: 只读 + 提交机会板排序因子; 给外部研究系统用; 提交后进前向记分, 可被每周自动选策略换入做多)。
  * - 任何密钥都不能改登录密码、不能管理密钥 (只能在这里网页登录后操作)。
  * - MCP 端点: <站点>/api/mcp (Streamable HTTP, 无状态), 认证头 Authorization: Bearer <密钥>。
  */
@@ -95,7 +95,7 @@ export function SettingsApiAccessPanel() {
           <h2 className="text-sm font-medium text-foreground">API 密钥</h2>
         </div>
         <p className="mb-3 text-[11px] leading-relaxed text-secondary">
-          完全控制：与网页登录权限相同（回测、策略增删改、自选、规则集、模拟交易设置）。只读：查询，以及回测、选股等不改数据的计算。研究提交：只读 + 提交机会板排序因子（提交后为候选，在机会页规则设置中启用）。任何密钥均不能修改登录密码，也不能生成或吊销密钥。
+          完全控制：与网页登录权限相同（回测、策略增删改、自选、规则集、模拟交易设置）。只读：查询，以及回测、选股等不改数据的计算。研究提交：只读 + 提交机会板排序因子（提交后进入前向记分；在机会页规则设置中启用，或由每周自动选策略换入）。任何密钥均不能修改登录密码，也不能生成或吊销密钥。
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <input className={`${INPUT_CLS} w-48`} placeholder="名称（如 Claude Desktop）" value={name}

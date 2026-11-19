@@ -225,6 +225,28 @@ def test_formula_taken_over_by_external_system_is_released_not_retired(lab, cal,
     assert fm.retire(lab, today=DAY) == []                                    # 之后不再碰它
 
 
+def test_admit_skips_a_formula_another_system_imported_during_the_search(lab, cal, monkeypatch):
+    """搜索在子进程里跑 (最长 15 分钟), 这期间外部研究系统导入了同一条公式: 入席时不改写它的登记出处、不记成候补
+    (否则之后垫底 / 到期会把这条外部导入移除), 本轮记录列进 taken。判断与登记在 rank_lab 的同一把锁里。"""
+    monkeypatch.setattr(rl, "backfill_latest", lambda d, r: {"added": []})
+    seen = {}
+
+    def searcher(data_dir, cfg):
+        res = fm.search(data_dir, slots=cfg["slots"], seed=cfg["seed"], budget=120)
+        c = seen["c"] = res["chosen"][0]
+        rl.import_ranker(data_dir, name="外部导入", formula=c["formula"], direction=c["direction"],
+                         source={"system": "external-miner"})
+        return res
+    rec = fm.run(lab, object(), today=DAY, searcher=searcher)
+    taken = seen["c"]["id"]
+    assert rl.read_rankers(lab)[taken]["source"]["system"] == "external-miner"
+    assert taken not in fm.read_state(lab)["members"]
+    assert len(rec["admitted"]) == fm.ADMIT_PER_RUN - 1 and taken not in {a["id"] for a in rec["admitted"]}
+    assert rec["taken"] == [{"id": taken, "name": seen["c"]["name"], "system": "external-miner"}]
+    _forward(lab, [_fw(taken, "below", -0.3)])
+    assert fm.retire(lab, today=DAY) == [] and taken in rl.read_rankers(lab)
+
+
 def test_retired_formula_is_never_tried_again(lab, cal, monkeypatch):
     monkeypatch.setattr(rl, "backfill_latest", lambda d, r: {"added": []})
     rid = fm.run(lab, object(), today=date(2026, 9, 1), searcher=_stub(lab))["admitted"][0]["id"]
