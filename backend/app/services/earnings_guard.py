@@ -48,4 +48,4 @@ def reduce_window_missed(event: dict, now: datetime) -> bool:
     """减仓日收盘已过 (或已是之后的日子)。"""
     now = us_clock.market_datetime(now)
     target = reduce_day(event)
-    return now.date() > target or (now.date() == target and now.time() >= us_clock.sessions[-1].close)
+    return now.date() > target or (now.date() == target and now.time() >= us_clock.session_close(target))

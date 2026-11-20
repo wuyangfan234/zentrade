@@ -294,11 +294,7 @@ def sync_and_persist_daily_batch(
                 written_dates_out.update(str(d) for d in df["date"].unique().to_list())
             repo.append_daily(df)
             try:
-                d = repo.store.data_dir.as_posix()
-                repo.db.execute(
-                    f"""CREATE OR REPLACE VIEW kline_daily AS
-                        SELECT * FROM read_parquet('{d}/kline_daily/**/*.parquet', union_by_name=true)"""
-                )
+                repo.refresh_view("kline_daily")
             except Exception as e:  # noqa: BLE001
                 logger.warning("refresh view failed: %s", e)
             return _finalize(df.height)
@@ -330,11 +326,7 @@ def sync_and_persist_daily_batch(
     repo.append_daily(df)
 
     try:
-        d = repo.store.data_dir.as_posix()
-        repo.db.execute(
-            f"""CREATE OR REPLACE VIEW kline_daily AS
-                SELECT * FROM read_parquet('{d}/kline_daily/**/*.parquet', union_by_name=true)"""
-        )
+        repo.refresh_view("kline_daily")
     except Exception as e:  # noqa: BLE001
         logger.warning("refresh view failed: %s", e)
 
@@ -1332,11 +1324,7 @@ def sync_and_persist_minute(
 
     # 刷新视图
     try:
-        d = repo.store.data_dir.as_posix()
-        repo.db.execute(
-            f"""CREATE OR REPLACE VIEW kline_minute AS
-                SELECT * FROM read_parquet('{d}/kline_minute/**/*.parquet', union_by_name=true)"""
-        )
+        repo.refresh_view("kline_minute")
     except Exception as e:  # noqa: BLE001
         logger.warning("refresh kline_minute view failed: %s", e)
 

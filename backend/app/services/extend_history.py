@@ -63,23 +63,9 @@ def _resolve_universe(capset: CapabilitySet) -> list[str]:
 
 
 def _refresh_single_view(repo: KlineRepository, name: str) -> None:
-    """刷新单个 DuckDB 视图。"""
-    d = repo.store.data_dir.as_posix()
-    paths = {
-        "kline_daily": f"{d}/kline_daily/**/*.parquet",
-        "kline_enriched": f"{d}/kline_daily_enriched/**/*.parquet",
-        "kline_minute": f"{d}/kline_minute/**/*.parquet",
-        "adj_factor": f"{d}/adj_factor/**/*.parquet",
-        "instruments": f"{d}/instruments/**/*.parquet",
-    }
-    path = paths.get(name)
-    if not path:
-        return
+    """刷新单个 DuckDB 视图 (经 repo.refresh_view 持有连接锁)。"""
     try:
-        repo.db.execute(
-            f"CREATE OR REPLACE VIEW {name} AS "
-            f"SELECT * FROM read_parquet('{path}', union_by_name=true)"
-        )
+        repo.refresh_view(name)
     except Exception as e:
         logger.warning("refresh view %s failed: %s", name, e)
 

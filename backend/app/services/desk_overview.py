@@ -44,7 +44,7 @@ def _window(card: OpportunityCard, today: date, days: int) -> dict:
 
 def _after_close(today: date) -> bool:
     now = us_clock.now()
-    return now.date() > today or (now.date() == today and now.time() >= us_clock.sessions[-1].close)
+    return now.date() > today or (now.date() == today and now.time() >= us_clock.session_close(today))
 
 
 def _account(loop, data_dir: Path):

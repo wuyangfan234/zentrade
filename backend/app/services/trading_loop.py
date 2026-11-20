@@ -708,12 +708,13 @@ class TradingLoop:
         if not self._boot:
             self.boot()
         day, now = trade_date or us_clock.today(), us_clock.now()
-        if day > now.date() or (day == now.date() and now.time() < us_clock.sessions[-1].close):
+        close_t = us_clock.session_close(day)
+        if day > now.date() or (day == now.date() and now.time() < close_t):
             return {'events': 0, 'nav': None, 'skipped': 'regular_session_not_closed'}
         if not confirmed_official:
             return {'events': 0, 'nav': None, 'skipped': 'official_close_not_confirmed'}
         with self.ledger._lock:
-            cutoff = datetime.combine(day, us_clock.sessions[-1].close, tzinfo=us_clock.tz)
+            cutoff = datetime.combine(day, close_t, tzinfo=us_clock.tz)
             state_kinds = {'fill','close','partial_close','stop_move','corp_action','adjust','entry_intent','exit_intent'}
             if any(e['kind'] in state_kinds and us_clock.market_datetime(e['at']) > cutoff for e in self.ledger.read_events()):
                 # 历史收盘重建需要历史账本视图；严禁对当前仓位应用过去价格或写过去NAV。
@@ -733,7 +734,7 @@ class TradingLoop:
             if missing:
                 # 缺价只跳过这几只的止损判断; 净值无法按官方价定版 → 当日不写 NAV (补跑判定据此重试)
                 logger.warning('post close: %s 缺官方收盘, 跳过其止损判断且当日不定版净值', missing)
-            at = datetime.combine(day, us_clock.sessions[-1].close, tzinfo=us_clock.tz)
+            at = cutoff
             for pos in list(self.ledger.open_positions):
                 if pos.symbol in marks:
                     generated.extend(self.trader.manage_close(pos.symbol, close_price=marks[pos.symbol], trade_date=day, at=at.isoformat()))

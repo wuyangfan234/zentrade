@@ -366,8 +366,8 @@ def get_daily(
             logger.debug("单股除权因子拉取失败 %s: %s", symbol, e)
         enriched = compute_enriched(raw, factors=factors)
         rows = enriched.tail(days).to_dicts()
-        # 即使 live 模式也尝试追加实时蜡烛
-        rows = _maybe_inject_live_candle(request, symbol, rows, asset_type)
+        # 即使 live 模式也尝试追加实时蜡烛 (仅当日落入请求窗口时)
+        rows = _maybe_inject_live_candle(request, symbol, rows, asset_type, start=start, end=end)
         resp = {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": rows, "source": "live"}
         return _gzip_payload(
             request,
@@ -377,8 +377,8 @@ def get_daily(
 
     rows = df.to_dicts()
 
-    # 追加/覆盖今日实时蜡烛
-    rows = _maybe_inject_live_candle(request, symbol, rows, asset_type)
+    # 追加/覆盖今日实时蜡烛 (仅当日落入请求窗口时)
+    rows = _maybe_inject_live_candle(request, symbol, rows, asset_type, start=start, end=end)
 
     resp = {"symbol": symbol, "name": stock_name, "stock_info": stock_info, "rows": rows, "source": "enriched"}
     return _gzip_payload(
@@ -498,10 +498,28 @@ def _latest_live_candle(
     return live_row
 
 
-def _maybe_inject_live_candle(request: Request, symbol: str, rows: list[dict], asset_type: str = "stock") -> list[dict]:
-    """如果有当日实时 enriched 数据, 用实时数据生成今日蜡烛并追加/覆盖。"""
+def _maybe_inject_live_candle(
+    request: Request,
+    symbol: str,
+    rows: list[dict],
+    asset_type: str = "stock",
+    *,
+    start: date | None = None,
+    end: date | None = None,
+) -> list[dict]:
+    """如果有当日实时 enriched 数据, 用实时数据生成今日蜡烛并追加/覆盖。
+
+    若调用方指定了查询窗口 [start, end], 仅当实时蜡烛日期落在该区间内才注入,
+    避免查询历史区间 (end_date < today) 时把今日 K 线拼进历史图。
+    """
+    today = us_clock.today()
+    if (start is not None and today < start) or (end is not None and today > end):
+        return rows
     live_row = _latest_live_candle(request, symbol, asset_type)
     if live_row is None:
+        return rows
+    live_day = date.fromisoformat(str(live_row["date"])[:10])
+    if (start is not None and live_day < start) or (end is not None and live_day > end):
         return rows
 
     # 如果已有今天的 enriched 行, 覆盖; 否则追加

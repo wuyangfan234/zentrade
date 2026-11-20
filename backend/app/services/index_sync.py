@@ -24,7 +24,7 @@ _DAILY_COLS = ("symbol", "date", "open", "high", "low", "close", "volume", "amou
 
 
 def _closed(day: date, now: datetime) -> bool:
-    return day < now.date() or (day == now.date() and now.time() >= us_clock.sessions[-1].close)
+    return day < now.date() or (day == now.date() and now.time() >= us_clock.session_close(day))
 
 
 def sync_core_index_from_stock(repo, days: Iterable[date], now: datetime | None = None) -> list[str]:

@@ -231,6 +231,90 @@ def _fresh(rng: random.Random) -> dict:
 
 _WIN_RE = re.compile(r",(\d+)\)")
 _WIN_NOTE_RE = re.compile(r"\s*·\s*窗口 \d+→\d+$")
+_NONNEG_ATOMS = frozenset(
+    re.sub(r",\d+\)", ",N)", re.sub(r"\s+", "", v[0]))
+    for k, v in ATOMS.items()
+    if k not in SIGNED
+)
+
+
+def _split_top_level(expr: str, op: str) -> tuple[str, str] | None:
+    """按括号深度为 0 的二元运算符 op 切分一次 (仅当顶层恰出现一次该运算符时返回左右两半)。"""
+    depth, pos = 0, -1
+    for idx, ch in enumerate(expr):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth < 0:
+                return None
+        elif depth == 0 and ch == op:
+            if op == "-" and (idx == 0 or expr[idx - 1] in "(,+-*/"):
+                continue
+            if pos >= 0:
+                return None
+            pos = idx
+    if depth != 0 or pos <= 0 or pos >= len(expr) - 1:
+        return None
+    return expr[:pos], expr[pos + 1:]
+
+
+def _unwrap_call(expr: str, name: str) -> str | None:
+    prefix = f"{name}("
+    if not (expr.startswith(prefix) and expr.endswith(")")):
+        return None
+    depth = 0
+    for idx in range(len(prefix) - 1, len(expr)):
+        ch = expr[idx]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0 and idx != len(expr) - 1:
+                return None
+    return expr[len(prefix):-1] if depth == 0 else None
+
+
+def _split_call_args(body: str) -> list[str]:
+    parts, depth, start = [], 0, 0
+    for idx, ch in enumerate(body):
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(body[start:idx])
+            start = idx + 1
+    parts.append(body[start:])
+    return parts
+
+
+def _is_degenerate(formula: str) -> bool:
+    """拦截变异后退化为常数的结构: A - A (恒 0), A / A 或非负积木同窗均值比 (恒 1)。"""
+    s = re.sub(r"\s+", "", formula)
+    sub = _split_top_level(s, "-")
+    if sub is not None and sub[0] == sub[1]:
+        return True
+    div = _split_top_level(s, "/")
+    if div is not None:
+        num, den = div
+        if num == den:
+            return True
+        max_body = _unwrap_call(den, "max")
+        if max_body is not None:
+            den_args = _split_call_args(max_body)
+            den = den_args[0] if den_args else den
+        num_body, den_body = _unwrap_call(num, "ts_mean"), _unwrap_call(den, "ts_mean")
+        if num_body is not None and den_body is not None:
+            na, da = _split_call_args(num_body), _split_call_args(den_body)
+            if len(na) == 2 and len(da) == 2 and na[1] == da[1]:
+                if na[0] == da[0]:
+                    return True
+                abs_inner = _unwrap_call(da[0], "abs")
+                norm_arg = re.sub(r",\d+\)", ",N)", na[0])
+                if abs_inner == na[0] and (norm_arg in _NONNEG_ATOMS or na[0].startswith("abs(")):
+                    return True
+    return False
 
 
 def _mutant_name(parent_name: str, old: str, new: str) -> str:
@@ -243,14 +327,21 @@ def _mutant_name(parent_name: str, old: str, new: str) -> str:
 
 
 def mutate(formula: str, rng: random.Random) -> str | None:
-    """点变异: 把一个窗口换成梯子上相邻的一档 (结构不动)。公式里没有窗口 -> None。"""
+    """点变异: 把一个窗口换成梯子上相邻的一档 (结构不动), 排除退化为常数的候选。无可用变异 -> None。"""
     spots = [m for m in _WIN_RE.finditer(formula) if int(m.group(1)) in WINDOWS]
     if not spots:
         return None
-    m = rng.choice(spots)
-    i = WINDOWS.index(int(m.group(1)))
-    j = rng.choice([k for k in (i - 1, i + 1) if 0 <= k < len(WINDOWS)])
-    return formula[:m.start(1)] + str(WINDOWS[j]) + formula[m.end(1):]
+    candidates: list[str] = []
+    for m in spots:
+        i = WINDOWS.index(int(m.group(1)))
+        for k in (i - 1, i + 1):
+            if 0 <= k < len(WINDOWS):
+                cand = formula[:m.start(1)] + str(WINDOWS[k]) + formula[m.end(1):]
+                if not _is_degenerate(cand):
+                    candidates.append(cand)
+    if not candidates:
+        return None
+    return rng.choice(candidates)
 
 
 def generate(seed: str, n: int, parents: list[dict] | None = None) -> list[dict]:

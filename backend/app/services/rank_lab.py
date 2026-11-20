@@ -186,11 +186,13 @@ def check_formula(formula: str):
             continue
         if n > RSI_MAX:
             raise RankFormulaError("R007", f"ts_rsi 的窗口不能超过 {RSI_MAX} (指数平滑记忆太长, 盘后扫描只有约 275 根日K, 与回放算不一致)")
-    bad = _adjustment_leak(text, compiled)
-    if bad:
+    code, bad = _pit_probe(text, compiled)
+    if code == "R008":
         raise RankFormulaError("R008", "公式值随复权基准变化 (价格列是导出日回溯的前复权价, volume 按拆股调整, "
                                f"amount / raw_close 是当日原值): {bad}。价格与量只能用比值、收益率或与自身历史比较, "
                                "不能跨股票比价格水平, 也不能把价格列与 amount / raw_close 混算")
+    if code:
+        raise RankFormulaError(code, bad)
     return compiled
 
 
@@ -231,7 +233,7 @@ def _pit_panels() -> tuple[pl.DataFrame, pl.DataFrame]:
     return _PIT_PANELS[0], _PIT_PANELS[1]
 
 
-_PIT_CACHE: dict[str, str] = {}
+_PIT_CACHE: dict[str, tuple[str, str]] = {}
 
 # 出值清理: 滚动求和 / 均值是增量累加的, 窗口内全是 0 时累加器不回到精确的 0, 留下 1e-17 级的残差
 # (if_else(条件, 值, 0) 外套 ts_mean / ts_sum 的公式几乎每条都有)。残差参与排名, 本该并列的票被它分出先后:
@@ -248,8 +250,8 @@ def clean_values(v: pl.Expr) -> pl.Expr:
     return pl.when(r.abs() < CLEAN_ZERO_ABS).then(pl.lit(0.0)).otherwise(r)
 
 
-def _adjustment_leak(text: str, compiled) -> str:
-    """'' = 与复权基准无关; 否则返回说明。只比较预热期之后的行 (预热期的空值兜底不算)。按公式文本缓存。"""
+def _pit_probe(text: str, compiled) -> tuple[str, str]:
+    """('', '') = 通过探针; 否则返回 (错误码, 说明): R008 复权基准泄露, R010 截面恒定无区分度。按公式文本缓存。"""
     key = re.sub(r"\s+", "", text)
     if key in _PIT_CACHE:
         return _PIT_CACHE[key]
@@ -260,9 +262,9 @@ def _adjustment_leak(text: str, compiled) -> str:
         b = compiled.frame_transform(p1)
     except Exception as e:                       # 运行期失败交给评估报错, 这里不判
         logger.debug("rank lab pit probe skipped: %s", type(e).__name__)
-        return ""
+        return ("", "")
     if a is None or b is None:
-        return ""
+        return ("", "")
     # 只看预热期之后, 且比的是每天 6 只的截面名次 (机会板只用名次挑前 5): 嵌套滚动算子会把预热期的大数
     # 带进 polars 的滚动累加器, 留下 1e-6 级的浮点残差, 按数值逐位比会误报 (实测 ts_corr(收益, 量比))。
     keep = pl.int_range(pl.len()).over("symbol") >= compiled.warmup_bars + 1
@@ -275,9 +277,19 @@ def _adjustment_leak(text: str, compiled) -> str:
     bad_rows = ra.select("date", (pl.col("r").ne_missing(rb["r"])).alias("bad")).filter(pl.col("bad"))
     n_days = ra["date"].n_unique()
     bad_days = bad_rows["date"].n_unique()
-    out = ""
+    out: tuple[str, str] = ("", "")
     if bad_days > max(2, int(0.01 * n_days)):
-        out = f"{bad_days}/{n_days} 天的截面名次改变"
+        out = ("R008", f"{bad_days}/{n_days} 天的截面名次改变")
+    else:
+        non_null = ra.filter(pl.col("v").is_not_null())
+        if non_null.height > 0:
+            has_spread = bool(
+                non_null.group_by("date")
+                .agg((pl.col("v").max() > pl.col("v").min()).alias("diff"))["diff"]
+                .any()
+            )
+            if not has_spread:
+                out = ("R010", "公式在所有交易日截面取值恒定, 无法区分不同股票")
     if len(_PIT_CACHE) > 512:
         _PIT_CACHE.clear()
     _PIT_CACHE[key] = out
@@ -509,7 +521,7 @@ def evaluate_formula(pool: Pool, formula: str, direction: str) -> dict:
 
 
 def check_values(pool: Pool, vals: np.ndarray, t_end: int | None = None) -> float:
-    """值矩阵的可用性: 全空 → R006; 4h 门内格子 (t < t_end) 有值比例 < MIN_COVERAGE → R009。返回覆盖率。
+    """值矩阵的可用性: 全空 → R006; 4h 门内格子 (t < t_end) 有值比例 < MIN_COVERAGE → R009; 全截面恒定 → R010。返回覆盖率。
     覆盖率低的公式 (如只有少数股票有 turnover_rate) 只在有数据的那几只里排, 等于换了一个候选池。
     覆盖率只按挖掘段算 (evaluate_formula 与挖掘端同口径), 不看留出段。"""
     if not np.isfinite(vals).any():
@@ -521,6 +533,19 @@ def check_values(pool: Pool, vals: np.ndarray, t_end: int | None = None) -> floa
     cov = covered / cells if cells else 0.0
     if cov < MIN_COVERAGE:
         raise RankFormulaError("R009", f"4h 门内只有 {cov:.0%} 的格子有值 (下限 {MIN_COVERAGE:.0%}), 数据太稀疏")
+    multi, varied = 0, 0
+    for t, js in enumerate(pool.gate_js[:t_end]):
+        if len(js) < 2:
+            continue
+        row = vals[t, js]
+        row = row[np.isfinite(row)]
+        if row.size < 2:
+            continue
+        multi += 1
+        if float(row.max()) > float(row.min()):
+            varied += 1
+    if multi > 0 and varied == 0:
+        raise RankFormulaError("R010", "公式在 4h 门内全部交易日取值恒定, 无法区分不同股票")
     return cov
 
 

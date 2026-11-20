@@ -123,15 +123,15 @@ def replay_card(side: str, zone: tuple[float, float], stop: float, target: float
         if pending_exit:
             return done(bars[0][0], k, "stop")
         last = len(bars) - 1
-        for b in range(b0 + 1 if k == 0 else 0, len(bars)):
+        # 最后持有日在 15:30 (半日市 12:30) 强平, 最后一根 (15:30-16:00 / 12:30-13:00) 在离场之后, 不再判止盈
+        end_b = last if (k == hold_days - 1 and len(bars) > 1) else len(bars)
+        for b in range(b0 + 1 if k == 0 else 0, end_b):
             o, h, lo, _c = bars[b]
             fav = h if sg == 1 else lo
             if sg * (o - target) >= 0:
                 return done(o, k, "target")
             if sg * (fav - target) >= 0:
                 return done(target, k, "target")
-            if k == hold_days - 1 and b == last:
-                break
             ext = max(ext, fav) if sg == 1 else min(ext, fav)
             gain = sg * (ext - entry) / rc
             if gain >= 2:

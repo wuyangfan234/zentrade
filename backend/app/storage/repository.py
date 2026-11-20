@@ -2050,15 +2050,9 @@ class KlineRepository:
         df_storage = df.select(storage_cols)
         self._write_daily_partition(df_storage, "kline_etf_enriched")
 
-    def rebuild_views(self) -> None:
-        """重建全部 13 张 parquet 视图并重挂 unified 视图 —— 唯一权威实现。
-
-        原先 daily_pipeline._refresh_views(盘后管道) 与 /api/data/clear(清库) 各自
-        内联了同一份视图重建 SQL, 清库那份还漏了几张视图导致漂移。此处收敛为单一入口:
-        覆盖全部 13 张视图 (二者的超集), 空目录 (清库后) 也能安全重挂。
-        """
+    def _view_paths(self) -> dict[str, str]:
         d = self.store.data_dir.as_posix()
-        views = {
+        return {
             "kline_daily": f"{d}/kline_daily/**/*.parquet",
             "kline_enriched": f"{d}/kline_daily_enriched/**/*.parquet",
             "kline_index_daily": f"{d}/kline_index_daily/**/*.parquet",
@@ -2073,13 +2067,28 @@ class KlineRepository:
             "instruments_index": f"{d}/instruments_index/**/*.parquet",
             "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
         }
-        for name, path in views.items():
+
+    def refresh_view(self, name: str) -> None:
+        """在连接锁保护下刷新单个 DuckDB 视图 (线程安全)。"""
+        path = self._view_paths().get(name)
+        if not path:
+            return
+        with self._lock:
+            self.db.execute(
+                f"CREATE OR REPLACE VIEW {name} AS "
+                f"SELECT * FROM read_parquet('{path}', union_by_name=true)"
+            )
+
+    def rebuild_views(self) -> None:
+        """重建全部 13 张 parquet 视图并重挂 unified 视图 —— 唯一权威实现。
+
+        原先 daily_pipeline._refresh_views(盘后管道) 与 /api/data/clear(清库) 各自
+        内联了同一份视图重建 SQL, 清库那份还漏了几张视图导致漂移。此处收敛为单一入口:
+        覆盖全部 13 张视图 (二者的超集), 空目录 (清库后) 也能安全重挂。
+        """
+        for name in self._view_paths():
             try:
-                with self._lock:
-                    self.db.execute(
-                        f"CREATE OR REPLACE VIEW {name} AS "
-                        f"SELECT * FROM read_parquet('{path}', union_by_name=true)"
-                    )
+                self.refresh_view(name)
             except Exception as e:  # noqa: BLE001
                 logger.warning("rebuild view %s failed: %s", name, e)
         with self._lock:
