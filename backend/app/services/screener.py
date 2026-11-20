@@ -168,16 +168,23 @@ class ScreenerService:
         """
         _history_cache.clear()
 
-    def _load_enriched_for_date(self, target_date: date) -> pl.DataFrame:
+    def _load_enriched_for_date(
+        self,
+        target_date: date,
+        *,
+        symbols: set[str] | None = None,
+    ) -> pl.DataFrame:
         """从 enriched parquet 读取指定日期的基础数据并即时计算完整指标+信号。
 
         enriched parquet 仅存 14 列。读取后需要即时计算 ma/ema/macd/kdj/rsi/boll/momentum/signal 等列。
         对于最新日, 优先使用内存缓存 (已包含完整指标)。
+        symbols 传入时仅保留指定标的 (全市场发现关闭时只算自选, 指标逐标的独立计算口径不变)。
         """
+        sym_list = sorted(symbols) if symbols else None
         # 优先使用 repo 最新日缓存
         cache, cache_date = self.repo.get_enriched_latest_asset(self.asset_type)
         if cache is not None and not cache.is_empty() and cache_date == target_date:
-            df = cache
+            df = cache.filter(pl.col("symbol").is_in(sym_list)) if sym_list is not None else cache
             # JOIN instruments
             df_i = self.repo.get_instruments_asset(self.asset_type)
             if not df_i.is_empty():
@@ -191,6 +198,8 @@ class ScreenerService:
             cached_hist = self.repo.get_enriched_history(target_date, 1)
             if cached_hist is not None and not cached_hist.is_empty() and "date" in cached_hist.columns:
                 df = cached_hist.filter(pl.col("date") == target_date)
+                if sym_list is not None and not df.is_empty():
+                    df = df.filter(pl.col("symbol").is_in(sym_list))
                 if not df.is_empty():
                     logger.debug("_load_enriched_for_date: repo history cache for %s", target_date)
                     # JOIN instruments
@@ -215,14 +224,22 @@ class ScreenerService:
             logger.warning("load_enriched_for_date failed: %s", e)
             return pl.DataFrame()
 
+        if sym_list is not None and not df.is_empty():
+            df = df.filter(pl.col("symbol").is_in(sym_list))
         if df.is_empty():
             return df
 
         # 即时计算指标: 需要加载历史窗口作 warmup
-        df_full = self._compute_enriched_full(df, target_date)
+        df_full = self._compute_enriched_full(df, target_date, symbols=symbols)
         return df_full
 
-    def _compute_enriched_full(self, df_target: pl.DataFrame, target_date: date) -> pl.DataFrame:
+    def _compute_enriched_full(
+        self,
+        df_target: pl.DataFrame,
+        target_date: date,
+        *,
+        symbols: set[str] | None = None,
+    ) -> pl.DataFrame:
         """从 14 列基础数据即时计算完整 enriched (含全部指标和信号)。
 
         读取历史数据作为指标计算的 warmup, 计算完成后只返回目标日期的行。
@@ -240,16 +257,16 @@ class ScreenerService:
         # 丢失, 自定义 SQL 用它做条件会 Binder Error 被吞成空结果 (#187)
         read_cols = ["symbol", "date", "open", "high", "low", "close", "volume",
                      "amount", "raw_close", "raw_high", "raw_low", "turnover_rate"]
+        sym_list = sorted(symbols) if symbols else None
 
         try:
-            lf = (
-                scan_enriched_parquet(str(enriched_dir / "**" / "*.parquet"))
-                .filter(
-                    (pl.col("date") >= start)
-                    & (pl.col("date") <= target_date)
-                )
-                .sort(["symbol", "date"])
+            lf = scan_enriched_parquet(str(enriched_dir / "**" / "*.parquet")).filter(
+                (pl.col("date") >= start)
+                & (pl.col("date") <= target_date)
             )
+            if sym_list is not None:
+                lf = lf.filter(pl.col("symbol").is_in(sym_list))
+            lf = lf.sort(["symbol", "date"])
             available = [c for c in read_cols if c in lf.schema]
             df_hist = lf.select(available).collect()
         except Exception as e:  # noqa: BLE001
@@ -283,17 +300,26 @@ class ScreenerService:
 
         return df_result
 
-    def _load_enriched_history(self, target_date: date, lookback_days: int) -> pl.DataFrame:
+    def _load_enriched_history(
+        self,
+        target_date: date,
+        lookback_days: int,
+        *,
+        symbols: set[str] | None = None,
+    ) -> pl.DataFrame:
         """读取目标日期之前的基础行情数据, 供历史窗口策略使用。
 
         优先从 repo 内存缓存获取 (启动时已预计算), 命中时 0ms。
         缓存 miss 时走 scan_parquet + compute_indicators 慢路径。
         """
+        sym_list = sorted(symbols) if symbols else None
         # 优先级 1: repo 级预计算缓存 (启动时 _refresh_enriched 已计算完整历史; 仅 stock)
         t0 = time.perf_counter()
         if self.asset_type == "stock":
             cached = self.repo.get_enriched_history(target_date, lookback_days)
             if cached is not None and not cached.is_empty():
+                if sym_list is not None:
+                    cached = cached.filter(pl.col("symbol").is_in(sym_list))
                 # JOIN instruments (repo 缓存不含 name 等列)
                 instruments = self.repo.get_instruments_asset(self.asset_type)
                 if instruments is not None and not instruments.is_empty() and "name" not in cached.columns:
@@ -305,16 +331,17 @@ class ScreenerService:
                             target_date, lookback_days, elapsed, len(cached))
                 return cached
 
-        # 优先级 2: 进程级 history_cache (之前的 TTL 缓存)
+        # 优先级 2: 进程级 history_cache (之前的 TTL 缓存; 仅全市场口径缓存, 子集不污染缓存)
         cache_key = (self.asset_type, target_date, lookback_days)
         now = time.monotonic()
-        ttl_cached = _history_cache.get(cache_key)
-        if ttl_cached is not None:
-            ts, cached_df = ttl_cached
-            if now - ts < _HISTORY_CACHE_TTL:
-                logger.debug("history TTL cache hit: %s lookback=%d", target_date, lookback_days)
-                return cached_df
-            del _history_cache[cache_key]
+        if sym_list is None:
+            ttl_cached = _history_cache.get(cache_key)
+            if ttl_cached is not None:
+                ts, cached_df = ttl_cached
+                if now - ts < _HISTORY_CACHE_TTL:
+                    logger.debug("history TTL cache hit: %s lookback=%d", target_date, lookback_days)
+                    return cached_df
+                del _history_cache[cache_key]
 
         # 优先级 3: scan_parquet + compute_indicators (慢路径, ~5s)
         logger.warning("_load_enriched_history cache miss, computing indicators (%s, %d)...",
@@ -336,11 +363,12 @@ class ScreenerService:
                      "amount", "raw_close", "raw_high", "raw_low", "turnover_rate"]
 
         try:
-            lf = (
-                scan_enriched_parquet(str(enriched_dir / "**" / "*.parquet"))
-                .filter((pl.col("date") >= start) & (pl.col("date") <= target_date))
-                .sort(["symbol", "date"])
+            lf = scan_enriched_parquet(str(enriched_dir / "**" / "*.parquet")).filter(
+                (pl.col("date") >= start) & (pl.col("date") <= target_date)
             )
+            if sym_list is not None:
+                lf = lf.filter(pl.col("symbol").is_in(sym_list))
+            lf = lf.sort(["symbol", "date"])
             available = [c for c in read_cols if c in lf.collect_schema().names()]
             df_hist = lf.select(available).collect()
         except Exception as e:  # noqa: BLE001
@@ -383,11 +411,12 @@ class ScreenerService:
         logger.info("_load_enriched_history(%s, %d): computed in %.1fms, %d rows",
                     target_date, lookback_days, elapsed, len(df_full))
 
-        _history_cache[cache_key] = (now, df_full)
-        if len(_history_cache) > 10:
-            expired = [k for k, (ts, _) in _history_cache.items() if now - ts > _HISTORY_CACHE_TTL]
-            for k in expired:
-                del _history_cache[k]
+        if sym_list is None:
+            _history_cache[cache_key] = (now, df_full)
+            if len(_history_cache) > 10:
+                expired = [k for k, (ts, _) in _history_cache.items() if now - ts > _HISTORY_CACHE_TTL]
+                for k in expired:
+                    del _history_cache[k]
 
         return df_full
 
@@ -471,12 +500,17 @@ class ScreenerService:
         current: pl.DataFrame | None = None,
         market=None,
         cache_key: str | None = None,
+        symbols: set[str] | None = None,
     ):
         """按调用方要求装配标准策略数据上下文，不解释策略公式。"""
         from app.strategy.engine import StrategyDataContext
 
         if current is None:
-            current = self._load_enriched_for_date(as_of)
+            current = (
+                self._load_enriched_for_date(as_of, symbols=symbols)
+                if symbols is not None
+                else self._load_enriched_for_date(as_of)
+            )
         if timeframe == "1h":
             history = self._load_hour_history(as_of, current)
             return StrategyDataContext(
@@ -498,7 +532,11 @@ class ScreenerService:
             if engine is not None:
                 daily_bars = engine.minute_daily_history_bars(strategy_ids)
                 if daily_bars > 0:
-                    daily_history = self._load_enriched_history(as_of, daily_bars)
+                    daily_history = (
+                        self._load_enriched_history(as_of, daily_bars, symbols=symbols)
+                        if symbols is not None
+                        else self._load_enriched_history(as_of, daily_bars)
+                    )
             return StrategyDataContext(
                 asset_type=self.asset_type,
                 timeframe=timeframe,
@@ -516,7 +554,11 @@ class ScreenerService:
         )
         history = None
         if history_bars > 1:
-            history = self._load_enriched_history(as_of, history_bars)
+            history = (
+                self._load_enriched_history(as_of, history_bars, symbols=symbols)
+                if symbols is not None
+                else self._load_enriched_history(as_of, history_bars)
+            )
         return StrategyDataContext(
             asset_type=self.asset_type,
             timeframe=timeframe,

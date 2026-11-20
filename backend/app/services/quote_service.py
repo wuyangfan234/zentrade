@@ -278,15 +278,19 @@ class QuoteService:
         """开启自动行情 (不立即启动线程，等下一个交易时段)。
 
         none 档无实时行情权限,拒绝开启并返回 False;
+        全市场发现与盘中扫描关闭时同样拒绝开启并返回 False;
         free 档开启自选股实时,starter+ 开启全市场实时。返回值表示是否真正开启。
         """
+        from app.services import preferences
+        if not preferences.get_full_market_discovery_enabled():
+            logger.info("实时行情开启被拒: 全市场盘中扫描已关闭")
+            return False
         if not self.is_realtime_allowed():
             logger.warning("实时行情开启被拒:当前档位(none)无实时行情权限")
             return False
         self._enabled = True
         self._save_enabled(True)
         if not self._running:
-            from app.services import preferences
             self._interval = self._clamp_interval(preferences.get_realtime_quote_interval())
             self._running = True
             self._thread = threading.Thread(target=self._poll_loop, daemon=True)
@@ -343,8 +347,12 @@ class QuoteService:
 
         none 档无实时行情权限:即使 preferences 标记为 enabled,
         也不启动,并同步 preferences 为关闭(避免 UI 误显示已开启)。
+        全市场盘中扫描关闭时仅跳过启动,不覆写 realtime_quotes_enabled 偏好。
         """
         from app.services import preferences
+        if not preferences.get_full_market_discovery_enabled():
+            logger.info("实时行情未启动: 全市场盘中扫描已关闭")
+            return
         if not self.is_realtime_allowed():
             if preferences.get_realtime_quotes_enabled():
                 self._save_enabled(False)
@@ -503,6 +511,7 @@ class QuoteService:
 
     def status(self) -> dict:
         """返回行情服务状态。"""
+        from app.services import preferences
         age = (time.perf_counter() - self._fetch_time) * 1000 if self._fetch_time else -1
         mode = self.realtime_mode()
         phase = self._market_phase()
@@ -513,6 +522,7 @@ class QuoteService:
             "enabled": self._enabled,
             "running": self._running,
             "paused": self._paused,
+            "full_market_discovery_enabled": preferences.get_full_market_discovery_enabled(),
             "mode": mode,
             "realtime_allowed": mode != "none",
             "interval_s": self._interval,
@@ -548,7 +558,13 @@ class QuoteService:
     # ================================================================
 
     def _poll_loop(self) -> None:
+        from app.services import preferences
         while self._running and self._enabled:
+            if not preferences.get_full_market_discovery_enabled():
+                logger.info("全市场盘中扫描已关闭, 退出全市场行情轮询")
+                self._running = False
+                self._enabled = False
+                break
             try:
                 # 管道/数据修正运行期间临时暂停取数, 防止与管道写同一批 parquet 竞态。
                 # 线程继续存活 + 分片 sleep, resume() 后即时恢复, 无需重启线程。

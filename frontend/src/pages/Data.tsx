@@ -219,6 +219,7 @@ export function Data() {
   const quoteInterval = useQuoteInterval()
   const updateInterval = useUpdateQuoteInterval()
 
+  const fullMarketEnabled = prefs.data?.full_market_discovery_enabled ?? true
   const realtimeEnabled = prefs.data?.realtime_quotes_enabled ?? false
   const quoteStatus = useQuoteStatus()
   const toggleQuote = useToggleRealtimeQuotes()
@@ -553,7 +554,8 @@ export function Data() {
         {/* 实时行情 + 存储 + 调度 */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <QuoteConfigCard
-            enabled={realtimeEnabled}
+            enabled={fullMarketEnabled && realtimeEnabled}
+            discoveryDisabled={!fullMarketEnabled}
             running={quoteStatus.data?.running ?? false}
             isTrading={quoteStatus.data?.is_trading_hours ?? false}
             lastFetchMs={quoteStatus.data?.last_fetch_ms ?? null}

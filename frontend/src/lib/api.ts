@@ -2492,6 +2492,7 @@ export interface WecomBotStatus {
 }
 
 export interface Preferences {
+  full_market_discovery_enabled?: boolean
   realtime_quotes_enabled: boolean
   watchlist_groups_in_nav: boolean
   minute_sync_enabled: boolean
@@ -2938,6 +2939,11 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(cfg),
     }),
+  updateFullMarketDiscovery: (enabled: boolean) =>
+    request<{ full_market_discovery_enabled: boolean; quote_running?: boolean }>('/api/settings/preferences/full-market-discovery', {
+      method: 'PUT',
+      body: JSON.stringify({ full_market_discovery_enabled: enabled }),
+    }),
   updateRealtimeQuotes: (enabled: boolean) =>
     request<{ realtime_quotes_enabled: boolean; realtime_allowed?: boolean; mode?: string; error?: string }>('/api/settings/preferences/realtime-quotes', {
       method: 'PUT',
@@ -2953,6 +2959,7 @@ export const api = {
       enabled: boolean
       running: boolean
       paused?: boolean
+      full_market_discovery_enabled?: boolean
       mode?: 'none' | 'watchlist' | 'full_market'
       realtime_allowed?: boolean
       interval_s: number

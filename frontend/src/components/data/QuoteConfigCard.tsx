@@ -4,8 +4,9 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Activity, Settings } from 'lucide-react'
 import { Skeleton } from './Skeleton'
 
-export function QuoteConfigCard({ enabled, running, isTrading, lastFetchMs, intervalS, intervalMin, intervalMax, loading, onToggle, toggling, showIntervalEdit, onShowIntervalEdit, onIntervalChange }: {
+export function QuoteConfigCard({ enabled, discoveryDisabled = false, running, isTrading, lastFetchMs, intervalS, intervalMin, intervalMax, loading, onToggle, toggling, showIntervalEdit, onShowIntervalEdit, onIntervalChange }: {
   enabled: boolean
+  discoveryDisabled?: boolean
   running: boolean
   isTrading: boolean
   lastFetchMs: number | null
@@ -19,19 +20,21 @@ export function QuoteConfigCard({ enabled, running, isTrading, lastFetchMs, inte
   onShowIntervalEdit: () => void
   onIntervalChange: (v: number) => void
 }) {
-  const statusColor = running && isTrading
+  const statusColor = !discoveryDisabled && running && isTrading
     ? 'bg-accent shadow-[0_0_6px_rgba(61,214,140,0.5)]'
-    : enabled && running
+    : !discoveryDisabled && enabled && running
       ? 'bg-warning/60'
       : 'bg-muted'
 
-  const statusText = !enabled
-    ? '已关闭'
-    : !isTrading
-      ? '非交易时段'
-      : running
-        ? '行情运行中'
-        : '已停止'
+  const statusText = discoveryDisabled
+    ? '全市场扫描已关闭'
+    : !enabled
+      ? '已关闭'
+      : !isTrading
+        ? '非交易时段'
+        : running
+          ? '行情运行中'
+          : '已停止'
 
   // 与数据页其它时间一致按美东显示 (ui-audit-1011: 原为不带时区的浏览器本地时间)
   const lastFetchTime = lastFetchMs
@@ -47,12 +50,13 @@ export function QuoteConfigCard({ enabled, running, isTrading, lastFetchMs, inte
         </div>
         <button
           onClick={() => onToggle(!enabled)}
-          disabled={toggling}
+          disabled={toggling || discoveryDisabled}
+          title={discoveryDisabled ? '全市场扫描已关闭，请在「设置 › 系统设置」开启' : undefined}
           className={`relative inline-flex h-4 w-7 items-center rounded-full shrink-0 transition-colors duration-200 ${
             enabled
               ? 'bg-accent shadow-[0_0_6px_rgba(59,130,246,0.3)]'
               : 'bg-elevated'
-          } ${toggling ? 'opacity-50' : 'cursor-pointer'}`}
+          } ${toggling || discoveryDisabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span className={`inline-block h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-200 ${
             enabled ? 'translate-x-[14px]' : 'translate-x-0.5'

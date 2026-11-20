@@ -95,6 +95,8 @@ const nav = [
   { to: '/status',     label: '系统状态', icon: Activity },
 ] as const
 
+const LEGACY_MARKET_WATCH_PATHS = new Set(['/monitor', '/lots', '/signals'])
+
 export const NAV_GROUPS: { id: string; label: string; items: string[] }[] = [
   { id: 'trade', label: '交易', items: ['/', '/paper'] },
   { id: 'market', label: '行情', items: ['/intel', '/watchlist', '/stock-analysis'] },
@@ -479,7 +481,8 @@ export function Layout() {
   const qc = useQueryClient()
   const navigate = useNavigate()
   const version = versionData?.version
-  const realtimeEnabled = prefs?.realtime_quotes_enabled ?? false
+  const fullMarketEnabled = prefs?.full_market_discovery_enabled ?? true
+  const realtimeEnabled = fullMarketEnabled && (prefs?.realtime_quotes_enabled ?? false)
   // 自选实时模式限制提示: 可手动关闭, 不持久化 (刷新后恢复显示)
   const [dismissFreeHint, setDismissFreeHint] = useState(false)
   // 开启实时行情时若存在排队中的挖掘任务 → 确认弹窗 (实时落盘会让排队任务开跑即失败)
@@ -498,8 +501,9 @@ export function Layout() {
     placeholderData: (prev) => prev,
   })
 
-  // SSE: 行情更新时自动刷新相关 queries + 告警通知
-  useQuoteStream(realtimeEnabled, prefs?.sse_refresh_pages)
+  // SSE: 行情更新或机会页雷达帧开启时建立连接 (全市场扫描关闭时仍保留机会页雷达推送)
+  const oppRadarSseEnabled = prefs?.sse_refresh_pages?.opportunities !== false
+  useQuoteStream(realtimeEnabled || oppRadarSseEnabled, prefs?.sse_refresh_pages)
   // 实时 SSE 连接状态 — 断开时底部显示提示, 提示可能漏策略告警
   const streamStatus = useQuoteStreamStatus()
 
@@ -547,10 +551,11 @@ export function Layout() {
         ? '关闭实时行情'
         : '开启实时行情'
 
-  // 轮询触发记录总数 → 更新监控中心徽标 (每 15 秒; 后台标签页由 SSE 事件驱动, 不轮询)
+  // 轮询触发记录总数 → 更新监控中心徽标 (每 15 秒; 全市场看盘关闭时停轮询)
   const alertsTotalQuery = useQuery({
     queryKey: ['alerts-total'],
     queryFn: () => api.alertsList({ days: 7, limit: 1 }),
+    enabled: fullMarketEnabled,
     refetchInterval: 15000,
     select: (data) => data.total,
   })
@@ -604,7 +609,12 @@ export function Layout() {
 
   const navGrouped = savedOrder.length === 0
   const hiddenIds = new Set(prefs?.nav_hidden ?? [])
-  const visibleNavItems = navItems.filter(n => !hiddenIds.has(n.to) && !hiddenIds.has(n.to.replace(/^\/analysis\//, '')))
+  const visibleNavItems = navItems.filter(
+    n =>
+      !hiddenIds.has(n.to)
+      && !hiddenIds.has(n.to.replace(/^\/analysis\//, ''))
+      && (fullMarketEnabled || !LEGACY_MARKET_WATCH_PATHS.has(n.to)),
+  )
   const navKey = visibleNavItems.map(n => n.to).join('|')
   useEffect(() => {
     const el = navRef.current
@@ -921,6 +931,17 @@ export function Layout() {
         {/* 全局行情开关 — 收起时只显示状态指示点 */}
         {railMode ? (
           <div className="border-t border-border px-2 py-2.5 shrink-0 flex justify-center">
+            {!fullMarketEnabled ? (
+              <button
+                type="button"
+                onClick={() => navigate('/settings?tab=system&highlight=full-market-discovery')}
+                aria-label="全市场扫描已关闭"
+                title="全市场扫描已关闭 · 前往系统设置开启"
+                className="flex items-center justify-center rounded-btn p-1.5 transition-colors hover:bg-elevated/70"
+              >
+                <span className="inline-block h-2 w-2 rounded-full bg-muted" />
+              </button>
+            ) : (
             <button
               onClick={() => handleToggle(!realtimeEnabled)}
               disabled={realtimeToggleDisabled}
@@ -931,10 +952,34 @@ export function Layout() {
             >
               <span className={`inline-block h-2 w-2 rounded-full ${realtimeIndicatorClass}`} />
             </button>
+            )}
           </div>
         ) : (
         <div className="border-t border-border px-3 py-2.5 shrink-0">
-          {realtimeUnavailable && !realtimeProviderName ? (
+          {!fullMarketEnabled ? (
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-muted" />
+                <div className="min-w-0">
+                  <div className="text-xs font-medium leading-none text-foreground">全市场扫描</div>
+                  <div className="mt-1 flex min-w-0 items-center gap-1 text-[11px] leading-none">
+                    <span className="truncate text-muted">仅自选与持仓</span>
+                    <span className="shrink-0 text-border" aria-hidden="true">·</span>
+                    <span className="shrink-0 text-muted">已关闭</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate('/settings?tab=system&highlight=full-market-discovery')}
+                aria-label="打开全市场扫描设置"
+                className="flex h-7 w-7 items-center justify-center rounded-btn text-muted transition-colors hover:bg-elevated hover:text-foreground"
+                title="在系统设置中开启"
+              >
+                <Settings className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ) : realtimeUnavailable && !realtimeProviderName ? (
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-secondary truncate">实时行情</span>

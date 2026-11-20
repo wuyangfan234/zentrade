@@ -624,8 +624,46 @@ def watchlist_enriched(
     df = df.sort("_sort_order").drop("_sort_order")
 
     rows = df.to_dicts()
+    _overlay_hot_quotes_rows(rows, as_of)
     elapsed = (time.perf_counter() - t0) * 1000
     return {"rows": rows, "as_of": str(as_of) if as_of else None, "elapsed_ms": elapsed}
+
+
+def _overlay_hot_quotes_rows(rows: list[dict], as_of: date | None) -> None:
+    """全市场实时轮询关闭且处于交易时段时, 用 5 秒热报价缓冲叠加自选现价与当日涨跌 (不额外出网)。"""
+    if not rows or as_of is None:
+        return
+    try:
+        from app.services import preferences
+        if preferences.get_full_market_discovery_enabled():
+            return
+        now = us_clock.now()
+        if not us_clock.in_session(now) or as_of >= now.date():
+            return
+        from app.api.portfolio import _live_marks
+        syms = [str(r["symbol"]) for r in rows if r.get("symbol")]
+        marks = _live_marks(syms)
+        if not marks:
+            return
+        now_ms = now.timestamp() * 1000
+        for r in rows:
+            sym = r.get("symbol")
+            hit = marks.get(sym) if sym else None
+            if not hit:
+                continue
+            px, ts = hit[0], hit[1]
+            if not isinstance(px, (int, float)) or px <= 0:
+                continue
+            if not isinstance(ts, (int, float)) or not (0 <= now_ms - ts <= 120_000):
+                continue
+            prev = r.get("close")
+            if isinstance(prev, (int, float)) and prev > 0:
+                r["prev_close"] = float(prev)
+                r["change_amount"] = float(px) - float(prev)
+                r["change_pct"] = (float(px) - float(prev)) / float(prev)
+            r["close"] = float(px)
+    except Exception as e:
+        logger.debug("watchlist hot quote overlay skipped: %s", type(e).__name__)
 
 
 def _parse_ext_columns(ext_columns: str) -> list[tuple[str, str]]:

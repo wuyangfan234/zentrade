@@ -183,6 +183,8 @@ class MinuteRefreshService:
 
     def _gate_reason(self) -> str | None:
         """返回本轮不执行的原因 (None = 放行)。"""
+        if not preferences.get_full_market_discovery_enabled():
+            return "full_market_disabled"
         if not preferences.get_minute_refresh_enabled():
             return "disabled"
         if not self.capability_ok():
@@ -376,6 +378,8 @@ class MinuteRefreshService:
         连续失败轮不更新 last_round_at → 自动超时判不健康, 无需单独盯 last_error。
         """
         try:
+            if not preferences.get_full_market_discovery_enabled():
+                return False
             if not preferences.get_minute_refresh_enabled():
                 return False
         except Exception:  # noqa: BLE001 — 偏好文件异常按不健康处理
@@ -392,12 +396,15 @@ class MinuteRefreshService:
         import contextlib
 
         enabled = False
+        full_market_enabled = True
         with contextlib.suppress(Exception):
             enabled = preferences.get_minute_refresh_enabled()
+            full_market_enabled = preferences.get_full_market_discovery_enabled()
         running = self._thread is not None and self._thread.is_alive()
         gate = self._gate_reason()
         return {
             "enabled": enabled,
+            "full_market_discovery_enabled": full_market_enabled,
             "running": running,
             "healthy": self.is_healthy(),
             "provider": self.active_provider(),

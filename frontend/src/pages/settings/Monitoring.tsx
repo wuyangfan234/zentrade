@@ -41,6 +41,8 @@ export function SettingsMonitoringPanel({ highlight }: { highlight?: string } = 
   const { data: intervalData } = useQuoteInterval()
   const updateInterval = useUpdateQuoteInterval()
   const toggleQuote = useToggleRealtimeQuotes()
+  // 全市场扫描总开关 (默认开启; 关闭时全市场行情轮询与全量分钟同步自动停用)
+  const fullMarketEnabled = prefs?.full_market_discovery_enabled ?? true
   // 实时模式以 quote_status 为准 (数据源无关): full_market=全市场 / none=不可用
   const realtimeEnabled = prefs?.realtime_quotes_enabled ?? false
   // 分时图实时刷新间隔 (秒), 与后端 [3,60] clamp 对齐; 默认 6
@@ -135,14 +137,15 @@ export function SettingsMonitoringPanel({ highlight }: { highlight?: string } = 
           <ToggleRow
             label="实时行情"
             desc={
-              isPaused ? '数据同步运行中，已临时暂停'
+              !fullMarketEnabled ? '全市场扫描已关闭（可在系统设置开启）'
+              : isPaused ? '数据同步运行中，已临时暂停'
               : isRunning && isTrading ? '运行中'
               : isRunning ? '运行中（非交易时段）'
               : '已关闭'
             }
-            checked={realtimeEnabled}
+            checked={fullMarketEnabled && realtimeEnabled}
             onChange={handleToggleQuote}
-            disabled={isPaused}
+            disabled={isPaused || !fullMarketEnabled}
           />
 
           <div className="mt-3 pt-3 border-t border-border">
@@ -237,14 +240,15 @@ export function SettingsMonitoringPanel({ highlight }: { highlight?: string } = 
           <ToggleRow
             label="全量分钟同步"
             desc={
-              !hasFullMinuteCap ? '当前数据源不提供全量分钟能力'
+              !fullMarketEnabled ? '全市场扫描已关闭（可在系统设置开启）'
+              : !hasFullMinuteCap ? '当前数据源不提供全量分钟能力'
               : rs?.repair_only ? `服务运行中 · ${rs?.provider ?? '自定义源'} 不支持增量 · 按 ≥60 秒批量同步`
               : rs?.running ? (rs?.in_trading_hours ? '服务运行中' : '运行中 · 非交易时段暂停')
               : '已关闭'
             }
-            checked={prefs?.minute_refresh_enabled ?? false}
+            checked={fullMarketEnabled && (prefs?.minute_refresh_enabled ?? false)}
             onChange={(v) => save({ minute_refresh_enabled: v })}
-            disabled={!hasFullMinuteCap}
+            disabled={!hasFullMinuteCap || !fullMarketEnabled}
           />
           <div className="mt-3 pt-3 border-t border-border">
             <div className="flex items-center justify-between gap-4 py-1">

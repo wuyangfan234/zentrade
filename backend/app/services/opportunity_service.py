@@ -452,7 +452,10 @@ class OpportunityService:
         logger.info('daily opportunity scan %s: scanned=%d cards=%d watch=%d gate=%s',as_of,result.scanned,len(result.cards),len(result.watch),result.gate)
         return result
 
-    def _load_universe(self, params: dict, as_of: date | None = None):
+    def _load_universe(self, params: dict, as_of: date | None = None, *, full_market: bool | None = None):
+        from app.services import preferences as _prefs
+        if full_market is None:
+            full_market = _prefs.get_full_market_discovery_enabled()
         end=as_of or us_clock.today()
         start=end-timedelta(days=400)
         inst=self.repo.get_instruments()
@@ -465,6 +468,15 @@ class OpportunityService:
                 inst = inst.filter(~pl.col(flag).fill_null(False))
         symbols=inst['symbol'].to_list()
         from app.services.index_const import CORE_INDEX_SYMBOLS
+        if not full_market:
+            from app.services import decision_scan_job
+            focus = set(decision_scan_job._watchlist())
+            if self.ledger is not None:
+                focus |= {p.symbol for p in self.ledger.open_positions}
+            listed_set = set(symbols)
+            symbols = [s for s in symbols if s in focus]
+        else:
+            listed_set = set(symbols)
         symbols=list(dict.fromkeys(symbols+list(CORE_INDEX_SYMBOLS)))
         all_bars=self.repo.get_daily_batch(symbols,start,end)
         if all_bars.is_empty(): return {},pl.DataFrame()
@@ -478,7 +490,7 @@ class OpportunityService:
             sym=frame['symbol'][0]
             if sym in liquid and sym not in CORE_INDEX_SYMBOLS and frame.height>=u['min_history_days']:
                 universe[sym]=frame
-        self.universe_diag = self._watchlist_pool_diag(all_bars, universe, set(symbols), u, end)
+        self.universe_diag = self._watchlist_pool_diag(all_bars, universe, listed_set | set(CORE_INDEX_SYMBOLS), u, end)
         return universe,all_bars.filter(pl.col('symbol')=='SPY')
 
     universe_diag: dict | None = None
