@@ -190,7 +190,7 @@ function DisclaimerStep({ onNext }: { onNext: () => void }) {
       <div className="mt-6 flex items-center justify-center">
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl btn-primary text-sm font-semibold transition-all"
         >
           我已了解，继续
           <ArrowRight className="h-4 w-4" />
@@ -249,7 +249,7 @@ function WelcomeStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => voi
       <div className="mt-8 flex items-center justify-center gap-3">
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-11 rounded-xl btn-primary text-sm font-semibold transition-all"
         >
           开始配置
           <ArrowRight className="h-4 w-4" />
@@ -455,7 +455,7 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
               <button
                 type="submit"
                 disabled={!val.trim() || saveKey.isPending}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-50 transition-colors"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium disabled:opacity-50 transition-colors"
               >
                 {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                 {pending ? '验证中…' : '验证并保存'}
@@ -498,7 +498,7 @@ function DataSourceStep({ onNext, onBack }: { onNext: () => void; onBack: () => 
         </button>
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl btn-primary text-sm font-semibold transition-colors"
         >
           下一步
           <ArrowRight className="h-4 w-4" />
@@ -667,7 +667,7 @@ function ResultStep({ onNext, onBack }: { onNext: () => void; onBack: () => void
         </button>
         <button
           onClick={onNext}
-          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold hover:bg-accent/90 transition-colors"
+          className="inline-flex items-center gap-2 px-5 h-9 rounded-xl btn-primary text-sm font-semibold transition-colors"
         >
           下一步
           <ArrowRight className="h-4 w-4" />
@@ -799,7 +799,7 @@ function FinishStep({ onNext, onBack, pending }: { onNext: () => void; onBack: (
         <button
           onClick={onNext}
           disabled={pending}
-          className="inline-flex items-center gap-2 px-6 h-10 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold shadow-lg shadow-accent/20 hover:bg-accent/90 hover:shadow-accent/30 disabled:opacity-60 transition-all"
+          className="inline-flex items-center gap-2 px-6 h-10 rounded-xl btn-primary text-sm font-semibold disabled:opacity-60 transition-all"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
           {pending ? '正在进入…' : '进入面板'}

@@ -1022,7 +1022,7 @@ function ConfirmDialog({ open, title, message, confirmText, danger, pending, onC
                 disabled={pending}
                 className={cn(
                   'px-3 py-1.5 rounded-btn text-xs font-medium disabled:opacity-50 cursor-pointer',
-                  danger ? 'bg-danger text-white' : 'bg-accent dark:bg-blue-700 text-white',
+                  danger ? 'bg-danger text-white' : 'btn-primary',
                 )}
               >
                 {confirmText ?? '确定'}
@@ -1094,7 +1094,7 @@ function MonitorExtConfigDialog({ open, fields, onClose }: {
             </div>
             <div className="mt-5 flex justify-end gap-2">
               <button onClick={onClose} className="px-3 py-1.5 rounded-btn text-xs text-secondary hover:text-foreground transition-colors cursor-pointer">取消</button>
-              <button onClick={handleSave} className="px-3 py-1.5 rounded-btn text-xs font-medium bg-accent dark:bg-blue-700 text-white cursor-pointer">保存</button>
+              <button onClick={handleSave} className="px-3 py-1.5 rounded-btn text-xs font-medium btn-primary cursor-pointer">保存</button>
             </div>
           </motion.div>
         </motion.div>

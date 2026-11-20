@@ -504,7 +504,7 @@ export function RuleEditor({ rule, preset, simple, onClose, onSaved }: Props) {
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-1.5 rounded-btn bg-elevated text-secondary text-xs cursor-pointer">取消</button>
-          <button onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn bg-accent dark:bg-blue-700 text-white text-xs font-medium disabled:opacity-50 cursor-pointer">
+          <button onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer">
             <Save className="h-3.5 w-3.5" />加入监控
           </button>
         </div>
@@ -1190,7 +1190,7 @@ export function RuleEditor({ rule, preset, simple, onClose, onSaved }: Props) {
 
       <div className="flex justify-end gap-2">
         <button onClick={onClose} className="px-4 py-1.5 rounded-btn bg-elevated text-secondary text-xs cursor-pointer">取消</button>
-        <button onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn bg-accent dark:bg-blue-700 text-white text-xs font-medium disabled:opacity-50 cursor-pointer">
+        <button onClick={() => save.mutate()} disabled={save.isPending} className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer">
           <Save className="h-3.5 w-3.5" />保存
         </button>
       </div>

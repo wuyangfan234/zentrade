@@ -488,7 +488,7 @@ export function SettingsAIPanel({ highlight }: { highlight?: string } = {}) {
       </div>
 
       <div className="flex gap-2">
-        <button onClick={() => save.mutate()} disabled={save.isPending || !canSave} className="flex-1 h-10 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all">
+        <button onClick={() => save.mutate()} disabled={save.isPending || !canSave} className="flex-1 h-10 rounded-xl btn-primary text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40 transition-all">
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
           {save.isPending ? '保存中' : saved ? '已保存' : '保存配置'}
         </button>
@@ -596,7 +596,7 @@ export function AiModelLibraryCard() {
     <Card icon={Library} title="模型库" anchor="ai-models"
       right={editing === null && (
         <button type="button" onClick={() => startEdit()} data-ai-model-add
-          className="inline-flex h-7 items-center gap-1 rounded-btn bg-accent dark:bg-blue-700 px-2.5 text-[11px] font-medium text-white hover:opacity-90">
+          className="inline-flex h-7 items-center gap-1 rounded-btn btn-primary px-2.5 text-[11px] font-medium">
           <Plus className="h-3.5 w-3.5" />添加模型
         </button>
       )}>
@@ -674,7 +674,7 @@ export function AiModelLibraryCard() {
           </div>
           <div className="mt-2 flex items-center gap-3">
             <button type="button" onClick={() => save.mutate()} disabled={save.isPending || !form.name.trim() || !form.model.trim()}
-              className="h-7 rounded-btn bg-accent dark:bg-blue-700 px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+              className="h-7 rounded-btn btn-primary px-3 text-[11px] font-medium disabled:opacity-50">
               {save.isPending ? '保存中…' : '保存'}
             </button>
             {editingEntry?.has_api_key && (
@@ -807,7 +807,7 @@ function AiTaskRowEditor({ row, models, onSaved }: { row: AiTaskRow; models: AiM
       </div>
       <div className="mt-2 flex items-center gap-3">
         <button type="button" onClick={() => save.mutate()} disabled={save.isPending}
-          className="h-7 rounded-btn bg-accent dark:bg-blue-700 px-3 text-[11px] font-medium text-white hover:opacity-90 disabled:opacity-50">
+          className="h-7 rounded-btn btn-primary px-3 text-[11px] font-medium disabled:opacity-50">
           {save.isPending ? '保存中…' : '保存'}
         </button>
         {row.override.has_api_key && ref === CUSTOM_REF && (

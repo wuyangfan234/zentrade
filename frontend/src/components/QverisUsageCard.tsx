@@ -67,7 +67,7 @@ export function QverisUsageCard() {
         <input value={limitInput} onChange={e => setLimitInput(e.target.value.replace(/[^0-9.]/g, ''))} placeholder={String(u.daily_limit)}
           className="h-7 w-20 rounded border border-border bg-transparent px-2 tabular-nums text-[11px]" />
         <button type="submit" disabled={!limitInput || setLimit.isPending}
-          className="h-7 rounded bg-accent dark:bg-blue-700 px-2.5 font-medium text-white disabled:opacity-40">保存</button>
+          className="h-7 rounded btn-primary px-2.5 font-medium disabled:opacity-40">保存</button>
         <span className="text-muted">超出后当日不再发起付费查询 · 缓存命中不计</span>
       </form>
       {setLimit.error && <div className="text-[11px] text-danger">{(setLimit.error as Error).message}</div>}

@@ -171,7 +171,7 @@ export function DefaultStrategyParamsDialog({ show, onClose }: Props) {
         <div className="flex items-center gap-2">
           <button onClick={onClose} className="px-3 py-1.5 rounded-btn text-xs text-secondary border border-border hover:text-foreground transition-colors cursor-pointer">取消</button>
           <button onClick={save}
-            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-btn text-xs font-medium text-white bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 hover:bg-accent/90 transition-colors cursor-pointer">
+            className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-btn text-xs font-medium btn-primary transition-colors cursor-pointer">
             <Save className="h-3 w-3" />
             保存
           </button>

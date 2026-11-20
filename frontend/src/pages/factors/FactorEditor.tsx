@@ -443,7 +443,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
             type="button"
             onClick={() => runTrial.mutate(formula)}
             disabled={!canTrial}
-            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn btn-primary px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
             title={validationOk ? '最近 40 个交易日 · IC' : '需先校验'}
           >
             <Play className="h-3.5 w-3.5" />
@@ -632,7 +632,7 @@ export function FactorEditor({ editId = '' }: { editId?: string }) {
                 type="button"
                 onClick={() => save.mutate()}
                 disabled={!saveLabel.trim() || save.isPending}
-                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn btn-primary px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-3.5 w-3.5" />
                 {saveButtonText}

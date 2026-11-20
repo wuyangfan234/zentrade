@@ -480,7 +480,7 @@ function PluginKeyConfig({ plugin, keyHint, keyPlaceholder, envLabel }: {
         <button
           type="submit"
           disabled={save.isPending || (!keyInput.trim() && !saved)}
-          className="w-full h-9 rounded-xl bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-sm font-semibold flex items-center justify-center gap-2 hover:bg-accent/90 disabled:opacity-40 transition-all"
+          className="w-full h-9 rounded-xl btn-primary text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40 transition-all"
         >
           {save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : <Save className="h-4 w-4" />}
           {save.isPending ? '验证中' : saved ? '已保存' : '保存并检测'}

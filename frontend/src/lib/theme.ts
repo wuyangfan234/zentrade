@@ -1,9 +1,9 @@
-// 主题管理 — 暗色(默认) / 亮色切换
+// 主题管理 — 亮色(默认) / 暗色切换
 //
 // 机制:
-//   - 状态存 localStorage('tf-theme'), 默认 dark (保持老用户体验不变)
+//   - 状态存 localStorage('tf-theme'), 按设备记住手动选择; 没选过 (或读不到) = 亮色
 //   - 生效方式: html.dark class (index.css 的 CSS variables + Tailwind darkMode:class)
-//   - index.html 里有预渲染内联脚本, 首屏前就设好 class, 避免闪烁 (FOUC)
+//   - index.html 里有预渲染内联脚本, 首屏前就设好 class, 避免闪烁 (FOUC); 与 getTheme() 同口径
 //   - UI token (bg-surface/text-foreground 等) 自动跟随;
 //     图表画布不吃 CSS 变量, 统一走 useChartTheme() 取调色板
 import { useEffect, useState } from 'react'
@@ -15,9 +15,9 @@ export type Theme = 'dark' | 'light'
 
 export function getTheme(): Theme {
   try {
-    return localStorage.getItem(KEY) === 'light' ? 'light' : 'dark'
+    return localStorage.getItem(KEY) === 'dark' ? 'dark' : 'light'
   } catch {
-    return 'dark'
+    return 'light'
   }
 }
 
@@ -96,19 +96,20 @@ const DARK: ChartTheme = {
   fillSubtle: 'rgba(255,255,255,0.04)',
 }
 
+// 亮色: 与 index.css :root 同一组冷灰中性色 (墨黑 #111214 / 边框 #E6E7E8 / 浅灰 #F4F5F6)
 const LIGHT: ChartTheme = {
-  text: '#71717A',
-  textStrong: '#27272A',
-  grid: 'rgba(0,0,0,0.06)',
-  border: '#E4E4E7',
-  crosshair: 'rgba(0,0,0,0.3)',
-  crosshairLabelBg: '#52525B',
-  tooltipBg: 'rgba(255,255,255,0.97)',
-  tooltipBorder: 'rgba(0,0,0,0.1)',
-  tooltipText: '#27272A',
-  infoBarBg: 'rgba(244,244,245,0.85)',
-  zoomFill: 'rgba(0,0,0,0.06)',
-  fillSubtle: 'rgba(0,0,0,0.04)',
+  text: '#686E73',
+  textStrong: '#1F2328',
+  grid: 'rgba(17,18,20,0.06)',
+  border: '#E6E7E8',
+  crosshair: 'rgba(17,18,20,0.28)',
+  crosshairLabelBg: '#545960',
+  tooltipBg: '#FFFFFF',
+  tooltipBorder: '#E8E9EA',
+  tooltipText: '#1F2328',
+  infoBarBg: 'rgba(244,245,246,0.9)',
+  zoomFill: 'rgba(17,18,20,0.06)',
+  fillSubtle: 'rgba(17,18,20,0.04)',
 }
 
 export function chartTheme(theme: Theme): ChartTheme {

@@ -148,7 +148,7 @@ export function StockMultiDayIntradayChart({
               <button
                 type="button"
                 onClick={() => syncMinute.mutate()}
-                className="inline-flex items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90"
+                className="inline-flex items-center gap-1.5 rounded-btn btn-primary px-3 py-1.5 text-xs font-medium"
               >
                 <Download className="h-3.5 w-3.5" />
                 获取近 {days} 日

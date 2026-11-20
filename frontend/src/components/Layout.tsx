@@ -148,8 +148,10 @@ function MonitorBadge({ active }: { active: boolean }) {
     try { return localStorage.getItem('monitor_badge_enabled') !== '0' } catch { return true }
   })()
   if (active || unread <= 0 || !badgeEnabled) return null
+  // 警示计数: 红点 + 红色数字 (不用实底胶囊); 红点闪烁保留提醒感
   return (
-    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[11px] font-bold text-white animate-pulse">
+    <span data-monitor-badge className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold leading-none tabular-nums text-danger">
+      <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-danger animate-pulse" />
       {unread > 99 ? '99+' : unread}
     </span>
   )
@@ -805,17 +807,11 @@ export function Layout() {
                     className={cn(
                       'group relative flex w-full items-center gap-3 rounded-btn px-3 py-2 text-sm transition-all duration-150 ease-smooth',
                       location.pathname === '/watchlist'
-                        ? 'bg-elevated text-foreground font-medium'
+                        ? 'bg-elevated text-foreground font-semibold'
                         : 'text-foreground/75 hover:bg-elevated/70 hover:text-foreground',
                     )}
                   >
-                    <span
-                      className={cn(
-                        'pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 w-[2.5px] rounded-full bg-accent transition-opacity duration-150',
-                        location.pathname === '/watchlist' ? 'opacity-100 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'opacity-0',
-                      )}
-                    />
-                    <Icon className={cn('h-4 w-4 shrink-0 transition-colors', location.pathname === '/watchlist' ? 'text-accent' : 'text-foreground/60 group-hover:text-foreground/85')} />
+                    <Icon className={cn('h-4 w-4 shrink-0 transition-colors', location.pathname === '/watchlist' ? 'text-foreground' : 'text-foreground/60 group-hover:text-foreground/85')} />
                     <span className="flex-1 text-left">{label}</span>
                     {watchlistNavExpanded
                       ? <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" />
@@ -832,21 +828,15 @@ export function Layout() {
                         'group relative flex items-center rounded-btn text-sm transition-all duration-150 ease-smooth',
                         railMode ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2',
                         isActive
-                          ? 'bg-elevated text-foreground font-medium'
+                          ? 'bg-elevated text-foreground font-semibold'
                           : 'text-foreground/75 hover:bg-elevated/70 hover:text-foreground',
                       )
                     }
                   >
                     {({ isActive }) => (
                       <>
-                        {/* active 左侧 accent 竖条指示 */}
-                        <span
-                          className={cn(
-                            'pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 w-[2.5px] rounded-full bg-accent transition-opacity duration-150',
-                            isActive ? 'opacity-100 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'opacity-0',
-                          )}
-                        />
-                        <Icon className={cn('h-4 w-4 shrink-0 transition-colors', isActive ? 'text-accent' : 'text-foreground/60 group-hover:text-foreground/85')} />
+                        {/* 当前项 = 浅灰底 + 加粗 (不用蓝色竖条) */}
+                        <Icon className={cn('h-4 w-4 shrink-0 transition-colors', isActive ? 'text-foreground' : 'text-foreground/60 group-hover:text-foreground/85')} />
                         {!railMode && <span className="flex-1">{label}</span>}
                         {!railMode && badge && (
                           <span className="ml-auto inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-1.5 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400 shrink-0">
@@ -875,7 +865,7 @@ export function Layout() {
                       className={({ isActive }) => cn(
                         'flex items-center gap-2 rounded-btn py-1.5 pl-9 pr-3 text-[12px] transition-colors duration-150 ease-smooth',
                         isActive && !location.search
-                          ? 'text-accent font-medium'
+                          ? 'bg-elevated text-foreground font-medium'
                           : 'text-foreground/60 hover:text-foreground hover:bg-elevated/50',
                       )}
                     >
@@ -902,7 +892,7 @@ export function Layout() {
                           className={cn(
                             'flex items-center gap-2 rounded-btn py-1.5 pl-9 pr-3 text-[12px] transition-colors duration-150 ease-smooth',
                             isGroupActive
-                              ? 'text-accent font-medium'
+                              ? 'bg-elevated text-foreground font-medium'
                               : 'text-foreground/60 hover:text-foreground hover:bg-elevated/50',
                           )}
                         >
@@ -1053,20 +1043,14 @@ export function Layout() {
                   'group relative flex items-center rounded-btn text-sm transition-all duration-150 ease-smooth',
                   railMode ? 'justify-center px-0 py-2' : 'flex-1 gap-3 px-3 py-2',
                   isActive
-                    ? 'bg-elevated text-foreground font-medium'
+                    ? 'bg-elevated text-foreground font-semibold'
                     : 'text-foreground/75 hover:bg-elevated/70 hover:text-foreground',
                 )
               }
             >
               {({ isActive }) => (
                 <>
-                  <span
-                    className={cn(
-                      'pointer-events-none absolute left-0 top-1/2 h-4 -translate-y-1/2 w-[2.5px] rounded-full bg-accent transition-opacity duration-150',
-                      isActive ? 'opacity-100 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'opacity-0',
-                    )}
-                  />
-                  <Settings className={cn('h-4 w-4 shrink-0 transition-colors', isActive ? 'text-accent' : 'text-foreground/60 group-hover:text-foreground/85')} />
+                  <Settings className={cn('h-4 w-4 shrink-0 transition-colors', isActive ? 'text-foreground' : 'text-foreground/60 group-hover:text-foreground/85')} />
                   {!railMode && <span>设置</span>}
                   {!railMode && version && (
                     <span title={versionData?.revision} className="ml-auto tabular-nums text-[11px] text-muted select-none shrink-0">
@@ -1156,7 +1140,7 @@ export function Layout() {
             </p>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setMiningQueuedWarning(null)} className="h-8 rounded-btn border border-border px-3 text-xs text-secondary hover:bg-elevated">取消</button>
-              <button type="button" onClick={() => { setMiningQueuedWarning(null); void doEnableRealtime() }} className="h-8 rounded-btn bg-accent dark:bg-blue-700 px-3 text-xs font-semibold text-white hover:opacity-90">仍要开启</button>
+              <button type="button" onClick={() => { setMiningQueuedWarning(null); void doEnableRealtime() }} className="h-8 rounded-btn btn-primary px-3 text-xs font-semibold">仍要开启</button>
             </div>
           </div>
         </div>

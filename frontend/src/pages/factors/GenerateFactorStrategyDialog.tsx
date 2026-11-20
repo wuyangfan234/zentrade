@@ -146,7 +146,7 @@ export function GenerateFactorStrategyDialog({
           type="button"
           onClick={() => generate.mutate()}
           disabled={generate.isPending || !name.trim() || !direction}
-          className="inline-flex items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-btn btn-primary px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Sparkles className="h-3.5 w-3.5" />
           {generate.isPending ? '生成中' : '生成策略'}

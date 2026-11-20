@@ -2987,7 +2987,7 @@ export function StrategyBacktest({ loadCandidate, onLoadConsumed, linkTarget, on
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
-                className="rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent/90"
+                className="rounded-btn btn-primary px-4 py-1.5 text-xs font-medium transition-colors"
               >
                 完成
               </button>

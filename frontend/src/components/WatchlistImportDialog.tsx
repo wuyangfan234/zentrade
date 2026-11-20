@@ -458,7 +458,7 @@ export function WatchlistImportDialog({
                     type="button"
                     disabled={busy || !codesText.trim()}
                     onClick={() => void runCodes()}
-                    className="h-7 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
+                    className="h-7 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 btn-primary disabled:opacity-40"
                   >
                     {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Keyboard className="h-3.5 w-3.5" />}
                     解析
@@ -592,7 +592,7 @@ export function WatchlistImportDialog({
                   onClick={() => void createGroup()}
                   disabled={creatingGroup || !newGroupName.trim()}
                   title="创建分组，并作为本次导入的目标分组"
-                  className="h-8 shrink-0 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
+                  className="h-8 shrink-0 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 btn-primary disabled:opacity-40"
                 >
                   {creatingGroup ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                   创建
@@ -633,7 +633,7 @@ export function WatchlistImportDialog({
             type="button"
             disabled={selected.size === 0 || batchAdd.isPending || busy}
             onClick={() => void confirmAdd()}
-            className="h-8 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 disabled:opacity-40"
+            className="h-8 px-3 rounded-btn text-xs inline-flex items-center gap-1.5 btn-primary disabled:opacity-40"
           >
             {batchAdd.isPending ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

@@ -413,7 +413,7 @@ export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) 
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-btn text-xs
-                           bg-accent text-white hover:bg-accent/90 transition-colors"
+                           btn-primary transition-colors"
               >
                 <Download className="h-3.5 w-3.5" />
                 {updateInfo.source === 'version_file' ? '查看更新日志' : '查看新版本'}

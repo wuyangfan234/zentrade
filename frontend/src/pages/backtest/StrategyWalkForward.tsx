@@ -188,7 +188,7 @@ export function StrategyWalkForward() {
             <Square className="h-3.5 w-3.5" /> 停止
           </button>
         ) : (
-          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 py-2 text-xs font-medium text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed">
+          <button onClick={onRun} disabled={!canRun} className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn btn-primary px-3 py-2 text-xs font-medium disabled:opacity-40 disabled:cursor-not-allowed">
             <Play className="h-3.5 w-3.5" /> 开始步进优化
           </button>
         )}

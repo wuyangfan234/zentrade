@@ -494,7 +494,7 @@ export function StrategyPoolDialog({ pool, onConfirm, onClose, onDeleted }: Prop
               </button>
               <button
                 onClick={() => { onConfirm(draftPool); onClose() }}
-                className="px-3 py-1 text-xs rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white hover:bg-accent/90 transition-colors cursor-pointer"
+                className="px-3 py-1 text-xs rounded-btn btn-primary transition-colors cursor-pointer"
               >
                 确定
               </button>
