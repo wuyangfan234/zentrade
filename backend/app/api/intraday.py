@@ -93,6 +93,50 @@ def status(request: Request):
             "quote_age_ms": None, "is_trading_hours": False, "last_fetch_ms": None}
 
 
+def _fallback_index_quotes_from_intel(request: Request, symbols: list[str] | None = None) -> list[dict]:
+    """全市场实时轮询关闭时, 优先读盘面情报当日已缓存的指数 ETF 实时报价 (不额外出网)。"""
+    repo = getattr(request.app.state, "repo", None)
+    if not repo:
+        return []
+    try:
+        from app.market_clock import us_clock
+        from app.services import intel_panel
+
+        tape = intel_panel.tape_view(repo.store.data_dir, us_clock.now())
+        indexes = tape.get("indexes") or []
+    except Exception:
+        return []
+    wanted = set(symbols) if symbols else None
+    out: list[dict] = []
+    for item in indexes:
+        if not isinstance(item, dict) or not item.get("live"):
+            continue
+        sym = item.get("symbol")
+        if wanted is not None and sym not in wanted:
+            continue
+        price = item.get("price")
+        chg_pct = item.get("chg_pct")
+        if price is None:
+            continue
+        prev_close = None
+        chg_amt = None
+        if isinstance(chg_pct, (int, float)) and chg_pct != -100:
+            prev_close = float(price) / (1.0 + float(chg_pct) / 100.0)
+            chg_amt = float(price) - prev_close
+        out.append({
+            "symbol": sym,
+            "name": item.get("name"),
+            "date": item.get("day"),
+            "last_price": float(price),
+            "close": float(price),
+            "prev_close": prev_close,
+            "change_amount": chg_amt,
+            "change_pct": float(chg_pct) if chg_pct is not None else None,
+            "source": "intel",
+        })
+    return out
+
+
 @router.get("/indices")
 def index_quotes(
     request: Request,
@@ -102,11 +146,17 @@ def index_quotes(
     symbol_list = [s.strip() for s in symbols.split(",") if s.strip()] if symbols else None
     qs = _get_quote_service(request)
     if not qs:
+        rows = _fallback_index_quotes_from_intel(request, symbol_list)
+        if rows:
+            return {"rows": rows, "count": len(rows), "source": "intel"}
         rows = _fallback_index_quotes_from_daily(request, symbol_list)
         return {"rows": rows, "count": len(rows), "source": "index_daily"}
     df = qs.get_index_quotes(symbol_list)
     rows = df.to_dicts() if not df.is_empty() else []
     if not rows:
+        rows = _fallback_index_quotes_from_intel(request, symbol_list)
+        if rows:
+            return {"rows": rows, "count": len(rows), "source": "intel"}
         rows = _fallback_index_quotes_from_daily(request, symbol_list)
         return {"rows": rows, "count": len(rows), "source": "index_daily"}
     return {"rows": rows, "count": len(rows), "source": "realtime"}

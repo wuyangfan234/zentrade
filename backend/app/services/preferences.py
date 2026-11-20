@@ -80,6 +80,19 @@ def get_realtime_quotes_enabled() -> bool:
     return load().get("realtime_quotes_enabled", False)
 
 
+def get_full_market_discovery_enabled() -> bool:
+    """全市场盘中实时扫描、看盘遗留与盘后全市场发现总开关。默认 True。"""
+    raw = load().get("full_market_discovery_enabled", True)
+    return bool(raw) if isinstance(raw, bool) else True
+
+
+def set_full_market_discovery_enabled(enabled: bool) -> bool:
+    """保存全市场盘中实时扫描与发现总开关。"""
+    value = bool(enabled)
+    save({"full_market_discovery_enabled": value})
+    return value
+
+
 def get_news_translation_enabled() -> bool:
     raw = load().get("news_translation_enabled", True)
     return raw if isinstance(raw, bool) else True

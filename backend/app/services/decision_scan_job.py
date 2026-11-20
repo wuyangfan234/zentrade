@@ -64,11 +64,19 @@ def _watchlist() -> set[str]:
 DESK_DISPLAY_LIMIT = 0
 
 
-def strategy_picks(repo, as_of: date, universe: set[str]) -> tuple[dict[str, list[str]], dict[str, float | None], dict]:
+def strategy_picks(
+    repo,
+    as_of: date,
+    universe: set[str],
+    *,
+    watchlist_only: bool = False,
+) -> tuple[dict[str, list[str]], dict[str, float | None], dict]:
     """返回 ({strategy_id: [symbols…]}, {strategy_id: stop_loss}, meta)。
 
     meta["hits"][sid] = 池内全部命中 [{symbol, score, rank}] (按策略自身评分排序, rank 从 1 起) —
     供自选独立选股与逐票诊断使用; picks 仍是每策略池内前 PICKS_PER_STRATEGY 名。
+    watchlist_only=True 时 (关闭全市场发现): 仅在 universe (+SPY) 子集上运行非截面策略,
+    自选股的信号口径与全市场一致, 但不扫描全市场候选。
     """
     state = _app_state()
     engine = getattr(state, "strategy_engine", None) if state is not None else None
@@ -78,14 +86,18 @@ def strategy_picks(repo, as_of: date, universe: set[str]) -> tuple[dict[str, lis
     from app.strategy import config as strategy_config
     svc = ScreenerService(repo, asset_type="stock")
     ids = [m["id"] for m in engine.list_strategies()
-           if not m.get("research_only") and "stock" in m.get("asset_types", ["stock"]) and "1d" in m.get("timeframes", ["1d"])]
+           if not m.get("research_only") and "stock" in m.get("asset_types", ["stock"]) and "1d" in m.get("timeframes", ["1d"])
+           and not (watchlist_only and m.get("cross_sectional"))]
     data_dir = repo.store.data_dir
     overrides_map = {sid: strategy_config.load_override(data_dir, sid) or {} for sid in ids}
     run_overrides = {sid: {**ov, "display_limit": DESK_DISPLAY_LIMIT} for sid, ov in overrides_map.items()}
     t0 = time.perf_counter()
-    context = svc.build_strategy_context(engine, as_of, ids, timeframe="1d", overrides_map=run_overrides)
+    ctx_symbols = (set(universe) | {"SPY"}) if watchlist_only else None
+    context = svc.build_strategy_context(
+        engine, as_of, ids, timeframe="1d", overrides_map=run_overrides, symbols=ctx_symbols,
+    )
     results = engine.run_all(context, overrides_map=run_overrides, strategy_ids=ids)
-    _rerun_long_memory(svc, engine, as_of, context, results, run_overrides, ids)
+    _rerun_long_memory(svc, engine, as_of, context, results, run_overrides, ids, watchlist_only=watchlist_only)
     picks, stops, hits, sell_hits = {}, {}, {}, {}
     from app.services import watchlist_v4 as wv
     for sid, res in results.items():
@@ -99,7 +111,7 @@ def strategy_picks(repo, as_of: date, universe: set[str]) -> tuple[dict[str, lis
             sell_hits[sid] = [{"symbol": h["symbol"], "rank": None} for h in (res.exit_signal_hits or [])
                               if h.get("symbol") in universe]
     return picks, stops, {"strategies": len(ids), "elapsed_s": round(time.perf_counter() - t0, 1), "hits": hits,
-                          "sell_hits": sell_hits}
+                          "sell_hits": sell_hits, "watchlist_only": watchlist_only}
 
 
 # 结构状态从序列开头累积的策略: 共享窗口 (~212 根) 截断后漏报/误报 (SMC CHoCH 召回 61%, 400 根 97%,
@@ -107,7 +119,17 @@ def strategy_picks(repo, as_of: date, universe: set[str]) -> tuple[dict[str, lis
 LONG_MEMORY_BARS = {"tv_smc_structure": 420}
 
 
-def _rerun_long_memory(svc, engine, as_of: date, context, results: dict, run_overrides: dict, ids: list[str]) -> None:
+def _rerun_long_memory(
+    svc,
+    engine,
+    as_of: date,
+    context,
+    results: dict,
+    run_overrides: dict,
+    ids: list[str],
+    *,
+    watchlist_only: bool = False,
+) -> None:
     from dataclasses import replace
 
     import polars as pl
@@ -118,7 +140,11 @@ def _rerun_long_memory(svc, engine, as_of: date, context, results: dict, run_ove
     if not wl:
         return
     try:
-        hist = svc._load_enriched_history(as_of, max(LONG_MEMORY_BARS[s] for s in todo))
+        max_bars = max(LONG_MEMORY_BARS[s] for s in todo)
+        if watchlist_only:
+            hist = svc._load_enriched_history(as_of, max_bars, symbols=set(wl))
+        else:
+            hist = svc._load_enriched_history(as_of, max_bars)
         if hist is None or hist.is_empty():
             return
         hist = hist.filter(pl.col("symbol").is_in(sorted(wl)))
@@ -262,12 +288,17 @@ def _save_weights(data_dir: Path, as_of: date, weights: dict[str, dict]) -> None
 
 def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: dict, excluded: set[str],
         risk_used_pct: float):
+    from app.services import preferences as _prefs
     repo = opp_svc.repo
     data_dir = Path(repo.store.data_dir)
+    full_market = _prefs.get_full_market_discovery_enabled()
     evaluation = strategy_evaluation.load_evaluation(data_dir)
     # 自选名单在扫描这一刻读取并落盘 (名单会动态增删; 卡上冻结的是扫描时的归属)。
     watchlist = _watchlist()
-    picks, stops, meta = strategy_picks(repo, as_of, set(frames))
+    if full_market:
+        picks, stops, meta = strategy_picks(repo, as_of, set(frames))
+    else:
+        picks, stops, meta = strategy_picks(repo, as_of, set(frames), watchlist_only=True)
     stops_by_symbol = _phantom_4h_picks(repo, as_of, frames, picks, meta, include=watchlist)
     hits = meta.pop("hits", {}) or {}
     sell_hits = meta.pop("sell_hits", {}) or {}
@@ -301,10 +332,15 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
                         "evaluation_window": (evaluation or {}).get("window"), "weights_refreshed": due,
                         "generated_at": _now_iso(), "watchlist_snapshot": sorted(watchlist),
                         "watchlist_lane": {sid: len(v) for sid, v in lane.items()},
-                        "source_hits": {sid: len(v) for sid, v in hits.items()}})
+                        "source_hits": {sid: len(v) for sid, v in hits.items()},
+                        "full_market_discovery_enabled": full_market,
+                        "scope": "full_market" if full_market else "watchlist_only"})
     _news_shadow_snapshot(data_dir, as_of, out)
-    _shadow_forward_snapshot(data_dir, as_of, frames=frames, hits=hits, stops=stops, stops_by_symbol=stops_by_symbol,
-                             out=out, s1s2=s1s2)
+    if full_market:
+        _shadow_forward_snapshot(data_dir, as_of, frames=frames, hits=hits, stops=stops, stops_by_symbol=stops_by_symbol,
+                                 out=out, s1s2=s1s2)
+    else:
+        out.summary["shadow_forward"] = {"skipped": "watchlist_only"}
     _watchlist_v4_snapshot(data_dir, as_of, watchlist=watchlist, frames=frames, hits=hits, stops=stops,
                            stops_by_symbol=stops_by_symbol, s1s2=s1s2, out=out, sell_hits=sell_hits, h4_state=h4_state,
                            repo=repo)

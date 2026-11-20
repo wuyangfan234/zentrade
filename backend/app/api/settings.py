@@ -669,6 +669,7 @@ def get_preferences() -> dict:
     """返回用户偏好设置。"""
     from app.services import preferences, push_channels
     return {
+        "full_market_discovery_enabled": preferences.get_full_market_discovery_enabled(),
         "realtime_quotes_enabled": preferences.get_realtime_quotes_enabled(),
         "realtime_allowed": _realtime_allowed(),
         "watchlist_groups_in_nav": preferences.get_watchlist_groups_in_nav(),
@@ -1113,9 +1114,35 @@ class RealtimeQuotesPrefs(BaseModel):
     realtime_quotes_enabled: bool
 
 
+class FullMarketDiscoveryPrefs(BaseModel):
+    full_market_discovery_enabled: bool = Field(..., strict=True)
+
+
 class RealtimeQuoteScopePrefs(BaseModel):
     realtime_pull_stock: bool | None = None
     realtime_pull_etf: bool | None = None
+
+
+@router.put("/preferences/full-market-discovery")
+def update_full_market_discovery(req: FullMarketDiscoveryPrefs, request: Request) -> dict:
+    """保存全市场盘中实时扫描、看盘遗留与盘后全市场发现总开关。
+
+    关闭时立即停止全市场实时行情轮询 (不覆写用户原有的 realtime_quotes_enabled 偏好),
+    全量分钟同步会在下一个循环步长自动暂停; 重新开启时若原偏好已开启则自动恢复轮询。
+    """
+    from app.services import preferences
+
+    enabled = preferences.set_full_market_discovery_enabled(req.full_market_discovery_enabled)
+    qs = getattr(request.app.state, "quote_service", None)
+    if qs is not None:
+        if not enabled:
+            qs.stop()
+        elif preferences.get_realtime_quotes_enabled() and qs.is_realtime_allowed() and not qs.is_paused():
+            qs.start()
+    return {
+        "full_market_discovery_enabled": enabled,
+        "quote_running": bool(qs and qs._running),
+    }
 
 
 @router.put("/preferences/realtime-quotes")
@@ -1127,6 +1154,12 @@ def update_realtime_quotes(req: RealtimeQuotesPrefs, request: Request) -> dict:
     """
     from app.services import preferences
     qs = getattr(request.app.state, "quote_service", None)
+
+    if req.realtime_quotes_enabled and not preferences.get_full_market_discovery_enabled():
+        raise HTTPException(
+            status_code=409,
+            detail="全市场盘中实时扫描已关闭，请先在「设置 › 系统设置」开启",  # noqa: RUF001
+        )
 
     allowed = qs.is_realtime_allowed() if qs else True
     if req.realtime_quotes_enabled and not allowed:

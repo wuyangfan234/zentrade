@@ -315,11 +315,18 @@ def system_status(request: Request):
     add('circuit_breaker', '熔断', 'warn' if cb.get('block_new_entries') or (cb.get('risk_multiplier') or 1) < 1 else 'ok',
         f"当日 {cb.get('day_change_pct', '—')}% · 回撤 {cb.get('drawdown_pct', '—')}% · "
         f"{'停新开仓' if cb.get('block_new_entries') else '允许开仓'} · 风险倍数 {cb.get('risk_multiplier', 1.0)}", 'data/circuit_breaker/')
+    from app.services import preferences as _prefs
+    fmd = _prefs.get_full_market_discovery_enabled()
     latest = safe(lambda: decision_scan_job.latest_run(data_dir), {}) or {}
     s = latest.get('summary') or {}
-    add('decision_desk', '全市场扫描', 'ok' if s else 'idle',
-        f"{s.get('as_of', '—')}：候选 {s.get('candidates', 0)} · 生成机会 {s.get('opened', 0)} · 仅观察 {s.get('watched', 0)}",
-        '机会页 → 来源管理')
+    if not fmd:
+        add('decision_desk', '全市场扫描', 'idle',
+            '已关闭全市场发现 · 仅扫描自选股（设置 › 系统设置）',
+            '设置 › 系统设置')
+    else:
+        add('decision_desk', '全市场扫描', 'ok' if s else 'idle',
+            f"{s.get('as_of', '—')}：候选 {s.get('candidates', 0)} · 生成机会 {s.get('opened', 0)} · 仅观察 {s.get('watched', 0)}",
+            '机会页 → 来源管理')
     ev = safe(lambda: strategy_evaluation.load_evaluation(data_dir), {}) or {}
     srcs = ev.get('sources') or {}
     runs = safe(lambda: evaluation_schedule.last_runs(data_dir, 1), []) or []

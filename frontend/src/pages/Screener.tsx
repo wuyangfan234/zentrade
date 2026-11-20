@@ -159,7 +159,8 @@ export function Screener() {
   )
 
   const { data: prefs } = usePreferences()
-  const screenerAutoRun = prefs?.screener_auto_run ?? true
+  const fullMarketEnabled = prefs?.full_market_discovery_enabled ?? true
+  const screenerAutoRun = fullMarketEnabled && (prefs?.screener_auto_run ?? true)
 
   // 统一列表: 不按周期过滤, 日线+分钟策略合并返回, 分钟策略带 timeframes 标识
   const strategies = useQuery({

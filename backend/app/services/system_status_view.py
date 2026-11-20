@@ -142,6 +142,9 @@ def enrich(components: list[dict], jobs: list[dict], *, now: datetime, loop_stat
     # Alpaca 停用是刻意的
     if (c := by.get("alpaca_mirror")) is not None and c["state"] == "warn" and "已停用" in c["summary"]:
         c["state"], c["idle_kind"] = "idle", "disabled"
+    # 全市场发现关闭是刻意的
+    if (c := by.get("decision_desk")) is not None and c["state"] == "idle" and "已关闭" in c["summary"]:
+        c["idle_kind"] = "disabled"
     # 盘中盯盘: 重新判定
     items = (ops or {}).get("checklist") or []
     if (c := by.get("ops_watch")) is not None and mk["trading_day"]:

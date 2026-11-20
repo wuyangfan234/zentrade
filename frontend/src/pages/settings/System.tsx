@@ -5,11 +5,12 @@
  */
 import { useState, useCallback, useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { Settings2, Trash2, RefreshCw, Bell, Volume2, Info, ExternalLink, CheckCircle2, Download } from 'lucide-react'
+import { Settings2, Trash2, RefreshCw, Bell, Volume2, Info, ExternalLink, CheckCircle2, Download, Radar } from 'lucide-react'
 import { usePreferences, useVersion } from '@/lib/useSharedQueries'
 import { api } from '@/lib/api'
 import { QK } from '@/lib/queryKeys'
 import { PageHeader } from '@/components/PageHeader'
+import { useCardFlash, cardFlashCls } from '@/lib/useCardFlash'
 import { refreshAlertToastConfig } from '@/components/AlertToast'
 import { SOUND_OPTIONS, previewSound } from '@/lib/notificationSound'
 import {
@@ -25,7 +26,9 @@ export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) 
   const { data: versionData } = useVersion()
   const [saving, setSaving] = useState(false)
 
+  const fullMarketDiscovery = prefs?.full_market_discovery_enabled ?? true
   const screenerAutoRun = prefs?.screener_auto_run ?? true
+  const { ref: discoveryRef, flash: discoveryFlashing } = useCardFlash(highlight, 'full-market-discovery')
   const [extTpl, setExtTpl] = useState(() => loadStockExternalTemplate())
   const [clearing, setClearing] = useState(false)
 
@@ -99,6 +102,19 @@ export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) 
     }
   }, [qc])
 
+  const saveFullMarketDiscovery = useCallback(async (enabled: boolean) => {
+    setSaving(true)
+    try {
+      await api.updateFullMarketDiscovery(enabled)
+      qc.invalidateQueries({ queryKey: QK.preferences })
+      qc.invalidateQueries({ queryKey: QK.quoteStatus })
+      qc.invalidateQueries({ queryKey: ['minute-refresh-status'] })
+      qc.invalidateQueries({ queryKey: ['system-status'] })
+    } finally {
+      setSaving(false)
+    }
+  }, [qc])
+
   // 刷新页面缓存: 清除 react-query 缓存 + 强制重载 (绕过浏览器缓存)
   // 不动 localStorage (用户列配置/策略池等偏好保留), 也不影响后端的本地股票数据
   const handleClearCache = useCallback(() => {
@@ -117,7 +133,24 @@ export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) 
         subtitle="页面行为 · 通知与推送 · 版本"
       />
 
-      <section className="rounded-card border border-border bg-surface p-5">
+      <div ref={discoveryRef} className={cardFlashCls(discoveryFlashing)}>
+        <section className="rounded-card border border-border bg-surface p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Radar className="h-4 w-4 text-accent" />
+            <h3 className="text-sm font-medium text-foreground">全市场扫描与看盘</h3>
+          </div>
+
+          <ToggleRow
+            label="全市场盘中实时扫描与看盘遗留"
+            desc="开启后启用全市场盘中行情轮询、全量分钟同步、盘后全市场发现及监控中心、持仓提醒、信号库菜单；关闭后仅保留自选与持仓核心链路"
+            checked={fullMarketDiscovery}
+            disabled={saving}
+            onChange={saveFullMarketDiscovery}
+          />
+        </section>
+      </div>
+
+      <section className="rounded-card border border-border bg-surface p-5 mt-6">
         <div className="flex items-center gap-2 mb-4">
           <Settings2 className="h-4 w-4 text-accent" />
           <h3 className="text-sm font-medium text-foreground">策略页</h3>
@@ -125,9 +158,9 @@ export function SettingsSystemPanel({ highlight }: { highlight?: string } = {}) 
 
         <ToggleRow
           label="进入策略页自动运行策略"
-          desc="进入策略页时自动运行全部策略"
-          checked={screenerAutoRun}
-          disabled={saving}
+          desc={fullMarketDiscovery ? '进入策略页时自动运行全部策略' : '全市场扫描已关闭，进入策略页不自动全市场运行（仍可手动运行）'}
+          checked={fullMarketDiscovery && screenerAutoRun}
+          disabled={saving || !fullMarketDiscovery}
           onChange={(v) => save({ screener_auto_run: v })}
         />
       </section>
@@ -466,6 +499,10 @@ function ToggleRow({
         <div className="text-[11px] leading-4 text-muted">{desc}</div>
       </div>
       <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
         onClick={() => onChange(!checked)}
         disabled={disabled}
         className={`relative inline-flex h-5 w-9 items-center rounded-full shrink-0 transition-colors duration-200 disabled:opacity-50 ${
