@@ -69,7 +69,7 @@ function InlineSecret({ itemId, autoFocus = false }: { itemId: string; autoFocus
       <button
         type="submit"
         disabled={!value.trim() || save.isPending}
-        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 px-3 text-xs text-white disabled:opacity-50"
+        className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs disabled:opacity-50"
       >
         {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
         保存

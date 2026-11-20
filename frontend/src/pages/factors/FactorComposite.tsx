@@ -199,7 +199,7 @@ export function FactorComposite() {
                 type="button"
                 onClick={() => save.mutate()}
                 disabled={!label.trim() || memberList.length < 2 || save.isPending}
-                className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-8 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Save className="h-3.5 w-3.5" />
                 {save.isPending ? '保存中' : '注册复合因子'}

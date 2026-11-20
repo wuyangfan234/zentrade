@@ -332,7 +332,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                         <button
                           onClick={submitFeishu}
                           disabled={saveFeishuWebhook.isPending || (feishuDraft.trim() === feishuWebhookUrl && !feishuSecretDraft.trim())}
-                          className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-accent/90 transition-colors"
+                          className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer transition-colors"
                         >
                           {saveFeishuWebhook.isPending ? '保存中…' : '保存'}
                         </button>
@@ -416,7 +416,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <button
                       onClick={submitWecom}
                       disabled={saveWecomWebhook.isPending || wecomDraft.trim() === wecomWebhookUrl}
-                      className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-accent/90 transition-colors"
+                      className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer transition-colors"
                     >
                       {saveWecomWebhook.isPending ? '保存中…' : '保存'}
                     </button>
@@ -495,7 +495,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <button
                       onClick={submitCustom}
                       disabled={saveCustomWebhook.isPending || (customDraft.trim() === customWebhookUrl && !customSecretDraft)}
-                      className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-accent/90 transition-colors"
+                      className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer transition-colors"
                     >
                       {saveCustomWebhook.isPending ? '保存中…' : '保存'}
                     </button>
@@ -579,7 +579,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                   </div>
                   {emailError && <div className="mt-2 text-[11px] text-danger">{emailError}</div>}
                   <div className="mt-2 flex items-center gap-2">
-                    <button onClick={submitEmail} disabled={saveEmailSmtp.isPending} className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-accent/90 transition-colors">
+                    <button onClick={submitEmail} disabled={saveEmailSmtp.isPending} className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer transition-colors">
                       {saveEmailSmtp.isPending ? '保存中…' : '保存'}
                     </button>
                     <TestSendButton test={testEmail} configured={emailConfigured} />
@@ -658,7 +658,7 @@ export function PushChannelsSection({ highlight }: { highlight?: string }) {
                     <button
                       onClick={submitBot}
                       disabled={saveWecomBot.isPending || (botIdDraft.trim() === wecomBotId && !botSecretDraft.trim())}
-                      className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-accent/90 transition-colors"
+                      className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50 cursor-pointer transition-colors"
                     >
                       {saveWecomBot.isPending ? '保存中…' : '保存并连接'}
                     </button>

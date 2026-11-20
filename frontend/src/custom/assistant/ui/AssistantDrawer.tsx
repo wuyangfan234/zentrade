@@ -387,7 +387,7 @@ function EmptyState({ status, suggests }: { status: AssistantStatus | null; sugg
         <button
           type="button"
           onClick={() => navigate('/settings?tab=ai')}
-          className="mt-2 cursor-pointer rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
+          className="mt-2 cursor-pointer rounded-btn btn-primary px-3 py-1.5 text-xs transition-colors duration-150 ease-smooth"
         >
           去设置页配置
         </button>
@@ -408,7 +408,7 @@ function EmptyState({ status, suggests }: { status: AssistantStatus | null; sugg
         <button
           type="button"
           onClick={() => navigate('/settings?tab=ai')}
-          className="mt-2 cursor-pointer rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90"
+          className="mt-2 cursor-pointer rounded-btn btn-primary px-3 py-1.5 text-xs transition-colors duration-150 ease-smooth"
         >
           前往设置
         </button>
@@ -547,7 +547,7 @@ function InputArea({ sending, blocked, skills, forcePalette, onPaletteClose }: {
             disabled={!canSend}
             title="发送"
             aria-label="发送"
-            className="mr-1.5 mb-1.5 flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white transition-all duration-150 ease-smooth hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-40"
+            className="mr-1.5 mb-1.5 flex h-8 w-8 cursor-pointer items-center justify-center rounded-btn btn-primary transition-all duration-150 ease-smooth disabled:cursor-not-allowed disabled:opacity-40"
           >
             <SendHorizontal className="h-4 w-4" />
           </button>

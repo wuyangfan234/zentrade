@@ -176,7 +176,7 @@ export function SkillPalette({ skills, query, page, active, onActive, onPick, on
               type="button"
               data-skill-run
               onClick={() => onPick(current)}
-              className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 self-center rounded-btn bg-accent px-2 py-0.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90 dark:bg-blue-700 dark:hover:bg-blue-600"
+              className="ml-auto inline-flex shrink-0 cursor-pointer items-center gap-1 self-center rounded-btn btn-primary px-2 py-0.5 text-xs transition-colors duration-150 ease-smooth"
             >
               <Play className="h-3 w-3" />
               运行

@@ -44,7 +44,7 @@ pages: [持仓]
 `
 
 const BTN = 'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-btn border border-border px-2.5 text-xs text-secondary transition-colors duration-150 ease-smooth hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50'
-const BTN_PRIMARY = 'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-btn bg-accent px-2.5 text-xs text-white transition-colors duration-150 ease-smooth hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-700 dark:hover:bg-blue-600'
+const BTN_PRIMARY = 'inline-flex h-8 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-btn btn-primary px-2.5 text-xs transition-colors duration-150 ease-smooth disabled:cursor-not-allowed disabled:opacity-50'
 
 export function AssistantSkillsSettings() {
   const [skills, setSkills] = useState<SkillSummary[]>([])

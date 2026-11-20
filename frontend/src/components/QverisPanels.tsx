@@ -43,7 +43,7 @@ export function PaidFetchBar({ meta, pending, onFetch, label, error }: {
         type="button"
         onClick={onFetch}
         disabled={pending || !configured || ledgerBlocked}
-        className="inline-flex h-6 items-center gap-1 rounded bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-2.5 font-medium text-white hover:bg-accent/90 disabled:opacity-50"
+        className="inline-flex h-6 items-center gap-1 rounded btn-primary px-2.5 font-medium disabled:opacity-50"
       >
         {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
         {label}

@@ -326,7 +326,7 @@ export function FactorBacktest({ initialFactorName = 'momentum_20d', initialConf
           onClick={() => run.mutate()}
           disabled={run.isPending}
           className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-btn
-            bg-accent text-sm font-medium text-white hover:bg-accent/90
+            btn-primary text-sm font-medium
             transition-colors duration-150 ease-smooth disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5" />

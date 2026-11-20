@@ -68,7 +68,7 @@ export function FeishuAppPanel({ credentialsSet, chatId }: { credentialsSet: boo
           type="button"
           onClick={() => save.mutate(draft)}
           disabled={save.isPending || draft === chatId}
-          className="px-3 py-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium disabled:opacity-50 hover:bg-accent/90"
+          className="px-3 py-1.5 rounded-btn btn-primary text-xs font-medium disabled:opacity-50"
         >
           {save.isPending ? '保存中…' : '保存'}
         </button>

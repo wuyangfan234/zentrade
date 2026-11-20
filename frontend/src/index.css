@@ -3,24 +3,32 @@
 @tailwind utilities;
 
 /* === §6.0 设计语言 CSS variables ===
- * 暗色为默认(html.dark) / 亮色用 :root 反转
+ * 亮色为默认 (:root) / 暗色用 html.dark 覆盖; 本设备手动切过暗色才是暗色 (见 lib/theme.ts)
  * HSL 形式以兼容 Tailwind alpha-value 语法
+ * 亮色: 浅灰页面底 → 纯白卡片 (细边框 + 轻阴影) → 卡内浅灰小格, 冷灰中性色; 主按钮墨黑 (.btn-primary)
  */
 :root {
-  /* 亮色(可切换) */
-  --base: 0 0% 98%;          /* #FAFAFA */
-  --surface: 0 0% 100%;      /* #FFFFFF */
-  --elevated: 240 5% 96%;    /* #F4F4F5 */
-  --border: 240 6% 90%;      /* #E4E4E7 */
-  --fg-primary: 240 6% 10%;  /* #18181B */
-  --fg-secondary: 240 4% 35%;/* #52525B */
-  /* 亮色文字色全部达到 WCAG AA (白/浅灰底对比度 ≥ 4.5); 原暗色同值在白底只有 2.3–3.7, 看不清 */
-  --fg-muted: 240 4% 44%;    /* #6C6C75 白底 5.2 (原 #A1A1AA 仅 2.6) */
+  /* #F9FAFA 页面浅灰底, 与原亮色底同明度。不要再加深: 直接铺在页面底上的彩色淡底 (自选页选中分组的绿色跌幅、
+   * 回测页琥珀色「自定义」徽章) 实测在 #F7F8F8 上已降到 4.49–4.50, 低于 WCAG AA 4.5 */
+  --base: 180 9% 98%;
+  --surface: 0 0% 100%;      /* #FFFFFF 卡片纯白 */
+  --elevated: 210 11% 96%;   /* #F4F5F6 卡内小格 / 悬停 / 菜单当前项; 与原亮色同明度 (更深时琥珀色文字压在上面低于 4.5) */
+  --border: 210 4% 91%;      /* #E6E7E8 */
+  --fg-primary: 220 8% 7%;   /* #111214 墨黑 */
+  --fg-secondary: 213 6% 35%;/* #545960 */
+  /* 亮色文字色全部达到 WCAG AA (白/浅灰底对比度 ≥ 4.5) */
+  --fg-muted: 210 5% 43%;    /* #686E73 白底约 5.2, elevated 底约 4.8 */
   --accent: 221 83% 48%;     /* #1555E0 白底 6.2 */
   --bull: 4 80% 42%;         /* #C12115 红涨, 白底 5.8, 15% 同色底上 4.7 */
   --bear: 152 90% 25%;       /* #067944 绿跌, 白底 5.5 */
   --warning: 27 92% 33%;     /* #A24C07 白底 5.6, 15% 同色底上 4.7 */
   --danger: 4 80% 42%;       /* #C12115 */
+  /* 阴影: 卡片几乎扁平, 只有主按钮与浮层带明显阴影 (tailwind.config.ts boxShadow 指向这里) */
+  --shadow-card: 0 1px 2px rgb(17 18 20 / 0.04);
+  --shadow-btn: 0 1px 2px rgb(17 18 20 / 0.2), 0 2px 8px rgb(17 18 20 / 0.12);
+  --shadow-lg: 0 4px 12px rgb(17 18 20 / 0.06);
+  --shadow-xl: 0 8px 24px rgb(17 18 20 / 0.08);
+  --shadow-2xl: 0 12px 32px rgb(17 18 20 / 0.1);
 }
 
 html.dark {
@@ -36,6 +44,22 @@ html.dark {
   --bear: 152 67% 45%;
   --warning: 32 95% 50%;
   --danger: 4 87% 60%;
+  /* 暗色靠边框分层: 卡片与主按钮不加阴影; 浮层沿用 Tailwind 原默认阴影 */
+  --shadow-card: 0 0 #0000;
+  --shadow-btn: 0 0 #0000;
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  --shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+@layer components {
+  /* 全站白卡 (rounded-card + bg-surface) 一次带上轻阴影; 元素自己写了 shadow-* 时以元素为准 (utilities 层在后) */
+  .rounded-card.bg-surface { box-shadow: var(--shadow-card); }
+  /* 主按钮: 前景色实底 + 卡片色文字 = 亮色墨黑底白字, 暗色自动反相为近白底深字。
+   * 蓝色实底白字只留给选中标记与计数 (守门: lib/primaryButton.test.ts)。 */
+  .btn-primary {
+    @apply bg-foreground text-surface shadow-btn transition-colors hover:bg-foreground/85;
+  }
 }
 
 /* 价格 / 数字一律等宽 */

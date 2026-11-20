@@ -111,7 +111,7 @@ export function SettingsApiAccessPanel() {
           </select>
           <button type="button" onClick={() => create.mutate()} disabled={!name.trim() || create.isPending}
             data-api-key-create
-            className="inline-flex h-9 items-center gap-1 rounded-btn bg-accent dark:bg-blue-700 px-3 text-xs font-medium text-white hover:opacity-90 disabled:opacity-50">
+            className="inline-flex h-9 items-center gap-1 rounded-btn btn-primary px-3 text-xs font-medium disabled:opacity-50">
             <Plus className="h-3.5 w-3.5" />{create.isPending ? '生成中…' : '生成密钥'}
           </button>
         </div>

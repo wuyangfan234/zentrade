@@ -452,7 +452,7 @@ export function CreateExtDialog({ onClose }: { onClose: () => void }) {
                 <button
                   onClick={handleDetectUrl}
                   disabled={detecting || !url.trim()}
-                  className="h-8 inline-flex items-center gap-1.5 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-40 transition-colors"
+                  className="h-8 inline-flex items-center gap-1.5 rounded-lg btn-primary px-3 text-xs font-medium disabled:opacity-40 transition-colors"
                 >
                   {detecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   测试识别
@@ -656,7 +656,7 @@ export function CreateExtDialog({ onClose }: { onClose: () => void }) {
                 <div className="text-[11px] text-muted">手动添加字段后可创建空表</div>
                 <button
                   onClick={addField}
-                  className="inline-flex items-center gap-1 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 transition-colors"
+                  className="inline-flex items-center gap-1 rounded-lg btn-primary px-3 py-1.5 text-xs font-medium transition-colors"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   添加字段
@@ -788,7 +788,7 @@ export function CreateExtDialog({ onClose }: { onClose: () => void }) {
             <button
               onClick={() => create.mutate()}
               disabled={!valid || create.isPending}
-              className="px-5 py-2 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-medium hover:bg-accent/90 disabled:opacity-40 transition-colors shadow-sm shadow-accent/20"
+              className="px-5 py-2 rounded-lg btn-primary text-xs font-medium disabled:opacity-40 transition-colors"
             >
               {create.isPending ? '创建中…' : '创建'}
             </button>

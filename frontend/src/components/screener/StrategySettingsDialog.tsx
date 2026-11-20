@@ -631,7 +631,7 @@ export function StrategySettingsDialog({ strategyId, onClose, onSaved, onAiModif
                 </button>
               )}
               <button onClick={handleSave} disabled={saving}
-                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-white text-xs font-semibold hover:bg-accent/90 transition-colors cursor-pointer disabled:opacity-50">
+                className="inline-flex items-center gap-1.5 h-8 px-4 rounded-lg btn-primary text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50">
                 <Save className="h-3.5 w-3.5" />{saving ? '保存中…' : '保存设置'}
               </button>
             </div>

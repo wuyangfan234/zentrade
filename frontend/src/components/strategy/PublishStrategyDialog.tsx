@@ -103,7 +103,7 @@ export function PublishStrategyDialog({
                 to={backtestHref(published.strategy_id)}
                 onClick={onClose}
                 data-publish-backtest
-                className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white dark:bg-blue-700"
+                className="inline-flex h-8 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium"
               >
                 <History className="h-3.5 w-3.5" />
                 回测
@@ -160,7 +160,7 @@ export function PublishStrategyDialog({
                 type="submit"
                 data-publish-submit
                 disabled={!!nameError || saving}
-                className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-700"
+                className="inline-flex h-8 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {saving
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -237,7 +237,7 @@ export function RenameStrategyDialog({
             type="submit"
             data-rename-submit
             disabled={!!nameError || unchanged || saving}
-            className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent px-3 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-50 dark:bg-blue-700"
+            className="inline-flex h-8 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           >
             {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             保存

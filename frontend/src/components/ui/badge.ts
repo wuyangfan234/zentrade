@@ -1,5 +1,5 @@
 /**
- * 徽章只有四类, 全站同一套样式 (字号 11px、圆角 4px、行高 20px):
+ * 徽章只有四类, 全站同一套样式 (字号 11px、圆角 6px (rounded-chip)、行高 20px):
  *   status 状态 — 淡底无边框: 盘前 / 盘中、偏多 / 偏空、正常、普涨
  *   action 动作 — 实色: 下单
  *   limit  限定 — 灰描边: 仅观察、模拟、策略命中、4h 趋势过滤
@@ -9,7 +9,7 @@
 export type BadgeKind = 'status' | 'action' | 'limit' | 'warn'
 export type BadgeTone = 'accent' | 'bull' | 'bear' | 'neutral' | 'ok'
 
-const BASE = 'inline-flex shrink-0 items-center whitespace-nowrap rounded-[4px] px-1.5 text-[11px] font-medium leading-5'
+const BASE = 'inline-flex shrink-0 items-center whitespace-nowrap rounded-chip px-1.5 text-[11px] font-medium leading-5'
 
 const STATUS_TONE: Record<BadgeTone, string> = {
   accent: 'bg-accent/10 text-accent dark:text-blue-400',

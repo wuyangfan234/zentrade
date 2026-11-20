@@ -491,7 +491,7 @@ function BatchDiscovery({ onInspect, focusFactor }: { onInspect: (factorName: st
           onClick={() => run.mutate()}
           disabled={run.isPending || selected.length === 0 || overLimit}
           title={overLimit ? `一次最多 ${MAX_BATCH_FACTORS} 个因子 · 当前 ${selected.length} 个` : undefined}
-          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex w-full items-center justify-center gap-1.5 rounded-btn btn-primary px-3 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Play className="h-3.5 w-3.5" />
           {run.isPending ? '筛选中' : overLimit ? `超过上限 ${MAX_BATCH_FACTORS} · 已选 ${selected.length}` : `筛选 ${selected.length} 个因子`}

@@ -158,7 +158,7 @@ export function Auth() {
             <button
               type="submit"
               disabled={submitMut.isPending || !password}
-              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:opacity-50"
+              className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-btn btn-primary text-sm font-medium transition-colors disabled:opacity-50"
             >
               {submitMut.isPending ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />处理中</>

@@ -22,7 +22,7 @@ export const TONE_TEXT: Record<Tone, string> = {
 export function Badge({ tone = 'neutral', title, children, className }: { tone?: Tone; title?: string; children: ReactNode; className?: string }) {
   return (
     <span data-badge={tone} title={title}
-      className={cn('inline-flex shrink-0 items-center gap-1 rounded-btn border px-1.5 py-0.5 text-[11px] font-medium leading-4 tabular-nums', TONE[tone], className)}>
+      className={cn('inline-flex shrink-0 items-center gap-1 rounded-chip border px-1.5 py-0.5 text-[11px] font-medium leading-4 tabular-nums', TONE[tone], className)}>
       {children}
     </span>
   )
@@ -60,7 +60,7 @@ export function ContextChips({ items, outline }: { items: Chip[]; outline?: bool
     <div className="flex flex-wrap gap-1">
       {items.map((c) => (
         <span key={c.label} data-chip={c.label} data-chip-kind={outline ? 'basis' : 'metric'} title={c.title}
-          className={cn('inline-flex items-center gap-1 rounded-btn px-1.5 py-0.5 text-[11px] leading-4',
+          className={cn('inline-flex items-center gap-1 rounded-chip px-1.5 py-0.5 text-[11px] leading-4',
             outline ? 'border border-border' : 'border border-transparent bg-elevated')}>
           <span className="text-muted">{c.label}</span>
           <span className={cn('font-medium tabular-nums', TONE_TEXT[c.tone ?? 'neutral'])}>{c.value}</span>

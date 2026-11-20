@@ -404,7 +404,7 @@ function LotDialog({ lot, onClose }: { lot: Lot; onClose: () => void }) {
         <button
           onClick={submit}
           disabled={save.isPending}
-          className={cn('h-9 rounded-btn px-4 text-xs font-medium bg-accent/90 text-white hover:bg-accent cursor-pointer disabled:opacity-50')}
+          className={cn('h-9 rounded-btn px-4 text-xs font-medium btn-primary cursor-pointer disabled:opacity-50')}
         >
           {save.isPending ? '保存中' : '保存'}
         </button>

@@ -364,7 +364,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                     type="button"
                     onClick={() => applyFactor.mutate({ candidate: item, draft: linkDraft })}
                     disabled={!linkDraft.strategyId || applyFactor.isPending}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-btn bg-accent dark:bg-blue-700 dark:hover:bg-blue-600 px-3 text-xs font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-btn btn-primary px-3 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     {applyFactor.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Link2 className="h-3.5 w-3.5" />}
                     应用

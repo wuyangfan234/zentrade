@@ -4,14 +4,14 @@
     <meta charset="UTF-8" />
     <script>
       // 预渲染主题脚本: 首屏前设置 html.dark, 避免亮暗闪烁 (FOUC)。
-      // 默认暗色; 用户切过亮色后 (localStorage tf-theme=light) 保持亮色。
+      // 默认亮色; 本设备手动切过暗色 (localStorage tf-theme=dark) 才用暗色。与 src/lib/theme.ts getTheme() 同口径。
       (function () {
         try {
-          if (localStorage.getItem('tf-theme') !== 'light') {
+          if (localStorage.getItem('tf-theme') === 'dark') {
             document.documentElement.classList.add('dark')
           }
         } catch (e) {
-          document.documentElement.classList.add('dark')
+          /* 读不到存值: 按默认亮色 */
         }
       })()
     </script>
