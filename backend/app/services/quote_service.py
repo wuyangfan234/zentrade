@@ -1109,7 +1109,7 @@ class QuoteService:
         当日实时刷新停摆、指数表停在盘中值)。返回是否已标记。
         """
         now = us_clock.now()
-        if day > now.date() or (day == now.date() and now.time() < us_clock.sessions[-1].close):
+        if day > now.date() or (day == now.date() and now.time() < us_clock.session_close(day)):
             logger.warning("官方收盘日标记拒绝: %s 常规时段尚未收盘 (now=%s)", day, now.isoformat(timespec="seconds"))
             return False
         key = day.isoformat()

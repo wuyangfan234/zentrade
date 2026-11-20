@@ -361,7 +361,7 @@ class SwingTrader:
                 continue
             signal_day = date.fromisoformat(event["trade_date"])
             decided_at = us_clock.market_datetime(event["at"])
-            close_at = datetime.combine(signal_day, us_clock.sessions[-1].close, tzinfo=us_clock.tz)
+            close_at = datetime.combine(signal_day, us_clock.session_close(signal_day), tzinfo=us_clock.tz)
             if signal_day >= entry_day and decided_at >= max(entry_at, close_at):
                 return event
         return None

@@ -682,7 +682,7 @@ def _run_zen_post_close(repo, day: _date) -> dict:
     from app.services.trading_loop import TradingLoop
     from app.ledger.core import Account
     now = us_clock.now()
-    if day > now.date() or (day == now.date() and now.time() < us_clock.sessions[-1].close):
+    if day > now.date() or (day == now.date() and now.time() < us_clock.session_close(day)):
         return {"status": "skipped", "reason": "regular_session_not_closed"}
     quote_service = _get_app_state_attr("quote_service")
     if quote_service is None or not quote_service.is_official_close(day):
@@ -780,31 +780,9 @@ def _refresh_views(repo: KlineRepository) -> None:
 
 
 def _refresh_single_view(repo: KlineRepository, name: str) -> None:
-    """刷新单个 DuckDB 视图。"""
-    d = repo.store.data_dir.as_posix()
-    paths = {
-        "kline_daily": f"{d}/kline_daily/**/*.parquet",
-        "kline_enriched": f"{d}/kline_daily_enriched/**/*.parquet",
-        "kline_index_daily": f"{d}/kline_index_daily/**/*.parquet",
-        "kline_index_enriched": f"{d}/kline_index_enriched/**/*.parquet",
-        "kline_etf_daily": f"{d}/kline_etf_daily/**/*.parquet",
-        "kline_etf_enriched": f"{d}/kline_etf_enriched/**/*.parquet",
-        "kline_etf_minute": f"{d}/kline_etf_minute/**/*.parquet",
-        "kline_minute": f"{d}/kline_minute/**/*.parquet",
-        "adj_factor": f"{d}/adj_factor/**/*.parquet",
-        "adj_factor_etf": f"{d}/adj_factor_etf/**/*.parquet",
-        "instruments": f"{d}/instruments/**/*.parquet",
-        "instruments_index": f"{d}/instruments_index/**/*.parquet",
-        "instruments_etf": f"{d}/instruments_etf/**/*.parquet",
-    }
-    path = paths.get(name)
-    if not path:
-        return
+    """刷新单个 DuckDB 视图 (经 repo.refresh_view 持有连接锁)。"""
     try:
-        repo.db.execute(
-            f"CREATE OR REPLACE VIEW {name} AS "
-            f"SELECT * FROM read_parquet('{path}', union_by_name=true)"
-        )
+        repo.refresh_view(name)
     except Exception as e:  # noqa: BLE001
         logger.warning("refresh view %s failed: %s", name, e)
 
@@ -815,13 +793,9 @@ def _resolve_minute_symbols(capset: CapabilitySet, repo=None) -> list[str]:
 
 
 def _refresh_instruments_view(repo: KlineRepository) -> None:
-    """单独刷新 instruments 视图。"""
-    d = repo.store.data_dir.as_posix()
+    """单独刷新 instruments 视图 (经 repo.refresh_view 持有连接锁)。"""
     try:
-        repo.db.execute(
-            f"CREATE OR REPLACE VIEW instruments AS "
-            f"SELECT * FROM read_parquet('{d}/instruments/**/*.parquet', union_by_name=true)"
-        )
+        repo.refresh_view("instruments")
     except Exception as e:  # noqa: BLE001
         logger.warning("refresh instruments view failed: %s", e)
 

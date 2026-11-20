@@ -426,7 +426,7 @@ class OpportunityService:
         bars,spy=self._load_universe(params,as_of)
         # 0.22+: evo precompute / 大市值弱势栏已退役 (出卡走 swing_desk)
         with self._lock:
-            now=datetime.combine(as_of,us_clock.sessions[-1].close,tzinfo=us_clock.tz)
+            now=datetime.combine(as_of,us_clock.session_close(as_of),tzinfo=us_clock.tz)
             self.advance_lifecycle(now,{},bars_by_symbol=bars)
             active=self._active_symbols(as_of)
             risk=0.0

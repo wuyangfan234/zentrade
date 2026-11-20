@@ -4,6 +4,14 @@
 
 ## [未发布]
 
+### 修复：五项交易与数据准确性缺陷
+
+- **半日市提前收盘口径**：盘后持仓管理（`post_close_manage`）、次日开盘止损意向核验（`_pending_exit`）、盘后管道入口、官方收盘标记、财报前减仓判过窗、指数日K同步与决策台入场窗统一改读 `us_clock.session_close(day)`，不再硬编码 `16:00`，避免感恩节次日/平安夜（13:00 ET 收盘）盘后拒跑或收盘止损意向次日被静默忽略。
+- **DuckDB 并发视图刷新加锁**：在 `KlineRepository` 收敛线程安全的 `refresh_view(name)`（持 `self._lock`），替换 `daily_pipeline`、`kline_sync`、`extend_history` 中 6 处无锁直调 `repo.db.execute("CREATE OR REPLACE VIEW ...")`，消除同步/补齐与页面查询并发时的 `CatalogException`。
+- **机会卡回放尾盘前视**：`swing_settlement.replay_card` 在最后持有日 15:30（半日市 12:30）时间止损后不再继续遍历最后一根 30 分钟 K 线（15:30–16:00 / 12:30–13:00），避免离场后冲高误计为目标止盈。
+- **公式挖掘退化变异与常数拦截**：`formula_miner.mutate` 排除变异后退化为 `A - A`（恒 0）或非负积木同窗比（恒 1）的候选；`rank_lab` 的 `check_formula` 与 `check_values` 新增 `R010` 拦截在所有交易日截面恒定、无法区分股票的公式。
+- **历史日K查询边界**：`GET /api/kline/daily` 仅在当日落入请求的 `[start_date, end_date]` 窗口时才追加或覆盖今日实时蜡烛，查询历史交易区间时不再在尾部拼入今日 K 线。
+
 ### 改进：界面视觉改版（亮色默认）
 
 - 默认主题改为亮色：浅灰页面底、白色卡片、细边框加轻阴影，圆角加大（卡片 12px、按钮 8px、弹窗 16px、徽章 6px）。没手动切过主题的设备（包括安卓 App）打开即为亮色；在本设备手动切过暗色的，下次仍是暗色。侧栏底部的主题按钮随时可切换。
