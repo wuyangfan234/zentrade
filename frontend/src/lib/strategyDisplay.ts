@@ -26,8 +26,14 @@ export function canonicalStrategyName(name: string): string {
   return CANONICAL[name.trim()] ?? name
 }
 
-/** 名称里夹带的因子 id (如「因子组合 · annual_vol_20d」) 换成因子库中文名; 库里没有的原样保留 */
+/** 旧版挖掘发布 / 保存的默认名: 「因子组合 · id + id」 (后端 mining_runtime._candidate_name) */
+const LEGACY_MINED_NAME = /^因子组合 · (.+)$/
+
+/** 名称里夹带的因子 id (如「因子组合 · annual_vol_20d」) 换成因子库中文名; 库里没有的原样保留。
+ *  旧版挖掘默认名逐个按 id 精确换: 不带下划线的 id (amplitude) 下面的通用规则认不出。 */
 export function humanizeFactorIds(name: string, labels: Map<string, string>): string {
+  const legacy = LEGACY_MINED_NAME.exec(name)
+  if (legacy) return `因子组合 · ${legacy[1].split(' + ').map((id) => labels.get(id) ?? id).join(' + ')}`
   return name.replace(/\b[a-z][a-z0-9_]*_[a-z0-9_]+\b/g, (id) => labels.get(id) ?? id)
 }
 

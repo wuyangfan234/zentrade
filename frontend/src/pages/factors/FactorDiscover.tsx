@@ -819,7 +819,11 @@ function SubmitSheet({ onClose, onDone }: { onClose: () => void; onDone: (id: st
 }
 
 // ---------------------------------------------------------------- page
-export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => void }) {
+export function FactorDiscover({ onGo, onOpenCandidate }: {
+  onGo: (tab: 'inspect' | 'mining') => void
+  /** 保存成功提示里的「去发布」: 打开该候选所属那一轮挖掘并选中它 */
+  onOpenCandidate?: (runId: string, signature: string) => void
+}) {
   const qc = useQueryClient()
   const q = useQuery({ queryKey: QK.factorLabPage, queryFn: () => api.factorLabPage(), refetchInterval: 60_000 })
   const page = q.data
@@ -841,9 +845,13 @@ export function FactorDiscover({ onGo }: { onGo: (tab: 'inspect' | 'mining') => 
   const decide = useMutation({
     mutationFn: ({ sig, action }: { sig: string; action: 'save' | 'discard' }) => api.factorLabDecide(page!.week!.week, sig, action),
     // 只在后端真的建出候选 (返回 candidate_id) 后提示「已保存」; 失败时 409 由请求层报错, 这里不再盖一个成功提示
+    // 保存成功要给下一步: 「去发布」直达该候选所属那一轮挖掘并选中它 (只写「已保存」等于没给路)
     onSuccess: (d, v) => {
-      if (v.action === 'save') toast(d.candidate_id ? '已保存 · 候选方案' : '已记录 · 候选方案未建出', d.candidate_id ? 'success' : 'error')
-      else toast(d.removed_candidate_id ? '未采用 · 候选方案已撤销' : '未采用', 'success')
+      const runId = page?.week?.run_id
+      if (v.action === 'save') {
+        if (d.candidate_id) toast('已保存 · 候选方案', 'success', onOpenCandidate && runId ? { action: { label: '去发布', onClick: () => onOpenCandidate(runId, v.sig) } } : undefined)
+        else toast('已记录 · 候选方案未建出', 'error')
+      } else toast(d.removed_candidate_id ? '未采用 · 候选方案已撤销' : '未采用', 'success')
       refresh(); void qc.invalidateQueries({ queryKey: QK.researchCandidates })
     },
   })
