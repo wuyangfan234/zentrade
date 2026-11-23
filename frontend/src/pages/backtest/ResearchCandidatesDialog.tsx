@@ -1,10 +1,18 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDown, ArrowUp, BookmarkCheck, CheckCircle2, Clock3, Link2, Loader2, RotateCcw, Trash2, X, XCircle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ArrowDown, ArrowUp, BookmarkCheck, CheckCircle2, Clock3, Link2, Loader2, Rocket, RotateCcw, Trash2, X, XCircle } from 'lucide-react'
 import { Modal } from '@/components/Modal'
 import { toast } from '@/components/Toast'
 import { api, type ResearchCandidate, type ResearchCandidateStatus, type ScoringDirection } from '@/lib/api'
 import { fmtPct } from '@/lib/format'
+import {
+  miningCandidateHref,
+  miningFocusState,
+  minedCandidateRef,
+  researchCandidateName,
+  type MinedCandidateRef,
+} from '@/lib/minedCandidate'
 import { QK } from '@/lib/queryKeys'
 import { SHARE_CAPITAL_FIELDS } from '@/lib/retired-market-fields'
 
@@ -77,6 +85,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
   onLoadStrategy?: (candidate: ResearchCandidate) => void
 }) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const [kind, setKind] = useState<'all' | 'factor' | 'strategy'>('all')
   const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null)
   const candidates = useQuery({ queryKey: QK.researchCandidates, queryFn: api.researchCandidates })
@@ -86,6 +95,18 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
     () => new Set((factorColumns.data?.columns ?? []).map(item => item.id)),
     [factorColumns.data],
   )
+  // 候选显示名与挖掘页候选列表、策略池同名 (lib/minedCandidate): 保存时的「因子组合 · amplitude」不再上屏
+  const factorLabels = useMemo(
+    () => new Map((factorColumns.data?.columns ?? []).map(item => [item.id, item.label] as [string, string])),
+    [factorColumns.data],
+  )
+  const strategyRows = strategies.data?.strategies ?? (strategies.isError ? [] : undefined)
+  const strategyExists = (id: string) => !!id && (strategies.data?.strategies ?? []).some(strategy => strategy.id === id)
+  /** 去发布: 落到该候选所属那一轮挖掘并选中它 (发布按钮就在那里), 弹窗随之关闭 */
+  const goPublish = (ref: MinedCandidateRef) => {
+    onClose()
+    navigate(miningCandidateHref(ref.runId, ref.signature), { state: miningFocusState(ref.runId ? ref.signature : null) })
+  }
   const visible = useMemo(() => {
     const items = candidates.data?.items ?? []
     return kind === 'all' ? items : items.filter(item => item.kind === kind)
@@ -212,9 +233,17 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
           const factorSupported = supportedFactors.has(item.source_id)
           const canLink = item.kind === 'factor' && item.status === 'validated' && factorSupported
           const ic = typeof item.metrics.ic_mean === 'number' ? item.metrics.ic_mean : null
+          const name = researchCandidateName(item, factorLabels, strategyRows)
+          const strategyId = String((item.config as Record<string, unknown>)?.strategy_id ?? '')
+          const published = item.kind === 'strategy' && strategyExists(strategyId)
+          // 挖掘因子候选在发布前, strategy_id 指向的 mined_factor_* 策略还不存在, 回测表单无从复测。
+          // 旧实现只写一个「待发布」, 去哪发布藏在悬停里 (手机上连悬停都没有); 现在给「去发布」:
+          // 落到该候选所属那一轮挖掘并选中它。已排除的不给。
+          const mined = minedCandidateRef(item)
+          const canPublish = !!mined && !!strategies.data && !published && item.status !== 'rejected'
           return (
           <div key={item.id} className="border-b border-border/70 last:border-b-0">
-            <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_8rem_7rem] md:items-center">
+            <div className="grid grid-cols-1 gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_8rem_8rem] md:items-center">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[11px] font-medium ${item.kind === 'factor'
@@ -223,7 +252,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                   }`}>
                     {item.kind === 'factor' ? '因子' : '策略'}
                   </span>
-                  <span className="truncate text-sm font-medium text-foreground">{item.name}</span>
+                  <span className="truncate text-sm font-medium text-foreground" data-candidate-name="">{name}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted">
                   <span>{metricSummary(item)}</span>
@@ -237,7 +266,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                 value={item.status}
                 onChange={event => update.mutate({ id: item.id, status: event.target.value as ResearchCandidateStatus })}
                 disabled={update.isPending}
-                aria-label={`更新 ${item.name} 的状态`}
+                aria-label={`更新 ${name} 的状态`}
                 className="h-8 rounded-input border border-border bg-surface px-2 text-xs text-secondary focus:border-accent focus:outline-none disabled:opacity-50"
               >
                 {STATUS_OPTIONS.map(option => (
@@ -245,21 +274,23 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                 ))}
               </select>
               <div className="flex items-center justify-end gap-1">
-                {item.kind === 'strategy' && onLoadStrategy && (() => {
-                  // 挖掘因子候选在发布前, strategy_id 指向的 mined_factor_* 策略还不存在, 回测表单无从复测:
-                  // 旧实现照样回填, 下拉选中一个不存在的策略。未发布时不给按钮, 写明先发布。
-                  const sid = String((item.config as Record<string, unknown>)?.strategy_id ?? '')
-                  const unpublished = Array.isArray((item.config as Record<string, unknown>)?.factor_names)
-                    && !!strategies.data && !(strategies.data.strategies ?? []).some(st => st.id === sid)
-                  return unpublished
-                    ? <span className="inline-flex h-8 items-center px-2 text-[11px] text-muted" title="挖掘候选需先在挖掘页发布为策略 · 发布后可在回测页复测">待发布</span>
-                    : null
-                })()}
-                {item.kind === 'strategy' && onLoadStrategy && (strategies.data?.strategies ?? []).some(st => st.id === String((item.config as Record<string, unknown>)?.strategy_id ?? '')) && (
+                {canPublish && mined && (
+                  <button
+                    type="button"
+                    data-candidate-publish=""
+                    onClick={() => goPublish(mined)}
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10"
+                    title="到挖掘页发布"
+                  >
+                    <Rocket className="h-3.5 w-3.5" />
+                    去发布
+                  </button>
+                )}
+                {item.kind === 'strategy' && onLoadStrategy && published && (
                   <button
                     type="button"
                     onClick={() => onLoadStrategy(item)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10"
                     title="将该候选的回测配置填入回测表单"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
@@ -271,7 +302,7 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                     type="button"
                     onClick={() => linking ? setLinkDraft(null) : startLink(item)}
                     disabled={!canLink || strategies.isLoading || factorColumns.isLoading}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
+                    className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-btn px-2 text-[11px] text-accent transition-colors hover:bg-accent/10 disabled:cursor-not-allowed disabled:text-muted disabled:opacity-50"
                     title={item.status !== 'validated' ? '验证通过后可加入策略' : factorSupported ? '加入策略评分' : '当前因子不可用于策略评分'}
                   >
                     <Link2 className="h-3.5 w-3.5" />
@@ -281,12 +312,12 @@ export function ResearchCandidatesDialog({ onClose, onLoadStrategy }: {
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`确认删除候选方案“${item.name}”？`)) remove.mutate(item.id)
+                    if (window.confirm(`确认删除候选方案“${name}”？`)) remove.mutate(item.id)
                   }}
                   disabled={remove.isPending}
                   className="flex h-8 w-8 items-center justify-center rounded-btn text-muted transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-50"
                   title="删除候选"
-                  aria-label={`删除候选 ${item.name}`}
+                  aria-label={`删除候选 ${name}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

@@ -12,12 +12,15 @@ import fixture from './__fixtures__/factor-lab-page.json'
 
 const mocks = vi.hoisted(() => ({
   factorLabPage: vi.fn(), watchlistRules: vi.fn(), oppPage: vi.fn(), screenerStrategies: vi.fn(),
-  factorLibrary: vi.fn(), miningRuns: vi.fn(), miningResult: vi.fn(),
+  factorLibrary: vi.fn(), miningRuns: vi.fn(), miningResult: vi.fn(), factorLabDecide: vi.fn(),
 }))
 vi.mock('@/lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/api')>()
   return { ...actual, api: { ...actual.api, ...mocks } }
 })
+type ToastCall = [string, string | undefined, { action?: { label: string; onClick: () => void } } | undefined]
+const toasts = vi.hoisted(() => ({ calls: [] as ToastCall[] }))
+vi.mock('@/components/Toast', () => ({ toast: (...args: ToastCall) => { toasts.calls.push(args) } }))
 import {
   FactorMatrix, FactorSlots, boardRows, humanizeName, roundShares, scoringChallengers, scoringUses, strategyFamily, weeklyIcTable,
 } from './FactorSlots'
@@ -168,6 +171,20 @@ it('matrix view: one row per scoring factor, family columns, warning ring on rev
   expect(cells).toHaveLength(3)
   for (const c of cells) expect(c.className).toContain('ring-warning')
   expect(host.querySelector('[data-matrix-row="momentum_60d"] [data-matrix-cell]')!.className).not.toContain('ring-warning')
+})
+
+it('stock slot: the 保存 success toast carries 去发布 to that candidate\'s own mining run', async () => {
+  toasts.calls.length = 0
+  mocks.factorLabDecide.mockResolvedValue({ candidate_id: 'rc_1' })
+  const open = vi.fn()
+  await render(<FactorSlots onInspect={() => {}} onOpenReview={() => {}} onOpenCandidate={open} />, '[data-decide="save"]')
+  await act(async () => { host.querySelector<HTMLButtonElement>('[data-decide="save"]')!.click() })
+  for (let i = 0; i < 12; i++) await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+  const saved = toasts.calls.find(([msg]) => msg === '已保存 · 候选方案')!
+  expect(saved[1]).toBe('success')
+  expect(saved[2]?.action?.label).toBe('去发布')
+  saved[2]!.action!.onClick()
+  expect(open).toHaveBeenCalledWith(page.week!.run_id, page.week!.candidates[0].signature)
 })
 
 it('factor page: slots is the home view, tools group the old tabs, old tab addresses keep working', () => {

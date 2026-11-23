@@ -14,6 +14,7 @@ const FactorDiscovery = lazy(() => import('./backtest/FactorDiscovery').then(m =
 const MiningWorkbench = lazy(() => import('./backtest/MiningWorkbench').then(m => ({ default: m.MiningWorkbench })))
 const ResearchCandidatesDialog = lazy(() => import('./backtest/ResearchCandidatesDialog').then(m => ({ default: m.ResearchCandidatesDialog })))
 import { api } from '@/lib/api'
+import { miningCandidateHref, miningFocusState } from '@/lib/minedCandidate'
 import { QK } from '@/lib/queryKeys'
 
 type Tab = 'slots' | 'matrix' | 'discover' | 'library' | ToolTab
@@ -74,6 +75,10 @@ export function Factors() {
     next.delete('focus') // 切 tab 清除单因子聚焦
     next.delete('edit') // 切 tab 清除编辑器载入目标
     setSearchParams(next, { replace: true })
+  }
+  // 保存成功提示里的「去发布」: 打开该候选所属那一轮挖掘并选中它 (与候选方案弹窗的「去发布」同一条深链)
+  const openMiningCandidate = (runId: string, signature: string) => {
+    navigate(miningCandidateHref(runId, signature), { state: miningFocusState(signature) })
   }
 
   return (
@@ -167,6 +172,7 @@ export function Factors() {
                 setSearchParams(next)
               }}
               onOpenReview={() => changeTab('discover')}
+              onOpenCandidate={openMiningCandidate}
             />
           </div>
         )}
@@ -177,7 +183,7 @@ export function Factors() {
         )}
         {activeTab === 'discover' && (
           <div className="h-full min-h-0 xl:overflow-y-auto">
-            <FactorDiscover onGo={tab => changeTab(tab)} />
+            <FactorDiscover onGo={tab => changeTab(tab)} onOpenCandidate={openMiningCandidate} />
           </div>
         )}
         {activeTab === 'library' && (

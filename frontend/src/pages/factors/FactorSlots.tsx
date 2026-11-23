@@ -499,15 +499,21 @@ function BoardSlot({ d }: { d: SlotData }) {
 }
 
 // ---------------------------------------------------------------- slot 2 · 选股策略
-function StockSlot({ d, onOpenReview }: { d: SlotData; onOpenReview: () => void }) {
+function StockSlot({ d, onOpenReview, onOpenCandidate }: {
+  d: SlotData; onOpenReview: () => void; onOpenCandidate?: (runId: string, signature: string) => void
+}) {
   const qc = useQueryClient()
   const page = d.lab.data
   const w: DiscoverWeek | null | undefined = page?.week
   const decide = useMutation({
     mutationFn: ({ sig, action }: { sig: string; action: 'save' | 'discard' }) => api.factorLabDecide(w!.week, sig, action),
     onSuccess: (r, v) => {
-      if (v.action === 'save') toast(r.candidate_id ? '已保存 · 候选方案' : '已记录 · 候选方案未建出', r.candidate_id ? 'success' : 'error')
-      else toast('未采用', 'success')
+      // 保存成功要给下一步: 「去发布」直达该候选所属那一轮挖掘并选中它 (只写「已保存」等于没给路)
+      const runId = w?.run_id
+      if (v.action === 'save') {
+        if (r.candidate_id) toast('已保存 · 候选方案', 'success', onOpenCandidate && runId ? { action: { label: '去发布', onClick: () => onOpenCandidate(runId, v.sig) } } : undefined)
+        else toast('已记录 · 候选方案未建出', 'error')
+      } else toast('未采用', 'success')
       void qc.invalidateQueries({ queryKey: QK.factorLabPage }); void qc.invalidateQueries({ queryKey: QK.researchCandidates })
     },
   })
@@ -719,14 +725,18 @@ function IdleStrip({ d }: { d: SlotData }) {
 }
 
 // ---------------------------------------------------------------- views
-export function FactorSlots({ onInspect, onOpenReview }: { onInspect: (id: string) => void; onOpenReview: () => void }) {
+export function FactorSlots({ onInspect, onOpenReview, onOpenCandidate }: {
+  onInspect: (id: string) => void; onOpenReview: () => void
+  /** 保存成功提示里的「去发布」: 打开该候选所属那一轮挖掘并选中它 */
+  onOpenCandidate?: (runId: string, signature: string) => void
+}) {
   const d = useSlotData()
   return (
     <div data-factor-slots="" className="pb-2">
       {/* 1 / 2 同一行等高: grid 默认 stretch, 卡片 h-full + 页脚 mt-auto, 净值线铺满剩余高度 */}
       <div data-slot-row="" className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <BoardSlot d={d} />
-        <StockSlot d={d} onOpenReview={onOpenReview} />
+        <StockSlot d={d} onOpenReview={onOpenReview} onOpenCandidate={onOpenCandidate} />
       </div>
       <div className="mt-3"><ScoringSlot d={d} onInspect={onInspect} /></div>
       <IdleStrip d={d} />
