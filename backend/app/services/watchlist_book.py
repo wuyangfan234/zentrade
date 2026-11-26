@@ -131,6 +131,9 @@ def _touched(geo_zone, bars, day: date, as_of_close: date) -> str:
     return "pending"
 
 
+ATTRIBUTION_KEYS = ("regime_state", "gate_id", "ledger_tier", "score_components", "timing_tier")
+
+
 def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch: set[str], pm: dict) -> dict:
     """tight-v1 (0.24.0): 下单簿 = 机会板同一张卡 (swing_desk.board_for_day)。规则名 swing, 入场窗 2 日, 持有 5 日,
     限价回踩卡不适用“开盘越区 2% 作废”。只收截至最近收盘仍未触及入场区、且仍在 2 日入场窗内的卡。"""
@@ -208,7 +211,9 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
             target_zone=(float(c["target"]), float(c["target"])), max_holding_days=sd.HOLD_DAYS,
             risk_per_share=float(c["risk"]), reward_risk=float(c["rr"]),
             evidence={"source": sd.RULE_ID, "side": side, "book": True, "signal_day": day.isoformat(),
-                      "ref_close": c["close"], "atr14": c["atr"], "score": c["score"], "decision": decision},
+                      "ref_close": c["close"], "atr14": c["atr"], "score": c["score"], "decision": decision,
+                      # P1-B2 卡归因 (只追加, 不进结算): 结算 / 谱系按 evidence.attribution 读
+                      "attribution": {k: c.get(k) for k in ATTRIBUTION_KEYS}},
             state=CardState.OPEN, state_reason="机会板" + ("做空" if side == "short" else "做多"))
         errs = card.validate(0.0)
         if errs:

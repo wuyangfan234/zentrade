@@ -33,10 +33,13 @@ freeze_streak = 连续几次月度复核点估计 < 0。
 from __future__ import annotations
 
 import json
+import logging
 import math
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
 
 CONTRACT = "strategy-ledger-v1"
 ACTIVE, OBSERVE, PENDING, FROZEN, REVIVED = "在用", "观察", "待定", "冷冻", "复活"
@@ -251,8 +254,8 @@ def monthly_review(data_dir: Path, day: date, *, config_dir: Path | None = None,
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
-    except OSError:
-        pass                     # 写不了审计不挡出板 (档位仍按本次复核)
+    except OSError as e:         # 写不了审计不挡出板 (档位仍按本次复核), 但必须留痕
+        logger.warning("strategy ledger: monthly audit write failed (%s): %s", rec.get("month"), type(e).__name__)
     return rec
 
 

@@ -589,11 +589,108 @@ def t1_plan(reg: dict | None, data_dir: Path | None, day: date) -> dict | None:
         from app.market_clock import us_clock
         live_day = us_clock.next_trading_day(day)
         until = us_clock.next_trading_day(live_day)
-    except Exception:
+    except Exception as e:
+        logger.warning("swing_desk: T1 plan dropped for %s (trading calendar unavailable): %s", day, type(e).__name__)
         return None
     return {"sides": sides, "day": live_day.isoformat(), "valid_until": until.isoformat(),
             "from": reg.get("snapshot_state"), "to": reg.get("state"), "switched_at": reg.get("as_of"),
             "slot": reg.get("slot")}
+
+
+T1_FILE = "t1_anchors.jsonl"
+T1_SOURCES = ("live", "snapshot", "premarket")
+
+
+def t1_path(data_dir: Path) -> Path:
+    return Path(data_dir) / "rules" / T1_FILE
+
+
+def load_t1(data_dir: Path, day: date) -> dict | None:
+    """该信号日的 T1 锚定记录 → {"plan": {...}, "anchors": {(symbol, side): {"price", "source", "at"}}}; 没有 → None。
+    只追加文件, 同一 (信号日, 票, 方向) 先写者为准 (锚定价定下后不再变)。plan 取该信号日第一条记录。"""
+    try:
+        lines = t1_path(data_dir).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return None
+    plan, anchors = None, {}
+    for line in lines:
+        try:
+            x = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(x, dict) or x.get("signal_day") != day.isoformat():
+            continue
+        if plan is None and isinstance(x.get("plan"), dict):
+            plan = x["plan"]
+        key = (x.get("symbol"), x.get("side"))
+        if key not in anchors and isinstance(x.get("price"), (int, float)) and x["price"] > 0:
+            anchors[key] = {"price": float(x["price"]), "source": x.get("source"), "at": x.get("at")}
+    return {"plan": plan, "anchors": anchors} if plan is not None else None
+
+
+def _append_t1(data_dir: Path, rows: list[dict]) -> bool:
+    """只追加 (打开方式 'a', 写完 fsync); 写失败打 warning 并返回 False (调用方本次不出这些 T1 卡, 不让锚定价漂移)。"""
+    import os
+    try:
+        p = t1_path(data_dir)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as f:
+            for r in rows:
+                f.write(json.dumps(r, ensure_ascii=False, sort_keys=True) + "\n")
+            f.flush()
+            os.fsync(f.fileno())
+        return True
+    except OSError as e:
+        logger.warning("swing_desk: T1 anchor write failed: %s", type(e).__name__)
+        return False
+
+
+def _t1_anchors(data_dir: Path, day: date, plan_now: dict | None, t1_today: date | None, live_prices,
+                candidates: dict[str, set[str]]) -> tuple[dict | None, dict]:
+    """T1 锚定 (P1-B2 审查修正: 切换时用现价重算一次, 之后不随行情漂移)。
+    -> (plan, {(symbol, side): anchor})。t1_today=None (落簿 / 对账 / 推送) → 只用本次 regime 判出的 plan, 不读不写锚定
+    (新开方向因没有锚定价而不出卡, T1 卡永不进簿)。t1_today 给定 (机会页实时板与其历史):
+      1) 读已落的锚定记录; 有就用记录里的 plan (切换信息固定);
+      2) 切换当日 (t1_today == plan.day) 且本次 regime 仍判切换、给了 live_prices: 给还没锚定的候选票取现价,
+         追加写一条记录 (票 / 方向 / 锚定价 / 现价来源 / 时刻), 以后只读;
+      3) t1_today 超过 valid_until → 不再出 T1 卡。"""
+    if t1_today is None:
+        return plan_now, {}
+    rec = load_t1(data_dir, day)
+    plan = (rec or {}).get("plan") or plan_now
+    anchors = dict((rec or {}).get("anchors") or {})
+    if plan is None:
+        return None, {}
+    try:
+        until = date.fromisoformat(str(plan.get("valid_until")))
+        live_day = date.fromisoformat(str(plan.get("day")))
+    except ValueError:
+        return None, {}
+    if t1_today > until:
+        return None, {}
+    if plan_now is not None and live_prices is not None and t1_today == live_day:
+        need = {(s, side) for side in plan.get("sides") or () for s in candidates.get(side, ())
+                if (s, side) not in anchors}
+        if need:
+            try:
+                raw = live_prices({s for s, _ in need}, live_day) or {}
+            except Exception as e:
+                logger.warning("swing_desk: T1 live prices unavailable: %s", type(e).__name__)
+                raw = {}
+            at = datetime.now().astimezone().isoformat(timespec="seconds")
+            rows = []
+            for s, side in sorted(need):
+                v = raw.get(s)
+                px, src = (v if isinstance(v, tuple) and len(v) == 2 else (v, None))
+                if not isinstance(px, (int, float)) or not px > 0:
+                    continue
+                rows.append({"signal_day": day.isoformat(), "symbol": s, "side": side, "price": float(px),
+                             "source": src if src in T1_SOURCES else "unknown", "at": at,
+                             "plan": {k: (list(v) if isinstance(v, tuple) else v) for k, v in plan.items()}})
+            if rows and _append_t1(data_dir, rows):
+                rec = load_t1(data_dir, day) or {}
+                anchors = dict(rec.get("anchors") or {})       # 并发时以先写者为准
+    return plan, anchors
 
 
 def mark_headwind(cards: list[dict], reg: dict | None) -> list[dict]:
@@ -618,11 +715,13 @@ def _direction_gate_id(data_dir: Path) -> str | None:
 
 
 def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False,
-                  live_prices=None) -> dict[str, Any] | None:
-    """某个信号日的板 (纯计算, 不写文件)。没有该日信号表 → None。repo=None → 空头门按数据缺处理 (不出空)。
+                  live_prices=None, t1_today: date | None = None) -> dict[str, Any] | None:
+    """某个信号日的板 (t1_today=None 时纯计算, 不写文件)。没有该日信号表 → None。repo=None → 空头门按数据缺处理。
     shadow=True: 另给没上板的同几何候选 (compose_boards 的 shadow)。
-    live_prices: 可选 callable(symbols: set[str], live_day: date) -> {symbol: 现价}; 只在盘中 regime 切换
-    (t1_plan) 时调用, 给新开方向的 T1 卡重算几何。不传 (落簿 / 对账 / 推送) → 新开方向不出卡 (T1 只上实时板)。"""
+    t1_today / live_prices: 只有机会页实时板 (build_live, 含其历史回看) 传。live_prices = callable(symbols, live_day)
+    -> {symbol: (现价, 来源 live/snapshot/premarket)}。T1 卡用切换当日首次取到的现价作锚定价 (落 data/rules/
+    t1_anchors.jsonl, 只追加), 之后每次刷新、次日回看都用同一锚定价重算同一几何; 过了 valid_until 不再出。
+    不传 t1_today (落簿 / 对账 / 推送) → 新开方向不出卡 (T1 卡永不进簿), 也不读写锚定记录。"""
     snap = load_watchlist_snapshot(data_dir, day)
     if snap is None:
         return None
@@ -646,15 +745,24 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False,
     rv = snap.get("rank_values") if isinstance(snap.get("rank_values"), dict) else None
     grades = snap.get("gate_grade") if isinstance(snap.get("gate_grade"), dict) else {}
     observe = {s for s, g in grades.items() if g == "observe"}
-    plan = t1_plan(reg, data_dir, day)
+    signals = list(snap.get("signals") or [])
+    cand: dict[str, set[str]] = {}
+    for r in signals:
+        if isinstance(r, dict) and r.get("symbol") in atr:
+            cand.setdefault("short" if r.get("side") == "short" else "long", set()).add(r["symbol"])
+    plan, anchors = _t1_anchors(data_dir, day, t1_plan(reg, data_dir, day), t1_today, live_prices, cand)
+    sides = tuple(plan.get("sides") or ()) if plan else ()
+    if plan is not None and reg is not None and t1_today is not None and reg.get("source") != "intraday":
+        # 次日回看 (信号日已成历史, 当时的盘中状态文件已被覆盖): 以锚定记录里的切换后状态出这张 T1 卡。
+        # 只降不升仍成立: 记录里的 to 就是当时 min(快照态, 盘中态)。
+        from app.opportunity import regime as _rg
+        reg = dict(reg, state=plan.get("to") or reg["state"], source="t1_record", caps=_rg.caps(plan.get("to"), data_dir)
+                   or reg.get("caps"))
+        short_ok = reg["state"] == "防守"
     live: dict[str, float] = {}
-    if plan is not None and live_prices is not None:
-        try:
-            raw = live_prices(set(atr), date.fromisoformat(plan["day"])) or {}
-            live = {k: float(v) for k, v in raw.items() if isinstance(v, (int, float)) and v > 0}
-        except Exception as e:
-            logger.warning("swing_desk: T1 live prices unavailable: %s", type(e).__name__)
-    boards = compose_boards(signals=list(snap.get("signals") or []), closes=closes, as_of=day,
+    for side in sides:          # 一个方向一套价; 同票两侧都新开的情况按现行上限不存在
+        live.update({s: a["price"] for (s, sd_), a in anchors.items() if sd_ == side})
+    boards = compose_boards(signals=signals, closes=closes, as_of=day,
                             long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok,
                             rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow,
                             max_long=reg["caps"]["long"] if reg else None,
@@ -662,8 +770,12 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False,
                             observe=observe, short_observe=reg is not None,
                             ledger=ledger_for_day(data_dir, day, reg["state"] if reg else None),
                             regime_state=reg["state"] if reg else None, direction_gate=_direction_gate_id(data_dir),
-                            t1_sides=plan["sides"] if plan else (), live_closes=live,
+                            t1_sides=sides, live_closes=live,
                             t1_info={k: v for k, v in plan.items() if k != "sides"} if plan else None)
+    for c in boards["long"] + boards["short"]:
+        a = anchors.get((c["symbol"], c["side"])) if c.get("timing_tier") == TIMING_T1 else None
+        if a is not None:       # 卡上记锚定价与现价来源 (live / snapshot / premarket)
+            c["t1"] = dict(c.get("t1") or {}, anchor_price=a["price"], anchor_source=a["source"], anchor_at=a["at"])
     if reg is not None:
         boards["meta"]["regime"] = reg
     if gate_info is not None:
@@ -697,11 +809,12 @@ def regime_for_snapshot(data_dir: Path, snap: dict, day: date | None = None) -> 
     return out
 
 
-def build(data_dir: Path, *, day: date | None = None, repo=None, live_prices=None) -> dict[str, Any]:
-    """读最近自选信号快照 + 3+3 → 两板 (严格只读, 不写 swing.json: 该文件存在与否决定纸面许可)。无快照 → 空板。
-    live_prices: 透传给 board_for_day (盘中 regime 切换时出 T1 卡)。"""
+def build(data_dir: Path, *, day: date | None = None, repo=None, live_prices=None,
+          t1_today: date | None = None) -> dict[str, Any]:
+    """读最近自选信号快照 + 3+3 → 两板 (不写 swing.json: 该文件存在与否决定纸面许可)。无快照 → 空板。
+    live_prices / t1_today: 透传给 board_for_day (盘中 regime 切换时出 T1 卡; 首次出卡追加写锚定记录)。"""
     day = day or latest_watchlist_day(data_dir)
-    boards = board_for_day(data_dir, day, repo, live_prices=live_prices) if day else None
+    boards = board_for_day(data_dir, day, repo, live_prices=live_prices, t1_today=t1_today) if day else None
     if boards is None:
         long_rules, short_rules = strategies_from_ruleset(data_dir)
         return {"contract": CONTRACT, "available": False, "as_of": None, "long_rules": list(long_rules),
@@ -971,8 +1084,8 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     from app.services import watchlist_book as wb
     now = us_clock.market_datetime(us_clock.now())
     today = today or now.date()
-    base = build(data_dir, repo=repo,
-                 live_prices=lambda syms, d: {s: v[0] for s, v in _live_prices(repo, syms, d, now).items()})
+    base = build(data_dir, repo=repo, t1_today=today,
+                 live_prices=lambda syms, d: dict(_live_prices(repo, syms, d, now).items()))
     base["history"] = []
     base["refresh"] = refresh_info(data_dir, today)
     if not base.get("available"):
@@ -995,7 +1108,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     days = files[: ENTRY_DAYS + HOLD_DAYS + 2]
     boards = {}
     for d in days:
-        b = base if d.isoformat() == base["as_of"] else board_for_day(data_dir, d, repo)
+        b = base if d.isoformat() == base["as_of"] else board_for_day(data_dir, d, repo, t1_today=today)
         if b is not None:
             boards[d] = b
     cards: list[dict] = []
