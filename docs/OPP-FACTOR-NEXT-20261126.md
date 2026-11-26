@@ -99,7 +99,7 @@ S1 的超额基线 = “同日同向 4h 门内格子、同一张紧卡”。用 
 - **生产多头**（ibs / zlsma / trend_breakout）三条**全不在表内** → 单命中恒为 **1.005**，双命中 2.010。这与生产实测“多头卡恒为 1.005”一致（反过来也印证了生产多头不是代码默认三条——默认三条单命中分别是 1.040 / 1.025 / 1.019）。同分时排序依次看命中数 → 排序因子名次 → 门类型 → `sha256(信号日:代码)`，即**按散列随机取前 5**。
 - **生产空头**三条在表内：smc 单命中 1.040，chandelier 与 halftrend 都是 1.006 —— smc 能被区分出来，后两者之间仍不可区分。而且这个区分用的是旧宽卡数，和 tight-v1 下的证据方向不一致（halftrend 才是唯一过校正的规则，权重却最低）。
 - `EXCESS_WEIGHT` 是写死的旧宽卡数，不随滚动表现更新。
-- 与供给的关系：按 A1.1，①→②→③ 两层损耗（门 + 市场状态）才是主战场；打分是第二优先级。但在回放口径下多头 2.70 卡/日、原始命中 14.5 次/日，**门放行的日子里**候选常常超过每侧 5 张，此时前 5 是散列随机选出的——所以修好门之后，打分会立刻成为下一个瓶颈。截断实际发生多少，现有产物没有，列入 P0 拆解。
+- 与供给的关系：按 A1.1，①→②→③ 两层损耗（门 + 市场状态）才是主战场；打分是第二优先级。但在回放口径下多头 2.70 卡/日、原始命中 14.5 次/日，**门放行的日子里**候选有可能超过每侧 5 张，一旦超过，前 5 就是散列随机选出的——所以修好门之后，打分会立刻成为下一个瓶颈。截断实际发生多少，现有产物没有，列入 P0 拆解。
 
 ### A1.5 方向门滞后（交易日）
 
@@ -149,6 +149,12 @@ S1 的超额基线 = “同日同向 4h 门内格子、同一张紧卡”。用 
 | 6 | 多重检验与回测过拟合 | Harvey–Liu–Zhu 2016 https://academic.oup.com/rfs/article-abstract/29/1/5/1843824 ；Deflated Sharpe https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2460551 ；BH 1995 https://doi.org/10.1111/j.2517-6161.1995.tb02031.x | ① 登记**尝试次数**并据此提高门槛；② 报告**校正后**结论 | 这是评估协议，不是策略，直接用 |
 
 注：Minervini 与 Weinstein 的具体规则以原著为准，网页为二手转述，只取机制。
+
+**链接核对状态（2026-11-26 用 web_extract 实际抓取）：**
+- 已打开、标题与引用一致：SSRN 962461（Faber, *A Quantitative Approach to Tactical Asset Allocation*）、SSRN 2460551（Bailey & López de Prado, *The Deflated Sharpe Ratio*）、DOI 10.1016/j.jfineco.2011.11.003（*Time series momentum*）、DOI 10.1016/j.jfineco.2015.12.002（*Momentum crashes*）、DOI 10.2307/1912559（Hamilton 1989）、GitHub quantopian/alphalens、GitHub stefan-jansen/alphalens-reloaded、QuantConnect Walk Forward Optimization 文档、investors.com “The L In CAN SLIM”、IBD University 首页、minervini.com 首页、TrendSpider Minervini Trend Template、TrendSpider Weinstein 文章。
+- **未能打开**：Harvey–Liu–Zhu RFS 页面（HTTP 403，仅在检索结果中见到标题匹配）；BH 1995 DOI（抓取 SSL 失败，未核对）。
+- **未核对**：两本原著的 ISBN（凭书目记忆填写，使用前请自行查验）；minervini.com 首页是会员产品页，不含趋势模板原文。
+
 
 ---
 
@@ -221,7 +227,7 @@ T1/T2 只新增卡来源，不改结算语义（仍按 `swing-settle-v3`，入�
 | 阶段 | 内容 | 改动面 | 预期收益（以验收标准表述，不承诺数值） | 风险 | 回滚 | 需拍板 |
 |---|---|---|---|---|---|---|
 | **P0 补数 + 影子** | ① 回放逐笔/逐日输出；② 门滞后测量；③ 账本离线计算 + 影子板（新打分）；④ regime 三态离线打标 | 新增研究脚本与影子输出；只读生产配置 | 回答 A1.7 所有“算不出”；给出账本组合在留出段的超额 CI 与零卡日比例 | 低；若改 `backend/scripts`、`backend/config` 或 `backend/app`，须标注“影响绿洲排序只读挂载”并通知 | 删除影子文件与脚本 | A6-0 |
-| **P1 换打分 + regime + 多尺度门** | 收缩超额打分替换命中条数；regime 三态替换 SPY<MA50；候选门以插件挂入 | `swing_desk` 打分与排序、`direction_gate` 新门、快照只追加字段、前端卡面分级 | 验收：留出段超额 CI 下限 > 0；零卡日 ≤ 你定阈值；门滞后中位数按 A4-6 缩短 | 中；打分/门改动需与绿洲排序对账 | 配置开关回到 tight-v1 打分与 `daily_ma50`；快照字段不改旧键 | A6-1 ~ A6-3、A6-5、A6-7 |
+| **P1 换打分 + regime + 多尺度门** | 收缩超额打分替换命中条数；regime 三态替换 SPY<MA50；候选门以插件挂入；更新已过时的代码默认 `DEFAULT_LONG` / `EXCESS_WEIGHT` | `swing_desk` 打分与排序、`direction_gate` 新门、快照只追加字段、前端卡面分级 | 验收：留出段超额 CI 下限 > 0；零卡日 ≤ 你定阈值；门滞后中位数按 A4-6 缩短 | 中；打分/门改动需与绿洲排序对账 | 配置开关回到 tight-v1 打分与 `daily_ma50`；快照字段不改旧键 | A6-1 ~ A6-3、A6-5、A6-7 |
 | **P2 盘中 T1/T2** | 整点重判触发 T1；盘中扫描触发 T2（先影子） | 盘中任务、30m/实时数据依赖、独立回放合同 | 验收：转向后第一张正确方向卡提前 ≥ 1 个交易日；T2 影子账本过 A4 | 高；数据时效与成交模拟口径最易出偏 | T1/T2 各自独立开关 | A6-4 |
 
 部署纪律：任何阶段都是“隔离分支 + 门禁全绿 + 实证截图 → 你确认 → 大总管部署”。本卡不部署。
@@ -232,23 +238,23 @@ T1/T2 只新增卡来源，不改结算语义（仍按 `swing-settle-v3`，入�
 
 **A6-0 先不先做 P0？**
 - 是什么：先用影子方式把账本、市场状态、滞后测出来，再决定换不换。
-- 现状：A1 里逐笔分布、实测滞后、生产 3+3 回放三类数字现在算不出。
+- 现状：A1 里逐笔 R 分布、方向门实测滞后、“回放 2.70 卡/日 vs 生产 0.72 卡/日”的差距拆解三类数字现在算不出——而第三项正是判断第一主因的关键证据。
 - 选项：a) 先做 P0（不碰线上卡）；b) 直接 P1（快，但没影子数据背书）；c) 暂缓。
 - 建议：a。
 
 **A6-1 卡多一点还是少而精？**
-- 现状：0.72 卡/日、零卡日 66.2%、最长空窗 24 天；旧 3+3 为 2.97 卡/日、零卡 14.3%。
-- 选项：a) 设供给下限（如零卡日 ≤ 30%），不够用“观察级”卡补位并明示；b) 保持稀缺；c) 回到旧 3+3。
-- 后果：a 有卡可看但要分辨等级；b 继续常空板；c 量回来，但 A1.3 显示旧选法在紧卡下没超额。
+- 现状：生产 10-22 起 0.72 卡/日、零卡日 66.2%、最长空窗 24 天；同一套生产规则（ibs / zlsma / trend_breakout）门前原始命中 ≈14.5 次/日、回放 2.70 卡/日——卡少不是规则不够，是门 + 市场状态层卡住了。而这三条的质量本身也一般：zlsma 超额 +0.127（p=0.024）、ibs +0.061（p=0.035）、trend_breakout −0.006（p=0.531），三条都过不了多重检验校正。
+- 选项：a) 先修门 / 市场状态让供给恢复，再设供给下限（如零卡日 ≤ 30%），不够时用“观察级”卡补位并明示；b) 保持稀缺，宁缺毋滥；c) 直接换更多 / 更常触发的规则来凑量。
+- 后果：a 有卡可看，但要分辨等级，且依赖 P0 拆解结果；b 继续常常空板；c 在错的层上用力——规则层本来就不缺货，换规则大概率提不了量，还会引入没证据的规则。
 - 建议：a。
 
 **A6-2 3+3 谁来选？**
-- 现状：默认 3 多在紧卡下超额全负；手选规则不随表现更新。
+- 现状：生产手选的 3 多 zlsma +0.127（p=0.024）、ibs +0.061（p=0.035）、trend_breakout −0.006（p=0.531），三条都过不了 BH 校正——“手选三条”本身没有统计证据支撑；选定后也不随滚动表现更新，打分权重表还停留在旧宽卡数字（生产多头三条都不在表内）。附带：代码默认 3 多在紧卡下超额全负，已过时。
 - 选项：a) 账本按 A4 自动升降级，你保留一票否决；b) 账本只给建议，你每周手选；c) 维持手选。
-- 建议：a（与 11-18 “排序因子参与每周自动选策略”一致）。
+- 建议：a（账本化是必要的；与 11-18 “排序因子参与每周自动选策略”一致）。
 
 **A6-3 空头怎么开？**
-- 现状：门内随机空头卡约 −0.16R/笔；只在 SPY < MA50 时开空。
+- 现状：门内随机空头卡约 −0.16R/笔；只在 SPY < MA50 时开空。**关键事实：生产空头 `tv_halftrend` 是全库 39 条规则里唯一通过 BH 校正的规则**（n=164，超额 +0.25，p≈0.000）——系统里统计上最站得住的信号恰恰在空头侧，而空头开关又是最滞后的那一道。所以“长多短空怎么开”这一拍很重要。
 - 选项：a) 只在“防守”态开空；b) 维持 SPY < MA50；c) 空头只出观察卡不进纸面。
 - 建议：a，过渡期叠加 c。
 
@@ -283,7 +289,8 @@ H=["2023-01-02","2023-01-16","2023-02-20","2023-04-07","2023-05-29","2023-06-19"
 "2025-01-01","2025-01-09","2025-01-20","2025-02-17","2025-04-18","2025-05-26","2025-06-19","2025-07-04","2025-09-01","2025-11-27","2025-12-25",
 "2026-01-01","2026-01-19","2026-02-16","2026-04-03","2026-05-25","2026-06-19","2026-07-03","2026-09-07"]
 def n(a,b): return int(np.busday_count(a,np.datetime64(b)+1,holidays=H))
-T=n("2023-01-03","2026-10-30")   # 961; 自检 2023-01-03..2026-09-18 = 931
+T=n("2023-01-03","2026-10-30")
+print('T',T,'selfcheck',n("2023-01-03","2026-09-18"))   # 期望 961 / 931
 b=json.load(open('backend/config/swing_base_rates.json'))
 for s in ('long','short'):
     d=b[s]; print(s,d['cards']/T,d['filled']/T,d['fill']['p']*d['mean_r']['v'])
@@ -296,22 +303,30 @@ for side in ('long','short'):
 ps=sorted(v['p'] for v in h.values() if not v.get('thin')); m=len(ps)
 print(m,sum(p<.05 for p in ps),max([i for i,p in enumerate(ps,1) if p<=0.10*i/m] or [0]),sum(p<.05/m for p in ps))
 hr=json.load(open('backend/config/swing_rule_hit_rates.json'))['rules']
-d=('tv_smc_structure','volume_price_surge','macd_golden')
+print('rules_in_S2',b['rules'],b['generated'])
+for side in ('long','short'):
+    print(side,'raw/day',round(sum(hr[r]['mean_per_day'] for r in b['rules'][side]),3),[(r,hr[r]) for r in b['rules'][side]])
+d=('tv_smc_structure','volume_price_surge','macd_golden')   # 代码 DEFAULT_LONG（附带发现）
 print(sum(hr[r]['mean_per_day'] for r in d),np.prod([hr[r]['p_zero_day'] for r in d]))
 ```
 
-实际输出（2026-11-26，本工作树，`main@cec55c0` 的配置文件）：
+实际输出（2026-11-26，本工作树，`main@cec55c0` 的配置文件；以下为脚本原样打印，未加工）：
 
 ```
-T(2023-01-03..2026-10-30)= 961 | check 2023-01-03..2026-09-18: 931 (artifact days=931)
-long cards/day 2.699 filled/day 1.692 R/issued card 0.185
-short cards/day 0.371 filled/day 0.25 R/issued card 0.079
-implied time-exit mean R (approx, assumes target=+2.43R stop=-1R) 0.211
-long rules 30 fills 13235 n-weighted implied gated-baseline R 0.206 excess>0: 11
-short rules 9 fills 3043 n-weighted implied gated-baseline R -0.155 excess>0: 6
-m 39 raw p<.05 3 BH q=.10 pass 1 Bonferroni(.05/m) pass 1
-DEFAULT_LONG raw hits/day sum 0.752 indep zero-day prob 0.543
+T 961 selfcheck 931
+long 2.6992715920915713 1.6919875130072841 0.18496868
+short 0.37148803329864727 0.2497398543184183 0.07852464
+0.2107146204311151
+long 30 13235 0.2064633698526634 11
+short 9 3043 -0.15542389089714095 6
+39 3 1 1
+rules_in_S2 {'long': ['ibs_mean_reversion', 'tv_zlsma_cross', 'trend_breakout'], 'short': ['tv_smc_structure', 'tv_chandelier_exit', 'tv_halftrend']} 2026-11-10T17:08:54+08:00
+long raw/day 14.489 [('ibs_mean_reversion', {'mean_per_day': 10.252, 'p_zero_day': 0.063, 'max_zero_run': 2}), ('tv_zlsma_cross', {'mean_per_day': 3.664, 'p_zero_day': 0.155, 'max_zero_run': 3}), ('trend_breakout', {'mean_per_day': 0.573, 'p_zero_day': 0.663, 'max_zero_run': 42})]
+short raw/day 2.657 [('tv_smc_structure', {'mean_per_day': 0.089, 'p_zero_day': 0.927, 'max_zero_run': 64}), ('tv_chandelier_exit', {'mean_per_day': 1.023, 'p_zero_day': 0.507, 'max_zero_run': 13}), ('tv_halftrend', {'mean_per_day': 1.545, 'p_zero_day': 0.45, 'max_zero_run': 13})]
+0.752 0.5431292999999999
 ```
+
+各行含义：T 交易日与 931 自检 → S2 每侧 卡/日、成交/日、每张出卡期望 R → 到期离场隐含平均 R（近似）→ 每侧有效规则数、成交合计、门内随机卡隐含基线 R、超额>0 规则数 → 规则总数、原始 p<.05 数、BH q=.10 通过数、Bonferroni 通过数 → S2 记录的生产规则与生成时间 → 生产规则门前原始命中合计与逐条供给 → 代码 DEFAULT_LONG 门前命中合计与独立零命中概率。
 
 ## 附录 B：均线翻转几何下界
 
