@@ -1374,11 +1374,18 @@ def start_scheduler(repo: KlineRepository, capset: CapabilitySet) -> AsyncIOSche
         if not _clk.is_trading_day(_clk.today()):
             return None
         from app.services import market_mood
+        res = None
         try:
-            return market_mood.update(repo.store.data_dir, repo, _market_mood_provider())
+            res = market_mood.update(repo.store.data_dir, repo, _market_mood_provider())
         except Exception as e:
             logger.warning("market mood update failed (soft): %s", type(e).__name__)
-            return None
+        # P1-A regime 快层: 复用同一整点钩子 (09:25 + 10:00-15:00), 不另起定时器; 失败不影响大盘重判
+        try:
+            from app.opportunity import regime
+            regime.evaluate_hourly(repo.store.data_dir, repo)
+        except Exception as e:
+            logger.warning("regime hourly failed (soft): %s", type(e).__name__)
+        return res
 
     scheduler.add_job(_market_mood_generate,
         trigger=CronTrigger(day_of_week="mon-fri", hour=8, minute=35, timezone="America/New_York"),

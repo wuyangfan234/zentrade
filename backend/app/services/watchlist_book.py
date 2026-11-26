@@ -173,6 +173,10 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
             return out
     for c in cards:
         sym, side = c["symbol"], c["side"]
+        if c.get("grade") == "observe":
+            # P1-A: 观察级卡 (空头过渡期 / 多尺度门慢中冲突) 只上板展示, 不进纸面下单簿 (RULE_ID 路径)
+            out["skipped"].append({"symbol": sym, "side": side, "reason": "observe_only"})
+            continue
         ok, risk, tier = wv.rule_permission(pm, sd.RULE_ID, side)
         if not ok:
             out["skipped"].append({"symbol": sym, "side": side, "reason": "not_permitted"})
