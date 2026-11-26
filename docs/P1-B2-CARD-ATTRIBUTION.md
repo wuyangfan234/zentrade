@@ -5,8 +5,14 @@
 
 ## 1. 卡归因五字段（只追加，旧键不变）
 
-`board_for_day` / `compose_boards` 产出的每张板卡都带下面五个键。它们出现在机会页 `/api` 板载荷（`build` / `build_live`），
-也会进入 `watchlist_book.build_swing_day` 读到的同一张板卡。`card_lineage` 侧按「板卡 dict → 键名」读取，类型以本表为准。
+`board_for_day` / `compose_boards` 产出的每张板卡都带下面五个键（机会页板载荷 `build` / `build_live` 直接返回）。
+
+**落盘与读取路径**：`watchlist_book.build_swing_day` 写纸面下单簿时，把这五个键原样追加到簿卡的
+`evidence.attribution`（`{键: 板卡上的值}`，键集合 = `watchlist_book.ATTRIBUTION_KEYS`），随簿落盘
+（`data/opportunities/book/<信号日>.json` 的 `cards[].evidence.attribution`）。结算、谱系与复盘侧按「簿卡 →
+`evidence.attribution` → 键名」读取，类型以本表为准。这是新加的一个键：不改 `evidence` 里已有的
+`ref_close` / `atr14` / `score` / `decision`，不参与 `swing-settle-v3` / `zt-settle-v1` 的任何计算。
+`card_lineage.stamp` / `reconstruct` 处理的是信号表行，不读这五个键。观察级卡（含全部 T1 卡）不进簿，所以它们的归因只在板载荷里。
 
 | 字段 | 类型 | 可空 | 语义 |
 |---|---|---|---|
@@ -16,16 +22,26 @@
 | `score_components` | `object` `{"rules": [...], "k": number, "total": number}` | 否 | 卡分逐规则明细。`rules` 每个元素：`{"strategy": str, "n": int, "excess": number\|null, "shrunk": number, "tier": str}`，`tier` ∈ {`active`, `observe`, `revived`, `rank`}（`rank` = 排序因子，分数恒 0）；`shrunk = excess × n / (n + k)`（四位小数）；`total` = 卡上 `score`（等于各 `shrunk` 之和，四舍五入误差 ≤ 1e-4）。只列参与打分的规则，待定/冷冻档不出现 |
 | `timing_tier` | `str` ∈ {`T0`, `T1`} | 否 | 出卡时机：`T0` = 盘后快照出卡；`T1` = 盘中整点 regime 切换后新开方向的卡（见第 2 节）。`T2` 已被产品决策删除，不会出现 |
 
-T1 卡另带（只追加）：`signal_close`（上一收盘，float）、`t1`（`{"day", "valid_until", "from", "to", "switched_at", "slot"}`）。
+T1 卡另带（只追加）：`signal_close`（上一收盘，float）、`t1`（`{"day", "valid_until", "from", "to", "switched_at", "slot",
+"anchor_price", "anchor_source", "anchor_at"}`；`anchor_source` ∈ {`live`, `snapshot`, `premarket`}，取不到来源时为 `unknown`）。
 板 `meta` 在有切换时另带 `t1`（`sides` / `live_n` 等）。
 
 ## 2. T1 状态切换卡
 
 - **触发**：盘中整点重判把 regime 降了一档以上（`regime_for_snapshot` 的 `source == "intraday"`），并且某个方向在快照态下上限为 0、切换后 > 0（`t1_plan`）。按现行上限（进攻/震荡/防守 多头 5/5/0、空头 0/0/5），实际只有「切到防守 → 空头新开」这一种情况。
-- **几何**：公式不改（`[c−0.50A, c−0.25A]`、止损 = 区上沿 −1.0A、目标 = 区上沿 +2.0A，空头镜像；`ENTRY_DAYS=2`、`HOLD_DAYS=5`），只把 `c` 从信号日收盘换成现价。现价取 `_live_prices`（热报价 → 当日快照 → 盘前），某只票取不到现价就不出卡（`skipped` 原因 `t1_no_live_price`）。
+- **几何**：公式不改（`[c−0.50A, c−0.25A]`、止损 = 区上沿 −1.0A、目标 = 区上沿 +2.0A，空头镜像；`ENTRY_DAYS=2`、`HOLD_DAYS=5`），只把 `c` 从信号日收盘换成**锚定价**。
+- **锚定价（固定一次）**：切换当日机会页第一次出这张卡时，用 `_live_prices`（热报价 → 当日快照 → 盘前）取到的现价作为锚定价，
+  并向 `data/rules/t1_anchors.jsonl` 追加一条记录（信号日 / 票 / 方向 / 锚定价 / 来源 / 时刻 / 切换信息）。之后每次刷新、
+  次日回看都只读这条记录，用同一锚定价重算出同一几何；同一 (信号日, 票, 方向) 以先写入的记录为准，不改写。
+  选择「落记录」而不是「取整点 K 线收盘价」的理由：自选池里的票不保证有整点 K 线；落记录能保证用户在切换时看到的价位就是之后一直用的价位，
+  而且来源（live / snapshot / premarket）可以如实记下。
+- 取不到现价就不出卡（`skipped` 原因 `t1_no_live_price`）；记录写失败时打 warning，本次也不出卡，避免锚定价漂移。
 - **有效期**：切换当日（快照日的下一个交易日）+ 次日，与 `ENTRY_DAYS=2` 是同一个窗口。
 - **等级**：T1 卡一律观察级（`grade="observe"`），纸面下单簿不收；机会页把它显示为待回踩、`blocked="observe_only"`（交易环不挂单）。空头仍只在防守态开放。
-- **读点**：只有 `build_live`（机会页实时板）给 `board_for_day` 传 `live_prices`。落簿、对账、推送不传，这些路径在切换期间不出新开方向的卡。
+- **读点**：只有 `build_live`（机会页实时板，包括它对历史信号日的回看）给 `board_for_day` 传 `t1_today`；
+  只有切换当日才会传入 `live_prices` 去写新锚定。次日新快照到了之后，原信号日变成历史日，回看时从锚定记录里读到切换后的状态
+  （`meta.regime.source = "t1_record"`），照样出这张 T1 卡，直到 `valid_until`；过了 `valid_until` 就不再出（板和历史里都没有）。
+  落簿、对账、推送不传 `t1_today`，既不读也不写锚定记录，所以 T1 卡永远不进簿。
 - **旧方向「逆风」**：切换后上限为 0 的方向上还没成交的卡（`pending` / `in_zone`，不含 T1 卡）在 `build_live` 中标 `headwind=true`，并在同组内排到后面。不撕单，不改写已落盘的簿卡。
 
 ## 3. 账本不可用 → fail-closed
