@@ -43,6 +43,13 @@ export const OPP = {
     strategies: [{ id: 'tv_zlsma_cross', name: 'ZLSMA 金叉' }], score_components: { rules: [{ strategy: 'tv_zlsma_cross', n: 601, excess: 0.127, shrunk: 0.121, tier: 'active' }], k: 30, total: 0.121 } }],
   { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: { 'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用' } } } }), ['tv_zlsma_cross'], []),
   empty: page(swingWith([], { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: { 'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用' } } } }), ['tv_zlsma_cross'], []),
+  /** 模拟后端卡 #11 合并后: 账本格带 ci_low / ci_high (现行后端不带) */
+  ci: page(swingWith([], { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: {
+    'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用', ci_low: 0.001, ci_high: 0.252 },
+    'tv_halftrend|short': { n: 164, excess: 0.249, tier: '在用', ci_low: 0.147, ci_high: 0.352 },
+    'tv_chandelier_exit|short': { n: 210, excess: 0.031, tier: '观察', ci_low: -0.05, ci_high: 0.11 },
+    'volume_price_surge|long': { n: 410, excess: -0.203, tier: '冷冻', ci_low: -0.31, ci_high: -0.09 },
+    'macd_golden|long': { n: 388, excess: -0.112, tier: '待定' } } } }), ['tv_zlsma_cross'], SHORT),
   anomaly: page(swingWith([CARDS.observe, CARDS.t1], { ledger: { status: 'unavailable', month: '2026-12', regime: '震荡', k: 30, cells: {} } }), LONG3, SHORT),
 }
 

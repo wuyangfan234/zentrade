@@ -16,7 +16,23 @@
    "contrast": 0,
    "count_bad": 0
   },
+  "opp-full-wide": {
+   "js_errors": 0,
+   "overflowX": 0,
+   "trunc": 0,
+   "overlap": 0,
+   "contrast": 0,
+   "count_bad": 0
+  },
   "opp-two-desktop": {
+   "js_errors": 0,
+   "overflowX": 0,
+   "trunc": 0,
+   "overlap": 0,
+   "contrast": 0,
+   "count_bad": 0
+  },
+  "opp-two-wide": {
    "js_errors": 0,
    "overflowX": 0,
    "trunc": 0,
@@ -49,6 +65,14 @@
    "count_bad": 0
   },
   "opp-anomaly-mobile": {
+   "js_errors": 0,
+   "overflowX": 0,
+   "trunc": 0,
+   "overlap": 0,
+   "contrast": 0,
+   "count_bad": 0
+  },
+  "opp-ci-desktop": {
    "js_errors": 0,
    "overflowX": 0,
    "trunc": 0,
@@ -129,7 +153,37 @@
     "/api/settings/update-check"
    ]
   },
+  "opp-full-wide": {
+   "js_errors": [],
+   "overflowX": 0,
+   "trunc": [],
+   "overlap": [],
+   "contrast": [],
+   "count_bad": [],
+   "cards": 7,
+   "ledger_rows": 7,
+   "reason_rows": 0,
+   "fp": "防守|2026-11-25T11:00:00-05:00|intraday",
+   "mock_404": [
+    "/api/settings/update-check"
+   ]
+  },
   "opp-two-desktop": {
+   "js_errors": [],
+   "overflowX": 0,
+   "trunc": [],
+   "overlap": [],
+   "contrast": [],
+   "count_bad": [],
+   "cards": 2,
+   "ledger_rows": 7,
+   "reason_rows": 0,
+   "fp": "防守|2026-11-25T11:00:00-05:00|intraday",
+   "mock_404": [
+    "/api/settings/update-check"
+   ]
+  },
+  "opp-two-wide": {
    "js_errors": [],
    "overflowX": 0,
    "trunc": [],
@@ -200,6 +254,21 @@
    "ledger_rows": 0,
    "reason_rows": 0,
    "fp": "none",
+   "mock_404": [
+    "/api/settings/update-check"
+   ]
+  },
+  "opp-ci-desktop": {
+   "js_errors": [],
+   "overflowX": 0,
+   "trunc": [],
+   "overlap": [],
+   "contrast": [],
+   "count_bad": [],
+   "cards": 0,
+   "ledger_rows": 5,
+   "reason_rows": 0,
+   "fp": "进攻|2026-11-24|snapshot",
    "mock_404": [
     "/api/settings/update-check"
    ]

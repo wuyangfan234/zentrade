@@ -78,12 +78,21 @@ COUNT_JS = r"""() => {
   for (const r of q('[data-loop-rule]')) {
     const c = r.querySelector('[data-loop-count]'); eq(`闭环 ${r.getAttribute('data-loop-rule')}`, Number(c.getAttribute('data-loop-count')), r.querySelectorAll('[data-loop-card]').length)
   }
-  // 末行不留整列空白: 每个卡片网格最后一张卡的右缘 = 网格内容区右缘
+  // 末行不偏到一侧: 末行左右空白相差 ≤ 2px (补齐或居中), 且任何卡不超过 2 个列宽 (宽屏不拉满整行)
   for (const g of q('[data-grid-fill]')) {
     const kids = [...g.children]; if (!kids.length) continue
-    const cs = getComputedStyle(g), gr = g.getBoundingClientRect(), last = kids[kids.length - 1].getBoundingClientRect()
-    const right = gr.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth)
-    if (right - last.right > 2) bad.push(`末行留白 ${g.getAttributeNames().filter(a => a.startsWith('data-'))[0]}: ${Math.round(right - last.right)}px`)
+    const cs = getComputedStyle(g), gr = g.getBoundingClientRect()
+    const L = gr.left + parseFloat(cs.paddingLeft) + parseFloat(cs.borderLeftWidth), Rr = gr.right - parseFloat(cs.paddingRight) - parseFloat(cs.borderRightWidth)
+    const rects = kids.map(k => k.getBoundingClientRect()), top = Math.max(...rects.map(r => Math.round(r.top)))
+    const row = rects.filter(r => Math.round(r.top) === top)
+    const lg = Math.min(...row.map(r => r.left)) - L, rg = Rr - Math.max(...row.map(r => r.right))
+    const name = g.getAttributeNames().filter(a => a.startsWith('data-') && a !== 'data-grid-fill')[0]
+    if (Math.abs(lg - rg) > 2) bad.push(`末行偏一侧 ${name}: 左 ${Math.round(lg)} 右 ${Math.round(rg)}`)
+    const col = Math.min(...rects.map(r => r.width)), gap = parseFloat(cs.columnGap) || 0
+    for (const r of rects) if (r.width > col * 2 + gap + 2) bad.push(`卡跨超过 2 列 ${name}: ${Math.round(r.width)}px`)
+  }
+  for (const f of q('[data-loop-factor]')) {
+    const c = f.querySelector('[data-loop-count]'); eq(`打分闭环 ${f.getAttribute('data-loop-factor')}`, Number(c.getAttribute('data-loop-count')), f.querySelectorAll('[data-loop-strategy]').length)
   }
   // 同一张表的区间条: 0 基准线横坐标一致 (全表同一刻度)
   for (const t of q('table')) {
@@ -130,15 +139,15 @@ PERIPHERAL = {
 
 def run():
     results, fps = {}, {}
-    plan = [('opp', s) for s in ('full', 'two', 'sparse', 'empty', 'anomaly')] + [('factor', s) for s in ('full', 'sparse', 'anomaly')]
+    plan = [('opp', s) for s in ('full', 'two', 'sparse', 'empty', 'anomaly', 'ci')] + [('factor', s) for s in ('full', 'sparse', 'anomaly')]
     with sync_playwright() as p:
         exe = os.environ.get('PW_CHROMIUM')  # 本机 playwright 包与已缓存浏览器版本不一致时显式指定
         br = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
         for kind, sc in plan:
             for vname, vp in VIEWS.items():
-                if sc in ('sparse', 'empty', 'two') and vname == 'mobile':
+                if sc in ('sparse', 'empty', 'two', 'ci') and vname == 'mobile':
                     continue
-                if vname == 'wide' and sc != 'two':  # 宽屏只用来复现「2 张卡占 3 列」
+                if vname == 'wide' and (kind != 'opp' or sc not in ('two', 'full')):  # 宽屏: 复现「2 张卡占 3 列」+ 4 列 5 张末行
                     continue
                 if ONLY and sc not in ONLY:
                     continue
@@ -173,8 +182,10 @@ def run():
                     raise
                 if kind == 'opp' and sc == 'full' and page.locator('[data-attr-toggle="AMD"]').count():
                     page.click('[data-attr-toggle="AMD"]')
-                if kind == 'factor' and page.locator('[data-loop-toggle="board"]').count():
-                    page.click('[data-loop-toggle="board"]')
+                if kind == 'factor':
+                    for t in ('board', 'scoring'):
+                        if page.locator(f'[data-loop-toggle="{t}"]').count():
+                            page.click(f'[data-loop-toggle="{t}"]')
                 page.wait_for_timeout(400)
                 # Layout 的 <main> 是内部滚动容器: 截图前展开成文档流, full_page 才能截到整页 (只作用于截图)
                 page.add_style_tag(content='html,body,#root,#root>div{height:auto!important;min-height:0!important;overflow:visible!important}'
@@ -185,6 +196,8 @@ def run():
                 # 细节对照的局部截图
                 if kind == 'factor' and sc == 'full' and vname == 'desktop':
                     page.locator('[data-slot="board"]').screenshot(path=str(OUT / f'{PREFIX}detail-ci-reason.png'))
+                if kind == 'opp' and sc == 'ci' and vname == 'desktop':
+                    page.locator('[data-ledger]').screenshot(path=str(OUT / f'{PREFIX}detail-ledger-ci.png'))
                 if kind == 'opp' and sc in ('two', 'full') and vname in ('desktop', 'wide'):
                     page.locator('[data-board]').screenshot(path=str(OUT / f'{PREFIX}detail-grid-{sc}-{vname}.png'))
                 chk = page.evaluate(CHECK_JS, SCOPE)
