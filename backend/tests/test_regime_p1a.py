@@ -356,3 +356,27 @@ def test_short_regime_does_not_downweight_halftrend():
     """空头样本少不是降权理由: regime 只决定开不开, 不改 3+3 空头规则名单或权重。"""
     assert "tv_halftrend" in sd.DEFAULT_SHORT
     assert rg.SHORT_CAP[D] == sd.MAX_PER_SIDE
+
+
+# ── lag / false-flip metrics ───────────────────────────────────────────
+
+def test_zigzag_and_lag_metrics():
+    from app.opportunity import gate_metrics as gm
+    c = [100, 105, 110, 104, 98, 95, 100, 106, 108]
+    piv = gm.zigzag(c, 0.07)
+    assert piv == [(0, "L"), (2, "H"), (5, "L")]
+    piv = piv[1:]
+    states = ["long", "long", "long", "long", "short", "short", "short", "long", "long"]
+    r = gm.lags(states, piv)
+    assert r["flip"] == [2, 2] and r["exit"] == [2, 2] and r["missed"] == 0
+    noisy = ["long", "long", "long", "short", "long", "short", "short", "long", "long"]
+    r2 = gm.lags(noisy, piv)
+    assert r2["flip"][0] == 1 and r2["false_flips"] >= 1
+    s = gm.summarize([r, r2])
+    assert s["pivots"] == 4 and s["flip_median"] is not None and s["false_per_pivot"] is not None
+
+
+def test_default_gate_unchanged_by_multi_scale_registration(tmp_path):
+    from app import optional
+    expected = "phantom_4h" if optional.available("app.services.phantom_4h_gate") else "daily_ma50"
+    assert dg.active(None).id == expected and dg.active(tmp_path).id == expected
