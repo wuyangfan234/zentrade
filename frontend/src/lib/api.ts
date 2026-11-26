@@ -1001,7 +1001,20 @@ export type SwingBoardCard = {
   /** 0.33.0: 持仓票已移出自选 -> 收盘后记离场, 下一交易日开盘平仓 */
   watch_removed?: boolean
   /** 今天不会开的原因 (卡仍显示): 同票持仓 / 平仓冷却 / 财报前一日 / 跨日多空冲突 / 交易环准入阻断 */
-  blocked?: 'holding_other' | 'cooldown' | 'earnings' | 'direction_conflict' | 'paper_watch' | null
+  blocked?: 'holding_other' | 'cooldown' | 'earnings' | 'direction_conflict' | 'paper_watch' | 'observe_only' | null
+  /** P1-B2 (docs/P1-B2-CARD-ATTRIBUTION.md) 观察级卡: 只上板, 不进纸面下单簿 (含全部 T1 卡) */
+  grade?: 'observe' | null
+  /** P1-B2 卡归因五字段 (只追加) */
+  regime_state?: RegimeState | null
+  gate_id?: string
+  ledger_tier?: 'active' | 'observe' | null
+  score_components?: CardScoreComponents
+  timing_tier?: 'T0' | 'T1'
+  /** T1 卡: 上一收盘 + 切换与锚定信息 */
+  signal_close?: number | null
+  t1?: CardT1Info | null
+  /** 盘中切换后旧方向未成交卡 (卡面「逆风」) */
+  headwind?: boolean
   paper_reason?: string | null
   /** 现价已越过止损 (0.27.0 起只有做多第 1 天 09:00 盘前越止损会作废; 其余只是一个状态, 已体现在 odds 里) */
   beyond_stop?: boolean
@@ -1022,6 +1035,25 @@ export type SwingBoardCard = {
   exit_reason?: string | null
   exit_date?: string | null
   exit_price?: number | null
+}
+/** P1-A regime 三态 (backend app/opportunity/regime.py) */
+export type RegimeState = '进攻' | '震荡' | '防守'
+/** 板 meta.regime = swing_desk.regime_for_snapshot 的返回 */
+export type SwingRegimeMeta = {
+  state: RegimeState; as_of?: string | null; reasons?: string[]; source?: 'snapshot' | 'intraday' | 't1_record' | string
+  snapshot_state?: RegimeState | null; slot?: string | null; caps?: Record<string, number> | null
+}
+/** 板 meta.ledger = strategy_ledger.ledger_for 切片; cells 键 = "rule|side" */
+export type LedgerTierZh = '在用' | '观察' | '待定' | '冷冻' | '复活'
+export type SwingLedgerMeta = {
+  contract?: string; status: 'ok' | 'disabled' | 'unavailable'; month?: string | null; regime?: string | null; k?: number | null
+  cells: Record<string, { n?: number | null; excess?: number | null; tier?: LedgerTierZh | string | null; ci_low?: number | null; ci_high?: number | null }>
+}
+export type CardScoreRule = { strategy: string; n: number; excess: number | null; shrunk: number; tier: 'active' | 'observe' | 'revived' | 'rank' | string }
+export type CardScoreComponents = { rules: CardScoreRule[]; k: number; total: number }
+export type CardT1Info = {
+  day?: string; valid_until?: string; from?: string; to?: string; switched_at?: string | null; slot?: string | null
+  anchor_price?: number | null; anchor_source?: 'live' | 'snapshot' | 'premarket' | 'unknown' | string | null; anchor_at?: string | null
 }
 /** 0.27.0 状态赔率 (config/swing_state_odds.json 查表): sig = 期望 95% 区间整体在 0 上 (+1) / 0 下 (-1) / 跨 0 (0) */
 export type SwingOdds = {

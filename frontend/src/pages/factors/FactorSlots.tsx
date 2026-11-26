@@ -34,6 +34,11 @@ import { QK } from '@/lib/queryKeys'
 import { RETIRED_MARKET_FIELDS } from '@/lib/retired-market-fields'
 import { RulesConsole } from '@/components/opportunities/RulesConsole'
 import { displayStrategyName } from '@/lib/strategyDisplay'
+import { RegimeBar } from '@/components/opportunities/RegimeBar'
+import { CiAxis, CiBar } from '@/components/opportunities/CiBar'
+import { FillGrid, GRID } from '@/components/opportunities/Cards'
+import { ciScale, isObserve, ledgerOf, regimeOf, TIER_ICON, tierReason, type ReasonPart, type TierReason } from '@/components/opportunities/p1'
+import type { SwingBoardCard } from '@/lib/api'
 
 const DASH = '—'
 const MINUS = '−'
@@ -223,6 +228,39 @@ export function boardRows(longIds: string[], catalog: WatchlistRuleCatalogItem[]
   return [...champs, ...chs]
 }
 
+/** 挑战者理由 (同一把尺子 = 比 4h 门内随便挑每笔多出的 R; 门槛与验收一致: n ≥ 30 且区间下限 > 0) */
+export function challengerReason(r: Pick<BoardRow, 'n' | 'excess' | 'lo' | 'hi' | 'passed' | 'note'>): TierReason {
+  const parts: ReasonPart[] = []
+  if (r.note) parts.push({ text: r.note, hot: true })
+  else if (r.lo != null && r.hi != null) {
+    if (r.lo > 0) parts.push({ text: `区间下限 ${fmtR(r.lo)} > 0` })
+    else if (r.hi < 0) parts.push({ text: `区间上限 ${fmtR(r.hi)} < 0`, hot: true })
+    else parts.push({ text: `区间 ${fmtR(r.lo)} ~ ${fmtR(r.hi)} 跨 0`, hot: true })
+    parts.push({ text: `样本 ${r.n ?? 0}` })
+  } else parts.push({ text: `超额 ${fmtR(r.excess)}` }, { text: `样本 ${r.n ?? 0}` })
+  if (r.passed) parts.push({ text: '已过验收' })
+  return { word: '挑战', off: false, parts }
+}
+
+/** 一行一句理由。换下行: 浅色底 + 加粗正文 + 触发条件高亮片段 (2026-11-26 用户指定细节) */
+const WORD_CLS: Record<string, string> = {
+  留用: 'bg-accent/10 text-accent dark:text-blue-300', 复活: 'bg-accent/10 text-accent dark:text-blue-300', 观察: 'bg-elevated text-foreground',
+  挑战: 'bg-elevated text-secondary', 换下: 'bg-warning text-white dark:bg-amber-600', 待定: 'bg-elevated text-secondary',
+}
+export function ReasonLine({ r }: { r: TierReason }) {
+  return (
+    <span data-reason={r.word} className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded px-1.5 py-0.5 text-[12px] ${r.off ? 'bg-warning/10 font-semibold text-foreground ring-1 ring-inset ring-warning/40' : 'text-secondary'}`}>
+      <span className={`inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-bold ${r.off ? WORD_CLS['换下'] : WORD_CLS[r.word] ?? WORD_CLS['挑战']}`}>{r.off && r.word === '待定' ? '待定·不出卡' : r.word}</span>
+      {r.parts.map((p, i) => (
+        <span key={i} className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          {i > 0 && <span aria-hidden="true" className="text-secondary">·</span>}
+          {p.hot ? <mark data-reason-hot="" className={`rounded px-1 tabular-nums text-foreground underline decoration-warning decoration-2 underline-offset-[3px] ${r.off ? 'bg-warning/30 font-extrabold' : 'bg-warning/15 font-semibold'}`}>{p.text}</mark> : <span className="tabular-nums">{p.text}</span>}
+        </span>
+      ))}
+    </span>
+  )
+}
+
 /** 百分比取整 (最大余数法): 各项合计正好 100, 避免 21+21+20… = 99 */
 export function roundShares(shares: number[]): number[] {
   const total = shares.reduce((a, b) => a + b, 0)
@@ -286,7 +324,7 @@ function SlotCard({ no, title, sub, ruler, children, footer, attr, className = '
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elevated text-[12px] font-bold text-foreground">{no}</span>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-semibold text-foreground">{title}</div>
-          <div className="truncate text-[11px] text-secondary">{sub}</div>
+          <div className="text-[11px] text-secondary md:truncate">{sub}</div>
         </div>
         <span data-ruler="" className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-medium text-foreground ring-1 ring-inset ring-border">口径 · {ruler}</span>
       </header>
@@ -299,30 +337,7 @@ function SlotError({ text }: { text: string }) {
   return <div className="flex flex-1 items-center justify-center p-6 text-xs text-muted">{text}</div>
 }
 
-/** 区间横条: 0 居中虚线; 点 = 均值; 线 = 区间 (跨 0 的那段琥珀色) */
-const BAR_W = 168
-function RangeBar({ v, lo, hi, min, max, champ }: { v: number | null; lo: number | null; hi: number | null; min: number; max: number; champ: boolean }) {
-  const x = (t: number) => 6 + ((Math.max(min, Math.min(max, t)) - min) / (max - min)) * (BAR_W - 12)
-  if (v == null) return <svg width={BAR_W} height={18} aria-hidden="true"><line x1={x(0)} x2={x(0)} y1={0} y2={18} stroke="hsl(var(--fg-muted))" strokeDasharray="2 3" /></svg>
-  const color = champ ? 'rgb(124 58 237)' : 'hsl(var(--accent))'
-  return (
-    <svg width={BAR_W} height={18} aria-hidden="true" data-range-bar="">
-      <line x1={x(0)} x2={x(0)} y1={0} y2={18} stroke="hsl(var(--fg-muted))" strokeDasharray="2 3" />
-      {lo != null && hi != null && <line x1={x(lo)} x2={x(hi)} y1={9} y2={9} stroke={color} strokeWidth={3} strokeLinecap="round" />}
-      {lo != null && lo < 0 && <line x1={x(lo)} x2={x(Math.min(0, hi ?? 0))} y1={9} y2={9} stroke="hsl(var(--warning))" strokeWidth={3} strokeLinecap="round" />}
-      <circle cx={x(v)} cy={9} r={4.5} fill={champ ? color : 'hsl(var(--surface))'} stroke={color} strokeWidth={champ ? 0 : 2} />
-    </svg>
-  )
-}
-function RangeAxis({ min, max }: { min: number; max: number }) {
-  const x = (t: number) => 6 + ((t - min) / (max - min)) * (BAR_W - 12)
-  const ticks = [-0.2, -0.1, 0, 0.1, 0.2, 0.3].filter(t => x(t) >= 14 && x(t) <= BAR_W - 14)
-  return (
-    <svg width={BAR_W} height={14} aria-hidden="true">
-      {ticks.map(t => <text key={t} x={x(t)} y={11} fontSize="10.5" textAnchor="middle" fill="hsl(var(--fg-secondary))">{t === 0 ? '0' : `${t > 0 ? '+' : MINUS}${Math.abs(t).toFixed(1)}`}</text>)}
-    </svg>
-  )
-}
+const BAR_W = 176
 
 /** 周度入选: 每次周度挖掘一个点, 实心 = 该次被选中 */
 function SelDots({ sel, weeks = [] }: { sel: (boolean | null)[]; weeks?: string[] }) {
@@ -420,43 +435,110 @@ function NavLines({ dates, series }: { dates: string[]; series: { key: string; v
 }
 
 // ---------------------------------------------------------------- slot 1 · 机会板做多
+/** 理由行出处: 账本在当前 regime 那一格的数 (与左侧「回放」超额列不同源) */
+export const ledgerSrc = (l: { regime?: string | null; month?: string | null }) => `账本·${l.regime ?? '—'}格${l.month ? ` ${l.month}` : ''}`
+
+/** 闭环: 槽位里每条在用规则 → 它引用的因子 (排序因子写公式) + 账本档位 → 今日命中它的卡 */
+function BoardLoop({ champs, tierOf, cards, catalog }: { champs: BoardRow[]; tierOf: (r: BoardRow) => string | null; cards: SwingBoardCard[]; catalog: WatchlistRuleCatalogItem[] }) {
+  const byId = new Map(catalog.map(c => [c.id, c]))
+  if (!champs.length) return <div data-loop="board" className="mt-1.5 text-[12px] text-muted">槽位暂无在用规则</div>
+  return (
+    <div data-loop="board" className="mt-1.5 flex flex-col gap-2">
+      {champs.map(r => {
+        const hit = cards.filter(c => c.strategies.some(s => s.id === r.id))
+        const cat = byId.get(r.id)
+        const tier = tierOf(r)
+        return (
+          <div key={r.id} data-loop-rule={r.id} className="rounded-btn border border-border/70">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-2.5 py-1.5 text-[12px]">
+              <b className="text-foreground">{r.name}</b>
+              {tier && <span className="text-secondary">{`${TIER_ICON[tier] ?? '·'} ${tier}`}</span>}
+              <span className="text-muted">{`引用 ${cat?.formula ? `公式 ${cat.formula}` : `${boardKind(r.kind)}规则 ${r.id}`}`}</span>
+              <span className="text-secondary">{`近期 ${fmtR(r.excess)} · ${r.n ?? 0} 笔`}</span>
+              <span data-loop-count={hit.length} className="ml-auto font-semibold tabular-nums text-foreground">{`今日卡 ${hit.length}`}</span>
+            </div>
+            {hit.length > 0 && (
+              <FillGrid data-loop-cards={r.id} className={GRID.replace('px-3 pb-3', 'px-2.5 pb-2.5').replace('280px', '150px').replace('auto-rows-fr ', '')}>
+                {hit.map(c => (
+                  <div key={c.card_id ?? `${c.symbol}${c.side}`} data-loop-card={c.symbol}
+                    className={`flex min-w-0 flex-wrap items-center gap-x-1.5 rounded-card border px-2 py-1.5 text-[12px] ${isObserve(c) ? 'border-dashed border-secondary/70' : 'border-border'}`}>
+                    <b className="text-foreground">{c.symbol}</b>
+                    <span className="text-secondary">{c.side === 'short' ? '↓' : '↑'}</span>
+                    <span className="text-muted">{c.timing_tier === 'T1' ? '盘中切换' : c.timing_tier === 'T0' ? '跨日有效' : ''}</span>
+                    {isObserve(c) && <span className="text-secondary">观察级</span>}
+                    <span className="ml-auto tabular-nums text-foreground">{fmtR(c.score)}</span>
+                  </div>
+                ))}
+              </FillGrid>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function BoardSlot({ d }: { d: SlotData }) {
   const [gear, setGear] = useState(false)
   const longIds = d.settings?.long ?? []
   const rows = boardRows(longIds, d.rules.data?.catalog ?? []).map(r => ({ ...r, name: humanizeName(r.name, d.libMap) }))
   const champs = rows.filter(r => r.role === 'champ')
   const chs = rows.filter(r => r.role === 'ch')
-  const vals = rows.flatMap(r => [r.excess, r.lo, r.hi]).filter(fin)
-  const min = Math.min(-0.15, Math.floor((Math.min(0, ...vals)) * 10) / 10)
-  const max = Math.max(0.25, Math.ceil((Math.max(0, ...vals)) * 10) / 10)
+  // 全表同一把尺子, 刻度按数据收紧 (不再用固定 −0.15 ~ +0.25 全幅, 小区间不会挤成一段)
+  const { min, max } = ciScale(rows.flatMap(r => [r.excess, r.lo, r.hi]))
+  const swing = d.opp.data?.swing
+  const ledger = ledgerOf(swing)
+  const cellOf = (id: string) => ledger?.cells[`${id}|long`]
+  const reasonOf = (r: BoardRow): TierReason => {
+    if (r.role === 'ch') return challengerReason(r)
+    if (r.kind === 'ranker' || r.id.startsWith('rank_')) return { word: '留用', off: false, parts: [{ text: '排序因子 · rank-lab-v2 确认合同' }, { text: `超额 ${fmtR(r.excess)}` }] }
+    const c = cellOf(r.id)
+    // 账本开关关 / 没有账本切片: 档位一律按在用, 只写回放的实际数字, 不做「≥ 30」之类的断言
+    if (!ledger || ledger.status === 'disabled') return { word: '留用', off: false, parts: [
+      { text: ledger ? '账本开关关闭 · 档位按在用' : '账本未返回 · 档位按在用' }, { text: `回放超额 ${fmtR(r.excess)}` }, { text: `样本 ${r.n ?? 0}` }] }
+    if (ledger.status === 'unavailable') return { word: '待定', off: true, parts: [{ text: '本月无账本复核', hot: true }, { text: '全部按待定 · 不出卡' }] }
+    // 理由只用账本切片 (当前 regime 那一格) 的数字, 不与左侧回放数混用; 开头写明出处
+    const why = tierReason(c?.tier ?? '待定', { n: fin(c?.n) ? c!.n! : null, excess: fin(c?.excess) ? c!.excess! : null,
+      lo: fin(c?.ci_low) ? c!.ci_low! : null, hi: fin(c?.ci_high) ? c!.ci_high! : null })
+    return { ...why, parts: [{ text: ledgerSrc(ledger) }, ...why.parts] }
+  }
+  const tierOf = (r: BoardRow) => (r.role === 'ch' ? null : r.kind === 'ranker' ? '排序因子' : ledger?.status === 'disabled' ? '在用' : ledger?.status === 'unavailable' ? '待定' : (cellOf(r.id)?.tier ?? (ledger ? '待定' : null)))
+  const [loop, setLoop] = useState(false)
+  const todayCards: SwingBoardCard[] = [...(swing?.long ?? []), ...(swing?.short ?? [])].filter(c => c.state !== 'holding')
   const passed = chs.filter(r => r.passed)
   const scored = chs.filter(r => r.lo != null)
   const best = [...scored].sort((a, b) => (b.lo ?? -9) - (a.lo ?? -9))[0]
   const err = d.opp.isError || d.rules.isError
   const scoredChs = chs.filter(r => r.excess != null)
   const thinChs = chs.filter(r => r.excess == null)
-  const row = (r: BoardRow) => (
-    <tr key={r.id} data-board-row={r.role} className={`border-b border-border/60 last:border-b-0 ${r.role === 'champ' ? 'bg-violet-500/[0.05]' : ''}`}>
+  const row = (r: BoardRow) => { const why = reasonOf(r); const tier = tierOf(r); return [
+    <tr key={r.id} data-board-row={r.role} data-tier={tier ?? ''} className={`${r.role === 'champ' ? 'bg-violet-500/[0.05]' : ''} ${why.off ? 'shadow-[inset_3px_0_0_hsl(var(--warning))]' : ''}`}>
       <td className="py-1.5 pl-4 pr-2 align-middle"><Role champ={r.role === 'champ'} /></td>
       <td className="py-1.5 pr-2 align-middle">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="break-words text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
           {r.passed && <Tag tone="ok">过验收</Tag>}
         </div>
-        <div className="truncate text-[11px] text-secondary">{`${r.role === 'champ' && !['ranker', 'custom', 'ai'].includes(r.kind) ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</div>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-secondary">
+          <span>{`${r.role === 'champ' && !['ranker', 'custom', 'ai'].includes(r.kind) ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</span>
+          {tier && <span data-board-tier={tier} className={`inline-flex h-[18px] shrink-0 items-center gap-0.5 whitespace-nowrap rounded px-1 font-semibold ${tier === '待定' || tier === '冷冻' ? 'border border-dashed border-warning/70 text-warning' : 'bg-elevated text-secondary'}`}>{`${TIER_ICON[tier] ?? '·'} ${tier}`}</span>}
+        </div>
       </td>
       <td className={`whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[13px] font-semibold tabular-nums ${rToneR(r.excess)}`}>{r.note ?? fmtR(r.excess)}</td>
       <td className="whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[12px] tabular-nums text-secondary">
         {r.lo != null && r.hi != null ? `${fmtR(r.lo).replace('R', '')} ~ ${fmtR(r.hi).replace('R', '')}` : r.p != null ? `p ${r.p.toFixed(3)}` : DASH}
       </td>
-      <td className="py-1.5 pr-4 align-middle"><RangeBar v={r.excess} lo={r.lo} hi={r.hi} min={min} max={max} champ={r.role === 'champ'} /></td>
-    </tr>
-  )
+      <td className="py-0.5 pr-4 align-middle"><CiBar v={r.excess} lo={r.lo} hi={r.hi} min={min} max={max} width={BAR_W} strong={r.role === 'champ'} dim={why.off} /></td>
+    </tr>,
+    <tr key={`${r.id}-why`} data-reason-row={r.id} className={`border-b border-border/60 ${r.role === 'champ' ? 'bg-violet-500/[0.05]' : ''}`}>
+      <td className="pb-1.5 pl-4" /><td colSpan={4} className="pb-1.5 pr-4"><ReasonLine r={why} /></td>
+    </tr>,
+  ] }
   return (
     <SlotCard no={1} title="机会板 · 做多策略" ruler="机会回放" attr={{ 'data-slot': 'board' }}
       sub={`做多 ${champs.length} 条 · 每笔超额 R（对比 4h 同向随机入场）`}
       footer={<>
-        <span data-slot-verdict="" className="min-w-0 flex-1 truncate text-secondary">
+        <span data-slot-verdict="" className="min-w-0 flex-1 text-secondary md:truncate">
           {err ? '读取失败' : passed.length ? `${passed.map(r => r.name).join(' · ')} 通过检验 · 可在机会板策略中启用`
             : best ? `挑战者区间都跨 0 · 下限最高 ${best.name} ${fmtR(best.lo)}` : '暂无可比挑战者'}
         </span>
@@ -469,11 +551,11 @@ function BoardSlot({ d }: { d: SlotData }) {
       {err ? <SlotError text="齿轮或规则目录读取失败" /> : (
         <div className="min-h-0 flex-1 overflow-x-auto">
           <table className="w-full min-w-[540px] table-fixed text-xs" data-board-table="">
-            <colgroup><col className="w-[66px]" /><col /><col className="w-[88px]" /><col className="w-[104px]" /><col className="w-[184px]" /></colgroup>
+            <colgroup><col className="w-[66px]" /><col /><col className="w-[88px]" /><col className="w-[104px]" /><col className="w-[192px]" /></colgroup>
             <thead><tr className="border-b border-border text-[11px] text-secondary">
               <th className="py-1.5 pl-4 text-left font-medium" /><th className="py-1.5 text-left font-medium">策略</th>
               <th className="py-1.5 pr-3 text-right font-medium">超额/笔</th><th className="py-1.5 pr-3 text-right font-medium" title="挑战者 = 95% 区间 · 在用 = p 值">区间 · p</th>
-              <th className="py-1.5 pr-4 text-left font-medium"><RangeAxis min={min} max={max} /></th>
+              <th className="py-1.5 pr-4 text-left font-medium"><CiAxis min={min} max={max} width={BAR_W} /></th>
             </tr></thead>
             <tbody>
               {champs.map(row)}
@@ -484,13 +566,21 @@ function BoardSlot({ d }: { d: SlotData }) {
           {thinChs.length > 0 && (
             <div data-board-thin="" className="flex min-w-0 items-center gap-2 border-t border-border/60 px-4 py-2 text-[12px] text-secondary">
               <span className="shrink-0 font-medium text-foreground">{`样本不足 ${thinChs.length} 个`}</span><span className="shrink-0 text-muted">·</span>
-              <span className="min-w-0 truncate" title={thinChs.map(r => `${r.name} ${r.n ?? 0} 笔`).join(' / ')}>{thinChs.map(r => `「${r.name}」${r.n ?? 0} 笔`).join('  ')}</span>
+              <span className="min-w-0 break-words" title={thinChs.map(r => `${r.name} ${r.n ?? 0} 笔`).join(' / ')}>{thinChs.map(r => `「${r.name}」${r.n ?? 0} 笔`).join('  ')}</span>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-[11px] text-secondary">
-            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full bg-violet-600" />在用 · 点 = 每笔超额</span>
-            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-2 rounded-full ring-2 ring-inset ring-accent" />挑战 · 线 = 95% 区间</span>
-            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-[3px] w-3 rounded bg-warning" />区间跨 0 · 不显著</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-violet-600" />在用 · 条 = 95% 区间 · 圈 = 每笔超额</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-accent" />挑战 · 实色 = 区间整体 &gt; 0</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm" style={{ background: 'repeating-linear-gradient(45deg, hsl(var(--warning)) 0 2px, transparent 2px 4px)' }} />区间跨 0 的负段 · 不显著</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-bear" />区间整体 &lt; 0</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-3 w-[2px] bg-foreground/75" />0 基准</span>
+          </div>
+          <div className="border-t border-border/60 px-4 py-2">
+            <button type="button" data-loop-toggle="board" aria-expanded={loop} onClick={() => setLoop(v => !v)} className="text-[12px] font-medium text-accent hover:underline dark:text-blue-400">
+              {loop ? '闭环 ▾ 因子 → 槽位 → 卡' : `闭环 ▸ 因子 → 槽位 → 卡 · 今日卡 ${todayCards.length}`}
+            </button>
+            {loop && <BoardLoop champs={champs} tierOf={tierOf} cards={todayCards} catalog={d.rules.data?.catalog ?? []} />}
           </div>
         </div>
       )}
@@ -530,6 +620,7 @@ function StockSlot({ d, onOpenReview, onOpenCandidate }: {
   const hold = (v: number | null | undefined) => (fin(v) ? `${v.toFixed(1)} 天` : DASH)
   const pending = cands.filter(c => !decision(c))
   const ann = (v: number | null | undefined) => <span className={`font-semibold tabular-nums ${rTone(v)}`}>{fmtPct(v)}</span>
+  const [loop, setLoop] = useState(false)
   return (
     <SlotCard no={2} title="选股策略" ruler="选股回测" attr={{ 'data-slot': 'stock' }}
       sub={w ? `每日前 20 · 自选 ${w.symbols} · ${w.window?.[0]?.slice(0, 7) ?? ''} → ${w.window?.[1]?.slice(0, 7) ?? ''} · ${w.week.replace(/^\d{4}-/, '')}` : '本周未生成'}
@@ -595,6 +686,17 @@ function StockSlot({ d, onOpenReview, onOpenCandidate }: {
           <span className="ml-auto" title="曲线约每 24 个交易日取一点 · 最大回撤按日净值计算，可能深于曲线所示">抽样净值 · 起点 1.00</span>
         </div>
         <div className="flex min-h-0 flex-1 px-2 pb-1"><NavLines dates={dates} series={series} /></div>
+        <div className="border-t border-border/60 px-4 py-2">
+          <button type="button" data-loop-toggle="stock" aria-expanded={loop} onClick={() => setLoop(v => !v)} className="text-[12px] font-medium text-accent hover:underline dark:text-blue-400">
+            {loop ? '闭环 ▾ 引用 → 槽位' : `闭环 ▸ 引用 ${engine.legs.length} 个策略`}
+          </button>
+          {loop && (
+            <div data-loop="stock" className="mt-1.5 flex flex-col gap-1 text-[12px]">
+              <div className="flex flex-wrap gap-1.5">{engine.legs.map(l => <span key={l.name} data-loop-leg="" className="rounded bg-elevated px-1.5 py-0.5 text-foreground">{displayStrategyName(l.name)}</span>)}</div>
+              <div className="text-secondary">{`近期表现 年化 ${fmtPct(engine.stats.annual_return)} · 夏普 ${fin(engine.stats.sharpe) ? engine.stats.sharpe.toFixed(2) : DASH} · 不在策略账本 (口径 = 选股回测 · 与机会板超额 R 不同尺)`}</div>
+            </div>
+          )}
+        </div>
       </>}
     </SlotCard>
   )
@@ -630,6 +732,7 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
   const cell = 'py-1.5 pr-3'
   const pctOf = new Map(uses.map((u, i) => [u.id, roundShares(uses.map(x => x.share))[i]]))
   const icScale = Math.max(IC_GATE * 1.5, ...[...uses.map(u => u.dirMean), ...challengers.map(c => c.dirMean)].filter(fin).map(Math.abs)) * 1.05
+  const [loop, setLoop] = useState(false)
   const lastRes = d.weeklyRuns[d.weeklyRuns.length - 1]?.result
   const lastFold = (lastRes?.folds ?? []).filter(f => !f.skipped).slice(-1)[0]
   const trainWin = lastFold?.train_start && lastFold.train_end ? `${lastFold.train_start.slice(0, 7)} → ${lastFold.train_end.slice(0, 7)}` : ''
@@ -698,7 +801,42 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
           </table>
         </div>
       )}
+      {!err && (
+        <div className="border-t border-border/60 px-4 py-2">
+          <button type="button" data-loop-toggle="scoring" aria-expanded={loop} onClick={() => setLoop(v => !v)} className="text-[12px] font-medium text-accent hover:underline dark:text-blue-400">
+            {loop ? '闭环 ▾ 因子 → 打分策略' : `闭环 ▸ 因子 → 打分策略 · ${uses.length} 个因子`}
+          </button>
+          {loop && <ScoringLoop uses={uses} weeks={weeks} />}
+        </div>
+      )}
     </SlotCard>
+  )
+}
+
+/** 槽位 3 闭环: 因子 → 引用它的打分策略 (权重) → 近期表现 (周度入选 + 折算 IC)。
+ * 打分因子不在策略账本 (账本只管机会板出卡规则), 也不直接出机会卡, 所以「档位」与「今日卡」写不适用并说明原因。 */
+export function ScoringLoop({ uses, weeks }: { uses: ScoreUse[]; weeks: string[] }) {
+  return (
+    <div data-loop="scoring" className="mt-1.5 flex flex-col gap-1.5 text-[12px]">
+      <div data-loop-note="" className="text-secondary">档位 · 不在策略账本 · 口径 = 周度 IC · 打分只给选股结果排序 · 不出机会卡</div>
+      {uses.length === 0 ? <div className="text-muted">暂无打分因子</div> : uses.map(u => {
+        const by = [...u.uses].sort((a, b) => b.w - a.w)
+        const picked = u.sel.filter(x => x === true).length
+        return (
+          <div key={u.id} data-loop-factor={u.id} className="rounded-btn border border-border/70 px-2.5 py-1.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <b className="text-foreground">{u.label}</b>
+              {u.flag && <span className="text-warning">{u.flag}</span>}
+              <span className="text-secondary">{`近期 折算 IC ${fmtIc(u.sign === 0 ? null : u.dirMean)} · 周度入选 ${picked}/${weeks.length || u.sel.length}`}</span>
+              <span data-loop-count={by.length} className="ml-auto font-semibold tabular-nums text-foreground">{`引用策略 ${by.length}`}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {by.map(x => <span key={x.id} data-loop-strategy={x.id} className={`rounded px-1.5 py-0.5 ${x.inPlay ? 'bg-violet-500/10 text-foreground' : 'bg-elevated text-secondary'}`}>{`${x.name} · 权重 ${x.w.toFixed(2)}`}</span>)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -731,8 +869,10 @@ export function FactorSlots({ onInspect, onOpenReview, onOpenCandidate }: {
   onOpenCandidate?: (runId: string, signature: string) => void
 }) {
   const d = useSlotData()
+  const op = d.opp.data
   return (
     <div data-factor-slots="" className="pb-2">
+      <RegimeBar regime={regimeOf(op?.swing)} clockEt={op?.radar_view?.clock.et} tradingDay={op?.radar_view?.clock.trading_day} />
       {/* 1 / 2 同一行等高: grid 默认 stretch, 卡片 h-full + 页脚 mt-auto, 净值线铺满剩余高度 */}
       <div data-slot-row="" className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <BoardSlot d={d} />

@@ -2,11 +2,13 @@
  * 今日机会 = 机会板策略命中且后端裁决可进场的卡 (唯一进入模拟下单链的来源); 后端裁决不做的卡折成一行写原因。
  * 持仓 = 台账为准 (数量 / 成本 / 当前止损 / 第几天 / 退出动作); 现价跟报价推送刷新, 浮动盈亏按现价重算。
  * 模型打分只作「模型反向」提示, 不改方向、不合成分数。只展示: 交易环 / 准入 / 下单簿 / 台账不变。 */
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react'
 import type { LsRankPayload, OppCardCtx, OppQuote, OppRadarView, RadarBlip, SwingBoardCard, SwingBoardsPayload } from '@/lib/api'
 import { cardVerdict, dayTag, gapText, md, SIDE_ARROW, setupKind, usdS, zonePos } from '@/components/opportunities/terms'
 import { PriceRuler, RulerLegend } from '@/components/opportunities/PriceRuler'
 import { badge } from '@/components/ui/badge'
+import { AttrToggle, ObserveOrderButton, TimingTags } from '@/components/opportunities/CardMeta'
+import { isObserve } from '@/components/opportunities/p1'
 
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 /** 美元按整数取色 (四舍五入为 0 = 平); 百分比按原值取色 */
@@ -54,10 +56,51 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
   )
 }
 
-/** 同一网格的卡等高 (auto-rows-fr: 不只同一行, 换行后的各行也一样高); 卡内最后一行贴底, 多出的高度留在价格尺下方 */
-export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]'
+/** 同一网格的卡等高 (auto-rows-fr: 不只同一行, 换行后的各行也一样高); 卡内最后一行贴底, 多出的高度留在价格尺下方。
+ * 2026-11-26 用户指定细节: auto-fit (不是 auto-fill) —— 卡少于一行时空列收掉、卡拉伸占满, 不会 2 张卡占 3 列右侧空一整列。 */
+export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]'
 export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
 export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
+/** 末行补齐 (2026-11-26 用户指定细节): 多行且末行不满时, 末行卡按剩余列平分加宽, 末行永远补满或左右对称, 不留「右侧空一整列」。
+ *  - 3 列及以下: 不设跨度上限, 直接补满 (3 列时 2 列上限没意义, 反而会在 3 列剩 1 张时右侧空一列);
+ *  - 4 列及以上: 每张最多跨 2 列 (宽屏不让最后一张拉满整行), 剩余空列为奇数时第一张再加 1 列, 其余空列左右平分居中。
+ * auto-fit 已让「不足一行」时空列收掉。列数读 computed grid-template-columns (收掉的 0px 轨道不算), jsdom 无布局时不动。 */
+export const FILL_MAX_SPAN = 2
+/** 末行 rem 张卡在 cols 列里的跨度与起始偏移 (纯函数, 单测守着); 保证 cols − Σspans 为偶数且 offset = 其一半 */
+export function lastRowLayout(cols: number, rem: number): { spans: number[]; offset: number } {
+  if (cols <= 1 || rem <= 0 || rem >= cols) return { spans: [], offset: 0 }
+  const base = Math.floor(cols / rem), extra = cols % rem
+  const cap = cols <= 3 ? Infinity : FILL_MAX_SPAN
+  const spans = Array.from({ length: rem }, (_, i) => Math.min(cap, base + (i < extra ? 1 : 0)))
+  let gap = cols - spans.reduce((a, b) => a + b, 0)
+  if (gap % 2 === 1) { spans[0] += 1; gap -= 1 }
+  return { spans, offset: gap / 2 }
+}
+export function FillGrid({ children, ...rest }: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>) {
+  const ref = useRef<HTMLDivElement>(null)
+  const apply = () => {
+    const el = ref.current
+    if (!el || typeof getComputedStyle === 'undefined') return
+    const cols = getComputedStyle(el).gridTemplateColumns.split(' ').filter((t) => t && t !== 'none' && parseFloat(t) > 0).length
+    const kids = [...el.children] as HTMLElement[]
+    for (const k of kids) k.style.gridColumn = ''
+    const rem = cols > 1 && kids.length > cols ? kids.length % cols : 0
+    el.dataset.gridCols = String(cols)
+    const { spans, offset } = lastRowLayout(cols, rem)
+    const last = kids.slice(kids.length - spans.length)
+    last.forEach((k, i) => { k.style.gridColumn = i === 0 && offset > 0 ? `${offset + 1} / span ${spans[i]}` : `span ${spans[i]}` })
+  }
+  useLayoutEffect(apply)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => apply())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return <div ref={ref} data-grid-fill="" {...rest}>{children}</div>
+}
+
 const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 text-[13px] text-muted">{t}</div>
 
 /** 现价时点: 报价有时写报价时刻; 没有时按页面价的来源写 (收盘价写哪天) */
@@ -73,7 +116,7 @@ export function priceStamp(at: string | null, srcs: string[], asof?: string | nu
 
 // ───────────────────────── 今日机会 ─────────────────────────
 
-function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: OppQuote; model: ModelSide; ctx?: OppCardCtx; nav: number | null; onOpen: (s: string) => void }) {
+function BoardCard({ c, q, model, ctx, nav, onOpen, names }: { c: SwingBoardCard; q?: OppQuote; model: ModelSide; ctx?: OppCardCtx; nav: number | null; onOpen: (s: string) => void; names: Map<string, string> }) {
   const price = q?.price ?? c.price ?? null
   const src = q?.src ?? c.price_source ?? null
   const chg = q?.chg ?? null
@@ -86,10 +129,11 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
   const hot = zp.pos === 'in'
   const kind = setupKind(c.strategies, c.side)
   const earn = ctx?.earnings
+  const obs = isObserve(c)
   return (
-    <div role="button" tabIndex={0} data-board-card={c.symbol} data-zone={zp.pos ?? 'none'} onClick={() => onOpen(c.symbol)}
+    <div role="button" tabIndex={0} data-board-card={c.symbol} data-zone={zp.pos ?? 'none'} data-observe={obs ? '' : undefined} onClick={() => onOpen(c.symbol)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(c.symbol) } }}
-      className={`${CARD} ${hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
+      className={`${CARD} ${obs ? 'border-dashed border-secondary/70 bg-base/40' : hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
       <div className="flex items-center gap-2">
         <b className="text-[14px] font-bold text-foreground">{c.symbol}</b>
         <Side side={c.side} />
@@ -106,6 +150,7 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
         <Conflict model={model} sym={c.symbol} side={c.side} />
         {earn && <span data-card-earn className={badge('warn')}>{`财报 ${md(earn.date)}`}</span>}
       </div>
+      <TimingTags c={c} />
       <PriceRuler data-ruler="board" geo={{ stop: c.stop, target: c.target, price, zone: c.entry_zone, side: c.side }}
         lossText={`止损亏 ${usdS(loss === null ? null : -loss)}`} gainText={`目标赚 ${usdS(gain)}`} lossCls="text-bear"
         stopLabel={`止损 ${px(c.stop)}`} targetLabel={`目标 ${px(c.target)}`} />
@@ -114,16 +159,21 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
         <span className="whitespace-nowrap">{`进场 ${px(lo)} ~ ${px(hi)}`}</span>
         <span className="whitespace-nowrap">{fin(qty) ? `${qty} 股` : '股数 —'}</span>
         {fin(qty) && fin(nav) && nav > 0 && <span className="whitespace-nowrap text-muted">{`占资金 ${Math.round((qty * mid) / nav * 100)}%`}</span>}
+        {obs && <span className="ml-auto"><ObserveOrderButton symbol={c.symbol} /></span>}
       </div>
+      <AttrToggle c={c} names={names} />
     </div>
   )
 }
 
-export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, onOpen }: {
+export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, onOpen, names = new Map() }: {
   swing?: SwingBoardsPayload | null; error?: string; quotes: Quotes; quotesAt: string | null; model: ModelSide; ctx: Record<string, OppCardCtx>
-  nav: number | null; onOpen: (s: string) => void
+  nav: number | null; onOpen: (s: string) => void; names?: Map<string, string>
 }) {
-  const cards = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
+  const all = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
+  // P1-B2: 观察级卡 (grade=observe / 全部 T1 卡) 单独一组, 虚线降级, 不进「今日机会」计数, 也不折进「不做」
+  const observe = all.filter(isObserve)
+  const cards = all.filter((c) => !isObserve(c))
   const vs = cards.map((c) => ({ c, v: cardVerdict(c) }))
   const act = vs.filter((x) => x.v.order).map((x) => x.c)
   // 同票同原因的多张卡只写一次
@@ -136,6 +186,7 @@ export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, on
   const tags = (
     <>
       <span className={badge('limit')} title="机会板策略命中 · 只有这里进入模拟下单">策略选出</span>
+      {observe.length > 0 && <span data-observe-count={observe.length} className={badge('limit')}>{`观察级 ${observe.length}`}</span>}
       {act.length > 0 && <RulerLegend kind="board" closed={closedPx} />}
     </>
   )
@@ -144,10 +195,18 @@ export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, on
       {error ? <div data-col-error className="px-3 pb-3 text-[13px] text-danger">机会板读取失败</div> : !swing ? <Empty t="—" /> : (
         <>
           {act.length === 0 ? <Empty t="无可进场机会" /> : (
-            <div data-board-grid data-in-zone={inZone} className={GRID}>
-              {act.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} />)}
-            </div>
+            <FillGrid data-board-grid="" data-in-zone={inZone} className={GRID}>
+              {act.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
+            </FillGrid>
           )}
+          {observe.length > 0 && <>
+            <div data-observe-head className="flex flex-wrap items-center gap-2 border-t border-dashed border-border px-3 pb-1.5 pt-2 text-[12px] text-secondary">
+              <b className="text-foreground">{`观察级 ${observe.length}`}</b><span>只上板 · 不进纸面下单簿</span>
+            </div>
+            <FillGrid data-observe-grid="" className={GRID}>
+              {observe.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}${c.timing_tier ?? ''}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
+            </FillGrid>
+          </>}
           {skip.length > 0 && (
             <div data-board-skips className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/70 px-3 py-2 text-[13px]">
               <span className={badge('limit')}>{`不做 ${skip.length}`}</span>
@@ -218,7 +277,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
     <Section data-holdings title="我的持仓" count={rows.length} tags={rows.length > 0 ? <RulerLegend kind="hold" closed={closedPx} /> : undefined}
       meta={rows.length ? <>{'浮动 '}<b data-hold-total className={`font-semibold ${sgnCls(total)}`}>{usdS(total)}</b>{` · ${priceStamp(quotesAt, srcs, asof)}`}</> : ''}>
       {rows.length === 0 ? <Empty t="无持仓" /> : (
-        <div className={GRID}>
+        <FillGrid data-hold-grid="" className={GRID}>
           {rows.map(({ b, price, src, pnl, tags }) => {
             const h = b.hold
             const sg = b.side === 'short' ? -1 : 1
@@ -263,7 +322,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
               </div>
             )
           })}
-        </div>
+        </FillGrid>
       )}
     </Section>
   )
