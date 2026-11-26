@@ -71,6 +71,12 @@ export function LedgerBlock({ swing, names }: { swing: SwingBoardsPayload | null
                 </tbody>
               ))}
             </table>
+            <div data-ledger-legend="" className="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 text-[11px] text-secondary">
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-accent" />区间整体 &gt; 0</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm" style={{ background: 'repeating-linear-gradient(45deg, hsl(var(--warning)) 0 2px, transparent 2px 4px)' }} />跨 0 的负段 · 不显著</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-bear" />区间整体 &lt; 0</span>
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-3 w-[2px] bg-foreground/75" />0 基准 · 全表同一刻度</span>
+            </div>
           </div>
         )}
       </>}

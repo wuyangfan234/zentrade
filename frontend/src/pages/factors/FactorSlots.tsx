@@ -36,7 +36,7 @@ import { RulesConsole } from '@/components/opportunities/RulesConsole'
 import { displayStrategyName } from '@/lib/strategyDisplay'
 import { RegimeBar } from '@/components/opportunities/RegimeBar'
 import { CiAxis, CiBar } from '@/components/opportunities/CiBar'
-import { GRID } from '@/components/opportunities/Cards'
+import { FillGrid, GRID } from '@/components/opportunities/Cards'
 import { ciScale, isObserve, ledgerOf, regimeOf, TIER_ICON, tierReason, type ReasonPart, type TierReason } from '@/components/opportunities/p1'
 import type { SwingBoardCard } from '@/lib/api'
 
@@ -250,11 +250,11 @@ const WORD_CLS: Record<string, string> = {
 export function ReasonLine({ r }: { r: TierReason }) {
   return (
     <span data-reason={r.word} className={`flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded px-1.5 py-0.5 text-[12px] ${r.off ? 'bg-warning/10 font-semibold text-foreground ring-1 ring-inset ring-warning/40' : 'text-secondary'}`}>
-      <span className={`inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-bold ${WORD_CLS[r.word] ?? WORD_CLS['挑战']}`}>{r.word}</span>
+      <span className={`inline-flex h-5 shrink-0 items-center rounded px-1.5 text-[11px] font-bold ${r.off ? WORD_CLS['换下'] : WORD_CLS[r.word] ?? WORD_CLS['挑战']}`}>{r.off && r.word === '待定' ? '待定·不出卡' : r.word}</span>
       {r.parts.map((p, i) => (
         <span key={i} className="inline-flex items-center gap-1.5 whitespace-nowrap">
-          {i > 0 && <span aria-hidden="true" className="text-muted">·</span>}
-          {p.hot ? <mark data-reason-hot="" className={`rounded px-1 tabular-nums ${r.off ? 'bg-warning/30 font-bold text-foreground' : 'bg-warning/15 text-foreground'}`}>{p.text}</mark> : <span className="tabular-nums">{p.text}</span>}
+          {i > 0 && <span aria-hidden="true" className="text-secondary">·</span>}
+          {p.hot ? <mark data-reason-hot="" className={`rounded px-1 tabular-nums text-foreground underline decoration-warning decoration-2 underline-offset-[3px] ${r.off ? 'bg-warning/30 font-extrabold' : 'bg-warning/15 font-semibold'}`}>{p.text}</mark> : <span className="tabular-nums">{p.text}</span>}
         </span>
       ))}
     </span>
@@ -324,7 +324,7 @@ function SlotCard({ no, title, sub, ruler, children, footer, attr, className = '
         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-elevated text-[12px] font-bold text-foreground">{no}</span>
         <div className="min-w-0">
           <div className="truncate text-[14px] font-semibold text-foreground">{title}</div>
-          <div className="truncate text-[11px] text-secondary">{sub}</div>
+          <div className="text-[11px] text-secondary md:truncate">{sub}</div>
         </div>
         <span data-ruler="" className="ml-auto shrink-0 whitespace-nowrap rounded px-2 py-0.5 text-[11px] font-medium text-foreground ring-1 ring-inset ring-border">口径 · {ruler}</span>
       </header>
@@ -455,7 +455,7 @@ function BoardLoop({ champs, tierOf, cards, catalog }: { champs: BoardRow[]; tie
               <span data-loop-count={hit.length} className="ml-auto font-semibold tabular-nums text-foreground">{`今日卡 ${hit.length}`}</span>
             </div>
             {hit.length > 0 && (
-              <div data-loop-cards={r.id} className={GRID.replace('px-3 pb-3', 'px-2.5 pb-2.5').replace('280px', '150px').replace('auto-rows-fr ', '')}>
+              <FillGrid data-loop-cards={r.id} className={GRID.replace('px-3 pb-3', 'px-2.5 pb-2.5').replace('280px', '150px').replace('auto-rows-fr ', '')}>
                 {hit.map(c => (
                   <div key={c.card_id ?? `${c.symbol}${c.side}`} data-loop-card={c.symbol}
                     className={`flex min-w-0 flex-wrap items-center gap-x-1.5 rounded-card border px-2 py-1.5 text-[12px] ${isObserve(c) ? 'border-dashed border-secondary/70' : 'border-border'}`}>
@@ -466,7 +466,7 @@ function BoardLoop({ champs, tierOf, cards, catalog }: { champs: BoardRow[]; tie
                     <span className="ml-auto tabular-nums text-foreground">{fmtR(c.score)}</span>
                   </div>
                 ))}
-              </div>
+              </FillGrid>
             )}
           </div>
         )
@@ -491,7 +491,7 @@ function BoardSlot({ d }: { d: SlotData }) {
     if (r.kind === 'ranker' || r.id.startsWith('rank_')) return { word: '留用', off: false, parts: [{ text: '排序因子 · rank-lab-v2 确认合同' }, { text: `超额 ${fmtR(r.excess)}` }] }
     const c = cellOf(r.id)
     if (!ledger || ledger.status === 'disabled') return tierReason('在用', { n: r.n, excess: r.excess, lo: r.lo, hi: r.hi })
-    if (ledger.status === 'unavailable') return { word: '换下', off: true, parts: [{ text: '本月无账本复核', hot: true }, { text: '全部按待定 · 不出卡' }] }
+    if (ledger.status === 'unavailable') return { word: '待定', off: true, parts: [{ text: '本月无账本复核', hot: true }, { text: '全部按待定 · 不出卡' }] }
     return tierReason(c?.tier ?? '待定', { n: fin(c?.n) ? c!.n! : r.n, excess: fin(c?.excess) ? c!.excess! : null, lo: fin(c?.ci_low) ? c!.ci_low! : r.lo, hi: fin(c?.ci_high) ? c!.ci_high! : r.hi })
   }
   const tierOf = (r: BoardRow) => (r.role === 'ch' ? null : r.kind === 'ranker' ? '排序因子' : ledger?.status === 'disabled' ? '在用' : ledger?.status === 'unavailable' ? '待定' : (cellOf(r.id)?.tier ?? (ledger ? '待定' : null)))
@@ -507,12 +507,14 @@ function BoardSlot({ d }: { d: SlotData }) {
     <tr key={r.id} data-board-row={r.role} data-tier={tier ?? ''} className={`${r.role === 'champ' ? 'bg-violet-500/[0.05]' : ''} ${why.off ? 'shadow-[inset_3px_0_0_hsl(var(--warning))]' : ''}`}>
       <td className="py-1.5 pl-4 pr-2 align-middle"><Role champ={r.role === 'champ'} /></td>
       <td className="py-1.5 pr-2 align-middle">
-        <div className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="break-words text-[13px] font-semibold text-foreground" title={r.name}>{r.name}</span>
           {r.passed && <Tag tone="ok">过验收</Tag>}
-          {tier && <span data-board-tier={tier} className={`inline-flex h-5 shrink-0 items-center gap-0.5 whitespace-nowrap rounded px-1.5 text-[11px] font-semibold ${tier === '待定' || tier === '冷冻' ? 'border border-dashed border-warning/70 text-warning' : 'bg-elevated text-secondary'}`}>{`${TIER_ICON[tier] ?? '·'} ${tier}`}</span>}
         </div>
-        <div className="truncate text-[11px] text-secondary">{`${r.role === 'champ' && !['ranker', 'custom', 'ai'].includes(r.kind) ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</div>
+        <div className="flex flex-wrap items-center gap-x-1.5 text-[11px] text-secondary">
+          <span>{`${r.role === 'champ' && !['ranker', 'custom', 'ai'].includes(r.kind) ? '离线回放' : boardKind(r.kind)} · ${r.n ?? 0} 笔`}</span>
+          {tier && <span data-board-tier={tier} className={`inline-flex h-[18px] shrink-0 items-center gap-0.5 whitespace-nowrap rounded px-1 font-semibold ${tier === '待定' || tier === '冷冻' ? 'border border-dashed border-warning/70 text-warning' : 'bg-elevated text-secondary'}`}>{`${TIER_ICON[tier] ?? '·'} ${tier}`}</span>}
+        </div>
       </td>
       <td className={`whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[13px] font-semibold tabular-nums ${rToneR(r.excess)}`}>{r.note ?? fmtR(r.excess)}</td>
       <td className="whitespace-nowrap py-1.5 pr-3 text-right align-middle text-[12px] tabular-nums text-secondary">
@@ -528,7 +530,7 @@ function BoardSlot({ d }: { d: SlotData }) {
     <SlotCard no={1} title="机会板 · 做多策略" ruler="机会回放" attr={{ 'data-slot': 'board' }}
       sub={`做多 ${champs.length} 条 · 每笔超额 R（对比 4h 同向随机入场）`}
       footer={<>
-        <span data-slot-verdict="" className="min-w-0 flex-1 truncate text-secondary">
+        <span data-slot-verdict="" className="min-w-0 flex-1 text-secondary md:truncate">
           {err ? '读取失败' : passed.length ? `${passed.map(r => r.name).join(' · ')} 通过检验 · 可在机会板策略中启用`
             : best ? `挑战者区间都跨 0 · 下限最高 ${best.name} ${fmtR(best.lo)}` : '暂无可比挑战者'}
         </span>
@@ -556,13 +558,14 @@ function BoardSlot({ d }: { d: SlotData }) {
           {thinChs.length > 0 && (
             <div data-board-thin="" className="flex min-w-0 items-center gap-2 border-t border-border/60 px-4 py-2 text-[12px] text-secondary">
               <span className="shrink-0 font-medium text-foreground">{`样本不足 ${thinChs.length} 个`}</span><span className="shrink-0 text-muted">·</span>
-              <span className="min-w-0 truncate" title={thinChs.map(r => `${r.name} ${r.n ?? 0} 笔`).join(' / ')}>{thinChs.map(r => `「${r.name}」${r.n ?? 0} 笔`).join('  ')}</span>
+              <span className="min-w-0 break-words" title={thinChs.map(r => `${r.name} ${r.n ?? 0} 笔`).join(' / ')}>{thinChs.map(r => `「${r.name}」${r.n ?? 0} 笔`).join('  ')}</span>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2 text-[11px] text-secondary">
             <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-violet-600" />在用 · 条 = 95% 区间 · 圈 = 每笔超额</span>
-            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-accent" />挑战</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-accent" />挑战 · 实色 = 区间整体 &gt; 0</span>
             <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm" style={{ background: 'repeating-linear-gradient(45deg, hsl(var(--warning)) 0 2px, transparent 2px 4px)' }} />区间跨 0 的负段 · 不显著</span>
+            <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2 w-3 rounded-sm bg-bear" />区间整体 &lt; 0</span>
             <span className="inline-flex items-center gap-1.5"><i className="inline-block h-3 w-[2px] bg-foreground/75" />0 基准</span>
           </div>
           <div className="border-t border-border/60 px-4 py-2">

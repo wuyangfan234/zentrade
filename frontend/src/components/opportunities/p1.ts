@@ -95,6 +95,7 @@ export function ledgerRows(l: SwingLedgerMeta | null, names: Map<string, string>
 /** 理由片段: hot = 触发条件 (淘汰行高亮) */
 export type ReasonPart = { text: string; hot?: boolean }
 export type TierReason = { word: '留用' | '观察' | '待定' | '换下' | '复活' | '挑战'; off: boolean; parts: ReasonPart[] }
+/** 状态词与账本档位一一对应: 冷冻 = 换下 (触发淘汰条件), 待定 = 待定 (证据不足, 不出卡); 两者都按「不出卡」加重显示 */
 /** 一行一句「为什么它在用 / 为什么被换下」, 带数字。门槛 = strategy_ledger.classify (n ≥ 30, 区间下限 > 0 / 上限 < 0, 连续 2 次复核 < 0) */
 export function tierReason(tier: string | null | undefined, x: { n: number | null; excess: number | null; lo: number | null; hi: number | null }): TierReason {
   const nTxt = x.n == null ? '样本 —' : `样本 ${x.n}`
@@ -102,7 +103,7 @@ export function tierReason(tier: string | null | undefined, x: { n: number | nul
   if (tier === '在用' || tier === '复活') return { word: tier === '复活' ? '复活' : '留用', off: false, parts: [
     ci ? { text: `区间下限 ${fR(x.lo)} > 0` } : { text: `超额 ${fR(x.excess)}` }, { text: `${nTxt} ≥ 30` }] }
   if (tier === '观察') return { word: '观察', off: false, parts: [
-    { text: `超额 ${fR(x.excess)} > 0` }, ci ? { text: `区间 ${fR(x.lo)} ~ ${fR(x.hi)} 跨 0`, hot: true } : { text: '区间跨 0', hot: true }, { text: nTxt }] }
+    { text: `超额 ${fR(x.excess)} > 0` }, ci ? { text: `区间 ${fR(x.lo)} ~ ${fR(x.hi)} 跨 0`, hot: true } : { text: '账本判区间跨 0', hot: true }, { text: nTxt }] }
   if (tier === '冷冻') return { word: '换下', off: true, parts: ci && x.hi! < 0
     ? [{ text: `区间上限 ${fR(x.hi)} < 0`, hot: true }, { text: `超额 ${fR(x.excess)}` }, { text: nTxt }]
     : [{ text: '连续 2 次月度复核 < 0', hot: true }, { text: `超额 ${fR(x.excess)}` }, { text: nTxt }] }
@@ -111,7 +112,7 @@ export function tierReason(tier: string | null | undefined, x: { n: number | nul
     if (x.n != null && x.n < 30) parts.push({ text: `样本 ${x.n} < 30`, hot: true })
     if (x.excess != null && x.excess <= 0) parts.push({ text: `超额 ${fR(x.excess)} ≤ 0`, hot: true })
     if (!parts.length) parts.push({ text: x.excess == null ? '账本无记录' : '证据不足', hot: true }, { text: nTxt })
-    return { word: '换下', off: true, parts }
+    return { word: '待定', off: true, parts }
   }
   return { word: '挑战', off: false, parts: [ci ? { text: `区间 ${fR(x.lo)} ~ ${fR(x.hi)}` } : { text: `超额 ${fR(x.excess)}` }, { text: nTxt }] }
 }

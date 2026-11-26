@@ -15,9 +15,9 @@ const tsText = (s?: string | null) => (!s ? '—' : s.length >= 16 ? `${s.slice(
 export function RegimeBar({ regime, clockEt, tradingDay }: { regime: SwingRegimeMeta | null; clockEt?: string | null; tradingDay?: boolean | null }) {
   if (!regime) {
     return (
-      <section data-regime-bar="" data-regime-fp="none" data-regime-missing="" className="mb-3 rounded-card border border-dashed border-border bg-surface px-3 py-2.5 text-[13px]">
+      <section data-regime-bar="" data-regime-fp="none" data-regime-missing="" className="mb-3 flex flex-wrap gap-x-2 gap-y-0.5 rounded-card border border-dashed border-border bg-surface px-3 py-2.5 text-[13px]">
         <span className="font-semibold text-foreground">市场状态 · 未提供</span>
-        <span className="ml-2 text-secondary">regime 开关关闭或快照不含 regime · 出卡按旧口径 (SPY &lt; MA50 才开空)</span>
+        <span className="text-secondary">regime 开关关闭或快照不含 regime · 出卡按旧口径 (SPY &lt; MA50 才开空)</span>
       </section>
     )
   }
@@ -44,7 +44,7 @@ export function RegimeBar({ regime, clockEt, tradingDay }: { regime: SwingRegime
         <span data-regime-meta="" className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] tabular-nums text-secondary">
           <span>{`更新 ${tsText(regime.as_of)} · ${REGIME_SRC_ZH[regime.source ?? ''] ?? regime.source ?? '—'}`}</span>
           <span data-regime-next="">{`下次重判 ${nextRejudge(clockEt, tradingDay)}`}</span>
-          <span className="text-muted" title="两页同一状态条 · 指纹一致即同一份数据">{`指纹 ${regimeFp(regime)}`}</span>
+          <span className="text-muted" title={`两页同一状态条 · 指纹 ${regimeFp(regime)}`}>同一状态条</span>
         </span>
       </div>
       <div data-regime-reasons="" className="grid grid-cols-1 border-t border-border/70 sm:grid-cols-2 xl:grid-cols-3">

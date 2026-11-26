@@ -2,7 +2,7 @@
  * 今日机会 = 机会板策略命中且后端裁决可进场的卡 (唯一进入模拟下单链的来源); 后端裁决不做的卡折成一行写原因。
  * 持仓 = 台账为准 (数量 / 成本 / 当前止损 / 第几天 / 退出动作); 现价跟报价推送刷新, 浮动盈亏按现价重算。
  * 模型打分只作「模型反向」提示, 不改方向、不合成分数。只展示: 交易环 / 准入 / 下单簿 / 台账不变。 */
-import type { ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type HTMLAttributes, type ReactNode } from 'react'
 import type { LsRankPayload, OppCardCtx, OppQuote, OppRadarView, RadarBlip, SwingBoardCard, SwingBoardsPayload } from '@/lib/api'
 import { cardVerdict, dayTag, gapText, md, SIDE_ARROW, setupKind, usdS, zonePos } from '@/components/opportunities/terms'
 import { PriceRuler, RulerLegend } from '@/components/opportunities/PriceRuler'
@@ -61,6 +61,31 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
 export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]'
 export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
 export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
+/** 末行补齐 (2026-11-26 用户指定细节): 按实际列数让最后一张卡横跨末行剩余列 —— 5 张卡排 2 列时末行不留整列空白。
+ * auto-fit 已让「不足一行」时空列收掉; 这里补「多行、末行不满」。列数读 computed grid-template-columns (收掉的 0px 轨道不算), jsdom 无布局时不动。 */
+export function FillGrid({ children, ...rest }: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>) {
+  const ref = useRef<HTMLDivElement>(null)
+  const apply = () => {
+    const el = ref.current
+    if (!el || typeof getComputedStyle === 'undefined') return
+    const cols = getComputedStyle(el).gridTemplateColumns.split(' ').filter((t) => t && t !== 'none' && parseFloat(t) > 0).length
+    const kids = [...el.children] as HTMLElement[]
+    for (const k of kids) k.style.gridColumn = ''
+    const rem = cols > 1 ? kids.length % cols : 0
+    el.dataset.gridCols = String(cols)
+    if (rem && kids.length) kids[kids.length - 1].style.gridColumn = `span ${cols - rem + 1}`
+  }
+  useLayoutEffect(apply)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => apply())
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  return <div ref={ref} data-grid-fill="" {...rest}>{children}</div>
+}
+
 const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 text-[13px] text-muted">{t}</div>
 
 /** 现价时点: 报价有时写报价时刻; 没有时按页面价的来源写 (收盘价写哪天) */
@@ -155,17 +180,17 @@ export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, on
       {error ? <div data-col-error className="px-3 pb-3 text-[13px] text-danger">机会板读取失败</div> : !swing ? <Empty t="—" /> : (
         <>
           {act.length === 0 ? <Empty t="无可进场机会" /> : (
-            <div data-board-grid data-in-zone={inZone} className={GRID}>
+            <FillGrid data-board-grid="" data-in-zone={inZone} className={GRID}>
               {act.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
-            </div>
+            </FillGrid>
           )}
           {observe.length > 0 && <>
             <div data-observe-head className="flex flex-wrap items-center gap-2 border-t border-dashed border-border px-3 pb-1.5 pt-2 text-[12px] text-secondary">
               <b className="text-foreground">{`观察级 ${observe.length}`}</b><span>只上板 · 不进纸面下单簿</span>
             </div>
-            <div data-observe-grid className={GRID}>
+            <FillGrid data-observe-grid="" className={GRID}>
               {observe.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}${c.timing_tier ?? ''}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
-            </div>
+            </FillGrid>
           </>}
           {skip.length > 0 && (
             <div data-board-skips className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/70 px-3 py-2 text-[13px]">
@@ -237,7 +262,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
     <Section data-holdings title="我的持仓" count={rows.length} tags={rows.length > 0 ? <RulerLegend kind="hold" closed={closedPx} /> : undefined}
       meta={rows.length ? <>{'浮动 '}<b data-hold-total className={`font-semibold ${sgnCls(total)}`}>{usdS(total)}</b>{` · ${priceStamp(quotesAt, srcs, asof)}`}</> : ''}>
       {rows.length === 0 ? <Empty t="无持仓" /> : (
-        <div className={GRID}>
+        <FillGrid data-hold-grid="" className={GRID}>
           {rows.map(({ b, price, src, pnl, tags }) => {
             const h = b.hold
             const sg = b.side === 'short' ? -1 : 1
@@ -282,7 +307,7 @@ export function HoldCards({ view, swing, quotes, quotesAt, model, onOpen }: {
               </div>
             )
           })}
-        </div>
+        </FillGrid>
       )}
     </Section>
   )

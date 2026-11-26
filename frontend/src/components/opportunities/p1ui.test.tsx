@@ -11,7 +11,7 @@ import { ciScale, fR, isObserve, ledgerRows, nextRejudge, parseReason, regimeFp,
 import { RegimeBar } from './RegimeBar'
 import { LedgerBlock } from './LedgerBlock'
 import { CiBar, CI_MIN_PX } from './CiBar'
-import { BoardCards, GRID } from './Cards'
+import { BoardCards, FillGrid, GRID } from './Cards'
 import { ReasonLine, challengerReason } from '@/pages/factors/FactorSlots'
 import { CARDS, LEDGER, REGIME, REGIME_CALM, swingWith } from './__fixtures__/p1'
 
@@ -138,6 +138,28 @@ it('卡: T0 跨日有效; 观察级 / T1 单独成组 + 虚线 + 徽章; T1 写�
   await act(async () => { (host.querySelector('[data-observe-order="META"]') as HTMLElement).click() })
   expect(toasts.calls[0][0]).toBe('META · 观察级不进纸面下单簿')
   expect(opened).toEqual([])
+})
+
+it('末行补齐: 3 张卡 2 列 → 末张横跨 2 列; 4 张卡 2 列 → 不动; 无布局 (jsdom) → 不动', async () => {
+  const real = window.getComputedStyle
+  const spy = vi.spyOn(window, 'getComputedStyle').mockImplementation((el: Element) => (el.hasAttribute('data-grid-fill')
+    ? ({ gridTemplateColumns: '300px 300px 0px' } as CSSStyleDeclaration) : real(el)))
+  await render(<FillGrid className="grid">{['a', 'b', 'c'].map((k) => <div key={k} data-k={k} />)}</FillGrid>)
+  expect((host.querySelector('[data-k="c"]') as HTMLElement).style.gridColumn).toBe('span 2')
+  expect(host.querySelector('[data-grid-fill]')!.getAttribute('data-grid-cols')).toBe('2')
+  await render(<FillGrid className="grid">{['a', 'b', 'c', 'd'].map((k) => <div key={k} data-k={k} />)}</FillGrid>)
+  expect((host.querySelector('[data-k="d"]') as HTMLElement).style.gridColumn).toBe('')
+  spy.mockRestore()
+  await render(<FillGrid className="grid">{['a', 'b', 'c'].map((k) => <div key={k} data-k={k} />)}</FillGrid>)
+  expect((host.querySelector('[data-k="c"]') as HTMLElement).style.gridColumn).toBe('')
+})
+
+it('理由: 待定 = 待定 (不写换下), 冷冻 = 换下; 都按不出卡加重', async () => {
+  const pd = tierReason('待定', { n: 29, excess: 0.08, lo: null, hi: null })
+  expect(pd).toMatchObject({ word: '待定', off: true })
+  await render(<ReasonLine r={pd} />)
+  expect(host.querySelector('[data-reason="待定"]')!.textContent).toContain('待定·不出卡')
+  expect(host.querySelector('mark[data-reason-hot]')!.className).toContain('underline')
 })
 
 it('辅助: isObserve / 锚定来源中文 / 门 / 网格 auto-fit', () => {

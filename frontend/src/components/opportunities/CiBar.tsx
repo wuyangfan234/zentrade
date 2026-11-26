@@ -22,7 +22,8 @@ export function CiBar({ v, lo, hi, min, max, width = 176, strong = false, dim = 
   const main = dim ? 'hsl(var(--fg-muted))' : strong ? 'rgb(124 58 237)' : 'hsl(var(--accent))'
   const fill = pos ? main : hasCi && hi! < 0 ? 'hsl(var(--bear))' : main
   const id = `ci-hatch-${Math.round(x1)}-${Math.round(x2)}`
-  const narrow = x2 - x1 < 46
+  // 两个端点数字 (各约 28px) 之间至少留 8px, 放不下就合成一个居中标签
+  const narrow = x2 - x1 < 66
   return (
     <svg width={W} height={H} role="img" aria-label={hasCi ? `95% 区间 ${n2(lo!)} ~ ${n2(hi!)}${cross ? ' 跨 0' : ''}` : '区间未返回'}
       data-ci-bar="" data-ci-cross={hasCi ? (cross ? '1' : '0') : ''} data-ci-w={hasCi ? (x2 - x1).toFixed(1) : ''}>
