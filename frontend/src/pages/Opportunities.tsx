@@ -21,6 +21,10 @@ import { BoardCards, HoldCards, modelSides } from '@/components/opportunities/Ca
 import { AccountCard, ConcRisk } from '@/components/opportunities/SideRail'
 import { AutoCard } from '@/components/opportunities/AutoSelect'
 import { AsOfView } from '@/components/opportunities/AsOfView'
+import { RegimeBar } from '@/components/opportunities/RegimeBar'
+import { LedgerBlock } from '@/components/opportunities/LedgerBlock'
+import { regimeOf } from '@/components/opportunities/p1'
+import { displayStrategyName } from '@/lib/strategyDisplay'
 import { ACTIVE_PHASES, useOppPage, useOppQuotes } from '@/components/opportunities/useOppPage'
 import { hm, md } from '@/components/opportunities/format'
 import { badge } from '@/components/ui/badge'
@@ -31,6 +35,22 @@ const StockPreviewDialog = lazy(() => import('@/components/StockPreviewDialog').
 
 function SectionError({ name, err }: { name: string; err: string }) {
   return <div data-section-error={name} className="mb-3 rounded-card border border-dashed border-danger/40 px-3 py-3 text-xs text-danger">{`${name}读取失败 · ${err}`}</div>
+}
+
+/** 规则 id → 中文名 (账本 / 归因用): 板卡与历史卡的 strategies + 自动选策略行; 键 = id 与 id|side */
+export function ruleNames(d: OppPagePayload | undefined): Map<string, string> {
+  const m = new Map<string, string>()
+  const put = (id: string, name: string, side?: string) => {
+    if (!id || !name) return
+    const n = displayStrategyName(name)
+    if (side) m.set(`${id}|${side}`, n)
+    if (!m.has(id)) m.set(id, n)
+  }
+  const sw = d?.swing
+  for (const c of [...(sw?.long ?? []), ...(sw?.short ?? []), ...(sw?.history ?? [])]) for (const s of c.strategies ?? []) put(s.id, s.name, c.side)
+  const au = d?.auto
+  for (const r of [...(au?.picks?.long ?? []), ...(au?.picks?.short ?? []), ...(au?.bench ?? [])]) put(r.id, r.name, r.side)
+  return m
 }
 
 /** 页头第二行: 数据时点 (信号日 / 机会板刷新) */
@@ -85,6 +105,7 @@ export function Opportunities() {
   const order = COL_ORDER[desk?.regime.key ?? 'normal']
   const res = useMemo(() => new Set((desk?.resonance ?? []).map((x) => x.symbol)), [desk])
   const model = useMemo(() => modelSides(d?.ls_rank), [d])
+  const names = useMemo(() => ruleNames(d), [d])
   const nav = d?.themes?.nav ?? d?.swing?.equity ?? d?.ls_rank?.equity ?? null
   // 价格尺现价: 今日机会 / 持仓 / 盘中异动里出现的票, 盘前 / 开盘 / 盘中跟报价推送刷新
   const quoteSyms = useMemo(() => {
@@ -116,10 +137,12 @@ export function Opportunities() {
       {d && !asof && (
         <>
           {view ? <StatusLine view={view} /> : <SectionError name="状态栏" err={errs.radar_view ?? errs.swing ?? '无数据'} />}
+          <RegimeBar regime={regimeOf(d.swing)} clockEt={view?.clock.et} tradingDay={view?.clock.trading_day} />
           <MarketHero mood={d.mood} desk={desk} moodError={errs.mood} deskError={errs.desk} />
           <div data-opp-grid className="grid items-start gap-x-3 xl:grid-cols-[minmax(0,1fr)_340px]">
             <div data-opp-main className="min-w-0">
-              <BoardCards swing={d.swing} error={errs.swing} quotes={live.quotes} quotesAt={live.at} model={model} ctx={d.ctx ?? {}} nav={nav} onOpen={setOpen} />
+              <BoardCards swing={d.swing} error={errs.swing} quotes={live.quotes} quotesAt={live.at} model={model} ctx={d.ctx ?? {}} nav={nav} onOpen={setOpen} names={names} />
+              {!errs.swing && <LedgerBlock swing={d.swing} names={names} />}
               {view && <HoldCards view={view} swing={d.swing} quotes={live.quotes} quotesAt={live.at} model={model} onOpen={setOpen} />}
             </div>
             <aside data-opp-rail className="min-w-0">

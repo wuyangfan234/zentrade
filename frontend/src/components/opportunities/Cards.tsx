@@ -7,6 +7,8 @@ import type { LsRankPayload, OppCardCtx, OppQuote, OppRadarView, RadarBlip, Swin
 import { cardVerdict, dayTag, gapText, md, SIDE_ARROW, setupKind, usdS, zonePos } from '@/components/opportunities/terms'
 import { PriceRuler, RulerLegend } from '@/components/opportunities/PriceRuler'
 import { badge } from '@/components/ui/badge'
+import { AttrToggle, ObserveOrderButton, TimingTags } from '@/components/opportunities/CardMeta'
+import { isObserve } from '@/components/opportunities/p1'
 
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 /** 美元按整数取色 (四舍五入为 0 = 平); 百分比按原值取色 */
@@ -54,8 +56,9 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
   )
 }
 
-/** 同一网格的卡等高 (auto-rows-fr: 不只同一行, 换行后的各行也一样高); 卡内最后一行贴底, 多出的高度留在价格尺下方 */
-export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fill,minmax(min(100%,280px),1fr))]'
+/** 同一网格的卡等高 (auto-rows-fr: 不只同一行, 换行后的各行也一样高); 卡内最后一行贴底, 多出的高度留在价格尺下方。
+ * 2026-11-26 用户指定细节: auto-fit (不是 auto-fill) —— 卡少于一行时空列收掉、卡拉伸占满, 不会 2 张卡占 3 列右侧空一整列。 */
+export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]'
 export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
 export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
 const Empty = ({ t }: { t: string }) => <div data-col-empty className="px-3 pb-3 text-[13px] text-muted">{t}</div>
@@ -73,7 +76,7 @@ export function priceStamp(at: string | null, srcs: string[], asof?: string | nu
 
 // ───────────────────────── 今日机会 ─────────────────────────
 
-function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: OppQuote; model: ModelSide; ctx?: OppCardCtx; nav: number | null; onOpen: (s: string) => void }) {
+function BoardCard({ c, q, model, ctx, nav, onOpen, names }: { c: SwingBoardCard; q?: OppQuote; model: ModelSide; ctx?: OppCardCtx; nav: number | null; onOpen: (s: string) => void; names: Map<string, string> }) {
   const price = q?.price ?? c.price ?? null
   const src = q?.src ?? c.price_source ?? null
   const chg = q?.chg ?? null
@@ -86,10 +89,11 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
   const hot = zp.pos === 'in'
   const kind = setupKind(c.strategies, c.side)
   const earn = ctx?.earnings
+  const obs = isObserve(c)
   return (
-    <div role="button" tabIndex={0} data-board-card={c.symbol} data-zone={zp.pos ?? 'none'} onClick={() => onOpen(c.symbol)}
+    <div role="button" tabIndex={0} data-board-card={c.symbol} data-zone={zp.pos ?? 'none'} data-observe={obs ? '' : undefined} onClick={() => onOpen(c.symbol)}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(c.symbol) } }}
-      className={`${CARD} ${hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
+      className={`${CARD} ${obs ? 'border-dashed border-secondary/70 bg-base/40' : hot ? 'border-accent bg-accent/[0.06] shadow-[inset_0_0_0_1px_hsl(var(--accent))]' : 'border-border'}`}>
       <div className="flex items-center gap-2">
         <b className="text-[14px] font-bold text-foreground">{c.symbol}</b>
         <Side side={c.side} />
@@ -106,6 +110,7 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
         <Conflict model={model} sym={c.symbol} side={c.side} />
         {earn && <span data-card-earn className={badge('warn')}>{`财报 ${md(earn.date)}`}</span>}
       </div>
+      <TimingTags c={c} />
       <PriceRuler data-ruler="board" geo={{ stop: c.stop, target: c.target, price, zone: c.entry_zone, side: c.side }}
         lossText={`止损亏 ${usdS(loss === null ? null : -loss)}`} gainText={`目标赚 ${usdS(gain)}`} lossCls="text-bear"
         stopLabel={`止损 ${px(c.stop)}`} targetLabel={`目标 ${px(c.target)}`} />
@@ -114,16 +119,21 @@ function BoardCard({ c, q, model, ctx, nav, onOpen }: { c: SwingBoardCard; q?: O
         <span className="whitespace-nowrap">{`进场 ${px(lo)} ~ ${px(hi)}`}</span>
         <span className="whitespace-nowrap">{fin(qty) ? `${qty} 股` : '股数 —'}</span>
         {fin(qty) && fin(nav) && nav > 0 && <span className="whitespace-nowrap text-muted">{`占资金 ${Math.round((qty * mid) / nav * 100)}%`}</span>}
+        {obs && <span className="ml-auto"><ObserveOrderButton symbol={c.symbol} /></span>}
       </div>
+      <AttrToggle c={c} names={names} />
     </div>
   )
 }
 
-export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, onOpen }: {
+export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, onOpen, names = new Map() }: {
   swing?: SwingBoardsPayload | null; error?: string; quotes: Quotes; quotesAt: string | null; model: ModelSide; ctx: Record<string, OppCardCtx>
-  nav: number | null; onOpen: (s: string) => void
+  nav: number | null; onOpen: (s: string) => void; names?: Map<string, string>
 }) {
-  const cards = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
+  const all = swing ? [...swing.long, ...swing.short].filter((c) => c.state !== 'holding') : []
+  // P1-B2: 观察级卡 (grade=observe / 全部 T1 卡) 单独一组, 虚线降级, 不进「今日机会」计数, 也不折进「不做」
+  const observe = all.filter(isObserve)
+  const cards = all.filter((c) => !isObserve(c))
   const vs = cards.map((c) => ({ c, v: cardVerdict(c) }))
   const act = vs.filter((x) => x.v.order).map((x) => x.c)
   // 同票同原因的多张卡只写一次
@@ -136,6 +146,7 @@ export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, on
   const tags = (
     <>
       <span className={badge('limit')} title="机会板策略命中 · 只有这里进入模拟下单">策略选出</span>
+      {observe.length > 0 && <span data-observe-count={observe.length} className={badge('limit')}>{`观察级 ${observe.length}`}</span>}
       {act.length > 0 && <RulerLegend kind="board" closed={closedPx} />}
     </>
   )
@@ -145,9 +156,17 @@ export function BoardCards({ swing, error, quotes, quotesAt, model, ctx, nav, on
         <>
           {act.length === 0 ? <Empty t="无可进场机会" /> : (
             <div data-board-grid data-in-zone={inZone} className={GRID}>
-              {act.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} />)}
+              {act.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
             </div>
           )}
+          {observe.length > 0 && <>
+            <div data-observe-head className="flex flex-wrap items-center gap-2 border-t border-dashed border-border px-3 pb-1.5 pt-2 text-[12px] text-secondary">
+              <b className="text-foreground">{`观察级 ${observe.length}`}</b><span>只上板 · 不进纸面下单簿</span>
+            </div>
+            <div data-observe-grid className={GRID}>
+              {observe.map((c) => <BoardCard key={c.card_id ?? `${c.symbol}${c.side}${c.timing_tier ?? ''}`} c={c} q={quotes[c.symbol]} model={model} ctx={ctx[c.symbol]} nav={nav} onOpen={onOpen} names={names} />)}
+            </div>
+          </>}
           {skip.length > 0 && (
             <div data-board-skips className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border/70 px-3 py-2 text-[13px]">
               <span className={badge('limit')}>{`不做 ${skip.length}`}</span>
