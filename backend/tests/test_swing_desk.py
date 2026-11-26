@@ -27,12 +27,21 @@ def test_defaults_follow_ledger_gate():
     assert sd.DEFAULT_LONG == ()
     assert sd.DEFAULT_SHORT[0] == "tv_halftrend"
     assert "phantom_4h_short" not in sd.DEFAULT_SHORT and not hasattr(sd, "CORE_FALLBACK_LONG")
+    assert sd.strategies_from_ruleset(None)[0] == ()
+    # 账本对账只对当前环境实际存在的规则做: 开源核心版剔除 tv_*.py 与 swing_rule_history.json,
+    # 那里 tv_halftrend 不存在 → 跳过账本段并说明原因; 完整版规则在, 账本缺格/判非在用照样失败。
+    have = sd._builtin_ids()  # None = 目录读不到, 不过滤 (与 _available_defaults 同口径)
     cells = sl.artifact_stats()["cells"]
+    missing = []
     for side, ids in (("long", sd.DEFAULT_LONG), ("short", sd.DEFAULT_SHORT)):
         for r in ids:
+            if have is not None and r not in have:
+                missing.append(r)
+                continue
             c = cells[sl.cell_key(r, side)]
             assert sl.classify(c["n"], c["excess"], c["ci_low"], c["ci_high"]) == sl.ACTIVE
-    assert sd.strategies_from_ruleset(None)[0] == ()
+    if missing:
+        pytest.skip(f"默认规则在本环境不存在 (开源核心版剔除), 跳过账本对账: {missing}")
 
 
 def test_geometry_long_formula_nvda_example():
