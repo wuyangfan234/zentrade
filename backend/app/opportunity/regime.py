@@ -8,14 +8,17 @@
   ② 是否突破前 20 日高 / 跌破前 20 日低; ③ 5 日 / 60 日已实现波动比。盘后慢层评估时用收盘价再读一次快层。
 - 滞回: 降级只需任一层单次触发 (宁可早防守); 升级要求「慢层同意」或「快层连续 2 个整点 (同一交易日) 确认」,
   且盘后升级不越过同时刻快层读数。
+- 最小驻留: 切换后至少驻留 3 个交易日才允许再次升级; 降级不受驻留限制。
 
 状态与审计:
 - ``data/rules/regime_state.json``: 当前状态 (每次评估覆盖写)。
 - ``data/rules/regime_audit.jsonl``: 只追加, 每次状态切换一行 (时间、触发层、前/后状态、触发条件、依据数值)。
 
-作用面 (swing_desk 读信号快照里的 ``regime_state``): 每侧是否开放 + 每侧卡数上限; 空头只在「防守」开,
-且空头卡一律观察级 (不进纸面下单簿)。``rules/swing.json`` 的 ``"regime": false`` = 回到 tight-v1
-(空头只看 SPY < MA50, 每边 5 张), 无需改代码。
+作用面 (swing_desk.board_for_day): 盘后快照里的 ``regime_state``, 再与同一交易日盘中整点写入的状态文件取较低者
+(盘中只许降、不许升, 前一交易日的状态文件不影响当日板) → 每侧是否开放 + 每侧卡数上限; 空头只在「防守」开,
+且空头卡一律观察级 (不进纸面下单簿)。多头上限可由 ``rules/swing.json`` 的 ``regime_limits`` 配置
+(缺省 进攻 5 / 震荡 5 / 防守 0)。``"regime": false`` = 回到 tight-v1 (空头只看 SPY < MA50, 每边 5 张),
+且 regime 不再评估、不写状态与审计; 无需改代码。
 
 纯函数 (slow_target / fast_target / step) 不读文件、不出网, 便于单测与历史回放。
 """
@@ -51,10 +54,12 @@ VOL_SHORT, VOL_LONG = 5, 60
 VOL_RATIO_HOT = 1.5                         # 短波动 ≥ 1.5 倍长波动 = 波动放大
 VOL_RATIO_CALM = 1.2
 UP_CONFIRM_SLOTS = 2                        # 快层升级要连续 2 个整点确认
+MIN_DWELL_DAYS = 3                          # 切换后至少驻留 3 个交易日才允许再升级 (降级不受限)
 
-# 每侧卡数上限 (多头); 空头只在防守开, 上限沿用每边 5 张
-LONG_CAP = {ATTACK: 5, RANGE: 2, DEFENSE: 0}
+# 每侧卡数上限 (多头, 缺省; 可由 swing.json 的 regime_limits 覆盖); 空头只在防守开, 上限沿用每边 5 张
+LONG_CAP = {ATTACK: 5, RANGE: 5, DEFENSE: 0}
 SHORT_CAP = {ATTACK: 0, RANGE: 0, DEFENSE: 5}
+LIMIT_ALIASES = {"attack": ATTACK, "range": RANGE, "defense": DEFENSE}
 
 STATE_FILE = "regime_state.json"
 AUDIT_FILE = "regime_audit.jsonl"
@@ -64,6 +69,29 @@ _LOCK = threading.Lock()
 
 
 # ── 配置开关 ──────────────────────────────────────────────────────────
+
+def _swing_cfg(data_dir: Path | None) -> dict | None:
+    if data_dir is None:
+        return None
+    try:
+        raw = json.loads((Path(data_dir) / "rules" / "swing.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return raw if isinstance(raw, dict) else None
+
+
+def long_limits(data_dir: Path | None) -> dict[str, int]:
+    """多头每态上限: swing.json 的 ``regime_limits`` ({"进攻": n, "震荡": n, "防守": n}, 也认 attack/range/defense);
+    缺省 / 坏值按 LONG_CAP。上限再被机会板的每边 5 张封顶。"""
+    out = dict(LONG_CAP)
+    raw = (_swing_cfg(data_dir) or {}).get("regime_limits")
+    if isinstance(raw, dict):
+        for k, v in raw.items():
+            st = LIMIT_ALIASES.get(k, k)
+            if st in RANK and isinstance(v, int) and not isinstance(v, bool) and v >= 0:
+                out[st] = v
+    return out
+
 
 def enabled(data_dir: Path | None) -> bool:
     """``rules/swing.json`` 的 ``"regime"``: 缺省 = 开 (直接生效); ``false`` / ``{"enabled": false}`` = 回到 tight-v1。
@@ -84,11 +112,20 @@ def enabled(data_dir: Path | None) -> bool:
     return True
 
 
-def caps(state: str | None) -> dict[str, int] | None:
-    """{"long": n, "short": n}; 未知状态 = None (调用方走 tight-v1 旧口径)。"""
+def caps(state: str | None, data_dir: Path | None = None) -> dict[str, int] | None:
+    """{"long": n, "short": n}; 未知状态 = None (调用方走 tight-v1 旧口径)。多头上限按 regime_limits 配置。"""
     if state not in RANK:
         return None
-    return {"long": LONG_CAP[state], "short": SHORT_CAP[state]}
+    return {"long": long_limits(data_dir)[state], "short": SHORT_CAP[state]}
+
+
+def lower(a: str | None, b: str | None) -> str | None:
+    """两态取更防守的那个; 任一未知 = 另一个。"""
+    if a not in RANK:
+        return b if b in RANK else None
+    if b not in RANK:
+        return a
+    return a if RANK[a] <= RANK[b] else b
 
 
 # ── 指标 (纯函数) ─────────────────────────────────────────────────────
@@ -220,14 +257,18 @@ def _empty_streak() -> dict:
 
 
 def step(prev: str | None, *, mode: str, slow: str | None = None, fast: str | None = None,
-         streak: dict | None = None, day: str | None = None, slot: str | None = None) -> Step:
+         streak: dict | None = None, day: str | None = None, slot: str | None = None,
+         dwell: int | None = None) -> Step:
     """一次评估。mode = "close" (盘后慢层 + 收盘快层) / "hourly" (盘中整点快层, slow 传最近一次慢层目标)。
 
     - 降级: slow / fast 任一低于当前态 → 降到两者中更低的那个 (单次触发即生效)。
     - 升级 (close): 慢层目标高于当前态 → 升到 min(慢层, 收盘快层) (慢层同意, 且不越过同时刻快层读数)。
     - 升级 (hourly): 快层目标高于当前态时, 若最近慢层目标 ≥ 快层目标 → 直接升 (慢层同意);
       否则累计同一交易日连续整点确认, 满 2 次 → 升到这几次快层目标的最小值。
+    - 最小驻留: dwell = 上次切换以来的交易日数 (None = 未知/冷启动, 不限); dwell < 3 时不升级 (note="min_dwell"),
+      降级不受限。
     """
+    hold = dwell is not None and dwell < MIN_DWELL_DAYS
     cur = prev if prev in RANK else DEFAULT_STATE
     st = dict(streak) if isinstance(streak, dict) else _empty_streak()
     if st.get("day") != day:
@@ -246,12 +287,16 @@ def step(prev: str | None, *, mode: str, slow: str | None = None, fast: str | No
         return Step(low, True, trig, _empty_streak() | {"day": day})
     if mode == "close":
         tgt = slow if fast not in RANK else min((slow, fast), key=lambda s: RANK[s])
+        if RANK[tgt] > RANK[cur] and hold:
+            return Step(cur, False, None, _empty_streak() | {"day": day}, "min_dwell")
         if RANK[tgt] > RANK[cur]:
             return Step(tgt, True, "slow", _empty_streak() | {"day": day})
         return Step(cur, False, None, _empty_streak() | {"day": day})
     # hourly 升级
     if RANK[fast] <= RANK[cur]:
         return Step(cur, False, None, _empty_streak() | {"day": day})
+    if hold:
+        return Step(cur, False, None, _empty_streak() | {"day": day}, "min_dwell")
     if slow in RANK and RANK[slow] >= RANK[fast]:
         return Step(fast, True, "fast", _empty_streak() | {"day": day}, "slow_agrees")
     slots = [*list(st.get("slots") or []), slot]
@@ -313,6 +358,23 @@ def _save_state(data_dir: Path, d: dict) -> None:
     atomic_write_text(p, json.dumps(d, ensure_ascii=False, indent=1))
 
 
+def _dwell(since_day: str | None, day: str) -> int | None:
+    """上次切换日 → 本次评估日 经过的交易日数 (同日 = 0)。未知 = None。"""
+    if not since_day:
+        return None
+    try:
+        a, b = date.fromisoformat(since_day), date.fromisoformat(day)
+    except ValueError:
+        return None
+    if b <= a:
+        return 0
+    try:
+        from app.market_clock import us_clock
+        return max(len(us_clock.trading_days_between(a, b)) - 1, 0)
+    except Exception:
+        return int(np.busday_count(a, b))
+
+
 def _apply(data_dir: Path, *, mode: str, at: str, day: str, slot: str | None, slow_t: str | None,
            slow_r: list[str], slow_v: dict | None, fast_t: str | None, fast_r: list[str],
            fast_v: dict | None) -> dict:
@@ -320,8 +382,9 @@ def _apply(data_dir: Path, *, mode: str, at: str, day: str, slot: str | None, sl
         prev = load_state(data_dir) or {}
         prev_state = prev.get("state")
         last_slow = slow_t if mode == "close" else (prev.get("slow") or {}).get("target")
+        since_day = prev.get("since_day") if prev_state in RANK else None
         res = step(prev_state, mode=mode, slow=last_slow, fast=fast_t, streak=prev.get("streak"), day=day,
-                   slot=slot)
+                   slot=slot, dwell=_dwell(since_day, day))
         reasons = (slow_r if mode == "close" else []) + fast_r
         new = {
             "contract": CONTRACT, "state": res.state, "as_of": day, "updated_at": at, "mode": mode, "slot": slot,
@@ -330,6 +393,7 @@ def _apply(data_dir: Path, *, mode: str, at: str, day: str, slot: str | None, sl
             "fast": {"target": fast_t, "reasons": fast_r, "values": fast_v, "slot": slot},
             "streak": res.streak, "reasons": reasons, "note": res.note,
             "since": at if res.changed or not prev.get("since") else prev.get("since"),
+            "since_day": day if res.changed or not since_day else since_day,
         }
         if res.changed or prev_state not in RANK:
             _append_audit(data_dir, {
@@ -410,7 +474,10 @@ def evaluate_close(data_dir: Path, repo, as_of: date, *, frames: dict | None = N
                    now: datetime | None = None) -> dict | None:
     """盘后慢层 (decision_scan_job 调): 慢层 + 收盘快层 → 滞回 → 写状态 (+ 切换时追加审计)。
     返回快照字段 {"regime_state", "regime_as_of", "regime_reasons", "regime_contract"}; SPY 数据缺 = None
-    (快照不写 regime 字段 → 机会板按 tight-v1 旧口径, 空头仍受 SPY < MA50 + fail-closed 约束)。"""
+    (快照不写 regime 字段 → 机会板按 tight-v1 旧口径, 空头仍受 SPY < MA50 + fail-closed 约束)。
+    ``"regime": false`` (回滚) = 不评估、不写状态与审计, 返回 None。"""
+    if not enabled(data_dir):
+        return None
     bars = _spy_bars(repo, as_of, include_day=True)
     if bars is None or not bars["date"] or bars["date"][-1] != as_of:
         logger.warning("regime: SPY close for %s missing; snapshot without regime", as_of)
@@ -435,7 +502,10 @@ def snapshot_fields(state: dict | None) -> dict | None:
 
 def evaluate_hourly(data_dir: Path, repo, *, now: datetime | None = None, price: float | None = None) -> dict | None:
     """盘中整点快层 (挂在 zen_market_mood_preopen / zen_market_mood_intraday 同一任务上, 不另起定时器)。
-    只在大盘重判的检查点窗口内执行 (market_mood.due_slot), 同一 slot 只评估一次。现价取不到 = 不评估。"""
+    只在大盘重判的检查点窗口内执行 (market_mood.due_slot), 同一 slot 只评估一次。现价取不到 = 不评估。
+    ``"regime": false`` (回滚) = 不评估、不写状态与审计。结果由 swing_desk.board_for_day 读入当日板 (只降不升)。"""
+    if not enabled(data_dir):
+        return None
     from app.market_clock import us_clock
     from app.services import market_mood
     now = us_clock.market_datetime(now or us_clock.now())
@@ -472,6 +542,24 @@ def _live_price(repo, day: date, now) -> float | None:
     except Exception as e:
         logger.warning("regime hourly: live price failed: %s", type(e).__name__)
     return None
+
+
+def intraday_override(data_dir: Path, snapshot_day: date) -> dict | None:
+    """盘中整点状态 → 当日板 (只降不升由调用方 lower() 保证)。
+    只认「快照日之后的下一个交易日」(= 该快照的板在盘中生效的那一天) 由整点评估写入的状态;
+    前一交易日 / 快照日当天 / 盘后评估写入的状态一律不认 (防跨日污染)。"""
+    st = load_state(data_dir)
+    if not st or st.get("mode") != "hourly":
+        return None
+    try:
+        as_of = date.fromisoformat(str(st.get("as_of")))
+        from app.market_clock import us_clock
+        live_day = us_clock.next_trading_day(snapshot_day)
+    except Exception:
+        return None
+    if as_of != live_day or as_of <= snapshot_day:
+        return None
+    return st
 
 
 def status(data_dir: Path) -> dict[str, Any]:
