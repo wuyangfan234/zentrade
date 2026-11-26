@@ -17,7 +17,13 @@ BASE, SCENES, OUT = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])
 PREFIX = sys.argv[4] if len(sys.argv) > 4 else ''
 OUT.mkdir(parents=True, exist_ok=True)
 D = json.loads(SCENES.read_text(encoding='utf-8'))
-VIEWS = {'desktop': {'width': 1440, 'height': 900}, 'mobile': {'width': 390, 'height': 844}, 'wide': {'width': 1920, 'height': 1080}}
+VIEWS = {'desktop': {'width': 1440, 'height': 900}, 'mobile': {'width': 390, 'height': 844}, 'wide': {'width': 1920, 'height': 1080},
+}
+# 末行补齐分支必须真跑到: (场景, 视口) → 今日机会网格期望的 (列数, 末行张数)
+GRID_EXPECT = {('four', 'wide'): (3, 1), ('seven', 'wide'): (5, 2), ('full', 'wide'): (3, 2)}
+# 机会页容器 max-w-[1440px], 真实布局下今日机会网格最多 3 列; 5 列只能在页面加载前注入 CSS 把卡最小宽度收窄到 180px 来模拟,
+# 仅用于让 FillGrid 的 (5 列, 末行 2 张) 分支在真浏览器里跑一遍, 不代表线上会出现 5 列
+FORCE_CSS = {'seven': '[data-board-grid]{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))!important}'}
 ONLY = set(filter(None, os.environ.get('ONLY', '').split(',')))  # 只跑这些场景 (调试用)
 SCOPE = '[data-regime-bar],[data-ledger],[data-board],[data-slot="board"]'
 
@@ -89,7 +95,8 @@ COUNT_JS = r"""() => {
     const name = g.getAttributeNames().filter(a => a.startsWith('data-') && a !== 'data-grid-fill')[0]
     if (Math.abs(lg - rg) > 2) bad.push(`末行偏一侧 ${name}: 左 ${Math.round(lg)} 右 ${Math.round(rg)}`)
     const col = Math.min(...rects.map(r => r.width)), gap = parseFloat(cs.columnGap) || 0
-    for (const r of rects) if (r.width > col * 2 + gap + 2) bad.push(`卡跨超过 2 列 ${name}: ${Math.round(r.width)}px`)
+    const ncol = Number(g.getAttribute('data-grid-cols') || 0), maxSpan = ncol <= 3 ? ncol : 3  // ≤3 列补满; ≥4 列最多 2 列 + 奇数补 1
+    for (const r of rects) if (r.width > col * maxSpan + gap * (maxSpan - 1) + 2) bad.push(`卡跨超过 ${maxSpan} 列 ${name}: ${Math.round(r.width)}px`)
   }
   for (const f of q('[data-loop-factor]')) {
     const c = f.querySelector('[data-loop-count]'); eq(`打分闭环 ${f.getAttribute('data-loop-factor')}`, Number(c.getAttribute('data-loop-count')), f.querySelectorAll('[data-loop-strategy]').length)
@@ -99,7 +106,9 @@ COUNT_JS = r"""() => {
     const xs = [...t.querySelectorAll('[data-ci-zero]')].map(l => Math.round(l.getBoundingClientRect().left))
     if (xs.length > 1 && Math.max(...xs) - Math.min(...xs) > 1) bad.push(`0 基准未对齐: ${xs.join(',')}`)
   }
-  return { bad, fp: document.querySelector('[data-regime-bar]')?.getAttribute('data-regime-fp') ?? null,
+  const grids = q('[data-grid-fill]').map(g => ({ name: g.getAttributeNames().filter(a => a.startsWith('data-') && a !== 'data-grid-fill' && a !== 'data-grid-cols' && a !== 'data-in-zone')[0],
+    cols: Number(g.getAttribute('data-grid-cols') || 0), n: g.children.length }))
+  return { grids, bad, fp: document.querySelector('[data-regime-bar]')?.getAttribute('data-regime-fp') ?? null,
     cards: q('[data-board-card]').length, ledger: q('[data-ledger-row]').length, reasons: q('[data-reason-row]').length, observe: q('[data-observe] ').length }
 }"""
 
@@ -139,7 +148,7 @@ PERIPHERAL = {
 
 def run():
     results, fps = {}, {}
-    plan = [('opp', s) for s in ('full', 'two', 'sparse', 'empty', 'anomaly', 'ci')] + [('factor', s) for s in ('full', 'sparse', 'anomaly')]
+    plan = [('opp', s) for s in ('full', 'two', 'four', 'seven', 'sparse', 'empty', 'anomaly', 'ci')] + [('factor', s) for s in ('full', 'sparse', 'anomaly')]
     with sync_playwright() as p:
         exe = os.environ.get('PW_CHROMIUM')  # 本机 playwright 包与已缓存浏览器版本不一致时显式指定
         br = p.chromium.launch(executable_path=exe) if exe else p.chromium.launch()
@@ -147,7 +156,9 @@ def run():
             for vname, vp in VIEWS.items():
                 if sc in ('sparse', 'empty', 'two', 'ci') and vname == 'mobile':
                     continue
-                if vname == 'wide' and (kind != 'opp' or sc not in ('two', 'full')):  # 宽屏: 复现「2 张卡占 3 列」+ 4 列 5 张末行
+                if sc in ('four', 'seven') and vname in ('mobile', 'desktop'):
+                    continue
+                if vname == 'wide' and (kind != 'opp' or sc not in ('two', 'full', 'four', 'seven')):  # 宽屏: 2 张 / 5 张 (3,2) / 4 张 (3,1) / 7 张强制 5 列 (5,2)
                     continue
                 if ONLY and sc not in ONLY:
                     continue
@@ -172,6 +183,8 @@ def run():
                     return handle
                 handle = make((kind, sc), misses)
                 page.route('**/api/**', handle)
+                if kind == 'opp' and sc in FORCE_CSS:
+                    page.add_init_script("document.addEventListener('DOMContentLoaded',()=>{const st=document.createElement('style');st.textContent=%s;document.head.appendChild(st)})" % json.dumps(FORCE_CSS[sc]))
                 page.goto(BASE + ('/' if kind == 'opp' else '/factors'), wait_until='domcontentloaded')
                 sel = '[data-board]' if kind == 'opp' else '[data-slot="board"]'
                 try:
@@ -198,10 +211,17 @@ def run():
                     page.locator('[data-slot="board"]').screenshot(path=str(OUT / f'{PREFIX}detail-ci-reason.png'))
                 if kind == 'opp' and sc == 'ci' and vname == 'desktop':
                     page.locator('[data-ledger]').screenshot(path=str(OUT / f'{PREFIX}detail-ledger-ci.png'))
-                if kind == 'opp' and sc in ('two', 'full') and vname in ('desktop', 'wide'):
+                if kind == 'opp' and sc in ('two', 'full', 'four', 'seven') and vname in ('desktop', 'wide'):
                     page.locator('[data-board]').screenshot(path=str(OUT / f'{PREFIX}detail-grid-{sc}-{vname}.png'))
                 chk = page.evaluate(CHECK_JS, SCOPE)
                 cnt = page.evaluate(COUNT_JS)
+                want = GRID_EXPECT.get((sc, vname)) if kind == 'opp' else None
+                if want:
+                    bg = [g for g in cnt['grids'] if g['name'] == 'data-board-grid']
+                    got = (bg[0]['cols'], bg[0]['n'] % bg[0]['cols'] if bg[0]['cols'] else -1) if bg else None
+                    print('GRID', sc, vname, 'want', want, 'got', got)
+                    if got != want:
+                        cnt['bad'].append(f'末行分支未跑到: 期望 (列, 末行) = {want} 实际 {got}')
                 fps.setdefault(sc, {})[kind] = cnt['fp']
                 # 404 的接口只允许是本页用不到的外围接口 (由页面自己的「读取失败」兜住, 不算 JS 报错)
                 errs = [e for e in errs if 'Failed to load resource' not in e]

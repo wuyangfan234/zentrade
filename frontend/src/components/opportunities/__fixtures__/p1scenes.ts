@@ -37,6 +37,9 @@ const LONG3 = ['tv_zlsma_cross', 'volume_price_surge', 'macd_golden']
 
 export const OPP = {
   two: page(swingWith([more('NVDA', 178.2), { ...more('AMD', 214.6), hit_count: 2, strategies: CARDS.t0b.strategies, score_components: CARDS.t0b.score_components }]), LONG3, SHORT),
+  /** 末行补齐分支: 4 张 (3 列剩 1) / 7 张 (5 列剩 2) */
+  four: page(swingWith([more('NVDA', 178.2), more('AVGO', 342.1), more('MU', 104.6), more('ORCL', 188.4)]), LONG3, SHORT),
+  seven: page(swingWith([more('NVDA', 178.2), more('AVGO', 342.1), more('MU', 104.6), more('ORCL', 188.4), more('AMD', 214.6), more('TSM', 296.3), more('ARM', 142.8)]), LONG3, SHORT),
   full: page(swingWith([more('NVDA', 178.2), { ...more('AMD', 214.6), hit_count: 2, strategies: CARDS.t0b.strategies, score_components: CARDS.t0b.score_components }, more('AVGO', 342.1), more('MU', 104.6), more('ORCL', 188.4),
     { ...more('TSLA', 351.3), ...pick(CARDS.observe) }, { ...more('META', 591.37), ...pick(CARDS.t1) }]), LONG3, SHORT),
   sparse: page(swingWith([{ ...CARDS.t0, side: 'long', symbol: 'AAPL', card_id: 'AAPL-long', regime_state: '进攻', entry_zone: [97.5, 98.75], stop: 95.5, target: 102.75,
