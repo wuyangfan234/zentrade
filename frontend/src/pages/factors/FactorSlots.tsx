@@ -685,7 +685,7 @@ function StockSlot({ d, onOpenReview, onOpenCandidate }: {
           {loop && (
             <div data-loop="stock" className="mt-1.5 flex flex-col gap-1 text-[12px]">
               <div className="flex flex-wrap gap-1.5">{engine.legs.map(l => <span key={l.name} data-loop-leg="" className="rounded bg-elevated px-1.5 py-0.5 text-foreground">{displayStrategyName(l.name)}</span>)}</div>
-              <div className="text-secondary">{`近期表现 年化 ${fmtPct(engine.stats.annual_return)} · 夏普 ${fin(engine.stats.sharpe) ? engine.stats.sharpe.toFixed(2) : DASH} · 不在策略账本 (口径 = 选股回测, 与机会板超额 R 不同尺)`}</div>
+              <div className="text-secondary">{`近期表现 年化 ${fmtPct(engine.stats.annual_return)} · 夏普 ${fin(engine.stats.sharpe) ? engine.stats.sharpe.toFixed(2) : DASH} · 不在策略账本 (口径 = 选股回测 · 与机会板超额 R 不同尺)`}</div>
             </div>
           )}
         </div>

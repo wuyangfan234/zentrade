@@ -58,7 +58,7 @@ export function RegimeBar({ regime, clockEt, tradingDay }: { regime: SwingRegime
           </div>
         ))}
       </div>
-      <div className="border-t border-border/70 px-3 py-1 text-[11px] text-muted">{`进攻条件满足 ${met}/${reasons.length} · 降级任一层单次触发, 升级需慢层同意或快层连续 2 个整点确认 · 盘中只降不升`}</div>
+      <div className="border-t border-border/70 px-3 py-1 text-[11px] text-muted">{`进攻条件满足 ${met}/${reasons.length} · 降级任一层单次触发 · 升级需慢层同意或快层连续 2 个整点确认 · 盘中只降不升`}</div>
     </section>
   )
 }

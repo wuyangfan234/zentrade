@@ -57,7 +57,7 @@ it('状态条: 三态有图标 + 文字 + 当前段 aria-current; 依据逐项; 
   expect(regimeOf(swingWith([], { regime: { state: '乱写' } }))).toBeNull()
 })
 
-it('账本: 五档分组, 计数 = 行数; 待定 / 冷冻带图标 + 「不出卡」文字; 区间缺写「区间未返回」', async () => {
+it('账本: 五个档位分组, 计数 = 行数; 待定 / 冷冻带图标 + 「不出卡」文字; 区间缺写「区间未返回」', async () => {
   await render(<LedgerBlock swing={swingWith([])} names={new Map([['tv_halftrend', '半趋势翻空']])} />)
   const rows = $$('[data-ledger-row]')
   expect(rows).toHaveLength(Object.keys(LEDGER.cells).length)

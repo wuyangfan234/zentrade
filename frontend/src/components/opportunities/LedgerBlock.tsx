@@ -1,4 +1,4 @@
-/** 机会页「策略账本」(P1-B1 五档): 按 在用 / 观察 / 待定 / 冷冻 / 复活 分组。
+/** 机会页「策略账本」(P1-B1 五个档位): 按 在用 / 观察 / 待定 / 冷冻 / 复活 分组。
  * 数据 = 板 meta.ledger (strategy_ledger.ledger_for 在当前 regime 的切片), 与出卡同源 (ledger_for_day 板/簿同源)。
  * 待定 / 冷冻 = 不出卡: 除颜色外有图标 + 「不出卡」文字 + 虚线左边, 一眼可辨。
  * 区间: 后端切片现只带 n / excess / tier (ledger_view 未透传 ci_low / ci_high), 有就画, 没有就写「区间未返回」, 不编。 */
@@ -8,8 +8,8 @@ import { SIDE_ARROW } from '@/components/opportunities/terms'
 import { ciScale, fR, LEDGER_TIERS, ledgerOf, ledgerRows, TIER_ICON, TIER_OFF } from '@/components/opportunities/p1'
 
 const STATUS_NOTE: Record<string, string> = {
-  disabled: '账本开关关闭 · 档位一律按在用, 分数取回放汇总',
-  unavailable: '本月无复核记录 · 全部规则按待定处理, 今日不出卡',
+  disabled: '账本开关关闭 · 档位一律按在用 · 分数取回放汇总',
+  unavailable: '本月无复核记录 · 全部规则按待定处理 · 今日不出卡',
 }
 const TIER_CHIP: Record<string, string> = {
   在用: 'bg-accent/10 text-accent dark:text-blue-300', 复活: 'bg-accent/10 text-accent dark:text-blue-300',
