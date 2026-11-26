@@ -116,12 +116,14 @@ def week_ci(pairs):
     return ci
 
 
-def regime_history(spy: pl.DataFrame, start: date, breadth: dict[date, float]) -> dict:
-    """日频回放 regime (只用收盘: 慢层 + 收盘快层; 盘中整点无历史数据, 不回放)。宽度 = 本研究股票池收盘 > MA20 占比。"""
+def regime_history(spy: pl.DataFrame, start: date, breadth: dict[date, float], min_dwell: int) -> dict:
+    """日频回放 regime (只用收盘: 慢层 + 收盘快层; 盘中整点无历史数据, 不回放)。宽度 = 本研究股票池收盘 > MA20 占比。
+    min_dwell = 0 → 无驻留限制 (首版口径); 非 0 → 现行 rg.step 的最小驻留 (rg.MIN_DWELL_DAYS, 降级不受限)。"""
     spy = spy.sort("date")
     c, h, lo = (spy[k].to_numpy().astype(float) for k in ("close", "high", "low"))
     days = spy["date"].to_list()
     state, counts, switches, by_day = None, {s: 0 for s in rg.STATES}, 0, {}
+    since, runs, run = None, [], 0
     for t in range(len(days)):
         if days[t] < start or t < 80:
             continue
@@ -129,14 +131,21 @@ def regime_history(spy: pl.DataFrame, start: date, breadth: dict[date, float]) -
         st, _ = rg.slow_target(sv)
         fv = rg.fast_values(c[:t], h[:t], lo[:t], c[t])
         ft, _ = rg.fast_target(fv)
-        r = rg.step(state, mode="close", slow=st, fast=ft, day=str(days[t]))
-        if r.changed and state is not None:
-            switches += 1
+        dwell = None if (since is None or not min_dwell) else t - since      # 交易日数 (SPY 日K 下标差)
+        r = rg.step(state, mode="close", slow=st, fast=ft, day=str(days[t]), dwell=dwell)
+        if r.changed or state is None:
+            if state is not None:
+                switches += 1
+                runs.append(run)
+            since, run = t, 0
         state = r.state
+        run += 1
         counts[state] += 1
         by_day[days[t]] = state
-    return {"days": counts, "switches": switches, "by_day": by_day,
-            "note": "close-only replay (slow + close-fast), breadth = study universe"}
+    runs.append(run)
+    return {"min_dwell": min_dwell, "days": counts, "switches": switches,
+            "mean_dwell_days": round(float(np.mean(runs)), 2), "median_dwell_days": float(np.median(runs)),
+            "by_day": by_day, "note": "close-only replay (slow + close-fast), breadth = study universe"}
 
 
 def main() -> int:
@@ -217,18 +226,21 @@ def main() -> int:
     spy = daily.filter((pl.col("symbol") == "SPY") & (pl.col("date") <= end))
     if spy.height:
         br = {d: above_n.get(d, 0) / n for d, n in total_n.items() if n >= 5}
-        rh = regime_history(spy, start, br)
-        by_day = rh.pop("by_day")
-        out["regime_history"] = rh
-        grp: dict = {}
-        for g in ("daily_ma50", "multi_scale_v1"):
-            for d, r in cards[g].get("by_day", []):
-                stt = by_day.get(d)
-                if stt is None:
-                    continue
-                grp.setdefault(g, {}).setdefault(stt, []).append(r)
-        out["r_by_regime"] = {g: {s: {"filled": len(v), "mean_r": round(float(np.mean(v)), 4)}
-                                  for s, v in m.items()} for g, m in grp.items()}
+        out["regime_history"], out["r_by_regime"] = {}, {}
+        for md in (0, rg.MIN_DWELL_DAYS):
+            rh = regime_history(spy, start, br, md)
+            by_day = rh.pop("by_day")
+            key = f"dwell{md}"
+            out["regime_history"][key] = rh
+            grp: dict = {}
+            for g in ("daily_ma50", "multi_scale_v1"):
+                for d, r in cards[g].get("by_day", []):
+                    stt = by_day.get(d)
+                    if stt is None:
+                        continue
+                    grp.setdefault(g, {}).setdefault(stt, []).append(r)
+            out["r_by_regime"][key] = {g: {s: {"filled": len(v), "mean_r": round(float(np.mean(v)), 4)}
+                                           for s, v in m.items()} for g, m in grp.items()}
     Path(a.out).write_text(json.dumps(out, ensure_ascii=False, indent=1))
     print(json.dumps(out, ensure_ascii=False, indent=1))
     return 0

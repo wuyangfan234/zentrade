@@ -5,11 +5,17 @@
 
 ## 1. 结论
 
-1. **regime 三态已直接生效**（带开关可回滚）：盘后慢层随 `decision_scan_job` 跑一次并写进当日自选信号快照（只追加 `regime_state` / `regime_as_of` / `regime_reasons` / `regime_contract`）；盘中快层挂在已有的 09:25 + 10:00–15:00 整点大盘重判任务里，没有新定时器。
+1. **regime 三态已直接生效**（带开关可回滚）：
+   - 盘后慢层随 `decision_scan_job` 跑一次，写进当日自选信号快照（只追加 `regime_state` / `regime_as_of` / `regime_reasons` / `regime_contract`）。
+   - 盘中快层挂在已有的 09:25 + 10:00–15:00 整点大盘重判任务里，没有新定时器。
+   - 盘中降级当场作用于当日机会板：板取「快照态」和「同一交易日整点态」中更防守的那个，只降不升。
+   - 关掉开关后 regime 完全不评估，不写状态、不写审计。
 2. **空头只在「防守」开**，取代「SPY 收盘 < MA50」单条件；过渡期空头卡一律观察级，不进纸面下单簿。`tv_halftrend` 留在默认空头三条里，权重与名单都没动。
 3. **`multi_scale_v1` 已注册但默认不生效**（`preferred=False`），只有 `rules/swing.json` 写 `"gate": "multi_scale_v1"` 才启用。
 4. **滞后 / 假翻转（44 只自选，2023-01-03 至 2026-10-13）**：多尺度门的假翻转比 `daily_ma50` 少约 20%–24%，停止放行旧方向快 1 天，翻到新方向慢 1 天。门内格子少 18%，每笔 R 0.163 对 0.154，差值落在自助区间内，不显著。
-5. **需要拍板的风险**：同一份回放里，按 regime 分组的每笔 R 是「震荡」最高（0.21）、「进攻」次之（0.13）、「防守」最低（0.05）。所以按任务书写的上限「进攻 5 / 震荡 2」与证据方向不一致，防守关多头有证据支持。另外，只用收盘的回放里 regime 平均约每 5 个交易日切换一次。详见 §4。
+5. **审查后调整**（详见 §4）：
+   - 多头上限改为可配，缺省「进攻 5 / 震荡 5 / 防守 0」。依据是按 regime 分组的每笔 R：震荡 > 进攻 > 防守。
+   - 新增最小驻留：切换后满 3 个交易日才允许再升级，降级不受限。只用收盘的回放里，切换次数从 190 降到 151，平均驻留从 4.96 天升到 6.24 天；各态每笔 R 的次序仍是 震荡 > 进攻 > 防守。
 
 ## 2. 实现与开关
 
@@ -17,10 +23,12 @@
 | --- | --- | --- |
 | regime 三态 | `backend/app/opportunity/regime.py` | 慢层：SPY 收盘对 MA50、MA50 的 20 日斜率、自选宽度（收盘 > MA20 占比）。快层：SPY 对 10 日 EMA、前 20 日高低点突破、5/60 日已实现波动比。 |
 | 滞回 | `regime.step` | 降级：任一层单次触发即降。升级：慢层同意，或快层同一交易日连续 2 个整点确认。盘后升级不越过同时刻的收盘快层读数。 |
+| 最小驻留 | `regime.step(dwell=…)`、`MIN_DWELL_DAYS = 3` | 上次切换以来不足 3 个交易日时不升级（状态文件 `note: "min_dwell"`，不追加审计）；降级不受限。切换日记在状态文件 `since_day`。 |
 | 状态 / 审计 | `data/rules/regime_state.json`、`data/rules/regime_audit.jsonl` | 审计只追加；每次切换一行，记录时间、触发层、前后状态、触发条件和依据数值。不写结算台账。 |
 | 盘后接入 | `decision_scan_job._regime_close` → `watchlist_v4.save_signals(regime=…)` | 快照只追加新键；旧快照没有这些键时仍可读，机会板按 tight-v1 旧口径处理。 |
 | 盘中接入 | `daily_pipeline._market_mood_update` → `regime.evaluate_hourly` | 与大盘整点重判同一任务；只在 `market_mood.due_slot` 窗口内执行，同一 slot 只评估一次。没有实时现价时不评估。 |
-| 作用面 | `swing_desk.board_for_day` / `compose_boards` | 多头上限：进攻 5、震荡 2、防守 0。空头：只在防守开，上限 5，卡带 `grade: "observe"`。 |
+| 作用面 | `swing_desk.board_for_day` / `regime_for_snapshot` / `compose_boards` | 多头上限缺省：进攻 5、震荡 5、防守 0，可由 `swing.json` 的 `regime_limits` 覆盖（键可写 `进攻/震荡/防守` 或 `attack/range/defense`，非负整数；坏值忽略；仍受每边 5 张封顶）。空头：只在防守开，上限 5，卡带 `grade: "observe"`。 |
+| 盘中降级生效 | `regime.intraday_override` + `regime.lower` | 只认状态文件里 `mode == "hourly"` 且 `as_of` = 快照日的下一个交易日（即这张板在盘中生效的那天）的状态，并与快照态取更防守的一个，只降不升。前一交易日、快照日当天、盘后写入的状态都不影响当日板（防跨日污染）。板的 `meta.regime` 里有 `source`（`snapshot` / `intraday`）和 `snapshot_state`，可以核对。 |
 | 观察级不进簿 | `watchlist_book.build_swing_day` | `grade == "observe"` 的卡记 `skipped: observe_only`，不进 `RULE_ID = swing` 的纸面下单簿。 |
 | 多尺度门 | `backend/app/opportunity/multi_scale_gate.py` | 慢：MA50；中：MA20 + 5 日斜率；快：4h Phantom 方向。慢中同意 → 放行；慢中冲突且快层与其一同向 → 只放行观察级；其余 → 不放行（fail-closed）。 |
 | 指标 | `backend/app/opportunity/gate_metrics.py` | ZigZag、翻转滞后、停放行滞后、20 日内假翻转。 |
@@ -31,14 +39,20 @@
 **回滚（都只改 `data/rules/swing.json`，不改代码）**
 
 - 方向门：删掉 `"gate"` 字段，或改回原值（`"daily_ma50"` / `"phantom_4h"`）。
-- regime：写 `"regime": false`。机会板回到 tight-v1：空头只看 SPY < MA50，每边 5 张，不打观察级。
-- 齿轮保存 3+3（`save_strategies`）会保留 `gate` 和 `regime` 两个字段。这次顺带修了一处：修复前保存 3+3 会把 `gate` 字段抹掉。
+- regime：写 `"regime": false`。机会板回到 tight-v1：空头只看 SPY < MA50，每边 5 张，不打观察级。同时盘后 / 整点两个入口都直接返回，不评估、不写 `regime_state.json`、不追加审计。
+- 上限：删掉 `regime_limits` 就回到缺省 5 / 5 / 0。
+- 齿轮保存 3+3（`save_strategies`）会保留 `gate`、`regime`、`regime_limits` 三个字段。这次顺带修了一处：修复前保存 3+3 会把 `gate` 字段抹掉。
 
-**现网默认门说明**：私有完整版注册了 `phantom_4h`（`preferred=True`），所以没有配置 `gate` 时生效的是 `phantom_4h`；开源核心版没有该插件，生效的是 `daily_ma50`。`multi_scale_v1` 为 `preferred=False`，加进来后两种版本的默认门都不变（单测锁定）。任务书写的是 `preferred=True`，但如果照写，没有配置 `gate` 的实例会直接换门，违反「默认仍走现行门」，所以这里取 `False`。
+**为什么 `multi_scale_v1` 是 `preferred=False`（审查已确认）**：
+
+- 现网没有配置 `gate` 时，门按 `direction_gate.active` 选：先找 `preferred=True` 的门，没有才用 `daily_ma50`。
+- 私有完整版注册了 `phantom_4h`（`preferred=True`），所以现网生效的是 `phantom_4h`；开源核心版没有该插件，生效的是 `daily_ma50`。
+- 如果按任务书把 `multi_scale_v1` 设成 `preferred=True`，没有配置 `gate` 的实例会直接换成多尺度门，违反「默认仍走现行门」。
+- 设成 `False` 后，两种版本的默认门都不变（单测 `test_default_gate_unchanged_by_multi_scale_registration` 锁定），只能通过 `"gate": "multi_scale_v1"` 显式启用。
 
 **已知边界**
 
-- 盘中快层降级只改 regime 状态与审计，作用到下一次盘后快照（下一张板）。当日已落簿的卡和交易环准入不受影响，本卡不改交易环。
+- 盘中降级作用于当日机会板与下单簿的后续追加：板的多头上限立即收紧，防守态空头开放（观察级）。下单簿已经落盘的卡按「不可变提案」不改写，也不撤，交易环准入本卡不动。要不要在降级时撤掉已落簿、尚未成交的多头卡，需要另卡改交易环。
 - regime 读不到 SPY 当日收盘时，快照不写 regime 字段，当天按 tight-v1 旧口径处理；空头仍受 SPY < MA50 及数据缺失 fail-closed 约束。
 
 ## 3. 滞后与假翻转（一级指标）
@@ -92,15 +106,27 @@ S1/S2 只存了汇总数，没有逐卡明细，没法在同一批卡上换门�
 
 **regime 回放（只用收盘：慢层 + 收盘快层；盘中整点没有历史数据，不回放）**：
 
-- 948 个交易日里，进攻 404 天、震荡 349 天、防守 195 天，切换 190 次。
-- 门内成交按信号日 regime 分组的每笔 R：
+948 个交易日，用同一份数据比较「无驻留」（首版）和「最小驻留 3 日」（现行）：
 
-| 门 | 进攻 | 震荡 | 防守 |
-| --- | --- | --- | --- |
-| daily_ma50 | 0.133（n=7,928） | 0.213（n=5,446） | 0.046（n=1,485） |
-| multi_scale_v1 | 0.132（n=7,067） | 0.235（n=4,195） | 0.075（n=946） |
+| 口径 | 进攻天数 | 震荡天数 | 防守天数 | 切换次数 | 平均驻留（交易日） | 驻留中位数 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 无驻留（首版） | 404 | 349 | 195 | 190 | 4.96 | 3 |
+| 最小驻留 3 日（现行） | 355 | 376 | 217 | **151** | **6.24** | 4 |
 
-防守态关多头与数据方向一致。「震荡只出 2 张」与数据方向相反：震荡态每笔 R 最高，和以前「日线大盘状态描述的是已经涨过，对一周持有反而不利」的结论吻合。上限是任务书规定值，本卡照写；要改的话，下一张卡可以把上限做成 `swing.json` 配置项，不改代码。
+门内成交按信号日 regime 分组的每笔 R：
+
+| 口径 | 门 | 进攻 | 震荡 | 防守 |
+| --- | --- | --- | --- | --- |
+| 无驻留 | daily_ma50 | 0.133（n=7,928） | 0.213（n=5,446） | 0.046（n=1,485） |
+| 无驻留 | multi_scale_v1 | 0.132（n=7,067） | 0.235（n=4,195） | 0.075（n=946） |
+| 最小驻留 3 日 | daily_ma50 | 0.123（n=7,050） | 0.230（n=5,970） | 0.025（n=1,839） |
+| 最小驻留 3 日 | multi_scale_v1 | 0.122（n=6,305） | 0.246（n=4,700） | 0.053（n=1,203） |
+
+读法：
+
+- 加最小驻留后切换少了 21%（190 → 151）。降级保留单次触发，切换里有相当一部分是降级，所以降幅有限。
+- 各态每笔 R 的次序在两个门、两种口径下都还是 **震荡 > 进攻 > 防守**，而且驻留后各态之间的差距更大。
+- 这支持缺省上限 进攻 5 / 震荡 5 / 防守 0：震荡态每笔 R 最高，不该限到 2 张；防守态只有 0.03–0.05R，不值得占名额。这与以前「日线大盘状态描述的是已经涨过，对一周持有反而不利」的结论吻合。
 
 ## 5. 复现
 
@@ -123,4 +149,4 @@ env -u PYTHONPATH -u VIRTUAL_ENV .venv/bin/python -m scripts.p1a_gate_lag \
   --start 2023-01-03 --out /tmp/p1a_gate_lag.json
 ```
 
-单机耗时约 12 秒，结果确定（无随机种子差异；自助区间固定 seed=7）。
+单机耗时约 12 秒，结果确定（无随机种子差异；自助区间固定 seed=7）。输出里 `regime_history.dwell0` / `dwell3` 与 `r_by_regime.dwell0` / `dwell3` 就是 §4 的两种口径。
