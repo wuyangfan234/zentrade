@@ -1,4 +1,4 @@
-# ruff: noqa: RUF001, RUF002, RUF003
+# ruff: noqa: RUF002
 """P1-A 研究: 方向门滞后 / 假翻转 + 现行门 vs 多尺度门的卡量、成交、每笔 R (只读, 只写 --out)。
 
 门:
@@ -57,17 +57,19 @@ def gate_series(c: np.ndarray, fast: list) -> dict[str, list]:
 
 
 def phantom_daily(bars4h: pd.DataFrame | None, days: list[date]) -> list:
-    if bars4h is None or len(bars4h) < 60:
+    from app import optional
+    p4 = optional.load("app.services.phantom_4h")          # 开源核心版没有该插件: 快层视为缺失
+    src = optional.load("app.services.phantom_4h_source")
+    if bars4h is None or len(bars4h) < 60 or p4 is None or src is None:
         return [None] * len(days)
-    from app.services import phantom_4h
-    from app.services.phantom_4h_source import DIRECTION_SIDE
-    s = phantom_4h.scan_series(bars4h)
+    side_of = src.DIRECTION_SIDE
+    s = p4.scan_series(bars4h)
     idx = s.index.values
     dr = s["direction"].values if "direction" in s.columns else np.array([""] * len(s))
     out = []
     for d in days:
         b = np.searchsorted(idx, np.datetime64(datetime.combine(d, time(9, 30))), "right")
-        out.append(DIRECTION_SIDE.get(str(dr[b - 1])) if b > 0 else None)
+        out.append(side_of.get(str(dr[b - 1])) if b > 0 else None)
     return out
 
 

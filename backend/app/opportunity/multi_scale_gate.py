@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001, RUF002, RUF003
 """多尺度方向门 ``multi_scale_v1`` (P1-A, 走 direction_gate 插件位)。
 
 三尺度投票 (只用信号日收盘及以前的数据):

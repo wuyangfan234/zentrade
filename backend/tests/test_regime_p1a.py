@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001, RUF002, RUF003
 """P1-A: regime three states (slow + hourly fast + hysteresis), multi_scale_v1 gate, short only in defense,
 observe-grade cards stay out of the paper book, snapshot keys append-only, config rollback."""
 import json
@@ -129,7 +128,7 @@ def test_evaluate_close_writes_state_and_append_only_audit(tmp_path):
     rg.evaluate_close(tmp_path, repo, end, frames=frames, watchlist=set(frames))
     assert (tmp_path / "rules" / rg.AUDIT_FILE).read_bytes() == audit
     # 断崖下跌 → 降级, 追加一行, 旧行字节不变
-    crash = up[:-1] + [520.0]
+    crash = [*up[:-1], 520.0]
     f2 = rg.evaluate_close(tmp_path, _spy_repo(crash, end, tmp_path), end, frames=frames, watchlist=set(frames))
     assert f2["regime_state"] == D
     after = (tmp_path / "rules" / rg.AUDIT_FILE).read_bytes()

@@ -1,4 +1,3 @@
-# ruff: noqa: RUF001, RUF002, RUF003
 """大盘 regime 三态 (P1-A): 进攻 / 震荡 / 防守。
 
 两层输入 + 滞回:
