@@ -1,0 +1,221 @@
+/* ZenTrade 参考稿共用脚本: 侧栏 / regime 状态条 / 虚拟数据 (两页同一份) / 归因明细 / 抽屉。
+ * 全部数字为 DEMO 虚拟数据, 计数一律由数据现算, 不手填。
+ * 地址参数: ?d=sparse 稀疏态 · ?c=<卡id> 展开该卡归因 · ?open=<卡id> 打开归因抽屉 · ?f=x|i 机会筛选 · ?x=all 槽位全展开 */
+'use strict';
+var Q = new URLSearchParams(location.search);
+var SPARSE = Q.get('d') === 'sparse';
+var MINUS = '\u2212';
+
+var ICON = {
+  leaf: '<path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/>',
+  wallet: '<path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/>',
+  gauge: '<path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/>',
+  star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  trend: '<polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/>',
+  scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/><path d="m16 16-1.9-1.9"/>',
+  sigma: '<path d="M18 7V5a1 1 0 0 0-1-1H6.5a.5.5 0 0 0-.4.8l4.5 6a2 2 0 0 1 0 2.4l-4.5 6a.5.5 0 0 0 .4.8H17a1 1 0 0 0 1-1v-2"/>',
+  history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  zap: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+  radio: '<path d="M4.9 16.1C1 12.2 1 5.8 4.9 1.9"/><path d="M7.8 4.7a6.14 6.14 0 0 0-.8 7.5"/><circle cx="12" cy="9" r="2"/><path d="M16.2 4.8c2 2 2.26 5.11.8 7.47"/><path d="M19.1 1.9a9.96 9.96 0 0 1 0 14.1"/><path d="M9.5 18h5"/><path d="m8 22 4-11 4 11"/>',
+  layers: '<path d="m16.02 12 5.48 3.13a1 1 0 0 1 0 1.74L13 21.74a2 2 0 0 1-2 0l-8.5-4.87a1 1 0 0 1 0-1.74L7.98 12"/><path d="M13 13.74a2 2 0 0 1-2 0L2.5 8.87a1 1 0 0 1 0-1.74L11 2.26a2 2 0 0 1 2 0l8.5 4.87a1 1 0 0 1 0 1.74Z"/>',
+  db: '<ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5V19A9 3 0 0 0 21 19V5"/><path d="M3 12A9 3 0 0 0 21 12"/>',
+  act: '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>'
+};
+/* 导航顺序与分组 = frontend/src/components/Layout.tsx NAV + NAV_GROUPS */
+var NAV = [
+  ['交易', [['机会', 'leaf', 'opp-next.html', 'opp'], ['持仓', 'wallet']]],
+  ['行情', [['情报', 'gauge'], ['自选', 'star'], ['个股分析', 'trend']]],
+  ['研究', [['策略', 'scan'], ['因子', 'sigma', 'factor-next.html', 'factor'], ['回测', 'history'], ['信号库', 'zap']]],
+  ['提醒', [['监控中心', 'radio'], ['持仓提醒', 'layers']]],
+  ['系统', [['数据', 'db'], ['系统状态', 'act']]]
+];
+function svg(name) {
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICON[name] + '</svg>';
+}
+function renderSide(active) {
+  var h = '<div class="brand"><span class="logo"></span>ZenTrade</div>';
+  NAV.forEach(function (g) {
+    h += '<div class="ng">' + g[0] + '</div>';
+    g[1].forEach(function (it) {
+      var on = it[3] === active ? ' on' : '';
+      h += it[2] ? '<a class="ni' + on + '" href="' + it[2] + '">' + svg(it[1]) + it[0] + '</a>'
+        : '<span class="ni">' + svg(it[1]) + it[0] + '</span>';
+    });
+  });
+  document.getElementById('side').innerHTML = h;
+}
+
+/* ---------------------------------------------------------------- 格式 */
+function sg(v, d) { var a = Math.abs(v).toFixed(d); return (Number(a) === 0 ? '' : v > 0 ? '+' : MINUS) + a; }
+function fR(v) { return sg(v, 2) + 'R'; }
+function tone(v) { return Math.abs(v) < 0.005 ? '' : v > 0 ? 'bull' : 'bear'; }
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+var SIDE = { long: '\u2191 做多', short: '\u2193 做空' };
+
+/* ---------------------------------------------------------------- regime (两页同一份) */
+var REGIME = {
+  fp: 'RG-1125-1015', state: 'up', name: '上行趋势', days: 6, conf: 0.78,
+  updated: '11-25 10:15 ET', next: '10:30 ET', cadence: '每 15 分钟 + 事件触发', old: '整点重判 · 60 分钟',
+  lastSwitch: '11-17 震荡 \u2192 上行',
+  ev: [
+    { no: 1, k: '指数距 50 日线', v: '+2.4%', t: '门槛 > 0', ok: true },
+    { no: 2, k: '20 日新高占比', v: '31%', t: '门槛 \u2265 20%', ok: true },
+    { no: 3, k: '波动率分位', v: '28', t: '门槛 \u2264 60', ok: true },
+    { no: 4, k: '涨跌家数 5 日比', v: '1.6', t: '门槛 \u2265 1.2', ok: true }
+  ]
+};
+var NO = ['', '\u2460', '\u2461', '\u2462', '\u2463'];
+function regimeBar() {
+  var r = REGIME;
+  var sc = [['down', '下行'], ['range', '震荡'], ['up', '上行']].map(function (x) {
+    return '<span class="' + (x[0] === r.state ? 'on' : '') + '">' + x[1] + '</span>';
+  }).join('');
+  var ev = r.ev.map(function (e) {
+    return '<div class="rg-item" data-item="rg-ev' + (e.ok ? ' rg-ok' : '') + '" data-rg-ev="' + e.no + '"><div class="rg-k"><span class="rg-no">' + e.no + '</span><span class="nw">' + e.k + '</span></div>' +
+      '<div class="rg-v num">' + e.v + '</div><div class="rg-t nw">' + e.t + ' · ' + (e.ok ? '满足' : '<span class="warn">未满足</span>') + '</div></div>';
+  }).join('');
+  var nOk = r.ev.filter(function (e) { return e.ok; }).length;
+  return '<section class="card rg" data-regime data-fp="' + r.fp + '">' +
+    '<div class="rg-top"><div class="rg-state"><span class="meta nw">市场状态</span><span class="rg-name" data-rg-name>' + r.name + '</span></div>' +
+    '<span class="scale">' + sc + '</span>' +
+    '<span class="b lim">依据 <span data-count="rg-ok">' + nOk + '</span>/<span data-count="rg-ev">' + r.ev.length + '</span> 满足</span>' +
+    '<span class="b lim">持续 ' + r.days + ' 交易日</span>' +
+    '<div class="rg-time ml"><span class="nw">更新 <b data-rg-time>' + r.updated + '</b></span><span class="nw">下次重判 <b>' + r.next + '</b></span><span class="nw mut">' + r.fp + '</span></div></div>' +
+    '<div class="rg-ev">' + ev + '</div>' +
+    '<div class="rg-foot"><span class="nw">重判节奏 <b class="acc">' + r.cadence + '</b></span><span class="nw">现网 ' + r.old + '</span><span class="nw">上次切换 ' + r.lastSwitch + '</span><span class="nw ml">置信 ' + r.conf.toFixed(2) + '</span></div>' +
+    '</section>';
+}
+
+/* ---------------------------------------------------------------- 因子 */
+var FACTORS = [
+  { id: 'rs20', label: '相对强度 20 日', dir: '高', w: [0.12, 0.09, 0.11, 0.10] },
+  { id: 'volc5', label: '量能收缩 5 日', dir: '低', w: [0.05, 0.07, 0.04, 0.06] },
+  { id: 'atrc', label: '波动收敛', dir: '低', w: [0.03, 0.01, 0.04, 0.02] },
+  { id: 'h4', label: '4h 趋势一致', dir: '高', w: [0.09, 0.07, 0.03, 0.02] },
+  { id: 'dd10', label: '回撤深度 10 日', dir: '高', w: [-0.01, 0.02, 0.00, 0.01] },
+  { id: 'gap', label: '隔夜跳空', dir: '低', w: [0.02, -0.01, 0.01, 0.00] },
+  { id: 'mom60', label: '动量 60 日', dir: '高', w: [0.04, 0.05, 0.03, 0.06] },
+  { id: 'rankA', label: '排序因子 A', dir: '高', w: [0.15, 0.11, 0.18, 0.13] },
+  { id: 'tochg', label: '换手率变化', dir: '高', w: [-0.03, -0.02, -0.04, -0.01] }
+];
+var FBY = {}; FACTORS.forEach(function (f) { FBY[f.id] = f; });
+function fState(f) {
+  var m = f.w.reduce(function (a, b) { return a + b; }, 0) / f.w.length;
+  var early = (f.w[0] + f.w[1]) / 2, late = (f.w[2] + f.w[3]) / 2;
+  if (m < 0) return ['为负', 'warn'];
+  if (early > 0.04 && late < early * 0.5) return ['走弱', 'warn'];
+  return ['稳定', 'fg2'];
+}
+
+/* ---------------------------------------------------------------- 策略 / 槽位成员 (尺子 = 比门内随便挑每笔多出的 R, 滚动 60 交易日, 95% 区间) */
+var SLOTS = [
+  { id: 'board', name: '机会板 · 做多出卡', use: '出卡', ruler: '比 4h 门内随便挑 每笔多出的 R' },
+  { id: 'pick', name: '选股策略', use: '入自选候选', ruler: '入选票 比 门内随便挑 每笔多出的 R' },
+  { id: 'score', name: '策略打分', use: '卡排序', ruler: '打分前 5 比 门内随便挑 每笔多出的 R' }
+];
+var ALL_STRATS = [
+  { id: 'S1', slot: 'board', side: 'long', tier: 'champ', name: '回踩企稳', kind: '内置', ex: 0.14, lo: 0.05, hi: 0.23, n: 214, last: '11-24', f: ['rs20', 'volc5'], why: '区间下限 +0.05R > 0 · 连续 7 周为正' },
+  { id: 'S2', slot: 'board', side: 'long', tier: 'champ', name: '突破回抽', kind: '内置', ex: 0.11, lo: 0.02, hi: 0.20, n: 167, last: '11-24', f: ['rs20', 'atrc'], why: '区间下限 +0.02R > 0 · 11-12 替换跳空追涨' },
+  { id: 'S3', slot: 'board', side: 'long', tier: 'champ', name: '4h 趋势延续', kind: '内置', ex: 0.09, lo: 0.01, hi: 0.17, n: 243, last: '11-21', f: ['h4', 'rs20'], why: '区间下限 +0.01R > 0 · 近 2 周走弱 观察中' },
+  { id: 'S4', slot: 'board-short', side: 'short', tier: 'champ', name: '冲高回落', kind: '内置', ex: 0.06, lo: 0.01, hi: 0.12, n: 96, last: '11-20', f: ['gap', 'atrc'], why: '区间下限 +0.01R > 0 · 仅下行 / 震荡出卡' },
+  { id: 'C1', slot: 'board', side: 'long', tier: 'ch', name: '排序因子 A 前 5', kind: '排序因子', ex: 0.17, lo: -0.02, hi: 0.36, n: 58, last: '11-24', f: ['rankA', 'rs20'], why: '样本 58 < 100 · 区间跨 0 · 再攒 42 笔' },
+  { id: 'C2', slot: 'board', side: 'long', tier: 'ch', name: '挖掘 · 缩量回踩', kind: '挖掘', ex: 0.08, lo: -0.03, hi: 0.19, n: 121, last: '11-21', f: ['volc5', 'dd10'], why: '区间跨 0 · 与回踩企稳重叠 64%' },
+  { id: 'C3', slot: 'board', side: 'long', tier: 'ch', name: 'AI 策略 A', kind: 'AI', ex: 0.03, lo: -0.09, hi: 0.15, n: 74, last: '11-19', f: ['mom60'], why: '区间跨 0 · 样本 74 < 100' },
+  { id: 'E1', slot: 'board', side: 'long', tier: 'out', name: '超跌反弹', kind: '内置', ex: -0.11, lo: -0.20, hi: -0.02, n: 188, last: '11-18', f: ['dd10'], why: '区间上限 \u22120.02R < 0 · 11-18 换下' },
+  { id: 'E2', slot: 'board', side: 'long', tier: 'out', name: '跳空追涨', kind: '内置', ex: -0.04, lo: -0.12, hi: 0.04, n: 135, last: '11-12', f: ['gap'], why: '连续 4 周 < 0 · 被突破回抽替换' },
+  { id: 'P1', slot: 'pick', side: 'long', tier: 'champ', name: '因子组合 · 强势回踩', kind: '挖掘', ex: 0.07, lo: 0.01, hi: 0.13, n: 312, last: '11-21', f: ['rs20', 'dd10', 'volc5'], why: '区间下限 +0.01R > 0 · 连续 5 周入选' },
+  { id: 'P2', slot: 'pick', side: 'long', tier: 'ch', name: '因子组合 · 动量收敛', kind: '挖掘', ex: 0.05, lo: -0.01, hi: 0.11, n: 288, last: '11-21', f: ['mom60', 'atrc'], why: '区间跨 0 · 比在用少 0.02R' },
+  { id: 'P3', slot: 'pick', side: 'long', tier: 'out', name: '因子组合 · 换手异动', kind: '挖掘', ex: -0.02, lo: -0.07, hi: 0.03, n: 205, last: '11-14', f: ['tochg'], why: '连续 5 周 < 0 · 11-14 换下' },
+  { id: 'K1', slot: 'score', side: 'long', tier: 'champ', name: '打分 v7', kind: '打分', ex: 0.05, lo: 0.01, hi: 0.09, n: 520, last: '11-24', f: ['rs20', 'h4', 'volc5'], why: '区间下限 +0.01R > 0 · 权重 40 / 35 / 25' },
+  { id: 'K2', slot: 'score', side: 'long', tier: 'ch', name: '打分 v8 候选', kind: '打分', ex: 0.07, lo: 0.02, hi: 0.12, n: 140, last: '11-24', f: ['rs20', 'rankA', 'volc5'], why: '比 v7 多 0.02R · 满 4 周可晋级 · 还差 2 周' },
+  { id: 'K3', slot: 'score', side: 'long', tier: 'out', name: '打分 v6', kind: '打分', ex: -0.01, lo: -0.04, hi: 0.02, n: 610, last: '11-10', f: ['rs20', 'tochg'], why: '换手率因子为负 · 11-10 换下' }
+];
+/* 稀疏态: 只留在用, 挑战者 / 已淘汰为 0 */
+var STRATS = SPARSE ? ALL_STRATS.filter(function (s) { return s.tier === 'champ'; }) : ALL_STRATS;
+var SBY = {}; ALL_STRATS.forEach(function (s) { SBY[s.id] = s; });
+var TIER = { champ: '在用', ch: '挑战者', out: '已淘汰' };
+
+/* ---------------------------------------------------------------- 卡 (今日 + 近期已结算) */
+var ALL_CARDS = [
+  { id: 'c1', sym: 'QALF', side: 'long', timing: 'x', strat: 'S1', rank: 1, verdict: '下单', gen: '11-24 16:40 ET', until: '11-25 收盘',
+    zone: '41.20 ~ 41.80', stop: '39.90', tgt: '44.10', exp: 0.21, rg: [1, 2],
+    fv: [['rs20', '87 分位', '\u2265 70'], ['volc5', '0.62', '\u2264 0.80']] },
+  { id: 'c2', sym: 'QBRV', side: 'long', timing: 'x', strat: 'S2', rank: 2, verdict: '下单', gen: '11-24 16:40 ET', until: '11-26 收盘',
+    zone: '18.05 ~ 18.40', stop: '17.40', tgt: '19.70', exp: 0.17, rg: [1, 4],
+    fv: [['rs20', '79 分位', '\u2265 70'], ['atrc', '0.71', '\u2264 0.85']] },
+  { id: 'c3', sym: 'QCHR', side: 'long', timing: 'x', strat: 'S1', rank: 4, verdict: '不下单', why: '离进场 2.1 倍日均波动', gen: '11-24 16:40 ET', until: '11-25 收盘',
+    zone: '63.10 ~ 63.90', stop: '61.20', tgt: '67.40', exp: 0.04, rg: [2],
+    fv: [['rs20', '72 分位', '\u2265 70'], ['volc5', '0.78', '\u2264 0.80']] },
+  { id: 'c4', sym: 'QDLT', side: 'long', timing: 'i', strat: 'S3', rank: 3, verdict: '下单', gen: '10:12 ET', valid: 30, left: 1068,
+    zone: '27.30 ~ 27.55', stop: '26.85', tgt: '28.60', exp: 0.12, rg: [1, 3], event: '4h 收盘站上趋势线',
+    fv: [['h4', '同向 3 根', '\u2265 2 根'], ['rs20', '81 分位', '\u2265 70']] },
+  { id: 'c5', sym: 'QFOX', side: 'long', timing: 'i', strat: 'S2', rank: 5, verdict: '下单', gen: '10:02 ET', valid: 25, left: 168,
+    zone: '9.42 ~ 9.55', stop: '9.18', tgt: '10.05', exp: 0.09, rg: [1, 4], event: '放量突破 5 日高',
+    fv: [['rs20', '74 分位', '\u2265 70'], ['atrc', '0.66', '\u2264 0.85']] },
+  { id: 'r1', sym: 'QGLF', side: 'long', strat: 'S1', rank: 1, settled: '11-20', res: 1.42, exit: '到目标', rg: [1, 2],
+    fv: [['rs20', '91 分位', '\u2265 70'], ['volc5', '0.55', '\u2264 0.80']] },
+  { id: 'r2', sym: 'QHTL', side: 'long', strat: 'S2', rank: 2, settled: '11-21', res: -1.00, exit: '止损', rg: [1, 4],
+    fv: [['rs20', '76 分位', '\u2265 70'], ['atrc', '0.80', '\u2264 0.85']] },
+  { id: 'r3', sym: 'QJET', side: 'long', strat: 'S3', rank: 1, settled: '11-24', res: 0.36, exit: '到期', rg: [1, 3],
+    fv: [['h4', '同向 4 根', '\u2265 2 根'], ['rs20', '84 分位', '\u2265 70']] },
+  { id: 'r4', sym: 'QKIN', side: 'long', strat: 'P1', settled: '11-19', res: 0.81, exit: '入选 5 日', rg: [2],
+    fv: [['rs20', '88 分位', '\u2265 70'], ['dd10', '6.2%', '4% ~ 12%']] },
+  { id: 'r5', sym: 'QLUX', side: 'long', strat: 'P1', settled: '11-24', res: -0.22, exit: '入选 5 日', rg: [1],
+    fv: [['rs20', '73 分位', '\u2265 70'], ['volc5', '0.69', '\u2264 0.80']] }
+];
+var CARDS = SPARSE ? ALL_CARDS.filter(function (c) { return c.id === 'c4'; }) : ALL_CARDS;
+var TODAY = CARDS.filter(function (c) { return c.timing; });
+var CBY = {}; ALL_CARDS.forEach(function (c) { CBY[c.id] = c; });
+/* 卡属于哪些槽位: 出卡策略所在槽位 + 机会板卡都经过「策略打分」排序 */
+function cardSlots(c) {
+  var s = SBY[c.strat].slot, out = [s];
+  if (s === 'board' && c.rank) out.push('score');
+  return out;
+}
+
+/* ---------------------------------------------------------------- 置信区间横条 (所有表同一刻度) */
+var AX = [-0.3, 0.4];
+function pos(v) { return ((Math.max(AX[0], Math.min(AX[1], v)) - AX[0]) / (AX[1] - AX[0]) * 100).toFixed(1) + '%'; }
+function ciBar(s) {
+  return '<div class="ci' + (s.tier === 'out' ? ' out' : '') + '" title="' + fR(s.lo) + ' ~ ' + fR(s.hi) + '"><span class="ax"></span><span class="z" style="left:' + pos(0) + '"></span>' +
+    '<span class="r" style="left:' + pos(s.lo) + ';width:calc(' + pos(s.hi) + ' - ' + pos(s.lo) + ')"></span><span class="p" style="left:' + pos(s.ex) + '"></span></div>';
+}
+function ciScale() {
+  return '<div class="ci-scale"><span style="left:0">' + fR(AX[0]) + '</span><span class="c" style="left:' + pos(0) + '">0</span><span style="right:0">' + fR(AX[1]) + '</span></div>';
+}
+
+/* ---------------------------------------------------------------- 卡归因 (机会页展开 / 因子页抽屉共用) */
+function attrHTML(c) {
+  var s = SBY[c.strat];
+  var fs = c.fv.map(function (x) {
+    return '<span class="sub"><b class="fg2">' + FBY[x[0]].label + '</b> ' + x[1] + ' <span class="mut">门槛 ' + x[2] + '</span></span>';
+  }).join('');
+  var ev = c.rg.map(function (n) { var e = REGIME.ev[n - 1]; return '<span class="sub">' + NO[n] + ' ' + e.k + ' ' + e.v + ' <span class="mut">' + e.t + '</span></span>'; }).join('');
+  var tm = c.timing === 'x' ? '跨日有效 · ' + c.gen + ' 生成 · 有效至 ' + c.until
+    : c.timing === 'i' ? '盘中事件 · ' + c.event + ' · ' + c.gen + ' 触发 · ' + c.valid + ' 分钟内有效'
+      : '已结算 ' + c.settled + ' · ' + c.exit + ' <b class="' + tone(c.res) + '">' + fR(c.res) + '</b>';
+  return '<div class="attr" data-attr="' + c.id + '">' +
+    '<span class="k">策略</span><span class="v">' + s.name + ' <span class="b lim">' + TIER[s.tier] + '</span><span class="sub">滚动超额 <b class="' + tone(s.ex) + '">' + fR(s.ex) + '</b> · 区间 ' + fR(s.lo) + ' ~ ' + fR(s.hi) + ' · 样本 ' + s.n + '</span></span>' +
+    '<span class="k">因子</span><span class="v">' + fs + '</span>' +
+    '<span class="k">状态</span><span class="v">' + REGIME.name + ' <span class="mut">' + REGIME.fp + '</span>' + ev + '</span>' +
+    (c.rank ? '<span class="k">排序</span><span class="v">打分 v7 第 ' + c.rank + '</span>' : '') +
+    '<span class="k">时效</span><span class="v">' + tm + '</span>' +
+    '</div>';
+}
+
+/* ---------------------------------------------------------------- 抽屉 */
+function openDrawer(id) {
+  var c = CBY[id]; if (!c) return;
+  var dr = document.getElementById('dr-card');
+  dr.innerHTML = '<div class="dr-h"><h2>卡归因</h2><b class="num">' + c.sym + '</b><span class="fg2 nw">' + SIDE[c.side] + '</span>' +
+    '<button class="btn ml" data-close>关闭</button></div><div class="dr-b">' + attrHTML(c) +
+    (c.timing ? '<div class="sec"><a class="btn" href="opp-next.html?c=' + c.id + '">在机会页打开</a></div>' : '') + '</div>';
+  dr.classList.add('on'); document.getElementById('mask').classList.add('on');
+}
+function closeDrawer() {
+  document.getElementById('dr-card').classList.remove('on'); document.getElementById('mask').classList.remove('on');
+}
+document.addEventListener('click', function (e) {
+  if (e.target.closest('[data-close]') || e.target.id === 'mask') closeDrawer();
+});
+document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeDrawer(); });
