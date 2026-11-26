@@ -6,6 +6,7 @@
   counts  页面上每个 [data-count=K] 的数字 = DOM 里 [data-item~=K] 的个数; [data-shown] = 可见卡数
   overlap flex / grid 容器内可见兄弟元素两两不相交 (同行文字互压)
   spill   .card / .cc / .drawer 内后代右缘不越出容器 (横滑表格容器内除外)
+  textover 非 inline 元素的文字不溢出自身盒子 (溢出会压到相邻格子)
 另外两页的 regime 状态条文本必须逐字相同 (同一状态、同一时间戳)。
 
 用法 (需要带 playwright 的 Python):
@@ -78,6 +79,13 @@ GEO_JS = r'''() => {
      if (e.getBoundingClientRect().right > cr.right + 1) out.spill.push(name(e));
    });
  });
+ // 文字溢出自身盒子 (会压到旁边的格子): 非 inline 且 overflow 可见的元素 scrollWidth > clientWidth
+ out.textover = [];
+ document.querySelectorAll('.page *, .drawer.on *').forEach(e => {
+   if (!vis(e) || e.closest('svg')) return; const s = getComputedStyle(e);
+   if (s.display === 'inline' || s.overflowX !== 'visible' || /^(TABLE|TBODY|THEAD|TR)$/.test(e.tagName)) return;
+   if (e.scrollWidth > e.clientWidth + 1) out.textover.push(name(e));
+ });
  const rg = document.querySelector('[data-regime]');
  out.regime = rg ? rg.innerText.replace(/\s+/g, ' ').trim() : '';
  out.demo = !!document.querySelector('[data-demo]') && /DEMO · 虚拟数据/.test(document.body.innerText);
@@ -119,7 +127,7 @@ def main():
                 issues["errs"] = errs
             if r["hscroll"]:
                 issues["hscroll"] = True
-            for k in ("counts", "overlap", "spill"):
+            for k in ("counts", "overlap", "spill", "textover"):
                 if g[k]:
                     issues[k] = g[k]
             if not g["demo"]:

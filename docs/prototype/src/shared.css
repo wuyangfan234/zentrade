@@ -59,13 +59,16 @@ h3{font-size:13px;font-weight:600;white-space:nowrap}
 .scale span.on{background:var(--fg);color:#fff;font-weight:600}
 .rg-time{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--fg2)}
 .rg-time b{color:var(--fg);font-weight:600}
-.rg-ev{flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border)}
+.rg-ev{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border)}
 .rg-item{display:flex;flex-direction:column;justify-content:center;padding:9px 14px;border-left:1px solid var(--border);min-width:0}
 .rg-item:first-child{border-left:0}
 .rg-k{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg2)}
 .rg-no{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--elevated);color:var(--fg);font-size:11px;font-weight:700;flex:none}
 .rg-v{font-size:15px;font-weight:700;margin-top:2px}
 .rg-t{font-size:12px;color:var(--muted)}
+.rg-log{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:7px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--fg2)}
+.rg-log .lg{border:1px solid var(--border);border-radius:4px;padding:0 6px;line-height:20px}
+.rg-log .lg b{color:var(--fg)}
 .rg-foot{display:flex;gap:6px 14px;flex-wrap:wrap;padding:7px 14px;border-top:1px solid var(--border);background:var(--elevated);font-size:12px;color:var(--fg2);border-radius:0 0 8px 8px}
 /* 置信区间横条 (同一把尺子) */
 .ci{position:relative;height:18px;min-width:150px}
@@ -79,6 +82,8 @@ h3{font-size:13px;font-weight:600;white-space:nowrap}
 .ci-scale span.c{transform:translateX(-50%)}
 /* 表格 */
 .tw{overflow-x:auto}
+.tw::-webkit-scrollbar{height:6px}
+.tw::-webkit-scrollbar-thumb{background:#B9BEC3;border-radius:999px}
 table{border-collapse:collapse;width:100%}
 th{font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
 td{padding:7px 10px;border-top:1px solid var(--border);vertical-align:middle}

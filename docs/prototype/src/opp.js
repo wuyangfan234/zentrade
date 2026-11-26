@@ -19,7 +19,8 @@ function cardHTML(c) {
     ? '<div class="cc-time"><span class="nw">盘后 ' + c.gen + ' 生成</span><span class="nw">可挂限价单</span><span class="nw">有效至 ' + c.until + '</span></div>'
     : '<div class="cc-time"><span class="nw">' + c.gen + ' 触发</span><span class="nw">' + c.event + '</span><span class="nw cd' + (c.left <= 300 ? ' warn' : '') + '" data-left="' + c.left + '" data-valid="' + c.valid * 60 + '">剩 <b class="num">' + mmss(c.left) + '</b></span><span class="nw">限时 ' + c.valid + ' 分钟</span></div>' +
       '<div class="ttl"><span style="width:' + (c.left / (c.valid * 60) * 100).toFixed(1) + '%"' + (c.left <= 300 ? ' class="low"' : '') + '></span></div>';
-  var why = c.verdict === '不下单' ? '<div class="cc-why warn">不下单 · ' + c.why + '</div>' : '';
+  var why = c.verdict === '不下单' ? '<div class="cc-why warn">不下单 · ' + c.why + '</div>'
+    : '<div class="cc-why fg2">下单 · 离进场 ' + c.dist + ' 倍日均波动</div>';
   var ev = c.rg.map(function (n) { return NO[n]; }).join('');
   var src = '<div class="cc-src"><span class="mut nw">来源</span><span class="nw">' + s.name + '</span><span class="mut">·</span><span class="nw">' + FBY[c.fv[0][0]].label + '</span><span class="mut">·</span><span class="nw">' + REGIME.name.slice(0, 2) + ' ' + ev + '</span>' +
     '<button class="btn ghost ml" data-toggle="' + c.id + '" aria-expanded="' + (OPEN_C === c.id) + '">归因' + (OPEN_C === c.id ? ' \u25B4' : ' \u25BE') + '</button></div>';
@@ -69,8 +70,8 @@ function ledgerSection() {
   return '<section class="card sec" data-sec="ledger"><div class="card-h"><h2>策略账本</h2>' +
     '<span class="chipline">' + ['champ', 'ch', 'out'].map(function (t) { return '<span class="b lim">' + TIER[t] + ' <span data-count="led-' + t + '">' + rows.filter(function (s) { return s.tier === t; }).length + '</span></span>'; }).join('') + '</span>' +
     '<span class="meta ml nw">滚动 60 交易日 · 比门内随便挑 每笔多出的 R · 在用条数不固定</span></div>' +
-    '<div class="tw"><table><thead><tr><th>策略</th><th>方向</th><th>来源</th><th class="r">滚动超额</th><th>95% 区间 ' + ciScale() + '</th><th class="r">样本</th><th>最近结算</th><th>理由</th><th>操作</th></tr></thead><tbody>' +
-    body + '</tbody></table></div><div class="mhint meta">表内左右滑动</div></section>';
+    '<div class="mhint meta">表内左右滑动 \u2192</div><div class="tw"><table><thead><tr><th>策略</th><th>方向</th><th>来源</th><th class="r">滚动超额</th><th>95% 区间 ' + ciScale() + '</th><th class="r">样本</th><th>最近结算</th><th>理由</th><th>操作</th></tr></thead><tbody>' +
+    body + '</tbody></table></div></section>';
 }
 
 var SPEED = [
@@ -84,19 +85,19 @@ function speedSection() {
   var mx = {}; SPEED.forEach(function (r) { mx[r.u] = Math.max(mx[r.u] || 0, r.old); });
   var rows = SPEED.map(function (r) {
     return '<div class="sp-row" data-item="speed"><div class="sp-k"><span class="nw">' + r.k + '</span><span class="nw meta">' + r.u + '</span></div>' +
-      '<div class="sp-bars"><div class="sp-b"><span class="lab mut nw">现网</span><span class="bar old" style="width:' + (r.old / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw">' + r.old + '</b></div>' +
-      '<div class="sp-b"><span class="lab acc nw">新</span><span class="bar new" style="width:' + (r.now / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw acc">' + r.now + '</b></div></div></div>';
+      '<div class="sp-b"><span class="lab mut nw">现网</span><span class="bar old" style="width:' + (r.old / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw">' + r.old + '</b></div>' +
+      '<div class="sp-b"><span class="lab acc nw">新</span><span class="bar new" style="width:' + (r.now / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw acc">' + r.now + '</b></div></div>';
   }).join('');
-  return '<section class="card" data-sec="speed"><div class="card-h"><h2>反应速度</h2><span class="b demo">DEMO</span><span class="meta ml nw">平均滞后 · 近 20 次</span></div>' +
-    '<div class="card-b"><div class="sp-big"><span class="num acc" data-cut>' + MINUS + Math.round(cut * 100) + '%</span><span class="meta nw">滞后缩短 · <span data-count="speed">' + SPEED.length + '</span> 项均值</span></div>' + rows +
-    '<div class="meta sp-foot">现网 = 整点重判 · 固定 3+3 · 周度换策略</div></div></section>';
+  return '<section class="card sec" data-sec="speed"><div class="card-h"><h2>反应速度</h2><span class="b demo">DEMO</span><span class="meta nw">平均滞后 · 近 20 次</span>' +
+    '<span class="meta ml nw">现网 = 整点重判 · 固定 3+3 · 周度换策略</span></div>' +
+    '<div class="sp-grid"><div class="sp-big"><span class="num acc" data-cut>' + MINUS + Math.round(cut * 100) + '%</span><span class="meta nw">滞后缩短 · <span data-count="speed">' + SPEED.length + '</span> 项均值</span></div>' + rows + '</div></section>';
 }
 
 function render() {
   document.getElementById('app').innerHTML =
     '<div class="head"><h1>机会</h1><span class="meta nw">11-25 周三 · 10:24 ET · 盘中</span><span class="b demo">DEMO · 虚拟数据</span>' +
     '<span class="meta ml nw">原型 · 不接后端</span></div>' +
-    '<div class="top2">' + regimeBar() + speedSection() + '</div>' +
+    regimeBar() + speedSection() +
     cardsSection() + ledgerSection();
 }
 render();

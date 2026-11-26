@@ -57,6 +57,7 @@ var REGIME = {
   fp: 'RG-1125-1015', state: 'up', name: '上行趋势', days: 6, conf: 0.78,
   updated: '11-25 10:15 ET', next: '10:30 ET', cadence: '每 15 分钟 + 事件触发', old: '整点重判 · 60 分钟',
   lastSwitch: '11-17 震荡 \u2192 上行',
+  log: [['09:30', '开盘'], ['09:45', '定时'], ['10:00', '定时'], ['10:06', '事件 · 指数 5 分钟 \u22120.8%'], ['10:15', '定时']],
   ev: [
     { no: 1, k: '指数距 50 日线', v: '+2.4%', t: '门槛 > 0', ok: true },
     { no: 2, k: '20 日新高占比', v: '31%', t: '门槛 \u2265 20%', ok: true },
@@ -82,6 +83,9 @@ function regimeBar() {
     '<span class="b lim">持续 ' + r.days + ' 交易日</span>' +
     '<div class="rg-time ml"><span class="nw">更新 <b data-rg-time>' + r.updated + '</b></span><span class="nw">下次重判 <b>' + r.next + '</b></span><span class="nw mut">' + r.fp + '</span></div></div>' +
     '<div class="rg-ev">' + ev + '</div>' +
+    '<div class="rg-log"><span class="meta nw">今日重判 <span data-count="rg-log">' + r.log.length + '</span></span>' + r.log.map(function (x) {
+      return '<span class="lg nw" data-item="rg-log"><b class="num">' + x[0] + '</b> ' + x[1] + ' \u2192 ' + r.name.slice(0, 2) + '</span>';
+    }).join('') + '</div>' +
     '<div class="rg-foot"><span class="nw">重判节奏 <b class="acc">' + r.cadence + '</b></span><span class="nw">现网 ' + r.old + '</span><span class="nw">上次切换 ' + r.lastSwitch + '</span><span class="nw ml">置信 ' + r.conf.toFixed(2) + '</span></div>' +
     '</section>';
 }
@@ -137,19 +141,19 @@ var TIER = { champ: '在用', ch: '挑战者', out: '已淘汰' };
 
 /* ---------------------------------------------------------------- 卡 (今日 + 近期已结算) */
 var ALL_CARDS = [
-  { id: 'c1', sym: 'QALF', side: 'long', timing: 'x', strat: 'S1', rank: 1, verdict: '下单', gen: '11-24 16:40 ET', until: '11-25 收盘',
+  { id: 'c1', dist: 0.3, sym: 'QALF', side: 'long', timing: 'x', strat: 'S1', rank: 1, verdict: '下单', gen: '11-24 16:40 ET', until: '11-25 收盘',
     zone: '41.20 ~ 41.80', stop: '39.90', tgt: '44.10', exp: 0.21, rg: [1, 2],
     fv: [['rs20', '87 分位', '\u2265 70'], ['volc5', '0.62', '\u2264 0.80']] },
-  { id: 'c2', sym: 'QBRV', side: 'long', timing: 'x', strat: 'S2', rank: 2, verdict: '下单', gen: '11-24 16:40 ET', until: '11-26 收盘',
+  { id: 'c2', dist: 0.5, sym: 'QBRV', side: 'long', timing: 'x', strat: 'S2', rank: 2, verdict: '下单', gen: '11-24 16:40 ET', until: '11-26 收盘',
     zone: '18.05 ~ 18.40', stop: '17.40', tgt: '19.70', exp: 0.17, rg: [1, 4],
     fv: [['rs20', '79 分位', '\u2265 70'], ['atrc', '0.71', '\u2264 0.85']] },
   { id: 'c3', sym: 'QCHR', side: 'long', timing: 'x', strat: 'S1', rank: 4, verdict: '不下单', why: '离进场 2.1 倍日均波动', gen: '11-24 16:40 ET', until: '11-25 收盘',
     zone: '63.10 ~ 63.90', stop: '61.20', tgt: '67.40', exp: 0.04, rg: [2],
     fv: [['rs20', '72 分位', '\u2265 70'], ['volc5', '0.78', '\u2264 0.80']] },
-  { id: 'c4', sym: 'QDLT', side: 'long', timing: 'i', strat: 'S3', rank: 3, verdict: '下单', gen: '10:12 ET', valid: 30, left: 1068,
+  { id: 'c4', dist: 0.1, sym: 'QDLT', side: 'long', timing: 'i', strat: 'S3', rank: 3, verdict: '下单', gen: '10:12 ET', valid: 30, left: 1068,
     zone: '27.30 ~ 27.55', stop: '26.85', tgt: '28.60', exp: 0.12, rg: [1, 3], event: '4h 收盘站上趋势线',
     fv: [['h4', '同向 3 根', '\u2265 2 根'], ['rs20', '81 分位', '\u2265 70']] },
-  { id: 'c5', sym: 'QFOX', side: 'long', timing: 'i', strat: 'S2', rank: 5, verdict: '下单', gen: '10:02 ET', valid: 25, left: 168,
+  { id: 'c5', dist: 0.2, sym: 'QFOX', side: 'long', timing: 'i', strat: 'S2', rank: 5, verdict: '下单', gen: '10:02 ET', valid: 25, left: 168,
     zone: '9.42 ~ 9.55', stop: '9.18', tgt: '10.05', exp: 0.09, rg: [1, 4], event: '放量突破 5 日高',
     fv: [['rs20', '74 分位', '\u2265 70'], ['atrc', '0.66', '\u2264 0.85']] },
   { id: 'r1', sym: 'QGLF', side: 'long', strat: 'S1', rank: 1, settled: '11-20', res: 1.42, exit: '到目标', rg: [1, 2],

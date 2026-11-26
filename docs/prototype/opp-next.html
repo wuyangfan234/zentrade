@@ -67,13 +67,16 @@ h3{font-size:13px;font-weight:600;white-space:nowrap}
 .scale span.on{background:var(--fg);color:#fff;font-weight:600}
 .rg-time{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12px;color:var(--fg2)}
 .rg-time b{color:var(--fg);font-weight:600}
-.rg-ev{flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border)}
+.rg-ev{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:1px solid var(--border)}
 .rg-item{display:flex;flex-direction:column;justify-content:center;padding:9px 14px;border-left:1px solid var(--border);min-width:0}
 .rg-item:first-child{border-left:0}
 .rg-k{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--fg2)}
 .rg-no{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border-radius:50%;background:var(--elevated);color:var(--fg);font-size:11px;font-weight:700;flex:none}
 .rg-v{font-size:15px;font-weight:700;margin-top:2px}
 .rg-t{font-size:12px;color:var(--muted)}
+.rg-log{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;padding:7px 14px;border-top:1px solid var(--border);font-size:12px;color:var(--fg2)}
+.rg-log .lg{border:1px solid var(--border);border-radius:4px;padding:0 6px;line-height:20px}
+.rg-log .lg b{color:var(--fg)}
 .rg-foot{display:flex;gap:6px 14px;flex-wrap:wrap;padding:7px 14px;border-top:1px solid var(--border);background:var(--elevated);font-size:12px;color:var(--fg2);border-radius:0 0 8px 8px}
 /* 置信区间横条 (同一把尺子) */
 .ci{position:relative;height:18px;min-width:150px}
@@ -87,6 +90,8 @@ h3{font-size:13px;font-weight:600;white-space:nowrap}
 .ci-scale span.c{transform:translateX(-50%)}
 /* 表格 */
 .tw{overflow-x:auto}
+.tw::-webkit-scrollbar{height:6px}
+.tw::-webkit-scrollbar-thumb{background:#B9BEC3;border-radius:999px}
 table{border-collapse:collapse;width:100%}
 th{font-size:12px;color:var(--muted);font-weight:500;text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap}
 td{padding:7px 10px;border-top:1px solid var(--border);vertical-align:middle}
@@ -118,8 +123,6 @@ tr.empty td{color:var(--muted);font-size:12px}
 }
 
 /* 机会页专属样式 */
-.top2{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
-@media (min-width:1200px){.top2{grid-template-columns:minmax(0,1fr) 320px}}
 .cg[hidden]{display:none}
 .cg+.cg:not([hidden]){margin-top:14px}
 .cg-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
@@ -144,22 +147,32 @@ tr.empty td{color:var(--muted);font-size:12px}
 .cc-attr{display:none;border-top:1px dashed var(--border);padding-top:8px}
 .cc-attr.on{display:block}
 .empty{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px 12px;border:1px dashed var(--muted);border-radius:8px;background:var(--base);font-size:12px}
-.mhint{display:none;padding:6px 14px;border-top:1px solid var(--border)}
-.sp-big{display:flex;align-items:baseline;gap:8px;margin-bottom:8px}
-.sp-big .num{font-size:24px;font-weight:700}
-.sp-row{display:grid;grid-template-columns:86px minmax(0,1fr);gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--border)}
-.sp-k{display:flex;flex-direction:column;font-size:12px;font-weight:600}
+.mhint{display:none;padding:6px 14px;border-bottom:1px solid var(--border);color:var(--accent);font-weight:600}
+.mhint.in{padding:0 0 6px;border:0}
+.sp-grid{display:grid;grid-template-columns:150px repeat(4,minmax(0,1fr))}
+.sp-big{display:flex;flex-direction:column;justify-content:center;padding:10px 14px}
+.sp-big .num{font-size:26px;font-weight:700;line-height:32px}
+.sp-row{display:flex;flex-direction:column;gap:4px;padding:10px 14px;border-left:1px solid var(--border);min-width:0}
+.sp-k{display:flex;align-items:baseline;gap:6px;font-size:12px;font-weight:600}
 .sp-k .meta{font-weight:400}
-.sp-bars{display:flex;flex-direction:column;gap:3px;min-width:0}
 .sp-b{display:grid;grid-template-columns:28px minmax(0,1fr) 28px;align-items:center;gap:6px;font-size:12px}
 .sp-b .bar{display:block;height:7px;border-radius:4px;justify-self:start}
 .sp-b .bar.old{background:#C9CCD0}
 .sp-b .bar.new{background:var(--accent)}
 .sp-b b{text-align:right}
-.sp-foot{border-top:1px solid var(--border);padding-top:6px}
+@media (min-width:768px) and (max-width:1099px){
+  .sp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sp-big{grid-column:1 / -1;flex-direction:row;align-items:baseline;gap:8px;border-bottom:1px solid var(--border)}
+  .sp-row:nth-child(2n){border-left:0}
+  .sp-row:nth-child(n+4){border-top:1px solid var(--border)}
+}
 @media (max-width:767px){
   .mhint{display:block}
   .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sp-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sp-big{grid-column:1 / -1;flex-direction:row;align-items:baseline;gap:8px;border-bottom:1px solid var(--border)}
+  .sp-row:nth-child(2n){border-left:0}
+  .sp-row:nth-child(n+4){border-top:1px solid var(--border)}
 }
 
 </style>
@@ -235,6 +248,7 @@ var REGIME = {
   fp: 'RG-1125-1015', state: 'up', name: '上行趋势', days: 6, conf: 0.78,
   updated: '11-25 10:15 ET', next: '10:30 ET', cadence: '每 15 分钟 + 事件触发', old: '整点重判 · 60 分钟',
   lastSwitch: '11-17 震荡 \u2192 上行',
+  log: [['09:30', '开盘'], ['09:45', '定时'], ['10:00', '定时'], ['10:06', '事件 · 指数 5 分钟 \u22120.8%'], ['10:15', '定时']],
   ev: [
     { no: 1, k: '指数距 50 日线', v: '+2.4%', t: '门槛 > 0', ok: true },
     { no: 2, k: '20 日新高占比', v: '31%', t: '门槛 \u2265 20%', ok: true },
@@ -260,6 +274,9 @@ function regimeBar() {
     '<span class="b lim">持续 ' + r.days + ' 交易日</span>' +
     '<div class="rg-time ml"><span class="nw">更新 <b data-rg-time>' + r.updated + '</b></span><span class="nw">下次重判 <b>' + r.next + '</b></span><span class="nw mut">' + r.fp + '</span></div></div>' +
     '<div class="rg-ev">' + ev + '</div>' +
+    '<div class="rg-log"><span class="meta nw">今日重判 <span data-count="rg-log">' + r.log.length + '</span></span>' + r.log.map(function (x) {
+      return '<span class="lg nw" data-item="rg-log"><b class="num">' + x[0] + '</b> ' + x[1] + ' \u2192 ' + r.name.slice(0, 2) + '</span>';
+    }).join('') + '</div>' +
     '<div class="rg-foot"><span class="nw">重判节奏 <b class="acc">' + r.cadence + '</b></span><span class="nw">现网 ' + r.old + '</span><span class="nw">上次切换 ' + r.lastSwitch + '</span><span class="nw ml">置信 ' + r.conf.toFixed(2) + '</span></div>' +
     '</section>';
 }
@@ -315,19 +332,19 @@ var TIER = { champ: '在用', ch: '挑战者', out: '已淘汰' };
 
 /* ---------------------------------------------------------------- 卡 (今日 + 近期已结算) */
 var ALL_CARDS = [
-  { id: 'c1', sym: 'QALF', side: 'long', timing: 'x', strat: 'S1', rank: 1, verdict: '下单', gen: '11-24 16:40 ET', until: '11-25 收盘',
+  { id: 'c1', dist: 0.3, sym: 'QALF', side: 'long', timing: 'x', strat: 'S1', rank: 1, verdict: '下单', gen: '11-24 16:40 ET', until: '11-25 收盘',
     zone: '41.20 ~ 41.80', stop: '39.90', tgt: '44.10', exp: 0.21, rg: [1, 2],
     fv: [['rs20', '87 分位', '\u2265 70'], ['volc5', '0.62', '\u2264 0.80']] },
-  { id: 'c2', sym: 'QBRV', side: 'long', timing: 'x', strat: 'S2', rank: 2, verdict: '下单', gen: '11-24 16:40 ET', until: '11-26 收盘',
+  { id: 'c2', dist: 0.5, sym: 'QBRV', side: 'long', timing: 'x', strat: 'S2', rank: 2, verdict: '下单', gen: '11-24 16:40 ET', until: '11-26 收盘',
     zone: '18.05 ~ 18.40', stop: '17.40', tgt: '19.70', exp: 0.17, rg: [1, 4],
     fv: [['rs20', '79 分位', '\u2265 70'], ['atrc', '0.71', '\u2264 0.85']] },
   { id: 'c3', sym: 'QCHR', side: 'long', timing: 'x', strat: 'S1', rank: 4, verdict: '不下单', why: '离进场 2.1 倍日均波动', gen: '11-24 16:40 ET', until: '11-25 收盘',
     zone: '63.10 ~ 63.90', stop: '61.20', tgt: '67.40', exp: 0.04, rg: [2],
     fv: [['rs20', '72 分位', '\u2265 70'], ['volc5', '0.78', '\u2264 0.80']] },
-  { id: 'c4', sym: 'QDLT', side: 'long', timing: 'i', strat: 'S3', rank: 3, verdict: '下单', gen: '10:12 ET', valid: 30, left: 1068,
+  { id: 'c4', dist: 0.1, sym: 'QDLT', side: 'long', timing: 'i', strat: 'S3', rank: 3, verdict: '下单', gen: '10:12 ET', valid: 30, left: 1068,
     zone: '27.30 ~ 27.55', stop: '26.85', tgt: '28.60', exp: 0.12, rg: [1, 3], event: '4h 收盘站上趋势线',
     fv: [['h4', '同向 3 根', '\u2265 2 根'], ['rs20', '81 分位', '\u2265 70']] },
-  { id: 'c5', sym: 'QFOX', side: 'long', timing: 'i', strat: 'S2', rank: 5, verdict: '下单', gen: '10:02 ET', valid: 25, left: 168,
+  { id: 'c5', dist: 0.2, sym: 'QFOX', side: 'long', timing: 'i', strat: 'S2', rank: 5, verdict: '下单', gen: '10:02 ET', valid: 25, left: 168,
     zone: '9.42 ~ 9.55', stop: '9.18', tgt: '10.05', exp: 0.09, rg: [1, 4], event: '放量突破 5 日高',
     fv: [['rs20', '74 分位', '\u2265 70'], ['atrc', '0.66', '\u2264 0.85']] },
   { id: 'r1', sym: 'QGLF', side: 'long', strat: 'S1', rank: 1, settled: '11-20', res: 1.42, exit: '到目标', rg: [1, 2],
@@ -421,7 +438,8 @@ function cardHTML(c) {
     ? '<div class="cc-time"><span class="nw">盘后 ' + c.gen + ' 生成</span><span class="nw">可挂限价单</span><span class="nw">有效至 ' + c.until + '</span></div>'
     : '<div class="cc-time"><span class="nw">' + c.gen + ' 触发</span><span class="nw">' + c.event + '</span><span class="nw cd' + (c.left <= 300 ? ' warn' : '') + '" data-left="' + c.left + '" data-valid="' + c.valid * 60 + '">剩 <b class="num">' + mmss(c.left) + '</b></span><span class="nw">限时 ' + c.valid + ' 分钟</span></div>' +
       '<div class="ttl"><span style="width:' + (c.left / (c.valid * 60) * 100).toFixed(1) + '%"' + (c.left <= 300 ? ' class="low"' : '') + '></span></div>';
-  var why = c.verdict === '不下单' ? '<div class="cc-why warn">不下单 · ' + c.why + '</div>' : '';
+  var why = c.verdict === '不下单' ? '<div class="cc-why warn">不下单 · ' + c.why + '</div>'
+    : '<div class="cc-why fg2">下单 · 离进场 ' + c.dist + ' 倍日均波动</div>';
   var ev = c.rg.map(function (n) { return NO[n]; }).join('');
   var src = '<div class="cc-src"><span class="mut nw">来源</span><span class="nw">' + s.name + '</span><span class="mut">·</span><span class="nw">' + FBY[c.fv[0][0]].label + '</span><span class="mut">·</span><span class="nw">' + REGIME.name.slice(0, 2) + ' ' + ev + '</span>' +
     '<button class="btn ghost ml" data-toggle="' + c.id + '" aria-expanded="' + (OPEN_C === c.id) + '">归因' + (OPEN_C === c.id ? ' \u25B4' : ' \u25BE') + '</button></div>';
@@ -471,8 +489,8 @@ function ledgerSection() {
   return '<section class="card sec" data-sec="ledger"><div class="card-h"><h2>策略账本</h2>' +
     '<span class="chipline">' + ['champ', 'ch', 'out'].map(function (t) { return '<span class="b lim">' + TIER[t] + ' <span data-count="led-' + t + '">' + rows.filter(function (s) { return s.tier === t; }).length + '</span></span>'; }).join('') + '</span>' +
     '<span class="meta ml nw">滚动 60 交易日 · 比门内随便挑 每笔多出的 R · 在用条数不固定</span></div>' +
-    '<div class="tw"><table><thead><tr><th>策略</th><th>方向</th><th>来源</th><th class="r">滚动超额</th><th>95% 区间 ' + ciScale() + '</th><th class="r">样本</th><th>最近结算</th><th>理由</th><th>操作</th></tr></thead><tbody>' +
-    body + '</tbody></table></div><div class="mhint meta">表内左右滑动</div></section>';
+    '<div class="mhint meta">表内左右滑动 \u2192</div><div class="tw"><table><thead><tr><th>策略</th><th>方向</th><th>来源</th><th class="r">滚动超额</th><th>95% 区间 ' + ciScale() + '</th><th class="r">样本</th><th>最近结算</th><th>理由</th><th>操作</th></tr></thead><tbody>' +
+    body + '</tbody></table></div></section>';
 }
 
 var SPEED = [
@@ -486,19 +504,19 @@ function speedSection() {
   var mx = {}; SPEED.forEach(function (r) { mx[r.u] = Math.max(mx[r.u] || 0, r.old); });
   var rows = SPEED.map(function (r) {
     return '<div class="sp-row" data-item="speed"><div class="sp-k"><span class="nw">' + r.k + '</span><span class="nw meta">' + r.u + '</span></div>' +
-      '<div class="sp-bars"><div class="sp-b"><span class="lab mut nw">现网</span><span class="bar old" style="width:' + (r.old / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw">' + r.old + '</b></div>' +
-      '<div class="sp-b"><span class="lab acc nw">新</span><span class="bar new" style="width:' + (r.now / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw acc">' + r.now + '</b></div></div></div>';
+      '<div class="sp-b"><span class="lab mut nw">现网</span><span class="bar old" style="width:' + (r.old / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw">' + r.old + '</b></div>' +
+      '<div class="sp-b"><span class="lab acc nw">新</span><span class="bar new" style="width:' + (r.now / mx[r.u] * 100).toFixed(1) + '%"></span><b class="num nw acc">' + r.now + '</b></div></div>';
   }).join('');
-  return '<section class="card" data-sec="speed"><div class="card-h"><h2>反应速度</h2><span class="b demo">DEMO</span><span class="meta ml nw">平均滞后 · 近 20 次</span></div>' +
-    '<div class="card-b"><div class="sp-big"><span class="num acc" data-cut>' + MINUS + Math.round(cut * 100) + '%</span><span class="meta nw">滞后缩短 · <span data-count="speed">' + SPEED.length + '</span> 项均值</span></div>' + rows +
-    '<div class="meta sp-foot">现网 = 整点重判 · 固定 3+3 · 周度换策略</div></div></section>';
+  return '<section class="card sec" data-sec="speed"><div class="card-h"><h2>反应速度</h2><span class="b demo">DEMO</span><span class="meta nw">平均滞后 · 近 20 次</span>' +
+    '<span class="meta ml nw">现网 = 整点重判 · 固定 3+3 · 周度换策略</span></div>' +
+    '<div class="sp-grid"><div class="sp-big"><span class="num acc" data-cut>' + MINUS + Math.round(cut * 100) + '%</span><span class="meta nw">滞后缩短 · <span data-count="speed">' + SPEED.length + '</span> 项均值</span></div>' + rows + '</div></section>';
 }
 
 function render() {
   document.getElementById('app').innerHTML =
     '<div class="head"><h1>机会</h1><span class="meta nw">11-25 周三 · 10:24 ET · 盘中</span><span class="b demo">DEMO · 虚拟数据</span>' +
     '<span class="meta ml nw">原型 · 不接后端</span></div>' +
-    '<div class="top2">' + regimeBar() + speedSection() + '</div>' +
+    regimeBar() + speedSection() +
     cardsSection() + ledgerSection();
 }
 render();
