@@ -179,7 +179,9 @@ def test_view_and_api_toggle_and_undo(tmp_path, monkeypatch, cal):
 
 def test_view_is_safe_without_any_scores(tmp_path, cal):
     v = ras.view(tmp_path, today=date(2026, 12, 7))
-    assert v["scored"] == 0 and v["last_eval"] is None and v["swaps"] == [] and len(v["picks"]["long"]) == 3
+    from app.services import swing_desk as sd
+    assert v["scored"] == 0 and v["last_eval"] is None and v["swaps"] == []
+    assert len(v["picks"]["long"]) == len(sd.DEFAULT_LONG) and len(v["picks"]["short"]) == len(sd.DEFAULT_SHORT)
     assert {x["verdict"] for x in v["picks"]["long"] + v["picks"]["short"]} == {"thin"}
 
 

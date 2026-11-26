@@ -7,6 +7,9 @@
     卡上参与打分的非 rank_* 规则全是观察档 → ledger_tier="observe", 纸面下单簿不收;
     rank_* 排序因子不进账本 (rank-lab-v2 确认合同管), 不参与卡档位判定; 只有 rank_* 命中的卡 ledger_tier=None;
   - 回滚开关: swing.json "ledger": false → 不按档位过滤 (收缩打分仍用产物里的 excess/n); 彻底回滚 = git revert。
+    开关关时出板读点给的是 status="disabled" 的空切片 (不是 None), 落簿冻结的也是它, 板与簿照样同源。
+  - 账本不可用 (P1-B2, fail-closed): 历史/未来月份没有复核记录 → status="unavailable" 的空切片,
+    所有规则 (含 rank_*) 一律按待定处理 → 不打分、不出卡、不进簿。不再把「没有账本」当成「全部在用」。
 
 数据来源只读既有产物 (backend/config/*.json), 不回放、不写影子文件:
   swing_rule_history.json   tight-v1 每条规则 (多头 = id, 空头 = "id:short") 的 n / excess / p (主来源)
@@ -22,17 +25,21 @@
     产物将来带逐笔 / 分期样本时, review_cells 改为喂冷冻后样本即可。
 
 月度复核: 当月 (美东) 第一次出板时落一条只追加审计 data/rules/ledger_audit.jsonl (不进结算台账)。
-只写当月: 看历史/未来月份且该月没有记录 → 只读不写, 返回 None (按无账本处理), 不会用当前产物给过去月份补写
+只写当月: 看历史/未来月份且该月没有记录 → 只读不写, monthly_review 返回 None, ledger_for 给 unavailable 切片
+(fail-closed, 见上), 不会用当前产物给过去月份补写
 而打乱 freeze_streak 的连续计数。同月内档位只认这条记录 (同一天同一批候选结果可复现);
 freeze_streak = 连续几次月度复核点估计 < 0。
 """
 from __future__ import annotations
 
 import json
+import logging
 import math
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
+
+logger = logging.getLogger(__name__)
 
 CONTRACT = "strategy-ledger-v1"
 ACTIVE, OBSERVE, PENDING, FROZEN, REVIVED = "在用", "观察", "待定", "冷冻", "复活"
@@ -45,6 +52,7 @@ MIN_N = 30                                        # 同 rank_lab.MIN_SEG_N
 FREEZE_STREAK = 2
 DEFAULT_K = 100.0
 AUDIT_FILE = "ledger_audit.jsonl"
+STATUS_OK, STATUS_DISABLED, STATUS_UNAVAILABLE = "ok", "disabled", "unavailable"
 CONFIG_DIR = Path(__file__).parents[2] / "config"
 _Z975 = 1.959963984540054
 
@@ -246,8 +254,8 @@ def monthly_review(data_dir: Path, day: date, *, config_dir: Path | None = None,
         p.parent.mkdir(parents=True, exist_ok=True)
         with p.open("a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
-    except OSError:
-        pass                     # 写不了审计不挡出板 (档位仍按本次复核)
+    except OSError as e:         # 写不了审计不挡出板 (档位仍按本次复核), 但必须留痕
+        logger.warning("strategy ledger: monthly audit write failed (%s): %s", rec.get("month"), type(e).__name__)
     return rec
 
 
@@ -260,25 +268,42 @@ def ledger_view(rec: dict, regime_state: str | None, k: float) -> dict:
         rule_side, _, r = ck.rpartition("|")
         if r == reg:
             cells[rule_side] = {"n": c.get("n"), "excess": c.get("excess"), "tier": c.get("tier")}
-    return {"contract": CONTRACT, "month": rec.get("month"), "regime": reg, "k": k, "cells": cells}
+    return {"contract": CONTRACT, "status": STATUS_OK, "month": rec.get("month"), "regime": reg, "k": k,
+            "cells": cells}
 
 
-def ledger_for(data_dir: Path, day: date, regime_state: str | None) -> dict | None:
-    """出板读点: 回滚开关关 → None; 历史月份没有复核记录 → None (无账本, 不按档位过滤);
-    否则该月复核 (当月必要时落审计) 在当前 regime 的切片。"""
+def _empty_view(status: str, day: date, regime_state: str | None, k: float) -> dict:
+    reg = regime_state if regime_state in REGIMES else "震荡"
+    return {"contract": CONTRACT, "status": status, "month": day.strftime("%Y-%m"), "regime": reg, "k": k,
+            "cells": {}}
+
+
+def ledger_for(data_dir: Path, day: date, regime_state: str | None) -> dict:
+    """出板读点, 总返回切片 (不返回 None, 落簿不会冻结 None):
+      回滚开关关            → status="disabled": 不按档位过滤 (lookup 走产物汇总, 档位一律在用);
+      该月没有复核记录      → status="unavailable": fail-closed, 所有规则按待定 (不出卡, 见模块 docstring);
+      否则                  → status="ok": 该月复核 (当月必要时落审计) 在当前 regime 的切片。"""
+    k = ledger_k(data_dir)
     if not enabled(data_dir):
-        return None
+        return _empty_view(STATUS_DISABLED, day, regime_state, k)
     rec = monthly_review(data_dir, day)
-    return ledger_view(rec, regime_state, ledger_k(data_dir)) if rec is not None else None
+    if rec is None:
+        return _empty_view(STATUS_UNAVAILABLE, day, regime_state, k)
+    return ledger_view(rec, regime_state, k)
 
 
 def lookup(ledger: dict | None, rule: str, side: str) -> tuple[str, float | None, int]:
-    """(tier, excess, n)。ledger=None (开关关) → 档位一律在用, 分数用产物汇总。
+    """(tier, excess, n)。
+    status="unavailable" (该月无复核) → 一律待定, rank_* 也不例外 (fail-closed: 账本不可用时不出任何卡)。
+    ledger=None (P1-B1 之前落的旧簿) / status="disabled" (开关关) → 档位一律在用, 分数用产物汇总。
     rank_* 排序因子不在账本里 (由 rank-lab-v2 确认合同管): 算命中、分数 0; 卡档位判定不计它 (见 swing_desk._card)。
     账本里没有的其他规则 → 待定 (无证据, 不打分)。"""
+    status = ledger.get("status") if isinstance(ledger, dict) else None
+    if status == STATUS_UNAVAILABLE:
+        return PENDING, None, 0
     if rule.startswith("rank_"):
         return ACTIVE, 0.0, 0
-    if ledger is None:
+    if ledger is None or status == STATUS_DISABLED:
         c = artifact_stats()["cells"].get(cell_key(rule, side)) or {}
         return ACTIVE, c.get("excess"), int(c.get("n") or 0)
     c = (ledger.get("cells") or {}).get(cell_key(rule, side))

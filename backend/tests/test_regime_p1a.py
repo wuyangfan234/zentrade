@@ -397,8 +397,12 @@ def test_intraday_downgrade_applies_to_same_day_board(tmp_path, monkeypatch, cal
     before = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
     assert len(before["long"]) == 3 and before["short"] == []
     _hourly_state(tmp_path, D, LIVE_DAY)
-    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    # P1-B2: 切换新开的空头 = T1 卡, 必须用现价重算几何; 不给现价 (落簿/对账路径) → 不出
+    assert sd.board_for_day(tmp_path, SIG_DAY, repo=object())["short"] == []
+    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object(), live_prices=lambda syms, d: {"AMD": (198.0, "live")},
+                         t1_today=LIVE_DAY)
     assert b["long"] == [] and [c["symbol"] for c in b["short"]] == ["AMD"]
+    assert b["short"][0]["timing_tier"] == "T1" and b["short"][0]["grade"] == "observe"
     assert b["meta"]["regime"]["state"] == D and b["meta"]["regime"]["source"] == "intraday"
     assert b["meta"]["regime"]["snapshot_state"] == A and b["meta"]["regime"]["caps"] == {"long": 0, "short": 5}
     built = wb.build_day(tmp_path, _empty_repo(tmp_path), SIG_DAY, as_of_close=SIG_DAY, watch=watch,
