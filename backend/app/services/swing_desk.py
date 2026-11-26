@@ -304,8 +304,9 @@ def tie_key(as_of: date, symbol: str, mode: str = TIEBREAK) -> str:
 
 def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...], close: float | None,
           atr: float | None, gate: str, as_of: date, ledger: dict | None = None) -> dict[str, Any] | None:
-    """ledger = strategy_ledger.ledger_for 的切片 (None = 回滚开关关: 不按档位过滤, 分数仍用产物 excess/n)。
-    冷冻档规则不算命中; 参与规则全是观察档 → ledger_tier="observe" (只上板, 不进纸面下单簿)。"""
+    """ledger = strategy_ledger.ledger_for 的切片 (None = 回滚开关关/历史月无复核: 不按档位过滤, 分数用产物 excess/n)。
+    待定/冷冻档规则不算命中; 参与打分的非 rank_* 规则全是观察档 → ledger_tier="observe" (只上板, 不进纸面下单簿)。
+    rank_* 不参与卡档位判定 (否则「rank + 观察」会绕过观察不进簿); 只有 rank_* 命中 → ledger_tier=None (沿用旧行为)。"""
     from app.opportunity import strategy_ledger as sl
     seen = {h.get("rule") for h in hits}
     hit_rules, parts, tiers = [], [], []
@@ -317,7 +318,8 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
             continue
         hit_rules.append(r)
         parts.append((ex, n))
-        tiers.append(tier)
+        if not r.startswith("rank_"):
+            tiers.append(tier)
     if not hit_rules:
         return None
     geo = geometry(side, close, atr) if close and atr else None
@@ -325,7 +327,8 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
         return None
     k = float(ledger["k"]) if ledger and isinstance(ledger.get("k"), (int, float)) else sl.DEFAULT_K
     score = sl.card_score(parts, k)
-    ledger_tier = "active" if any(t in sl.PAPER_TIERS for t in tiers) else "observe"
+    ledger_tier = (None if not tiers
+                   else "active" if any(t in sl.PAPER_TIERS for t in tiers) else "observe")
     pos = [h["rank_pos"] for h in hits if isinstance(h.get("rank_pos"), int)]
     return {
         "contract": CONTRACT,
@@ -441,7 +444,7 @@ def compose_boards(
                       atr=atr.get(sym), gate=gate, as_of=as_of, ledger=ledger)
             if c is None:
                 if not _ledger_hits(hits, rules, side, ledger):
-                    reason = "ledger_frozen"
+                    reason = "ledger_inactive"       # 命中规则全在待定/冷冻档
                 elif not (closes.get(sym) and atr.get(sym)):
                     reason = "no_atr_or_close"
                 else:

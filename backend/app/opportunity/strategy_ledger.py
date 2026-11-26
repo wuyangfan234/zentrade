@@ -1,9 +1,11 @@
-"""P1-B1 策略账本: 格子 = (策略, 方向, regime), 四档 在用 / 观察 / 冷冻 / 复活; 收缩超额打分。
+"""P1-B1 策略账本: 格子 = (策略, 方向, regime), 五档 在用 / 观察 / 待定 / 冷冻 / 复活; 收缩超额打分。
 
 直接生效 (无影子): swing_desk.board_for_day 每次出板都读本账本 —
   - 打分 = Σ_命中且参与打分的规则 excess × n / (n + k)   (k 默认 100, data/rules/swing.json 的 "ledger_k" 可改)
     这个分就是机会板每侧排序的主键 (取代旧「命中条数 + 固定 EXCESS_WEIGHT」公式);
-  - 冷冻档规则不算命中、不参与打分; 卡上全部参与规则都是观察档 → ledger_tier="observe", 纸面下单簿不收;
+  - 待定 / 冷冻档规则不算命中、不参与打分 (只命中它们的票不出卡);
+    卡上参与打分的非 rank_* 规则全是观察档 → ledger_tier="observe", 纸面下单簿不收;
+    rank_* 排序因子不进账本 (rank-lab-v2 确认合同管), 不参与卡档位判定; 只有 rank_* 命中的卡 ledger_tier=None;
   - 回滚开关: swing.json "ledger": false → 不按档位过滤 (收缩打分仍用产物里的 excess/n); 彻底回滚 = git revert。
 
 数据来源只读既有产物 (backend/config/*.json), 不回放、不写影子文件:
@@ -15,9 +17,14 @@
     有逐笔 (t, 超额) 时用 ci_from_pairs (直接复用 rank_lab.week_boot, 区间与 swing_candidates.week_boot_ci 逐位相同)。
   - 三个 regime 格子暂用同一份汇总 (regime_split=False 写进审计); 产物将来带 regime 拆分时按格子读。
   - 「滚动 252 交易日」受产物窗口限制, 现为产物全窗口; 窗口写进审计。
+  - 复活的实际口径限制: 规格要求「冷冻后新样本单独 n ≥ 30 且 ci_low > 0」, 但产物只有全窗口汇总, 没有冷冻日之后的
+    单独样本 → 现在复活判的是**全样本** n / CI (classify 的口径不变, 是调用方喂进去的统计量不是新样本)。
+    产物将来带逐笔 / 分期样本时, review_cells 改为喂冷冻后样本即可。
 
-月度复核: 每个自然月第一次出板时落一条只追加审计 data/rules/ledger_audit.jsonl (不进结算台账)。
-同月内档位只认这条记录 (同一天同一批候选结果可复现); freeze_streak = 连续几次月度复核点估计 < 0。
+月度复核: 当月 (美东) 第一次出板时落一条只追加审计 data/rules/ledger_audit.jsonl (不进结算台账)。
+只写当月: 看历史/未来月份且该月没有记录 → 只读不写, 返回 None (按无账本处理), 不会用当前产物给过去月份补写
+而打乱 freeze_streak 的连续计数。同月内档位只认这条记录 (同一天同一批候选结果可复现);
+freeze_streak = 连续几次月度复核点估计 < 0。
 """
 from __future__ import annotations
 
@@ -28,9 +35,9 @@ from pathlib import Path
 from typing import Any, Iterable
 
 CONTRACT = "strategy-ledger-v1"
-ACTIVE, OBSERVE, FROZEN, REVIVED = "在用", "观察", "冷冻", "复活"
-TIER_CODE = {ACTIVE: "active", OBSERVE: "observe", FROZEN: "frozen", REVIVED: "revived"}
-SCORING_TIERS = (ACTIVE, OBSERVE, REVIVED)       # 复活 = 新样本单独过 CI, 与在用同等 (可进纸面)
+ACTIVE, OBSERVE, PENDING, FROZEN, REVIVED = "在用", "观察", "待定", "冷冻", "复活"
+TIER_CODE = {ACTIVE: "active", OBSERVE: "observe", PENDING: "pending", FROZEN: "frozen", REVIVED: "revived"}
+SCORING_TIERS = (ACTIVE, OBSERVE, REVIVED)       # 复活 = 过 CI, 与在用同等 (可进纸面); 待定/冷冻不打分
 PAPER_TIERS = (ACTIVE, REVIVED)
 REGIMES = ("进攻", "震荡", "防守")
 SIDES = ("long", "short")
@@ -46,23 +53,27 @@ _Z975 = 1.959963984540054
 
 def classify(n: int | None, excess: float | None, ci_low: float | None, ci_high: float | None,
              prev_tier: str | None = None, freeze_streak: int = 0) -> str:
-    """四档判定。
+    """五档判定。优先级: 冷冻条件 > 复活 > 在用 > 观察 > 待定。
 
-    冷冻后: 只有新样本单独 n ≥ 30 且 ci_low > 0 才「复活」, 否则仍「冷冻」(调用方传入冷冻后的新样本统计)。
-    其余: 连续 2 次月度复核点估计 < 0 或 ci_high < 0 → 冷冻; ci_low > 0 且 n ≥ 30 → 在用;
-    excess > 0 且 n ≥ 30 且 ci_low ≤ 0 ≤ ci_high → 观察; 证据不足 (n < 30 / 无 CI / 点估计 ≤ 0) → 冷冻 (fail-closed, 不参与打分)。
+    冷冻: freeze_streak ≥ 2 (连续 2 次月度复核点估计 < 0) 或 ci_high < 0。
+    复活: 上次是冷冻, 且 n ≥ 30 且 ci_low > 0 (否则保持冷冻)。口径限制见模块 docstring (现为全样本统计)。
+    在用: ci_low > 0 且 n ≥ 30。
+    观察: excess > 0 且 n ≥ 30 且 ci_low ≤ 0 ≤ ci_high。
+    待定: 其余 = 证据不足 (n < 30 / CI 缺) 或 点估计 ≤ 0 但 streak < 2 且 ci_high ≥ 0。
+          不打分、不出卡、不进簿 (效果同冷冻), 但不是冷冻: 下个月证据够了直接回到观察/在用, 不必走复活。
     """
     n = int(n or 0)
-    ok_ci = ci_low is not None and ci_high is not None and math.isfinite(ci_low) and math.isfinite(ci_high)
-    if prev_tier == FROZEN:
-        return REVIVED if (ok_ci and n >= MIN_N and ci_low > 0) else FROZEN
+    ok_ci = (ci_low is not None and ci_high is not None
+             and math.isfinite(ci_low) and math.isfinite(ci_high))
     if freeze_streak >= FREEZE_STREAK or (ok_ci and ci_high < 0):
         return FROZEN
+    if prev_tier == FROZEN:
+        return REVIVED if (ok_ci and n >= MIN_N and ci_low > 0) else FROZEN
     if ok_ci and ci_low > 0 and n >= MIN_N:
         return ACTIVE
-    if (ok_ci and excess is not None and excess > 0 and n >= MIN_N and ci_low <= 0 <= ci_high):
+    if ok_ci and excess is not None and excess > 0 and n >= MIN_N and ci_low <= 0 <= ci_high:
         return OBSERVE
-    return FROZEN
+    return PENDING
 
 
 def shrink(excess: float | None, n: int | None, k: float = DEFAULT_K) -> float:
@@ -206,13 +217,23 @@ def review_cells(stats: dict[str, dict], prev: dict[str, dict] | None) -> dict[s
     return out
 
 
-def monthly_review(data_dir: Path, day: date, *, config_dir: Path | None = None) -> dict:
-    """day 所在自然月的复核记录: 已有 → 原样返回; 没有 → 用上一次复核 + 当前产物算一条并只追加写入审计。"""
+def _today() -> date:
+    """当前美东日期 (月度复核按美东自然月)。"""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York")).date()
+
+
+def monthly_review(data_dir: Path, day: date, *, config_dir: Path | None = None,
+                   today: date | None = None) -> dict | None:
+    """day 所在自然月的复核记录: 已有 → 原样返回; 没有且 day 在当月 → 用上一次复核 + 当前产物算一条并只追加写入审计;
+    没有且 day 不在当月 (历史/未来) → None, 只读不写 (不补写过去月份, 保 freeze_streak 连续计数)。"""
     month = day.strftime("%Y-%m")
     recs = _audit_records(data_dir)
     for r in reversed(recs):
         if r["month"] == month:
             return r
+    if month != (today or _today()).strftime("%Y-%m"):
+        return None
     earlier = [r for r in recs if r["month"] < month]
     prev = max(earlier, key=lambda r: r["month"])["cells"] if earlier else None
     art = artifact_stats(config_dir)
@@ -243,15 +264,18 @@ def ledger_view(rec: dict, regime_state: str | None, k: float) -> dict:
 
 
 def ledger_for(data_dir: Path, day: date, regime_state: str | None) -> dict | None:
-    """出板读点: 回滚开关关 → None; 否则本月复核 (必要时落审计) 在当前 regime 的切片。"""
+    """出板读点: 回滚开关关 → None; 历史月份没有复核记录 → None (无账本, 不按档位过滤);
+    否则该月复核 (当月必要时落审计) 在当前 regime 的切片。"""
     if not enabled(data_dir):
         return None
-    return ledger_view(monthly_review(data_dir, day), regime_state, ledger_k(data_dir))
+    rec = monthly_review(data_dir, day)
+    return ledger_view(rec, regime_state, ledger_k(data_dir)) if rec is not None else None
 
 
 def lookup(ledger: dict | None, rule: str, side: str) -> tuple[str, float | None, int]:
     """(tier, excess, n)。ledger=None (开关关) → 档位一律在用, 分数用产物汇总。
-    rank_* 排序因子不在账本里 (由 rank-lab-v2 确认合同管), 视为在用、分数 0。账本里没有的其他规则 → 冷冻。"""
+    rank_* 排序因子不在账本里 (由 rank-lab-v2 确认合同管): 算命中、分数 0; 卡档位判定不计它 (见 swing_desk._card)。
+    账本里没有的其他规则 → 待定 (无证据, 不打分)。"""
     if rule.startswith("rank_"):
         return ACTIVE, 0.0, 0
     if ledger is None:
@@ -259,5 +283,5 @@ def lookup(ledger: dict | None, rule: str, side: str) -> tuple[str, float | None
         return ACTIVE, c.get("excess"), int(c.get("n") or 0)
     c = (ledger.get("cells") or {}).get(cell_key(rule, side))
     if not c:
-        return FROZEN, None, 0
-    return c.get("tier") or FROZEN, c.get("excess"), int(c.get("n") or 0)
+        return PENDING, None, 0
+    return c.get("tier") or PENDING, c.get("excess"), int(c.get("n") or 0)
