@@ -2,7 +2,7 @@
 .cg[hidden]{display:none}
 .cg+.cg:not([hidden]){margin-top:14px}
 .cg-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));align-items:stretch}
+.cards{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,330px),1fr));align-items:start}
 .cc{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface);display:flex;flex-direction:column;gap:7px;min-width:0;scroll-margin-top:84px}
 .cc[hidden]{display:none}
 .cc-top{display:flex;align-items:center;gap:8px;min-height:22px}

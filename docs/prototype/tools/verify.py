@@ -7,6 +7,7 @@
   overlap flex / grid 容器内可见兄弟元素两两不相交 (同行文字互压)
   spill   .card / .cc / .drawer 内后代右缘不越出容器 (横滑表格容器内除外)
   textover 非 inline 元素的文字不溢出自身盒子 (溢出会压到相邻格子)
+  rowh    同排机会卡等高 (未展开归因的卡)
 另外两页的 regime 状态条文本必须逐字相同 (同一状态、同一时间戳)。
 
 用法 (需要带 playwright 的 Python):
@@ -86,6 +87,14 @@ GEO_JS = r'''() => {
    if (s.display === 'inline' || s.overflowX !== 'visible' || /^(TABLE|TBODY|THEAD|TR)$/.test(e.tagName)) return;
    if (e.scrollWidth > e.clientWidth + 1) out.textover.push(name(e));
  });
+ // 同排卡等高 (未展开归因的卡): 同一 .cards 网格里 top 相同的卡高度差 ≤ 1px
+ out.rowh = [];
+ document.querySelectorAll('.cards').forEach(g => {
+   const rows = {};
+   [...g.children].filter(c => vis(c) && !c.querySelector('.cc-attr.on')).forEach(c => {
+     const r = c.getBoundingClientRect(); (rows[Math.round(r.top)] = rows[Math.round(r.top)] || []).push(r.height); });
+   Object.values(rows).forEach(hs => { if (Math.max(...hs) - Math.min(...hs) > 1) out.rowh.push(hs.map(h => Math.round(h))); });
+ });
  const rg = document.querySelector('[data-regime]');
  out.regime = rg ? rg.innerText.replace(/\s+/g, ' ').trim() : '';
  out.demo = !!document.querySelector('[data-demo]') && /DEMO · 虚拟数据/.test(document.body.innerText);
@@ -127,7 +136,7 @@ def main():
                 issues["errs"] = errs
             if r["hscroll"]:
                 issues["hscroll"] = True
-            for k in ("counts", "overlap", "spill", "textover"):
+            for k in ("counts", "overlap", "spill", "textover", "rowh"):
                 if g[k]:
                     issues[k] = g[k]
             if not g["demo"]:
