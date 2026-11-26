@@ -151,6 +151,8 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
         return out
     out["swing_rules"] = {"long": board["long_rules"], "short": board["short_rules"]}   # 冻结本日 3+3 (板读这份)
     out["tiebreak"] = board.get("tiebreak")       # 冻结同分卡的先后口径 (swing_desk.tiebreak_for_day 读这份)
+    if isinstance(board["meta"].get("ledger"), dict):
+        out["ledger"] = board["meta"]["ledger"]   # P1-B1 冻结本日策略账本切片 (swing_desk.ledger_for_day 读这份)
     if board["meta"].get("short_gate") is None and board["meta"].get("raw_short_hits"):
         # SPY 数据缺: 空头未判 → 多空冲突也未知, 整天不落盘 (save_day 认这个原因), 下次重试
         out["incomplete"] = True
@@ -420,6 +422,7 @@ def ensure(data_dir: Path, repo, *, today: date, as_of_close: date, watch: set[s
         from app.opportunity import regime as _rg   # 盘中 regime 降级 → 重算后续追加 (只降不升)
         return (today, as_of_close, tuple(sorted(watch)), wv._sig(_sd.swing_config_path(data_dir)),
                 wv._sig(Path(data_dir) / "rules" / _rg.STATE_FILE),
+                wv._sig(Path(data_dir) / "rules" / "ledger_audit.jsonl"),   # P1-B1 月度复核换档 → 重算
                 tuple(sorted(pm.get("tradable") or [])),
                 tuple(sorted(pm.get("short_tradable") or [])),
                 tuple((d, wv._sig(wv.signals_dir(data_dir) / f"{d.isoformat()}.json"), wv._sig(book_path(data_dir, d)))

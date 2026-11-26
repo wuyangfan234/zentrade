@@ -281,9 +281,8 @@ def test_rules_api_history_uses_tight_history(tmp_path, monkeypatch):
 
 
 def test_swing_sort_weights_unchanged():
-    """截断保持现状 (10-18 产品决策第 7 条): 同分排序权重一个字都不动。"""
-    assert sd.EXCESS_WEIGHT == {"tv_smc_structure": 0.40, "volume_price_surge": 0.25, "macd_golden": 0.19,
-                                "tv_chandelier_exit": 0.06, "tv_halftrend": 0.06}
+    """截断保持现状 (10-18 产品决策第 7 条): 每侧 5 张。P1-B1 (11-26): 固定 EXCESS_WEIGHT 已被策略账本收缩超额取代。"""
+    assert not hasattr(sd, "EXCESS_WEIGHT")
     assert sd.MAX_PER_SIDE == 5
 
 

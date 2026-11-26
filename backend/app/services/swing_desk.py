@@ -36,14 +36,8 @@ DEFAULT_SHORT = (
     "tv_chandelier_exit",    # excess +0.06 (n=610)
     "tv_halftrend",          # excess +0.06 (n=955)
 )
-# 固定展示权重 (非日更 evo); 仅同分 tie-break
-EXCESS_WEIGHT = {
-    "tv_smc_structure": 0.40,
-    "volume_price_surge": 0.25,
-    "macd_golden": 0.19,
-    "tv_chandelier_exit": 0.06,
-    "tv_halftrend": 0.06,
-}
+# P1-B1 (2026-11-26): 卡分 = 策略账本收缩超额 Σ excess × n / (n + k) (app.opportunity.strategy_ledger),
+# 是每侧排序主键; 旧「命中条数 + 固定 EXCESS_WEIGHT」公式已删除。
 HOLD_DAYS = 5
 MAX_PER_SIDE = 5
 CONTRACT = "swing-desk-tight-v1"
@@ -54,7 +48,7 @@ CONTRACT = "swing-desk-tight-v1"
 TIEBREAK = "hash-v1"
 TIEBREAK_LEGACY = "symbol"
 # 0.26.0: 规则面板“回测 N 笔”= 现在这张卡 (tight-v1) 的历史, 由 30 分钟K 回放算出 (见文件 source 字段);
-# 旧宽卡历史 watchlist_rule_history.json 只留给旧规则表。只展示, 不进打分/排序 (排序权重仍是上面的 EXCESS_WEIGHT)。
+# 旧宽卡历史 watchlist_rule_history.json 只留给旧规则表 (策略账本仅在 tight-v1 历史缺该规则时兜底)。
 RULE_HISTORY_PATH = Path(__file__).parents[2] / "config" / "swing_rule_history.json"
 _RULE_HISTORY: dict = {}
 
@@ -309,20 +303,37 @@ def tie_key(as_of: date, symbol: str, mode: str = TIEBREAK) -> str:
 
 
 def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...], close: float | None,
-          atr: float | None, gate: str, as_of: date) -> dict[str, Any] | None:
+          atr: float | None, gate: str, as_of: date, ledger: dict | None = None) -> dict[str, Any] | None:
+    """ledger = strategy_ledger.ledger_for 的切片 (None = 回滚开关关: 不按档位过滤, 分数仍用产物 excess/n)。
+    冷冻档规则不算命中; 参与规则全是观察档 → ledger_tier="observe" (只上板, 不进纸面下单簿)。"""
+    from app.opportunity import strategy_ledger as sl
     seen = {h.get("rule") for h in hits}
-    hit_rules = [r for r in rule_ids if r in seen]
+    hit_rules, parts, tiers = [], [], []
+    for r in rule_ids:
+        if r not in seen:
+            continue
+        tier, ex, n = sl.lookup(ledger, r, side)
+        if tier not in sl.SCORING_TIERS:
+            continue
+        hit_rules.append(r)
+        parts.append((ex, n))
+        tiers.append(tier)
+    if not hit_rules:
+        return None
     geo = geometry(side, close, atr) if close and atr else None
     if geo is None:
         return None
-    score = float(len(hit_rules)) + sum(EXCESS_WEIGHT.get(r, 0.05) * 0.1 for r in hit_rules)
+    k = float(ledger["k"]) if ledger and isinstance(ledger.get("k"), (int, float)) else sl.DEFAULT_K
+    score = sl.card_score(parts, k)
+    ledger_tier = "active" if any(t in sl.PAPER_TIERS for t in tiers) else "observe"
     pos = [h["rank_pos"] for h in hits if isinstance(h.get("rank_pos"), int)]
     return {
         "contract": CONTRACT,
         "symbol": symbol,
         "side": side,
-        "score": round(score, 3),
+        "score": round(score, 4),
         "hit_count": len(hit_rules),
+        "ledger_tier": ledger_tier,
         "strategies": [{"id": r, "name": strategy_name(r, side)} for r in hit_rules],
         "gate": gate,                       # "event" = 4h 窗口内条件齐备; "state" = 4h 方向同向
         "close": close,
@@ -337,6 +348,28 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
         # 0.52.0: 排序因子给的名次 (1 = 当天 4h 门内值最高); 没勾排序因子 = None。同分卡按它排先后
         "rank_pos": min(pos) if pos else None,
     }
+
+
+def _ledger_hits(hits: list[dict], rules: tuple[str, ...], side: str, ledger: dict | None) -> bool:
+    from app.opportunity import strategy_ledger as sl
+    seen = {h.get("rule") for h in hits}
+    return any(sl.lookup(ledger, r, side)[0] in sl.SCORING_TIERS for r in rules if r in seen)
+
+
+def ledger_for_day(data_dir: Path, day: date, regime_state: str | None) -> dict | None:
+    """该信号日用哪份账本切片: 簿已落盘且冻结了账本 → 用簿里那份 (板与纸面始终同一批卡);
+    簿已落盘但没有账本 (P1-B1 之前的旧簿) → None (不按档位过滤); 还没落簿 → 本月复核 (开关关 → None)。"""
+    from app.opportunity import strategy_ledger as sl
+    from app.services import watchlist_book as wb
+    try:
+        raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
+        fr = raw.get("swing_rules") if isinstance(raw, dict) else None
+        if isinstance(fr, dict) and fr.get("long"):
+            lg = raw.get("ledger")
+            return lg if isinstance(lg, dict) and isinstance(lg.get("cells"), dict) else None
+    except (OSError, ValueError):
+        pass
+    return sl.ledger_for(data_dir, day, regime_state)
 
 
 def compose_boards(
@@ -357,6 +390,7 @@ def compose_boards(
     max_short: int | None = None,
     observe: set[str] | None = None,
     short_observe: bool = False,
+    ledger: dict | None = None,
 ) -> dict[str, Any]:
     """纯函数: 信号快照 → LONG/SHORT 板。
 
@@ -371,6 +405,8 @@ def compose_boards(
     max_long / max_short: 每侧卡数上限 (P1-A regime 决定); 缺省 = max_per_side。
     observe: 方向门只放行到「观察级」的票 (多尺度门慢中冲突); short_observe: 空头卡一律观察级。
         观察级卡带 "grade": "observe" (只追加新键), 纸面下单簿 (watchlist_book) 不收。
+    ledger: 策略账本切片 (P1-B1)。排序主键 = 收缩超额卡分 (见 _card); 冷冻档规则不算命中;
+        只靠观察档规则出的卡带 ledger_tier="observe" + grade="observe", 纸面下单簿不收。
     atr 缺的票不出卡 (旧信号表没有 atr → 板为空, 等下一次盘后扫描)。
     """
     ph_l, ph_s = _phantom_maps(signals)
@@ -397,14 +433,19 @@ def compose_boards(
             else:
                 if shadow:
                     b = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
-                              atr=atr.get(sym), gate="none", as_of=as_of)
+                              atr=atr.get(sym), gate="none", as_of=as_of, ledger=ledger)
                     if b is not None:
                         gate_blocked.append({**b, "shadow": "gate_4h"})
                 continue
             c = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
-                      atr=atr.get(sym), gate=gate, as_of=as_of)
+                      atr=atr.get(sym), gate=gate, as_of=as_of, ledger=ledger)
             if c is None:
-                reason = "no_atr_or_close" if not (closes.get(sym) and atr.get(sym)) else "bad_geometry"
+                if not _ledger_hits(hits, rules, side, ledger):
+                    reason = "ledger_frozen"
+                elif not (closes.get(sym) and atr.get(sym)):
+                    reason = "no_atr_or_close"
+                else:
+                    reason = "bad_geometry"
                 skipped.append({"symbol": sym, "side": side, "reason": reason})
                 continue
             out.append(c)
@@ -424,7 +465,8 @@ def compose_boards(
     n_short = max_per_side if max_short is None else max(0, min(int(max_short), max_per_side))
     observe = observe or set()
     for c in long_ok + short_ok_cards:
-        if c["symbol"] in observe or (short_observe and c["side"] == "short"):
+        if (c["symbol"] in observe or (short_observe and c["side"] == "short")
+                or c.get("ledger_tier") == "observe"):
             c["grade"] = "observe"
     long_cards, short_cards = long_ok[:n_long], short_ok_cards[:n_short]
     extra: dict[str, Any] = {}
@@ -450,6 +492,7 @@ def compose_boards(
             "raw_short_hits": len(hits_s),
             "short_gate": short_ok,
             "skipped": skipped,
+            "ledger": ledger,
             "geometry": {"entry": [K_NEAR, K_FAR], "stop_atr": STOP_A, "target_atr": TARGET_A,
                          "entry_days": ENTRY_DAYS, "hold_days": HOLD_DAYS},
         },
@@ -517,7 +560,8 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
                             rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow,
                             max_long=reg["caps"]["long"] if reg else None,
                             max_short=reg["caps"]["short"] if reg else None,
-                            observe=observe, short_observe=reg is not None)
+                            observe=observe, short_observe=reg is not None,
+                            ledger=ledger_for_day(data_dir, day, reg["state"] if reg else None))
     if reg is not None:
         boards["meta"]["regime"] = reg
     if gate_info is not None:
