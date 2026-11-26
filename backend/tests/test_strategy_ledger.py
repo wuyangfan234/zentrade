@@ -88,7 +88,9 @@ def test_history_month_never_backfilled(tmp_path, monkeypatch):
     assert sl.audit_path(tmp_path).read_text().splitlines() == before                       # 行数不变
     assert sl.monthly_review(tmp_path, date(2026, 11, 28), today=date(2026, 12, 2))["month"] == "2026-11"
     monkeypatch.setattr(sl, "_today", lambda: date(2026, 11, 3))
-    assert sl.ledger_for(tmp_path, date(2026, 8, 3), "震荡") is None                        # 无账本 → 不按档位过滤
+    lg = sl.ledger_for(tmp_path, date(2026, 8, 3), "震荡")                                  # P1-B2: 无账本 → fail-closed
+    assert lg["status"] == sl.STATUS_UNAVAILABLE and lg["cells"] == {}
+    assert sl.lookup(lg, "r1", "long")[0] == sl.PENDING and sl.lookup(lg, "rank_x", "long")[0] == sl.PENDING
     assert len(sl.audit_path(tmp_path).read_text().splitlines()) == 1
 
 
@@ -207,7 +209,7 @@ def test_board_reads_ledger_and_observe_cards_not_booked(tmp_path, monkeypatch, 
     # 回滚开关: swing.json "ledger": false → 不按档位过滤, 三张卡都进簿
     p = tmp_path / "rules" / "swing.json"
     p.write_text(json.dumps({**json.loads(p.read_text()), "ledger": False}))
-    assert sd.board_for_day(tmp_path, SIG_DAY, repo=object())["meta"]["ledger"] is None
+    assert sd.board_for_day(tmp_path, SIG_DAY, repo=object())["meta"]["ledger"]["status"] == sl.STATUS_DISABLED
     built = wb.build_day(tmp_path, _empty_repo(tmp_path), SIG_DAY, as_of_close=SIG_DAY, watch=watch,
                          pm=wv.permission(tmp_path))
     assert {c["symbol"] for c in built["cards"]} == {"L1", "L2", "L3"}
@@ -246,6 +248,10 @@ def test_pending_rule_gives_no_card_full_chain(tmp_path, monkeypatch, cal):  # n
 def test_reconcile_skips_pre_ledger_book(tmp_path, monkeypatch, cal):  # noqa: F811
     """过渡窗口: P1-B1 之前落的簿没有 ledger 键 → 对账跳过板层, 不报 book_card_not_recomputed。"""
     from app.services import swing_settlement as ss
+    stats = {"cells": {"macd_golden|long": {"n": 200, "excess": 0.1, "ci_low": 0.01, "ci_high": 0.2}},
+             "window": None, "data_end": None}
+    monkeypatch.setattr(sl, "artifact_stats", lambda config_dir=None: stats)
+    monkeypatch.setattr(sl, "_today", lambda: SIG_DAY)     # P1-B2: 无当月复核 = fail-closed, 这里要有账本才出卡
     watch = _setup(tmp_path, monkeypatch, regime_state=None, spy_ok=True)
     built = wb.build_day(tmp_path, _empty_repo(tmp_path), SIG_DAY, as_of_close=SIG_DAY, watch=watch,
                          pm=wv.permission(tmp_path))

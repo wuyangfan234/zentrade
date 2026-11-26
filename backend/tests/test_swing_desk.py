@@ -20,10 +20,19 @@ def _sig(rule, symbol, side, **kw):
 DAY = date(2026, 10, 13)
 
 
-def test_defaults_are_three_plus_three():
-    assert len(sd.DEFAULT_LONG) == 3 and len(sd.DEFAULT_SHORT) == 3
-    assert "phantom_4h_short" not in sd.DEFAULT_SHORT
-    assert "evo" not in sd.DEFAULT_LONG
+def test_defaults_follow_ledger_gate():
+    """P1-B2: 默认值只收过 A4 门槛且有留出段证据的规则。产物没有留出段拆分 → 多头默认为空;
+    空头保留全库唯一过 BH 的 tv_halftrend 且排第一; 默认值里不得有账本判待定/冷冻的规则。"""
+    from app.opportunity import strategy_ledger as sl
+    assert sd.DEFAULT_LONG == ()
+    assert sd.DEFAULT_SHORT[0] == "tv_halftrend"
+    assert "phantom_4h_short" not in sd.DEFAULT_SHORT and not hasattr(sd, "CORE_FALLBACK_LONG")
+    cells = sl.artifact_stats()["cells"]
+    for side, ids in (("long", sd.DEFAULT_LONG), ("short", sd.DEFAULT_SHORT)):
+        for r in ids:
+            c = cells[sl.cell_key(r, side)]
+            assert sl.classify(c["n"], c["excess"], c["ci_low"], c["ci_high"]) == sl.ACTIVE
+    assert sd.strategies_from_ruleset(None)[0] == ()
 
 
 def test_geometry_long_formula_nvda_example():
@@ -70,7 +79,8 @@ def test_compose_requires_phantom_gate():
         _sig("phantom_4h", "LLY", "long", score=80),
     ]
     closes = {"NVDA": 180.0, "AMD": 200.0, "LLY": 900.0}
-    out = sd.compose_boards(signals=signals, closes=closes, as_of=DAY, atr={s: 5.0 for s in closes}, short_ok=True)
+    out = sd.compose_boards(signals=signals, closes=closes, as_of=DAY, atr={s: 5.0 for s in closes}, short_ok=True,
+                            long_rules=("macd_golden", "volume_price_surge"))
     syms_l = {c["symbol"] for c in out["long"]}
     assert "NVDA" not in syms_l, "weak-tape NVDA long without 4h must be gated out"
     assert "LLY" in syms_l
@@ -117,7 +127,8 @@ def test_score_counts_strategy_hits_and_caps():
         signals.append(_sig("macd_golden", sym, "long"))
         signals.append(_sig("phantom_4h", sym, "long", score=90 - i))
     out = sd.compose_boards(signals=signals, closes={s: 10.0 for s in "ABCDEF"}, as_of=DAY,
-                            atr={s: 0.5 for s in "ABCDEF"}, max_per_side=5)
+                            atr={s: 0.5 for s in "ABCDEF"}, max_per_side=5,
+                            long_rules=("tv_smc_structure", "volume_price_surge", "macd_golden"))
     assert len(out["long"]) == 5
     assert out["long"][0]["hit_count"] == 3
     assert out["long"][0]["score"] >= 3.0

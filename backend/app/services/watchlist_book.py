@@ -151,7 +151,8 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
         return out
     out["swing_rules"] = {"long": board["long_rules"], "short": board["short_rules"]}   # 冻结本日 3+3 (板读这份)
     out["tiebreak"] = board.get("tiebreak")       # 冻结同分卡的先后口径 (swing_desk.tiebreak_for_day 读这份)
-    # P1-B1 冻结本日策略账本切片 (swing_desk.ledger_for_day 读这份)。键总写 (开关关/无复核 = None):
+    # P1-B1 冻结本日策略账本切片 (swing_desk.ledger_for_day 读这份)。键总写; P1-B2 起新簿冻结的总是切片
+    # (status ok / disabled / unavailable), 不再冻结 None (None 只会出现在重建 P1-B1 之前的旧簿时)。
     # 有这个键 = P1-B1 之后落的簿, 对账按它重算; 没有 = 旧簿, 对账跳过板层 (swing_settlement.reconcile)。
     out["ledger"] = board["meta"].get("ledger") if isinstance(board["meta"].get("ledger"), dict) else None
     if board["meta"].get("short_gate") is None and board["meta"].get("raw_short_hits"):

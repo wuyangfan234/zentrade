@@ -24,23 +24,31 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ── 默认 3+3 (10-15 产品决策: 可在规则集手动改; 初值按自选池超额 R 选) ──────────
-# 证据: backend/config/watchlist_rule_history.json 2022-01~2026-09 同票随机日基线。
-DEFAULT_LONG = (
-    "tv_smc_structure",      # excess +0.40 (n=43, p=0.025)
-    "volume_price_surge",    # excess +0.25 (n=105, p=0.085)
-    "macd_golden",           # excess +0.19 (n=228, p=0.073)
-)
-DEFAULT_SHORT = (
-    "tv_smc_structure",      # sell→short excess +0.08 (n=74)
-    "tv_chandelier_exit",    # excess +0.06 (n=610)
-    "tv_halftrend",          # excess +0.06 (n=955)
+# ── 默认 3+3 (只在 data/rules/swing.json 缺失/为空时用; 生产在设置页手动配) ──────────────
+# P1-B2 (2026-11-26) 规则: 默认值只收「按账本过 A4 门槛 (n ≥ 30 且 CI 下限 > 0) 且该结论在留出段
+# (2025-07-01 起, rank_lab.HOLDOUT_START) 成立」的规则; 账本判待定/冷冻的规则不得进默认值。
+# 现状: 账本唯一来源 backend/config/swing_rule_history.json (tight-v1, 窗口 2023-01-03 ~ 2026-10-30) 只有全窗口汇总,
+# 没有留出段拆分 → 留出段这一条对任何多头规则都无法验证; 评估协议 (docs/OPP-FACTOR-NEXT-20261126.md A6-0 第 3/8 条)
+# 又禁止用全窗超额选规则。全窗口里唯一过 A4 的多头是 tv_zlsma_cross (n=601, 超额 +0.127, CI [+0.001, +0.252]),
+# 但它没有留出段证据 → 多头默认 = 空 (不出多头卡)。旧默认 smc / 量价齐升 / MACD 金叉 是旧宽卡数, tight-v1 下
+# 超额 −0.148 / −0.203 / −0.112、账本全判待定, 已删除。产物将来带留出段拆分时按同一规则重选。
+DEFAULT_LONG: tuple[str, ...] = ()
+# 空头: tv_halftrend 是全库 39 条里唯一过 BH q=0.10 多重检验的规则 (tight-v1 n=164, 超额 +0.249, CI [+0.147, +0.352],
+# 账本在用), 按 P1-B2 规定优先级不得低于现状 → 保留且排第一。吊灯 (超额 +0.036, CI 跨 0 = 观察) /
+# SMC 结构 (n=29 < 30 = 待定) 不过 A4 门槛, 移出默认值。
+DEFAULT_SHORT: tuple[str, ...] = (
+    "tv_halftrend",
 )
 # P1-B1 (2026-11-26): 卡分 = 策略账本收缩超额 Σ excess × n / (n + k) (app.opportunity.strategy_ledger),
 # 是每侧排序主键; 旧「命中条数 + 固定 EXCESS_WEIGHT」公式已删除。
 HOLD_DAYS = 5
 MAX_PER_SIDE = 5
 CONTRACT = "swing-desk-tight-v1"
+GATE_VERSION = "tight-v1"     # 4h 门 + 紧几何属于 tight-v1 合同; 写进卡上 gate_id
+# 出卡时机 (P1-B2; T2 已被产品砍掉): T0 = 盘后快照出卡; T1 = 盘中整点 regime 切换后, 新开方向用上一收盘的信号 +
+# 现价重算几何立即出的卡 (有效期 = 切换当日 + 次日; 一律观察级, 不进纸面下单簿)。
+TIMING_T0, TIMING_T1 = "T0", "T1"
+TIMING_TIERS = (TIMING_T0, TIMING_T1)
 # 同分卡的先后 (2026-11-10 产品决策「同分卡改成固定散列排序」): 分数 / 命中条数 / 排序因子名次 / 4h 门类型都相同时,
 # 按 sha256("<信号日>:<代码>") 排。同一天同一批候选结果固定可复现, 不再让代码字母靠后的票长期被砍
 # (审计: 一个运行实例上 4 次截断全部按字母砍, 被砍的卡回放并不更差)。已落盘的旧簿没有 tiebreak 字段 = "symbol" (当时的字母序),
@@ -153,9 +161,8 @@ def swing_config_path(data_dir: Path) -> Path:
     return Path(data_dir) / "rules" / "swing.json"
 
 
-# 默认 3+3 里的策略在开源核心版里可能不存在 (第三方移植不随核心版分发): 缺失时按下面顺序补位。
-# 补位只用原创内置策略; 做空侧原创策略没有翻空信号 → 留空 (机会板只出多头卡)。
-CORE_FALLBACK_LONG = ("volume_price_surge", "macd_golden", "trend_breakout")
+# 默认值里的策略在开源核心版里可能不存在 (第三方移植不随核心版分发): 缺失就去掉, 不补位。
+# P1-B2: 旧补位 (量价齐升 / MACD 金叉 / trend_breakout) 在账本里全是待定, 补进来等于绕过账本, 已删除。
 
 
 def _builtin_ids() -> set[str] | None:
@@ -171,14 +178,7 @@ def _available_defaults() -> tuple[tuple[str, ...], tuple[str, ...]]:
     have = _builtin_ids()
     if have is None:
         return DEFAULT_LONG, DEFAULT_SHORT
-    lg = [x for x in DEFAULT_LONG if x in have]
-    for x in CORE_FALLBACK_LONG:
-        if len(lg) >= 3:
-            break
-        if x in have and x not in lg:
-            lg.append(x)
-    sh = [x for x in DEFAULT_SHORT if x in have]
-    return tuple(lg), tuple(sh)
+    return tuple(x for x in DEFAULT_LONG if x in have), tuple(x for x in DEFAULT_SHORT if x in have)
 
 
 def strategies_from_ruleset(data_dir: Path | None) -> tuple[tuple[str, ...], tuple[str, ...]]:
@@ -302,14 +302,23 @@ def tie_key(as_of: date, symbol: str, mode: str = TIEBREAK) -> str:
     return hashlib.sha256(f"{as_of.isoformat()}:{symbol}".encode()).hexdigest()
 
 
+def gate_id(direction_gate: str | None, gate: str) -> str:
+    """卡归因 gate_id: "<方向门 id>+4h.<event|state|none>@<GATE_VERSION>"; 方向门读不到 = "unknown"。"""
+    return f"{direction_gate or 'unknown'}+4h.{gate}@{GATE_VERSION}"
+
+
 def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...], close: float | None,
-          atr: float | None, gate: str, as_of: date, ledger: dict | None = None) -> dict[str, Any] | None:
-    """ledger = strategy_ledger.ledger_for 的切片 (None = 回滚开关关/历史月无复核: 不按档位过滤, 分数用产物 excess/n)。
+          atr: float | None, gate: str, as_of: date, ledger: dict | None = None, regime_state: str | None = None,
+          direction_gate: str | None = None, timing_tier: str = TIMING_T0) -> dict[str, Any] | None:
+    """ledger = strategy_ledger.ledger_for 的切片 (status disabled = 回滚开关关, unavailable = 该月无复核 → 全部待定;
+    None 只来自 P1-B1 之前落的旧簿: 不按档位过滤, 分数用产物 excess/n)。
+    卡归因五字段 (P1-B2, 只追加): regime_state / gate_id / ledger_tier / score_components / timing_tier, 契约见
+    docs/P1-B2-CARD-ATTRIBUTION.md。
     待定/冷冻档规则不算命中; 参与打分的非 rank_* 规则全是观察档 → ledger_tier="observe" (只上板, 不进纸面下单簿)。
     rank_* 不参与卡档位判定 (否则「rank + 观察」会绕过观察不进簿); 只有 rank_* 命中 → ledger_tier=None (沿用旧行为)。"""
     from app.opportunity import strategy_ledger as sl
     seen = {h.get("rule") for h in hits}
-    hit_rules, parts, tiers = [], [], []
+    hit_rules, parts, tiers, comp_tiers = [], [], [], []
     for r in rule_ids:
         if r not in seen:
             continue
@@ -318,6 +327,7 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
             continue
         hit_rules.append(r)
         parts.append((ex, n))
+        comp_tiers.append("rank" if r.startswith("rank_") else sl.TIER_CODE.get(tier, tier))
         if not r.startswith("rank_"):
             tiers.append(tier)
     if not hit_rules:
@@ -327,6 +337,9 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
         return None
     k = float(ledger["k"]) if ledger and isinstance(ledger.get("k"), (int, float)) else sl.DEFAULT_K
     score = sl.card_score(parts, k)
+    components = [{"strategy": r, "n": int(n or 0), "excess": None if ex is None else float(ex),
+                   "shrunk": round(sl.shrink(ex, n, k), 4), "tier": t}
+                  for r, (ex, n), t in zip(hit_rules, parts, comp_tiers)]
     ledger_tier = (None if not tiers
                    else "active" if any(t in sl.PAPER_TIERS for t in tiers) else "observe")
     pos = [h["rank_pos"] for h in hits if isinstance(h.get("rank_pos"), int)]
@@ -350,6 +363,11 @@ def _card(*, symbol: str, side: str, hits: list[dict], rule_ids: tuple[str, ...]
         "as_of": as_of.isoformat(),
         # 0.52.0: 排序因子给的名次 (1 = 当天 4h 门内值最高); 没勾排序因子 = None。同分卡按它排先后
         "rank_pos": min(pos) if pos else None,
+        # P1-B2 卡归因 (只追加; ledger_tier 在上面): 出卡那一刻的市场状态 / 门 / 逐规则分项 / 出卡时机
+        "regime_state": regime_state,
+        "gate_id": gate_id(direction_gate, gate),
+        "score_components": {"rules": components, "k": k, "total": round(score, 4)},
+        "timing_tier": timing_tier,
     }
 
 
@@ -359,19 +377,28 @@ def _ledger_hits(hits: list[dict], rules: tuple[str, ...], side: str, ledger: di
     return any(sl.lookup(ledger, r, side)[0] in sl.SCORING_TIERS for r in rules if r in seen)
 
 
-def ledger_for_day(data_dir: Path, day: date, regime_state: str | None) -> dict | None:
-    """该信号日用哪份账本切片: 簿已落盘且冻结了账本 → 用簿里那份 (板与纸面始终同一批卡);
-    簿已落盘但没有账本 (P1-B1 之前的旧簿) → None (不按档位过滤); 还没落簿 → 本月复核 (开关关 → None)。"""
-    from app.opportunity import strategy_ledger as sl
+def _frozen_book(data_dir: Path, day: date) -> dict | None:
+    """该信号日已落盘、且冻结了 3+3 的 tight-v1 簿 (swing_rules.long 是列表); 否则 None。
+    P1-B2: 多头默认可以为空 (DEFAULT_LONG = ()), 所以按「是列表」认冻结, 不再要求非空
+    (旧簿的 long 总是非空列表, 认法对旧簿不变)。"""
     from app.services import watchlist_book as wb
     try:
         raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
-        fr = raw.get("swing_rules") if isinstance(raw, dict) else None
-        if isinstance(fr, dict) and fr.get("long"):
-            lg = raw.get("ledger")
-            return lg if isinstance(lg, dict) and isinstance(lg.get("cells"), dict) else None
     except (OSError, ValueError):
-        pass
+        return None
+    fr = raw.get("swing_rules") if isinstance(raw, dict) else None
+    return raw if isinstance(fr, dict) and isinstance(fr.get("long"), list) else None
+
+
+def ledger_for_day(data_dir: Path, day: date, regime_state: str | None) -> dict | None:
+    """该信号日用哪份账本切片: 簿已落盘且冻结了账本 → 用簿里那份 (板与纸面始终同一批卡);
+    簿已落盘但没有账本 (P1-B1 之前的旧簿) → None (不按档位过滤, 保持旧簿当初的出卡);
+    还没落簿 → strategy_ledger.ledger_for (总是切片: ok / disabled / unavailable, unavailable = fail-closed)。"""
+    from app.opportunity import strategy_ledger as sl
+    raw = _frozen_book(data_dir, day)
+    if raw is not None:
+        lg = raw.get("ledger")
+        return lg if isinstance(lg, dict) and isinstance(lg.get("cells"), dict) else None
     return sl.ledger_for(data_dir, day, regime_state)
 
 
@@ -394,6 +421,11 @@ def compose_boards(
     observe: set[str] | None = None,
     short_observe: bool = False,
     ledger: dict | None = None,
+    regime_state: str | None = None,
+    direction_gate: str | None = None,
+    t1_sides: tuple[str, ...] = (),
+    live_closes: dict[str, float] | None = None,
+    t1_info: dict | None = None,
 ) -> dict[str, Any]:
     """纯函数: 信号快照 → LONG/SHORT 板。
 
@@ -410,16 +442,25 @@ def compose_boards(
         观察级卡带 "grade": "observe" (只追加新键), 纸面下单簿 (watchlist_book) 不收。
     ledger: 策略账本切片 (P1-B1)。排序主键 = 收缩超额卡分 (见 _card); 冷冻档规则不算命中;
         只靠观察档规则出的卡带 ledger_tier="observe" + grade="observe", 纸面下单簿不收。
+    regime_state / direction_gate: 只写进卡归因 (regime_state / gate_id), 不改出卡结果。
+    t1_sides: 盘中 regime 切换新开的方向 (P1-B2 T1)。这些方向的卡用 live_closes (现价) 代替信号日收盘重算紧几何
+        (公式不变), 带 timing_tier="T1" + t1_info, 一律观察级; 没有现价的票不出 (skipped reason "t1_no_live_price")。
+        新参数全有缺省值: 不传时出卡结果与 P1-B1 相同, 卡上只多五个归因键。
     atr 缺的票不出卡 (旧信号表没有 atr → 板为空, 等下一次盘后扫描)。
     """
     ph_l, ph_s = _phantom_maps(signals)
     h4_state = h4_state or {}
     atr = atr or {}
+    t1 = set(t1_sides or ())
+    live_closes = live_closes or {}
+
+    def px(side: str) -> dict[str, float]:
+        return live_closes if side in t1 else closes
     rank_rows: list[dict] = []
     if rank_values and any(str(r).startswith("rank_") for r in long_rules):
         from app.services import rank_lab
         gated = set(ph_l) | {s for s, v in h4_state.items() if v == "long"}
-        elig = {s for s in gated if geometry("long", closes.get(s), atr.get(s)) is not None}
+        elig = {s for s in gated if geometry("long", px("long").get(s), atr.get(s)) is not None}
         rank_rows = rank_lab.board_hits(rank_values, tuple(long_rules), elig)
     hits_l = _hits_by_symbol(list(signals) + rank_rows, long_rules, "long")
     hits_s = _hits_by_symbol(signals, short_rules, "short")
@@ -428,6 +469,9 @@ def compose_boards(
 
     def side_cards(side: str, hits_by: dict, events: dict, rules: tuple[str, ...]) -> list[dict]:
         out = []
+        cl = px(side)
+        timing = TIMING_T1 if side in t1 else TIMING_T0
+        attr = {"ledger": ledger, "regime_state": regime_state, "direction_gate": direction_gate, "timing_tier": timing}
         for sym, hits in hits_by.items():
             if sym in events:
                 gate = "event"
@@ -435,22 +479,27 @@ def compose_boards(
                 gate = "state"
             else:
                 if shadow:
-                    b = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
-                              atr=atr.get(sym), gate="none", as_of=as_of, ledger=ledger)
+                    b = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=cl.get(sym),
+                              atr=atr.get(sym), gate="none", as_of=as_of, **attr)
                     if b is not None:
                         gate_blocked.append({**b, "shadow": "gate_4h"})
                 continue
-            c = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=closes.get(sym),
-                      atr=atr.get(sym), gate=gate, as_of=as_of, ledger=ledger)
+            c = _card(symbol=sym, side=side, hits=hits, rule_ids=rules, close=cl.get(sym),
+                      atr=atr.get(sym), gate=gate, as_of=as_of, **attr)
             if c is None:
                 if not _ledger_hits(hits, rules, side, ledger):
-                    reason = "ledger_inactive"       # 命中规则全在待定/冷冻档
-                elif not (closes.get(sym) and atr.get(sym)):
+                    reason = "ledger_inactive"       # 命中规则全在待定/冷冻档 (或账本不可用)
+                elif side in t1 and not live_closes.get(sym):
+                    reason = "t1_no_live_price"      # T1 必须用现价重算几何, 取不到现价不出
+                elif not (cl.get(sym) and atr.get(sym)):
                     reason = "no_atr_or_close"
                 else:
                     reason = "bad_geometry"
                 skipped.append({"symbol": sym, "side": side, "reason": reason})
                 continue
+            if timing == TIMING_T1:
+                c["signal_close"] = closes.get(sym)          # 上一收盘 (信号日); close 字段 = 重算用的现价
+                c["t1"] = dict(t1_info or {})
             out.append(c)
         out.sort(key=lambda c: (-c["score"], -c["hit_count"], c.get("rank_pos") or 99, c["gate"] != "event",
                                 tie_key(as_of, c["symbol"], tiebreak)))
@@ -469,7 +518,7 @@ def compose_boards(
     observe = observe or set()
     for c in long_ok + short_ok_cards:
         if (c["symbol"] in observe or (short_observe and c["side"] == "short")
-                or c.get("ledger_tier") == "observe"):
+                or c.get("ledger_tier") == "observe" or c.get("timing_tier") == TIMING_T1):
             c["grade"] = "observe"
     long_cards, short_cards = long_ok[:n_long], short_ok_cards[:n_short]
     extra: dict[str, Any] = {}
@@ -496,6 +545,7 @@ def compose_boards(
             "short_gate": short_ok,
             "skipped": skipped,
             "ledger": ledger,
+            **({"t1": {**(t1_info or {}), "sides": sorted(t1), "live_n": len(live_closes)}} if t1 else {}),
             "geometry": {"entry": [K_NEAR, K_FAR], "stop_atr": STOP_A, "target_atr": TARGET_A,
                          "entry_days": ENTRY_DAYS, "hold_days": HOLD_DAYS},
         },
@@ -505,36 +555,74 @@ def compose_boards(
 def rules_for_day(data_dir: Path, day: date) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """该信号日用哪套 3+3: 纸面下单簿已落盘 → 用簿里冻结的那套 (板与纸面始终同一批卡);
     还没落簿 (盘后到次日 08:00 前) → 当前 swing.json (改 3+3 即时预览)。"""
-    from app.services import watchlist_book as wb
-    try:
-        raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
-        fr = raw.get("swing_rules") if isinstance(raw, dict) else None
-        # 做多一侧落簿时总有值 (缺省会补默认); 做空可以为空 —— 开源核心版没有翻空策略, 做空默认就是空。
-        # 旧判断要求两侧都非空, 核心版落簿后改 3+3 会让板与纸面簿不再是同一批卡 (2026-11-10 审计 #6)
-        if isinstance(fr, dict) and fr.get("long"):
-            return tuple(fr["long"]), tuple(fr.get("short") or ())
-    except (OSError, ValueError):
-        pass
+    # 两侧都可以为空 (P1-B2 多头默认为空; 开源核心版没有翻空策略)。旧判断要求两侧都非空, 核心版落簿后改 3+3
+    # 会让板与纸面簿不再是同一批卡 (2026-11-10 审计 #6); 现在按 _frozen_book 认 (long 是列表即冻结)。
+    raw = _frozen_book(data_dir, day)
+    if raw is not None:
+        fr = raw["swing_rules"]
+        return tuple(fr["long"]), tuple(fr.get("short") or ())
     return strategies_from_ruleset(data_dir)
 
 
 def tiebreak_for_day(data_dir: Path, day: date) -> str:
     """该信号日同分卡用哪种先后: 簿已落盘 → 簿里冻结的那种 (旧簿没有这个字段 = 字母序); 还没落簿 → 现行散列。"""
-    from app.services import watchlist_book as wb
-    try:
-        raw = json.loads(wb.book_path(data_dir, day).read_text(encoding="utf-8"))
-        fr = raw.get("swing_rules") if isinstance(raw, dict) else None
-        if isinstance(fr, dict) and fr.get("long"):
-            tb = raw.get("tiebreak")
-            return tb if isinstance(tb, str) and tb else TIEBREAK_LEGACY
-    except (OSError, ValueError):
-        pass
+    raw = _frozen_book(data_dir, day)
+    if raw is not None:
+        tb = raw.get("tiebreak")
+        return tb if isinstance(tb, str) and tb else TIEBREAK_LEGACY
     return TIEBREAK
 
 
-def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False) -> dict[str, Any] | None:
+def t1_plan(reg: dict | None, data_dir: Path | None, day: date) -> dict | None:
+    """P1-B2 T1 状态切换: 盘中整点重判把 regime 降了一档以上 (regime_for_snapshot 的 source == "intraday", 只降不升),
+    且某个方向在快照态下上限为 0、切换后 > 0 → 这些方向今天立即出 T1 卡。没有切换 / 没有新开方向 → None。
+    有效期 = 切换当日 (快照日的下一个交易日) + 次日, 与 ENTRY_DAYS=2 (信号日后 2 个交易日) 是同一个窗口。"""
+    if not reg or reg.get("source") != "intraday":
+        return None
+    from app.opportunity import regime
+    before = regime.caps(reg.get("snapshot_state"), data_dir) or {}
+    after = reg.get("caps") or {}
+    sides = tuple(s for s in ("long", "short") if before.get(s) == 0 and (after.get(s) or 0) > 0)
+    if not sides:
+        return None
+    try:
+        from app.market_clock import us_clock
+        live_day = us_clock.next_trading_day(day)
+        until = us_clock.next_trading_day(live_day)
+    except Exception:
+        return None
+    return {"sides": sides, "day": live_day.isoformat(), "valid_until": until.isoformat(),
+            "from": reg.get("snapshot_state"), "to": reg.get("state"), "switched_at": reg.get("as_of"),
+            "slot": reg.get("slot")}
+
+
+def mark_headwind(cards: list[dict], reg: dict | None) -> list[dict]:
+    """P1-B2: 盘中 regime 切换后 (source == "intraday"), 切换后上限为 0 的方向上还没成交的卡 (pending / in_zone,
+    不含 T1 卡) 标 headwind=True (卡面「逆风」, 同组内排后)。只改本次返回的行, 不撕单、不改写已落盘的簿卡。"""
+    if not reg or reg.get("source") != "intraday":
+        return cards
+    caps = reg.get("caps") or {}
+    for c in cards:
+        if (c.get("state") in ("pending", "in_zone") and c.get("timing_tier") != TIMING_T1
+                and caps.get(c.get("side")) == 0):
+            c["headwind"] = True
+    return cards
+
+
+def _direction_gate_id(data_dir: Path) -> str | None:
+    try:
+        from app.opportunity import direction_gate
+        return direction_gate.active(data_dir).id
+    except Exception:
+        return None
+
+
+def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False,
+                  live_prices=None) -> dict[str, Any] | None:
     """某个信号日的板 (纯计算, 不写文件)。没有该日信号表 → None。repo=None → 空头门按数据缺处理 (不出空)。
-    shadow=True: 另给没上板的同几何候选 (compose_boards 的 shadow)。"""
+    shadow=True: 另给没上板的同几何候选 (compose_boards 的 shadow)。
+    live_prices: 可选 callable(symbols: set[str], live_day: date) -> {symbol: 现价}; 只在盘中 regime 切换
+    (t1_plan) 时调用, 给新开方向的 T1 卡重算几何。不传 (落簿 / 对账 / 推送) → 新开方向不出卡 (T1 只上实时板)。"""
     snap = load_watchlist_snapshot(data_dir, day)
     if snap is None:
         return None
@@ -558,13 +646,24 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
     rv = snap.get("rank_values") if isinstance(snap.get("rank_values"), dict) else None
     grades = snap.get("gate_grade") if isinstance(snap.get("gate_grade"), dict) else {}
     observe = {s for s, g in grades.items() if g == "observe"}
+    plan = t1_plan(reg, data_dir, day)
+    live: dict[str, float] = {}
+    if plan is not None and live_prices is not None:
+        try:
+            raw = live_prices(set(atr), date.fromisoformat(plan["day"])) or {}
+            live = {k: float(v) for k, v in raw.items() if isinstance(v, (int, float)) and v > 0}
+        except Exception as e:
+            logger.warning("swing_desk: T1 live prices unavailable: %s", type(e).__name__)
     boards = compose_boards(signals=list(snap.get("signals") or []), closes=closes, as_of=day,
                             long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok,
                             rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow,
                             max_long=reg["caps"]["long"] if reg else None,
                             max_short=reg["caps"]["short"] if reg else None,
                             observe=observe, short_observe=reg is not None,
-                            ledger=ledger_for_day(data_dir, day, reg["state"] if reg else None))
+                            ledger=ledger_for_day(data_dir, day, reg["state"] if reg else None),
+                            regime_state=reg["state"] if reg else None, direction_gate=_direction_gate_id(data_dir),
+                            t1_sides=plan["sides"] if plan else (), live_closes=live,
+                            t1_info={k: v for k, v in plan.items() if k != "sides"} if plan else None)
     if reg is not None:
         boards["meta"]["regime"] = reg
     if gate_info is not None:
@@ -598,10 +697,11 @@ def regime_for_snapshot(data_dir: Path, snap: dict, day: date | None = None) -> 
     return out
 
 
-def build(data_dir: Path, *, day: date | None = None, repo=None) -> dict[str, Any]:
-    """读最近自选信号快照 + 3+3 → 两板 (严格只读, 不写 swing.json: 该文件存在与否决定纸面许可)。无快照 → 空板。"""
+def build(data_dir: Path, *, day: date | None = None, repo=None, live_prices=None) -> dict[str, Any]:
+    """读最近自选信号快照 + 3+3 → 两板 (严格只读, 不写 swing.json: 该文件存在与否决定纸面许可)。无快照 → 空板。
+    live_prices: 透传给 board_for_day (盘中 regime 切换时出 T1 卡)。"""
     day = day or latest_watchlist_day(data_dir)
-    boards = board_for_day(data_dir, day, repo) if day else None
+    boards = board_for_day(data_dir, day, repo, live_prices=live_prices) if day else None
     if boards is None:
         long_rules, short_rules = strategies_from_ruleset(data_dir)
         return {"contract": CONTRACT, "available": False, "as_of": None, "long_rules": list(long_rules),
@@ -871,7 +971,8 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     from app.services import watchlist_book as wb
     now = us_clock.market_datetime(us_clock.now())
     today = today or now.date()
-    base = build(data_dir, repo=repo)
+    base = build(data_dir, repo=repo,
+                 live_prices=lambda syms, d: {s: v[0] for s, v in _live_prices(repo, syms, d, now).items()})
     base["history"] = []
     base["refresh"] = refresh_info(data_dir, today)
     if not base.get("available"):
@@ -957,7 +1058,8 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
                 history.append(dict(row, state="void", void_reason="not_in_watchlist",
                                     voided_at=(paper.get(cid) or {}).get("at")))
                 continue
-            if book is not None and cid not in in_book:
+            t1 = c.get("timing_tier") == TIMING_T1   # P1-B2: 簿在切换前就落了, T1 卡本来就不在簿里, 不当作被排除
+            if book is not None and cid not in in_book and not t1:
                 history.append(dict(row, state="void", void_reason=excluded.get((c["symbol"], c["side"])) or "not_in_book",
                                     voided_at=(book or {}).get("built_at")))
                 continue
@@ -976,7 +1078,9 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
                                     voided_at=_last_entry_close(d).isoformat()))
                 continue
             row["state"], row["blocked"] = "pending", None
-            if cid in conflict_ids:
+            if t1:
+                row["blocked"] = "observe_only"      # T1 一律观察级: 上板展示, 交易环不挂单
+            elif cid in conflict_ids:
                 row["blocked"] = "direction_conflict"
             elif c["symbol"] in held_any:
                 row["blocked"] = "holding_other"
@@ -1039,6 +1143,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
         if p and c["state"] == "holding" and c.get("entry_price"):
             sg = 1 if c["side"] == "long" else -1
             c["r_now"] = round(sg * (p - c["entry_price"]) / c["risk"], 2) if c["risk"] else None
+    mark_headwind(cards, (base.get("meta") or {}).get("regime"))   # P1-B2: 盘中切换后旧方向未成交卡标逆风
     # 0.27.0 卡面裁决 + 两个数字 (回区率 / 期望美元): 裁决只看交易环会不会挂这张单; 数字按状态查回放表
     try:
         from app.services import swing_verdict as sv
@@ -1054,7 +1159,7 @@ def build_live(data_dir: Path, *, repo=None, loop=None, today: date | None = Non
     for side in ("long", "short"):
         base[side] = sorted([c for c in cards if c["side"] == side],
                             key=lambda c: (order.get(c["state"], 9), bool(c.get("blocked")) or c.get("verdict") == "skip",
-                                           -c["score"],
+                                           bool(c.get("headwind")), -c["score"],
                                            abs(c.get("dist_pct") or 0), c["symbol"], c.get("signal_day") or ""))
     # 0.31.0 盘前定稿 (10-21 产品决策): 09:20 ET 起卡面带盘前一行; 同向放量卡在同组内排前 (只重排, 不增减卡)
     try:
