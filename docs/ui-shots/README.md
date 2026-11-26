@@ -5,13 +5,14 @@
 `frontend/src/components/opportunities/__fixtures__/p1scenes.ts`, 用 [tools/dump-scenes.mjs](tools/dump-scenes.mjs) 导成 JSON,
 [tools/shoot.py](tools/shoot.py) 截图并自检。全部为虚拟数据, 非实时行情。
 
-## 未交付项 (如实说明)
+## 交付边界 (如实说明)
 
-- **机会页账本的 95% 区间: 真实数据下未交付。** 区间依赖后端透传 `ci_low` / `ci_high`, 现行后端
-  `strategy_ledger.ledger_view` 只给 `{n, excess, tier}`; 本卡禁改后端, 已另开后端卡 #11。
-  前端已做成向前兼容: 账本格一旦带这两个字段就按全表同一刻度画区间条, 缺值的行写「区间未返回」且条宽不变;
-  #11 合并后前端无需再改。模拟 #11 合并后的效果见 [states/ledger-ci-forward-compat.png](states/ledger-ci-forward-compat.png)。
-  主截图里账本各行写「区间未返回」, 即现行后端下的真实样子。
+- **机会页账本的 95% 区间: P1 全套 (#10 + #11) 都合入后交付。** 区间由后端卡 #11 (已合入 main `2faa44e`,
+  `strategy_ledger._cell_view` 输出 `ci_low` / `ci_high`) 提供, 本卡 #10 负责前端按全表同一刻度画区间条。
+  **单独合 #10 时区间会显示「区间未返回」**, 不是只靠 #10 就生效; 两卡都合入后, 历史旧簿缺这两个字段的行同样显示「区间未返回」, 条宽不变不错位。
+- **账本区间截图为 #11 合并后的预期效果**: [states/ledger-ci-forward-compat.png](states/ledger-ci-forward-compat.png)
+  用的是 `__fixtures__/p1scenes.ts` 里字段形状对齐 (`ci_low` / `ci_high`) 的模拟值, 不是真实后端数据。
+  主截图里账本各行写「区间未返回」, 对应的是本分支 (基于 `1a57c1c`, 未含 #11) 单独运行时的样子。
 - **冷冻理由**: 账本切片不带「哪条触发冷冻」。只有拿到区间上限且 < 0 时才写「区间上限 X < 0」, 否则写
   「冷冻 · 触发条件未返回 (复核连负 / 区间上限为负 / 延续上月冷冻 之一)」, 不猜具体原因。
 

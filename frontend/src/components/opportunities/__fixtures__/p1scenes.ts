@@ -43,7 +43,7 @@ export const OPP = {
     strategies: [{ id: 'tv_zlsma_cross', name: 'ZLSMA 金叉' }], score_components: { rules: [{ strategy: 'tv_zlsma_cross', n: 601, excess: 0.127, shrunk: 0.121, tier: 'active' }], k: 30, total: 0.121 } }],
   { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: { 'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用' } } } }), ['tv_zlsma_cross'], []),
   empty: page(swingWith([], { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: { 'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用' } } } }), ['tv_zlsma_cross'], []),
-  /** 模拟后端卡 #11 合并后: 账本格带 ci_low / ci_high (现行后端不带) */
+  /** #11 合并后的预期: 账本格带 ci_low / ci_high (字段形状对齐 strategy_ledger._cell_view, 数值为模拟) */
   ci: page(swingWith([], { regime: REGIME_CALM, ledger: { ...LEDGER, regime: '进攻', cells: {
     'tv_zlsma_cross|long': { n: 601, excess: 0.127, tier: '在用', ci_low: 0.001, ci_high: 0.252 },
     'tv_halftrend|short': { n: 164, excess: 0.249, tier: '在用', ci_low: 0.147, ci_high: 0.352 },

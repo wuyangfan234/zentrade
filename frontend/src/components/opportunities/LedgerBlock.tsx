@@ -1,9 +1,8 @@
 /** 机会页「策略账本」(P1-B1 五个档位): 按 在用 / 观察 / 待定 / 冷冻 / 复活 分组。
  * 数据 = 板 meta.ledger (strategy_ledger.ledger_for 在当前 regime 的切片), 与出卡同源 (ledger_for_day 板/簿同源)。
  * 待定 / 冷冻 = 不出卡: 除颜色外有图标 + 「不出卡」文字 + 虚线左边, 一眼可辨。
- * 区间 (向前兼容): 后端切片现只带 n / excess / tier (ledger_view 未透传 ci_low / ci_high), 真实数据下本列未交付;
- *   cells["rule|side"] 一旦带 ci_low + ci_high 就按全表同一刻度画区间条 (后端卡 #11 合并即生效, 前端不用再改),
- *   缺值的行写「区间未返回」, 条宽不变, 不错位。 */
+ * 区间: #11 已合入 main (2faa44e), 后端切片 (strategy_ledger._cell_view) 带 ci_low / ci_high, 按全表同一刻度画区间条;
+ *   历史旧簿没有这两个字段时显示「区间未返回」, 条宽不变, 不错位。单独合 #10 (不含 #11) 时区间也显示未返回。 */
 import type { SwingBoardsPayload } from '@/lib/api'
 import { CiAxis, CiBar } from '@/components/opportunities/CiBar'
 import { SIDE_ARROW } from '@/components/opportunities/terms'
