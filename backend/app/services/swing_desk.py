@@ -225,7 +225,7 @@ def save_strategies(data_dir: Path, long_ids: list[str], short_ids: list[str]) -
     try:   # 齿轮保存 3+3 不得抹掉方向门 / regime 开关 (P1-A: 切换与回滚都靠这两个字段)
         prev = json.loads(swing_config_path(data_dir).read_text(encoding="utf-8"))
         if isinstance(prev, dict):
-            out.update({k: prev[k] for k in ("gate", "regime") if k in prev})
+            out.update({k: prev[k] for k in ("gate", "regime", "regime_limits") if k in prev})
     except (OSError, ValueError):
         pass
     dl, ds = _available_defaults()
@@ -495,7 +495,7 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
     long_rules, short_rules = rules_for_day(data_dir, day)
     short_ok = None
     gate_info = None
-    reg = regime_for_snapshot(data_dir, snap)
+    reg = regime_for_snapshot(data_dir, snap, day)
     if reg is not None:
         # P1-A: 空头只在防守态开 (取代 SPY < MA50 单条件); 每侧卡数上限随 regime
         short_ok = reg["state"] == "防守"
@@ -527,18 +527,28 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
     return boards
 
 
-def regime_for_snapshot(data_dir: Path, snap: dict) -> dict | None:
-    """P1-A: 快照里的 regime 三态 → {"state", "as_of", "reasons", "caps"}。
-    rules/swing.json 的 "regime": false (回滚到 tight-v1) 或旧快照没有 regime_state → None (走 SPY < MA50 旧口径)。"""
+def regime_for_snapshot(data_dir: Path, snap: dict, day: date | None = None) -> dict | None:
+    """P1-A: 快照里的 regime 三态 → {"state", "as_of", "reasons", "caps", "source", "snapshot_state"}。
+    rules/swing.json 的 "regime": false (回滚到 tight-v1) 或旧快照没有 regime_state → None (走 SPY < MA50 旧口径)。
+
+    盘中整点快层: 若 data/rules/regime_state.json 是该快照的板生效当天 (快照日的下一个交易日) 由整点评估写入,
+    取 min(快照态, 盘中态) —— 只降不升; 前一交易日 / 盘后写入的状态不影响 (regime.intraday_override)。"""
     from app.opportunity import regime
     if not regime.enabled(data_dir):
         return None
     st = snap.get("regime_state") if isinstance(snap, dict) else None
-    cp = regime.caps(st)
-    if cp is None:
+    if st not in regime.RANK:
         return None
-    return {"state": st, "as_of": snap.get("regime_as_of"), "reasons": list(snap.get("regime_reasons") or []),
-            "caps": cp}
+    out = {"state": st, "as_of": snap.get("regime_as_of"), "reasons": list(snap.get("regime_reasons") or []),
+           "source": "snapshot", "snapshot_state": st}
+    live = regime.intraday_override(data_dir, day) if day is not None else None
+    if live is not None:
+        low = regime.lower(st, live.get("state"))
+        if low != st:
+            out.update(state=low, as_of=live.get("updated_at"), source="intraday",
+                       reasons=list(live.get("reasons") or []), slot=live.get("slot"))
+    out["caps"] = regime.caps(out["state"], data_dir)
+    return out
 
 
 def build(data_dir: Path, *, day: date | None = None, repo=None) -> dict[str, Any]:

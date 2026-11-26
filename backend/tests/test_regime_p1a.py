@@ -322,7 +322,7 @@ def test_attack_and_range_no_short_and_long_caps(tmp_path, monkeypatch, cal):
     assert b["short"] == [] and len(b["long"]) == 3 and b["meta"]["short_gate"] is False
     _setup(tmp_path, monkeypatch, regime_state=R, spy_ok=True)
     b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
-    assert b["short"] == [] and len(b["long"]) == 2
+    assert b["short"] == [] and len(b["long"]) == 3                       # 震荡缺省上限 5
 
 
 def test_regime_switch_off_rolls_back_to_tight_v1(tmp_path, monkeypatch, cal):
@@ -379,3 +379,112 @@ def test_default_gate_unchanged_by_multi_scale_registration(tmp_path):
     from app import optional
     expected = "phantom_4h" if optional.available("app.services.phantom_4h_gate") else "daily_ma50"
     assert dg.active(None).id == expected and dg.active(tmp_path).id == expected
+
+
+# ── review fixes: intraday downgrade reaches the board (only down, same live day) ──
+
+LIVE_DAY = date(2026, 10, 9)        # SIG_DAY (周四) 的下一个交易日
+
+
+def _hourly_state(tmp_path, state, as_of, mode="hourly"):
+    rg._save_state(tmp_path, {"contract": "regime-v1", "state": state, "as_of": as_of.isoformat(), "mode": mode,
+                              "slot": "11:00", "updated_at": f"{as_of.isoformat()}T11:00:00-04:00",
+                              "reasons": ["跌破前20日低"]})
+
+
+def test_intraday_downgrade_applies_to_same_day_board(tmp_path, monkeypatch, cal):
+    watch = _setup(tmp_path, monkeypatch, regime_state=A, spy_ok=True)
+    before = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    assert len(before["long"]) == 3 and before["short"] == []
+    _hourly_state(tmp_path, D, LIVE_DAY)
+    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    assert b["long"] == [] and [c["symbol"] for c in b["short"]] == ["AMD"]
+    assert b["meta"]["regime"]["state"] == D and b["meta"]["regime"]["source"] == "intraday"
+    assert b["meta"]["regime"]["snapshot_state"] == A and b["meta"]["regime"]["caps"] == {"long": 0, "short": 5}
+    built = wb.build_day(tmp_path, _empty_repo(tmp_path), SIG_DAY, as_of_close=SIG_DAY, watch=watch,
+                         pm=wv.permission(tmp_path))
+    assert built["cards"] == []                                            # 多头关、空头观察级不进簿
+
+
+def test_intraday_state_never_upgrades_board(tmp_path, monkeypatch, cal):
+    _setup(tmp_path, monkeypatch, regime_state=D, spy_ok=True)
+    _hourly_state(tmp_path, A, LIVE_DAY)
+    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    assert b["long"] == [] and b["meta"]["regime"]["state"] == D and b["meta"]["regime"]["source"] == "snapshot"
+
+
+@pytest.mark.parametrize("as_of,mode", [(SIG_DAY, "hourly"), (date(2026, 10, 7), "hourly"),
+                                        (date(2026, 10, 12), "hourly"), (LIVE_DAY, "close")])
+def test_intraday_state_from_other_day_or_close_does_not_leak(tmp_path, monkeypatch, cal, as_of, mode):
+    _setup(tmp_path, monkeypatch, regime_state=A, spy_ok=True)
+    _hourly_state(tmp_path, D, as_of, mode=mode)
+    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    assert len(b["long"]) == 3 and b["short"] == [] and b["meta"]["regime"]["source"] == "snapshot"
+
+
+# ── review fixes: rollback writes nothing ───────────────────────────────
+
+def test_regime_off_does_not_evaluate_or_write(tmp_path, cal):
+    (tmp_path / "rules").mkdir()
+    (tmp_path / "rules" / "swing.json").write_text(json.dumps({"long": ["x"], "regime": False}))
+    end = date(2026, 11, 2)
+    repo = _spy_repo(list(np.linspace(500, 700, 120)), end, tmp_path)
+    frames = _frames_up()
+    assert rg.evaluate_close(tmp_path, repo, end, frames=frames, watchlist=set(frames)) is None
+    now = datetime.combine(end, time(10, 5), tzinfo=us_clock.tz)
+    assert rg.evaluate_hourly(tmp_path, repo, now=now, price=600.0) is None
+    assert not (tmp_path / "rules" / rg.STATE_FILE).exists()
+    assert not (tmp_path / "rules" / rg.AUDIT_FILE).exists()
+
+
+# ── review fixes: configurable long limits (default 5 / 5 / 0) ──────────
+
+def test_regime_limits_default_and_config(tmp_path, monkeypatch, cal):
+    assert rg.long_limits(None) == {A: 5, R: 5, D: 0}
+    _setup(tmp_path, monkeypatch, regime_state=R, spy_ok=True)
+    p = tmp_path / "rules" / "swing.json"
+    raw = json.loads(p.read_text())
+    raw["regime_limits"] = {"震荡": 1, "attack": 4, "防守": -1, "bogus": 3}
+    p.write_text(json.dumps(raw))
+    assert rg.long_limits(tmp_path) == {A: 4, R: 1, D: 0}                  # 坏值 / 未知键忽略
+    b = sd.board_for_day(tmp_path, SIG_DAY, repo=object())
+    assert len(b["long"]) == 1 and b["meta"]["regime"]["caps"] == {"long": 1, "short": 0}
+    sd.save_strategies(tmp_path, ["macd_golden"], ["tv_halftrend"])
+    assert json.loads(p.read_text())["regime_limits"]["震荡"] == 1          # 齿轮保存不抹掉
+
+
+# ── review fixes: minimum dwell (3 trading days), downgrade exempt ─────
+
+def test_min_dwell_blocks_upgrade_but_not_downgrade():
+    blocked = rg.step(D, mode="close", slow=A, fast=A, day="d", dwell=2)
+    assert not blocked.changed and blocked.state == D and blocked.note == "min_dwell"
+    ok = rg.step(D, mode="close", slow=A, fast=A, day="d", dwell=3)
+    assert ok.changed and ok.state == A
+    assert rg.step(D, mode="close", slow=A, fast=A, day="d", dwell=None).changed      # 冷启动不限
+    dn = rg.step(A, mode="close", slow=A, fast=D, day="d", dwell=0)
+    assert dn.changed and dn.state == D
+    h = rg.step(D, mode="hourly", slow=A, fast=A, day="d", slot="10:00", dwell=1)
+    assert not h.changed and h.note == "min_dwell"
+    hd = rg.step(A, mode="hourly", slow=A, fast=D, day="d", slot="10:00", dwell=0)
+    assert hd.changed and hd.state == D
+
+
+def test_dwell_counts_trading_days_and_persists_since_day(tmp_path, cal):
+    assert rg._dwell("2026-11-02", "2026-11-02") == 0
+    assert rg._dwell("2026-11-06", "2026-11-09") == 1                       # 周五 → 周一
+    assert rg._dwell("2026-11-02", "2026-11-05") == 3
+    assert rg._dwell(None, "2026-11-05") is None
+    end = date(2026, 11, 2)
+    up = list(np.linspace(500, 700, 120))
+    frames = _frames_up()
+    rg.evaluate_close(tmp_path, _spy_repo(up, end, tmp_path), end, frames=frames, watchlist=set(frames))
+    crash = [*up[:-1], 520.0]
+    rg.evaluate_close(tmp_path, _spy_repo(crash, end, tmp_path), end, frames=frames, watchlist=set(frames))
+    st = rg.load_state(tmp_path)
+    assert st["state"] == D and st["since_day"] == "2026-11-02"
+    # 次日慢层又回到进攻: 驻留不足 3 日 → 不升级, 不追加审计
+    nxt = date(2026, 11, 3)
+    n_audit = len(rg.load_audit(tmp_path))
+    rg.evaluate_close(tmp_path, _spy_repo([*up, 702.0], nxt, tmp_path), nxt, frames=frames, watchlist=set(frames))
+    st = rg.load_state(tmp_path)
+    assert st["state"] == D and st["note"] == "min_dwell" and len(rg.load_audit(tmp_path)) == n_audit
