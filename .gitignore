@@ -40,6 +40,8 @@ backend/app/static/
 .playwright-mcp/
 .trae/
 .zcode/
+# Multica agent platform local task artifacts (replies, probes, patches, screenshots)
+.multica/
 .cursor/debug-*.log
 
 # Runtime data and user-generated content
