@@ -1,4 +1,4 @@
-"""P1-B1 策略账本: 格子 = (策略, 方向, regime), 五档 在用 / 观察 / 待定 / 冷冻 / 复活; 收缩超额打分。
+"""P1-B1 策略账本: 格子 = (策略, 方向, regime), 档位五级: 在用 / 观察 / 待定 / 冷冻 / 复活; 收缩超额打分。
 
 直接生效 (无影子): swing_desk.board_for_day 每次出板都读本账本 —
   - 打分 = Σ_命中且参与打分的规则 excess × n / (n + k)   (k 默认 100, data/rules/swing.json 的 "ledger_k" 可改)
@@ -53,7 +53,7 @@ _Z975 = 1.959963984540054
 
 def classify(n: int | None, excess: float | None, ci_low: float | None, ci_high: float | None,
              prev_tier: str | None = None, freeze_streak: int = 0) -> str:
-    """五档判定。优先级: 冷冻条件 > 复活 > 在用 > 观察 > 待定。
+    """档位判定 (五级)。优先级: 冷冻条件 > 复活 > 在用 > 观察 > 待定。
 
     冷冻: freeze_streak ≥ 2 (连续 2 次月度复核点估计 < 0) 或 ci_high < 0。
     复活: 上次是冷冻, 且 n ≥ 30 且 ci_low > 0 (否则保持冷冻)。口径限制见模块 docstring (现为全样本统计)。
