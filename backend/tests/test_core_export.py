@@ -97,7 +97,7 @@ def test_core_tree_imports_and_degrades(exported):
     assert got["gate"] == "daily_ma50" and got["phantom"] is False
     assert got["catalog"] == ["breakout", "pullback"]
     builtin = {p.stem for p in (out / "backend" / "app" / "strategy" / "builtin").glob("*.py")}
-    assert got["defaults"][0] and set(got["defaults"][0]) <= builtin
+    assert got["defaults"][0] == []          # P1-B2: 多头默认为空 (无规则有留出段证据过 A4), 不再用待定档补位
     assert set(got["defaults"][1]) <= builtin
 
 
