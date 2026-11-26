@@ -214,12 +214,24 @@ it('样本 n < 30 不写「≥ 30」; n ≥ 30 才写; 理由出处标账本·re
   expect(ledgerSrc({ regime: '防守', month: '2026-11' })).toBe('账本·防守格 2026-11')
 })
 
-it('末行布局: 每张最多跨 2 列, 剩余空列居中; 末行满 / 单列不动', () => {
+it('末行布局: ≤3 列补满; ≥4 列每张最多跨 2 列, 奇数空列第一张加 1, 其余居中对称; 末行满 / 单列不动', () => {
   expect(lastRowLayout(2, 1)).toEqual({ spans: [2], offset: 0 })
   expect(lastRowLayout(4, 1)).toEqual({ spans: [2], offset: 1 })
   expect(lastRowLayout(4, 2)).toEqual({ spans: [2, 2], offset: 0 })
   expect(lastRowLayout(4, 3)).toEqual({ spans: [2, 1, 1], offset: 0 })
-  expect(lastRowLayout(5, 1)).toEqual({ spans: [2], offset: 1 })
+  // 奇数空列: 第一张加 1 列 → 补满或左右对称 (2026-11-26 第二轮审查: 旧期望 (5,1)→[2]@1 是左 1 右 2 不对称, 已改)
+  expect(lastRowLayout(5, 1)).toEqual({ spans: [3], offset: 1 })
+  expect(lastRowLayout(5, 2)).toEqual({ spans: [3, 2], offset: 0 })
+  expect(lastRowLayout(3, 1)).toEqual({ spans: [3], offset: 0 })
+  expect(lastRowLayout(3, 2)).toEqual({ spans: [2, 1], offset: 0 })
+  expect(lastRowLayout(7, 1)).toEqual({ spans: [3], offset: 2 })
+  // 不变式: 所有 cols ≤ 8 / rem 组合, 左右空列相等 (末行补满或居中)
+  for (let c = 2; c <= 8; c += 1) for (let r = 1; r < c; r += 1) {
+    const { spans, offset } = lastRowLayout(c, r)
+    const used = spans.reduce((a, b) => a + b, 0)
+    expect(c - used - offset).toBe(offset)
+    if (c <= 3) expect(used).toBe(c)
+  }
   expect(lastRowLayout(3, 0)).toEqual({ spans: [], offset: 0 })
   expect(lastRowLayout(1, 0)).toEqual({ spans: [], offset: 0 })
 })

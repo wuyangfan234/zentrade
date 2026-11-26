@@ -61,17 +61,20 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
 export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]'
 export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
 export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
-/** 末行补齐 (2026-11-26 用户指定细节): 多行且末行不满时, 末行卡按剩余列平分加宽, 每张最多横跨 2 列; 仍有空列就把末行居中,
- * 不再出现「右侧空一整列」, 宽屏 (4 列 5 张) 也不会让最后一张拉满整行。
+/** 末行补齐 (2026-11-26 用户指定细节): 多行且末行不满时, 末行卡按剩余列平分加宽, 末行永远补满或左右对称, 不留「右侧空一整列」。
+ *  - 3 列及以下: 不设跨度上限, 直接补满 (3 列时 2 列上限没意义, 反而会在 3 列剩 1 张时右侧空一列);
+ *  - 4 列及以上: 每张最多跨 2 列 (宽屏不让最后一张拉满整行), 剩余空列为奇数时第一张再加 1 列, 其余空列左右平分居中。
  * auto-fit 已让「不足一行」时空列收掉。列数读 computed grid-template-columns (收掉的 0px 轨道不算), jsdom 无布局时不动。 */
 export const FILL_MAX_SPAN = 2
-/** 末行 rem 张卡在 cols 列里的跨度与起始偏移 (纯函数, 单测守着) */
+/** 末行 rem 张卡在 cols 列里的跨度与起始偏移 (纯函数, 单测守着); 保证 cols − Σspans 为偶数且 offset = 其一半 */
 export function lastRowLayout(cols: number, rem: number): { spans: number[]; offset: number } {
   if (cols <= 1 || rem <= 0 || rem >= cols) return { spans: [], offset: 0 }
   const base = Math.floor(cols / rem), extra = cols % rem
-  const spans = Array.from({ length: rem }, (_, i) => Math.min(FILL_MAX_SPAN, base + (i < extra ? 1 : 0)))
-  const used = spans.reduce((a, b) => a + b, 0)
-  return { spans, offset: Math.floor((cols - used) / 2) }
+  const cap = cols <= 3 ? Infinity : FILL_MAX_SPAN
+  const spans = Array.from({ length: rem }, (_, i) => Math.min(cap, base + (i < extra ? 1 : 0)))
+  let gap = cols - spans.reduce((a, b) => a + b, 0)
+  if (gap % 2 === 1) { spans[0] += 1; gap -= 1 }
+  return { spans, offset: gap / 2 }
 }
 export function FillGrid({ children, ...rest }: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>) {
   const ref = useRef<HTMLDivElement>(null)
