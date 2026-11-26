@@ -61,8 +61,18 @@ export function Section({ title, count, tags, meta, children, hero, ...rest }: {
 export const GRID = 'grid auto-rows-fr gap-2.5 px-3 pb-3 [grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))]'
 export const CARD = 'flex min-h-[186px] min-w-0 cursor-pointer flex-col rounded-card border px-3 pb-2 pt-2.5 hover:bg-elevated'
 export const CARD_FOOT = 'mt-auto flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] tabular-nums text-secondary'
-/** 末行补齐 (2026-11-26 用户指定细节): 按实际列数让最后一张卡横跨末行剩余列 —— 5 张卡排 2 列时末行不留整列空白。
- * auto-fit 已让「不足一行」时空列收掉; 这里补「多行、末行不满」。列数读 computed grid-template-columns (收掉的 0px 轨道不算), jsdom 无布局时不动。 */
+/** 末行补齐 (2026-11-26 用户指定细节): 多行且末行不满时, 末行卡按剩余列平分加宽, 每张最多横跨 2 列; 仍有空列就把末行居中,
+ * 不再出现「右侧空一整列」, 宽屏 (4 列 5 张) 也不会让最后一张拉满整行。
+ * auto-fit 已让「不足一行」时空列收掉。列数读 computed grid-template-columns (收掉的 0px 轨道不算), jsdom 无布局时不动。 */
+export const FILL_MAX_SPAN = 2
+/** 末行 rem 张卡在 cols 列里的跨度与起始偏移 (纯函数, 单测守着) */
+export function lastRowLayout(cols: number, rem: number): { spans: number[]; offset: number } {
+  if (cols <= 1 || rem <= 0 || rem >= cols) return { spans: [], offset: 0 }
+  const base = Math.floor(cols / rem), extra = cols % rem
+  const spans = Array.from({ length: rem }, (_, i) => Math.min(FILL_MAX_SPAN, base + (i < extra ? 1 : 0)))
+  const used = spans.reduce((a, b) => a + b, 0)
+  return { spans, offset: Math.floor((cols - used) / 2) }
+}
 export function FillGrid({ children, ...rest }: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | number | undefined>) {
   const ref = useRef<HTMLDivElement>(null)
   const apply = () => {
@@ -71,9 +81,11 @@ export function FillGrid({ children, ...rest }: HTMLAttributes<HTMLDivElement> &
     const cols = getComputedStyle(el).gridTemplateColumns.split(' ').filter((t) => t && t !== 'none' && parseFloat(t) > 0).length
     const kids = [...el.children] as HTMLElement[]
     for (const k of kids) k.style.gridColumn = ''
-    const rem = cols > 1 ? kids.length % cols : 0
+    const rem = cols > 1 && kids.length > cols ? kids.length % cols : 0
     el.dataset.gridCols = String(cols)
-    if (rem && kids.length) kids[kids.length - 1].style.gridColumn = `span ${cols - rem + 1}`
+    const { spans, offset } = lastRowLayout(cols, rem)
+    const last = kids.slice(kids.length - spans.length)
+    last.forEach((k, i) => { k.style.gridColumn = i === 0 && offset > 0 ? `${offset + 1} / span ${spans[i]}` : `span ${spans[i]}` })
   }
   useLayoutEffect(apply)
   useEffect(() => {

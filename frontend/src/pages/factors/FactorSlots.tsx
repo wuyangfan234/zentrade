@@ -435,6 +435,9 @@ function NavLines({ dates, series }: { dates: string[]; series: { key: string; v
 }
 
 // ---------------------------------------------------------------- slot 1 · 机会板做多
+/** 理由行出处: 账本在当前 regime 那一格的数 (与左侧「回放」超额列不同源) */
+export const ledgerSrc = (l: { regime?: string | null; month?: string | null }) => `账本·${l.regime ?? '—'}格${l.month ? ` ${l.month}` : ''}`
+
 /** 闭环: 槽位里每条在用规则 → 它引用的因子 (排序因子写公式) + 账本档位 → 今日命中它的卡 */
 function BoardLoop({ champs, tierOf, cards, catalog }: { champs: BoardRow[]; tierOf: (r: BoardRow) => string | null; cards: SwingBoardCard[]; catalog: WatchlistRuleCatalogItem[] }) {
   const byId = new Map(catalog.map(c => [c.id, c]))
@@ -490,9 +493,14 @@ function BoardSlot({ d }: { d: SlotData }) {
     if (r.role === 'ch') return challengerReason(r)
     if (r.kind === 'ranker' || r.id.startsWith('rank_')) return { word: '留用', off: false, parts: [{ text: '排序因子 · rank-lab-v2 确认合同' }, { text: `超额 ${fmtR(r.excess)}` }] }
     const c = cellOf(r.id)
-    if (!ledger || ledger.status === 'disabled') return tierReason('在用', { n: r.n, excess: r.excess, lo: r.lo, hi: r.hi })
+    // 账本开关关 / 没有账本切片: 档位一律按在用, 只写回放的实际数字, 不做「≥ 30」之类的断言
+    if (!ledger || ledger.status === 'disabled') return { word: '留用', off: false, parts: [
+      { text: ledger ? '账本开关关闭 · 档位按在用' : '账本未返回 · 档位按在用' }, { text: `回放超额 ${fmtR(r.excess)}` }, { text: `样本 ${r.n ?? 0}` }] }
     if (ledger.status === 'unavailable') return { word: '待定', off: true, parts: [{ text: '本月无账本复核', hot: true }, { text: '全部按待定 · 不出卡' }] }
-    return tierReason(c?.tier ?? '待定', { n: fin(c?.n) ? c!.n! : r.n, excess: fin(c?.excess) ? c!.excess! : null, lo: fin(c?.ci_low) ? c!.ci_low! : r.lo, hi: fin(c?.ci_high) ? c!.ci_high! : r.hi })
+    // 理由只用账本切片 (当前 regime 那一格) 的数字, 不与左侧回放数混用; 开头写明出处
+    const why = tierReason(c?.tier ?? '待定', { n: fin(c?.n) ? c!.n! : null, excess: fin(c?.excess) ? c!.excess! : null,
+      lo: fin(c?.ci_low) ? c!.ci_low! : null, hi: fin(c?.ci_high) ? c!.ci_high! : null })
+    return { ...why, parts: [{ text: ledgerSrc(ledger) }, ...why.parts] }
   }
   const tierOf = (r: BoardRow) => (r.role === 'ch' ? null : r.kind === 'ranker' ? '排序因子' : ledger?.status === 'disabled' ? '在用' : ledger?.status === 'unavailable' ? '待定' : (cellOf(r.id)?.tier ?? (ledger ? '待定' : null)))
   const [loop, setLoop] = useState(false)
@@ -724,6 +732,7 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
   const cell = 'py-1.5 pr-3'
   const pctOf = new Map(uses.map((u, i) => [u.id, roundShares(uses.map(x => x.share))[i]]))
   const icScale = Math.max(IC_GATE * 1.5, ...[...uses.map(u => u.dirMean), ...challengers.map(c => c.dirMean)].filter(fin).map(Math.abs)) * 1.05
+  const [loop, setLoop] = useState(false)
   const lastRes = d.weeklyRuns[d.weeklyRuns.length - 1]?.result
   const lastFold = (lastRes?.folds ?? []).filter(f => !f.skipped).slice(-1)[0]
   const trainWin = lastFold?.train_start && lastFold.train_end ? `${lastFold.train_start.slice(0, 7)} → ${lastFold.train_end.slice(0, 7)}` : ''
@@ -792,7 +801,42 @@ function ScoringSlot({ d, onInspect }: { d: SlotData; onInspect: (id: string) =>
           </table>
         </div>
       )}
+      {!err && (
+        <div className="border-t border-border/60 px-4 py-2">
+          <button type="button" data-loop-toggle="scoring" aria-expanded={loop} onClick={() => setLoop(v => !v)} className="text-[12px] font-medium text-accent hover:underline dark:text-blue-400">
+            {loop ? '闭环 ▾ 因子 → 打分策略' : `闭环 ▸ 因子 → 打分策略 · ${uses.length} 个因子`}
+          </button>
+          {loop && <ScoringLoop uses={uses} weeks={weeks} />}
+        </div>
+      )}
     </SlotCard>
+  )
+}
+
+/** 槽位 3 闭环: 因子 → 引用它的打分策略 (权重) → 近期表现 (周度入选 + 折算 IC)。
+ * 打分因子不在策略账本 (账本只管机会板出卡规则), 也不直接出机会卡, 所以「档位」与「今日卡」写不适用并说明原因。 */
+export function ScoringLoop({ uses, weeks }: { uses: ScoreUse[]; weeks: string[] }) {
+  return (
+    <div data-loop="scoring" className="mt-1.5 flex flex-col gap-1.5 text-[12px]">
+      <div data-loop-note="" className="text-secondary">档位 · 不在策略账本 · 口径 = 周度 IC · 打分只给选股结果排序 · 不出机会卡</div>
+      {uses.length === 0 ? <div className="text-muted">暂无打分因子</div> : uses.map(u => {
+        const by = [...u.uses].sort((a, b) => b.w - a.w)
+        const picked = u.sel.filter(x => x === true).length
+        return (
+          <div key={u.id} data-loop-factor={u.id} className="rounded-btn border border-border/70 px-2.5 py-1.5">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <b className="text-foreground">{u.label}</b>
+              {u.flag && <span className="text-warning">{u.flag}</span>}
+              <span className="text-secondary">{`近期 折算 IC ${fmtIc(u.sign === 0 ? null : u.dirMean)} · 周度入选 ${picked}/${weeks.length || u.sel.length}`}</span>
+              <span data-loop-count={by.length} className="ml-auto font-semibold tabular-nums text-foreground">{`引用策略 ${by.length}`}</span>
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {by.map(x => <span key={x.id} data-loop-strategy={x.id} className={`rounded px-1.5 py-0.5 ${x.inPlay ? 'bg-violet-500/10 text-foreground' : 'bg-elevated text-secondary'}`}>{`${x.name} · 权重 ${x.w.toFixed(2)}`}</span>)}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 

@@ -7,12 +7,12 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 const toasts = vi.hoisted(() => ({ calls: [] as unknown[][] }))
 vi.mock('@/components/Toast', () => ({ toast: (...a: unknown[]) => { toasts.calls.push(a) } }))
 
-import { ciScale, fR, isObserve, ledgerRows, nextRejudge, parseReason, regimeFp, regimeOf, tierReason, anchorText, gateText } from './p1'
+import { ciScale, FROZEN_UNKNOWN, fR, isObserve, ledgerRows, nextRejudge, parseReason, regimeFp, regimeOf, tierReason, anchorText, gateText } from './p1'
 import { RegimeBar } from './RegimeBar'
 import { LedgerBlock } from './LedgerBlock'
 import { CiBar, CI_MIN_PX } from './CiBar'
-import { BoardCards, FillGrid, GRID } from './Cards'
-import { ReasonLine, challengerReason } from '@/pages/factors/FactorSlots'
+import { BoardCards, FillGrid, GRID, lastRowLayout } from './Cards'
+import { ReasonLine, ScoringLoop, challengerReason, ledgerSrc, type ScoreUse } from '@/pages/factors/FactorSlots'
 import { CARDS, LEDGER, REGIME, REGIME_CALM, swingWith } from './__fixtures__/p1'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -59,19 +59,40 @@ it('状态条: 三态有图标 + 文字 + 当前段 aria-current; 依据逐项; 
 
 it('账本: 五个档位分组, 计数 = 行数; 待定 / 冷冻带图标 + 「不出卡」文字; 区间缺写「区间未返回」', async () => {
   await render(<LedgerBlock swing={swingWith([])} names={new Map([['tv_halftrend', '半趋势翻空']])} />)
+  // 期望值从夹具独立数出来, 再与渲染出的 DOM 行数、页面上的计数文字三方对比 (不拿同一个数组自比)
+  const want = new Map<string, number>()
+  for (const c of Object.values(LEDGER.cells)) want.set(String(c.tier), (want.get(String(c.tier)) ?? 0) + 1)
   const rows = $$('[data-ledger-row]')
-  expect(rows).toHaveLength(Object.keys(LEDGER.cells).length)
-  expect(host.querySelector('[data-ledger-count]')!.textContent).toBe(String(rows.length))
-  for (const g of $$('[data-ledger-group]')) {
-    const t = g.getAttribute('data-ledger-group')!
-    const n = g.querySelectorAll('[data-ledger-row]').length
-    expect(host.querySelector(`[data-ledger-tier-count="${t}"]`)!.textContent).toContain(`${t} ${n}`)
+  expect(rows).toHaveLength(7)
+  expect(host.querySelector('[data-ledger-count]')!.textContent).toBe('7')
+  expect([...want.values()].reduce((a, b) => a + b, 0)).toBe(7)
+  for (const [t, n] of want) {
+    const g = host.querySelector(`[data-ledger-group="${t}"]`)!
+    expect(g.querySelectorAll(`tr[data-ledger-row][data-tier="${t}"]`)).toHaveLength(n)
+    expect(host.querySelector(`[data-ledger-tier-count="${t}"]`)!.textContent!.trim().endsWith(`${t} ${n}`)).toBe(true)
   }
   expect($$('[data-ledger-group]').map((g) => g.getAttribute('data-ledger-group'))).toEqual(['在用', '观察', '待定', '冷冻', '复活'])
   const frozen = host.querySelector('[data-ledger-row="volume_price_surge|long"]')!
   expect(frozen.textContent).toContain('❄冷冻·不出卡')
   expect(host.querySelector('[data-ledger-row="tv_halftrend|short"]')!.textContent).toContain('半趋势翻空')
   expect(frozen.querySelector('[data-ci-bar]')!.getAttribute('aria-label')).toBe('区间未返回')
+})
+
+it('账本向前兼容: cells 带 ci_low / ci_high → 画区间条 (同一刻度); 缺值 → 区间未返回, 条宽不变', async () => {
+  const cells = { 'tv_halftrend|short': { n: 164, excess: 0.249, tier: '在用', ci_low: 0.147, ci_high: 0.352 },
+    'tv_chandelier_exit|short': { n: 210, excess: 0.031, tier: '观察', ci_low: -0.05, ci_high: 0.11 },
+    'macd_golden|long': { n: 388, excess: -0.112, tier: '待定' } }
+  await render(<LedgerBlock swing={swingWith([], { ledger: { ...LEDGER, cells } })} names={new Map()} />)
+  const bar = (k: string) => host.querySelector(`[data-ledger-row="${k}"] [data-ci-bar]`)!
+  expect(bar('tv_halftrend|short').getAttribute('data-ci-cross')).toBe('0')
+  expect(bar('tv_halftrend|short').getAttribute('aria-label')).toBe('95% 区间 +0.15 ~ +0.35')
+  expect(bar('tv_chandelier_exit|short').getAttribute('data-ci-cross')).toBe('1')
+  expect(bar('macd_golden|long').getAttribute('aria-label')).toBe('区间未返回')
+  expect(bar('macd_golden|long').getAttribute('width')).toBe(bar('tv_halftrend|short').getAttribute('width'))
+  // 同一刻度: 三条的 0 基准线横坐标相同
+  const zx = $$('[data-ci-zero]').map((l) => l.getAttribute('x1'))
+  expect(new Set(zx).size).toBe(1)
+  expect(ledgerRows({ status: 'ok', cells }, new Map()).find((r) => r.rule === 'tv_halftrend')).toMatchObject({ lo: 0.147, hi: 0.352 })
 })
 
 it('账本: unavailable / disabled 有明示; 无切片写未返回', async () => {
@@ -83,9 +104,17 @@ it('账本: unavailable / disabled 有明示; 无切片写未返回', async () =
 })
 
 it('区间条: 0 基准线; 跨 0 标记; 极窄区间也有最小像素; 端点数字', async () => {
-  const { min, max } = ciScale([0.14, 0.05, 0.23, 0.11, 0.02, 0.2])
+  const ends = [0.14, 0.05, 0.23, 0.11, 0.02, 0.2]
+  const { min, max } = ciScale(ends)
   expect(min).toBeLessThan(0)
   expect(max).toBeLessThan(0.3)
+  // 所有端点 (含 0) 都在轴内, 且两侧留白不超过跨度的 15%
+  expect(min).toBeLessThanOrEqual(Math.min(0, ...ends))
+  expect(max).toBeGreaterThanOrEqual(Math.max(...ends))
+  expect(max - Math.max(...ends)).toBeLessThanOrEqual((max - min) * 0.15)
+  const neg = ciScale([-0.2, -0.02, 0.36, -0.11])
+  expect(neg.min).toBeLessThanOrEqual(-0.2)
+  expect(neg.max).toBeGreaterThanOrEqual(0.36)
   await render(<><CiBar v={0.14} lo={0.05} hi={0.23} min={min} max={max} /><CiBar v={0.01} lo={0.0099} hi={0.0101} min={-1} max={1} /><CiBar v={0.03} lo={-0.09} hi={0.15} min={min} max={max} /></>)
   const bars = $$('[data-ci-bar]')
   expect(bars.every((b) => b.querySelector('[data-ci-zero]'))).toBe(true)
@@ -160,6 +189,50 @@ it('理由: 待定 = 待定 (不写换下), 冷冻 = 换下; 都按不出卡加�
   await render(<ReasonLine r={pd} />)
   expect(host.querySelector('[data-reason="待定"]')!.textContent).toContain('待定·不出卡')
   expect(host.querySelector('mark[data-reason-hot]')!.className).toContain('underline')
+})
+
+it('冷冻 + 无区间数据: 不断言具体触发条件 (不出现「连续 2 次」); 带区间且上限 < 0 才指名', async () => {
+  const fz = tierReason('冷冻', { n: 410, excess: -0.203, lo: null, hi: null })
+  expect(fz.parts[0]).toEqual({ text: FROZEN_UNKNOWN, hot: true })
+  await render(<ReasonLine r={fz} />)
+  expect(host.textContent).not.toContain('连续 2 次')
+  expect(host.textContent).toContain('触发条件未返回')
+  // 有区间但上限 ≥ 0 (冷冻来自复核连负或延续上月): 仍不指名
+  expect(tierReason('冷冻', { n: 410, excess: -0.05, lo: -0.12, hi: 0.02 }).parts[0].text).toBe(FROZEN_UNKNOWN)
+  expect(tierReason('冷冻', { n: 188, excess: -0.11, lo: -0.2, hi: -0.02 }).parts[0]).toEqual({ text: '区间上限 −0.02R < 0', hot: true })
+  // 机会页账本表行里也不出现
+  await render(<LedgerBlock swing={swingWith([])} names={new Map()} />)
+  expect(host.textContent).not.toContain('连续 2 次')
+})
+
+it('样本 n < 30 不写「≥ 30」; n ≥ 30 才写; 理由出处标账本·regime 格', () => {
+  const t = (n: number) => tierReason('在用', { n, excess: 0.1, lo: null, hi: null }).parts.map((p) => p.text)
+  expect(t(12)).toEqual(['超额 +0.10R', '样本 12'])
+  expect(t(12).join(' ')).not.toContain('≥ 30')
+  expect(t(40)).toContain('样本 40 ≥ 30')
+  expect(tierReason('复活', { n: 20, excess: 0.1, lo: -0.01, hi: 0.2 }).parts.map((p) => p.text)).toEqual(['超额 +0.10R', '样本 20'])
+  expect(ledgerSrc({ regime: '防守', month: '2026-11' })).toBe('账本·防守格 2026-11')
+})
+
+it('末行布局: 每张最多跨 2 列, 剩余空列居中; 末行满 / 单列不动', () => {
+  expect(lastRowLayout(2, 1)).toEqual({ spans: [2], offset: 0 })
+  expect(lastRowLayout(4, 1)).toEqual({ spans: [2], offset: 1 })
+  expect(lastRowLayout(4, 2)).toEqual({ spans: [2, 2], offset: 0 })
+  expect(lastRowLayout(4, 3)).toEqual({ spans: [2, 1, 1], offset: 0 })
+  expect(lastRowLayout(5, 1)).toEqual({ spans: [2], offset: 1 })
+  expect(lastRowLayout(3, 0)).toEqual({ spans: [], offset: 0 })
+  expect(lastRowLayout(1, 0)).toEqual({ spans: [], offset: 0 })
+})
+
+it('槽位 3 闭环: 因子 → 引用策略 + 近期表现; 写明不在策略账本', async () => {
+  const uses = [{ id: 'rs20', label: '相对强度 20 日', n: 2, share: 0.6, sign: 1, inLib: true, ics: [0.03, 0.02], dirIcs: [0.03, 0.02], dirMean: 0.025, flag: null,
+    sel: [true, false], uses: [{ id: 's1', name: '强势回踩', fam: '回踩', w: 0.4, inPlay: true }, { id: 's2', name: '突破', fam: '突破', w: 0.6, inPlay: false }] }] as ScoreUse[]
+  await render(<ScoringLoop uses={uses} weeks={['W46', 'W47']} />)
+  expect(host.querySelector('[data-loop-note]')!.textContent).toContain('不在策略账本 · 口径 = 周度 IC')
+  const f = host.querySelector('[data-loop-factor="rs20"]')!
+  expect(f.querySelectorAll('[data-loop-strategy]')).toHaveLength(Number(f.querySelector('[data-loop-count]')!.getAttribute('data-loop-count')))
+  expect(f.textContent).toContain('周度入选 1/2')
+  expect(f.querySelector('[data-loop-strategy]')!.textContent).toBe('突破 · 权重 0.60')
 })
 
 it('辅助: isObserve / 锚定来源中文 / 门 / 网格 auto-fit', () => {

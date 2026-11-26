@@ -95,18 +95,24 @@ export function ledgerRows(l: SwingLedgerMeta | null, names: Map<string, string>
 /** 理由片段: hot = 触发条件 (淘汰行高亮) */
 export type ReasonPart = { text: string; hot?: boolean }
 export type TierReason = { word: '留用' | '观察' | '待定' | '换下' | '复活' | '挑战'; off: boolean; parts: ReasonPart[] }
+/** 冷冻但账本没给触发条件时的写法 (不断言具体原因) */
+export const FROZEN_UNKNOWN = '冷冻 · 触发条件未返回（复核连负 / 区间上限为负 / 延续上月冷冻 之一）'
 /** 状态词与账本档位一一对应: 冷冻 = 换下 (触发淘汰条件), 待定 = 待定 (证据不足, 不出卡); 两者都按「不出卡」加重显示 */
 /** 一行一句「为什么它在用 / 为什么被换下」, 带数字。门槛 = strategy_ledger.classify (n ≥ 30, 区间下限 > 0 / 上限 < 0, 连续 2 次复核 < 0) */
 export function tierReason(tier: string | null | undefined, x: { n: number | null; excess: number | null; lo: number | null; hi: number | null }): TierReason {
   const nTxt = x.n == null ? '样本 —' : `样本 ${x.n}`
   const ci = x.lo != null && x.hi != null
+  // 样本只写实际数, 够 30 才写「≥ 30」(不替后端做断言)
+  const nGate = x.n != null && x.n >= 30 ? `${nTxt} ≥ 30` : nTxt
   if (tier === '在用' || tier === '复活') return { word: tier === '复活' ? '复活' : '留用', off: false, parts: [
-    ci ? { text: `区间下限 ${fR(x.lo)} > 0` } : { text: `超额 ${fR(x.excess)}` }, { text: `${nTxt} ≥ 30` }] }
+    ci && x.lo! > 0 ? { text: `区间下限 ${fR(x.lo)} > 0` } : { text: `超额 ${fR(x.excess)}` }, { text: nGate }] }
   if (tier === '观察') return { word: '观察', off: false, parts: [
     { text: `超额 ${fR(x.excess)} > 0` }, ci ? { text: `区间 ${fR(x.lo)} ~ ${fR(x.hi)} 跨 0`, hot: true } : { text: '账本判区间跨 0', hot: true }, { text: nTxt }] }
+  // 冷冻有三个来源 (strategy_ledger.classify): 复核连续为负 / 区间上限 < 0 / 延续上月冷冻。账本切片不带「哪条触发」,
+  // 只有拿到区间上限且 < 0 才能指名; 否则如实写未返回, 不猜。
   if (tier === '冷冻') return { word: '换下', off: true, parts: ci && x.hi! < 0
     ? [{ text: `区间上限 ${fR(x.hi)} < 0`, hot: true }, { text: `超额 ${fR(x.excess)}` }, { text: nTxt }]
-    : [{ text: '连续 2 次月度复核 < 0', hot: true }, { text: `超额 ${fR(x.excess)}` }, { text: nTxt }] }
+    : [{ text: FROZEN_UNKNOWN, hot: true }, { text: `超额 ${fR(x.excess)}` }, { text: nTxt }] }
   if (tier === '待定') {
     const parts: ReasonPart[] = []
     if (x.n != null && x.n < 30) parts.push({ text: `样本 ${x.n} < 30`, hot: true })
