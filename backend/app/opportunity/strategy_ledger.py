@@ -259,20 +259,27 @@ def monthly_review(data_dir: Path, day: date, *, config_dir: Path | None = None,
     return rec
 
 
+def _cell_view(c: dict) -> dict:
+    """单格切片 (ledger_view 与空切片共用同一形状): 旧三键 n / excess / tier 语义不变, 追加 ci_low / ci_high (可 None)。"""
+    return {"n": c.get("n"), "excess": c.get("excess"), "tier": c.get("tier"),
+            "ci_low": c.get("ci_low"), "ci_high": c.get("ci_high")}
+
+
 def ledger_view(rec: dict, regime_state: str | None, k: float) -> dict:
-    """复核记录 → 出板用的切片: {"contract", "month", "regime", "k", "cells": {"rule|side": {n, excess, tier}}}。
-    regime 缺 (P1-A 回滚) → 用「震荡」格 (现产物三格同值)。"""
+    """复核记录 → 出板用的切片: {"contract", "month", "regime", "k", "cells": {"rule|side": {n, excess, tier, ci_low, ci_high}}}。
+    regime 缺 (P1-A 回滚) → 用「震荡」格 (现产物三格同值)。ci_low / ci_high = 定档所用 95% 区间, 只供展示, 缺则 None。"""
     reg = regime_state if regime_state in REGIMES else "震荡"
     cells = {}
     for ck, c in (rec.get("cells") or {}).items():
         rule_side, _, r = ck.rpartition("|")
         if r == reg:
-            cells[rule_side] = {"n": c.get("n"), "excess": c.get("excess"), "tier": c.get("tier")}
+            cells[rule_side] = _cell_view(c)
     return {"contract": CONTRACT, "status": STATUS_OK, "month": rec.get("month"), "regime": reg, "k": k,
             "cells": cells}
 
 
 def _empty_view(status: str, day: date, regime_state: str | None, k: float) -> dict:
+    """disabled / unavailable 切片: cells 为空 (不改 lookup 语义); 若有格子, 形状同 _cell_view (含 ci_low / ci_high)。"""
     reg = regime_state if regime_state in REGIMES else "震荡"
     return {"contract": CONTRACT, "status": status, "month": day.strftime("%Y-%m"), "regime": reg, "k": k,
             "cells": {}}
