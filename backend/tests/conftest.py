@@ -53,6 +53,22 @@ def _no_swing_candidate_background_check(request, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _neutral_strategy_ledger(request, monkeypatch):
+    """P1-B1: 出板读策略账本 (产物里多数测试用的规则是冷冻/观察档)。与账本无关的旧用例默认中性账本:
+    每条规则都在用、收缩超额相同 (卡分 ∝ 命中条数), 不写 ledger_audit.jsonl。
+    测账本本身的用例用 @pytest.mark.real_strategy_ledger 退出此默认。"""
+    if request.node.get_closest_marker("real_strategy_ledger"):
+        yield
+        return
+    from app.opportunity import strategy_ledger as sl
+    monkeypatch.setattr(sl, "monthly_review",
+                        lambda data_dir, day, **_kw: {"month": day.strftime("%Y-%m"), "cells": {}})
+    monkeypatch.setattr(sl, "lookup",
+                        lambda ledger, rule, side: (sl.ACTIVE, 0.0 if rule.startswith("rank_") else 1.0, 10**9))
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _no_protection_feed_network(monkeypatch):
     """财报/公司行动源的默认 HTTP 出口在测试中一律拒绝 (本机有真实 key, 不能出网)。"""
     from app.services import corporate_actions, earnings_calendar

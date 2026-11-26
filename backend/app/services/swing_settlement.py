@@ -880,7 +880,11 @@ def reconcile(data_dir: Path, repo, *, day: date, notify: bool = True, replay=No
                           for c in (board.get("long") or []) + (board.get("short") or [])}
             out["recomputed"] = len(recomputed)
             book = wb.load_day(data_dir, bday)
-            if book is not None and book.get("swing_rules"):
+            if book is not None and book.get("swing_rules") and "ledger" not in book:
+                # P1-B1 过渡窗口: 之前落的旧簿没有 ledger 键, 当初按旧打分截前 5; 重算已是收缩超额打分,
+                # 截断可能不同 → 不核板层 (同 TIEBREAK_LEGACY 思路: 旧簿只按落盘时口径解读, 不拿新口径挑错)。
+                out["board_check"] = "skipped_pre_ledger_book"
+            elif book is not None and book.get("swing_rules"):
                 booked = {(c["symbol"], c.get("side") or "long"): (list(c.get("entry_zone") or []), c.get("invalidation"),
                                                                    (c.get("target_zone") or [None])[0])
                           for c in book.get("cards") or [] if "-book-swing" in str(c.get("id") or "")}
