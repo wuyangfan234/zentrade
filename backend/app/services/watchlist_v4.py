@@ -280,7 +280,8 @@ def signals_dir(data_dir: Path) -> Path:
 
 def save_signals(data_dir: Path, as_of: date, signals: dict[str, list[dict]], *, watchlist: set[str], frames: dict,
                  lineage: dict | None = None, row_extra=None, extra_rows: list[dict] | None = None,
-                 h4_state: dict | None = None, atr: dict | None = None, rank_values: dict | None = None) -> None:
+                 h4_state: dict | None = None, atr: dict | None = None, rank_values: dict | None = None,
+                 regime: dict | None = None, gate_grade: dict | None = None) -> None:
     """当日自选信号表 (机会页读这份): 每条规则命中的票与卡几何 (side: long/short; 旧文件无此字段 = long),
     以及扫描时的自选名单与收盘价。不含许可 (读时现算)。看空行只供机会卡展示, 自选表/盘前推送只读看多行。
     lineage / row_extra (2026-10-11 方向 A 谱系, card_lineage.stamp): 只追加新键 (顶层 lineage, 每行 mode/params_hash),
@@ -320,6 +321,13 @@ def save_signals(data_dir: Path, as_of: date, signals: dict[str, list[dict]], *,
     if rank_values:
         payload["rank_values"] = {rid: {**v, "values": {s: x for s, x in (v.get("values") or {}).items() if s in watchlist}}
                                   for rid, v in rank_values.items() if isinstance(v, dict)}
+    # P1-A (只追加新键, 不改旧键): 大盘 regime 三态 + 多尺度门观察级名单; 旧读方不读, 旧快照没有这些键照常可读
+    if regime and regime.get("regime_state"):
+        for k in ("regime_state", "regime_as_of", "regime_reasons", "regime_contract"):
+            if k in regime and k not in payload:
+                payload[k] = regime[k]
+    if gate_grade:
+        payload["gate_grade"] = {s: g for s, g in gate_grade.items() if s in watchlist and g == "observe"}
     d = signals_dir(data_dir)
     d.mkdir(parents=True, exist_ok=True)
     atomic_write_text(d / f"{as_of.isoformat()}.json", json.dumps(payload, ensure_ascii=False))

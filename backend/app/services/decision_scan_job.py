@@ -263,7 +263,27 @@ def _direction_states(repo, data_dir: Path, as_of: date, frames: dict, watchlist
         states = {}
     meta["direction_gate"] = {"id": gate.id, "long": sum(1 for v in states.values() if v == "long"),
                               "short": sum(1 for v in states.values() if v == "short")}
-    return {s: v for s, v in states.items() if v in ("long", "short")}
+    out = {s: v for s, v in states.items() if v in ("long", "short")}
+    # 多尺度门 (multi_scale_v1) 的观察级名单: 只对放行了的票有意义; 交给快照 gate_grade (只追加新键)
+    grades = pre.get("gate_grades") if isinstance(pre.get("gate_grades"), dict) else {}
+    grades = {s: g for s, g in grades.items() if s in out and g == "observe"}
+    if grades:
+        meta["gate_grades"] = grades
+        meta["direction_gate"]["observe"] = len(grades)
+    return out
+
+
+def _regime_close(repo, data_dir: Path, as_of: date, frames: dict, watchlist, meta: dict) -> dict | None:
+    """P1-A regime 慢层 (盘后 1 次): 写 rules/regime_state.json (+ 切换审计), 返回快照字段。失败 = None (只记日志)。"""
+    try:
+        from app.opportunity import regime
+        fields = regime.evaluate_close(Path(data_dir), repo, as_of, frames=frames, watchlist=watchlist)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("regime close evaluation failed (快照不带 regime): %s", type(e).__name__)
+        return None
+    if fields:
+        meta["regime"] = {"state": fields.get("regime_state"), "reasons": fields.get("regime_reasons")}
+    return fields
 
 
 def _previous_weights(data_dir: Path, as_of: date) -> tuple[dict[str, float] | None, bool]:
@@ -303,6 +323,8 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
     hits = meta.pop("hits", {}) or {}
     sell_hits = meta.pop("sell_hits", {}) or {}
     h4_state = _direction_states(repo, data_dir, as_of, frames, watchlist, meta)
+    gate_grades = meta.pop("gate_grades", None)
+    regime_fields = _regime_close(repo, data_dir, as_of, frames, watchlist, meta)
     # 自选独立选股 (2026-10-05 产品决策): 每个来源在自选池内的全部命中都成为候选, 不受“全池前 10”限制;
     # 门槛 (流动性池 / 统一成卡 / 来源证据 / 组合约束) 与全池一致, 同账户同风控。
     lane = {sid: [h["symbol"] for h in rows if h["symbol"] in watchlist and h["symbol"] not in set(picks.get(sid, []))]
@@ -343,7 +365,7 @@ def run(opp_svc, as_of: date, *, s1s2, frames: dict[str, pl.DataFrame], params: 
         out.summary["shadow_forward"] = {"skipped": "watchlist_only"}
     _watchlist_v4_snapshot(data_dir, as_of, watchlist=watchlist, frames=frames, hits=hits, stops=stops,
                            stops_by_symbol=stops_by_symbol, s1s2=s1s2, out=out, sell_hits=sell_hits, h4_state=h4_state,
-                           repo=repo)
+                           repo=repo, regime=regime_fields, gate_grade=gate_grades)
     out.summary["sell_hits"] = {sid: len(v) for sid, v in sell_hits.items()}
     runs = _desk_dir(data_dir) / "runs"
     runs.mkdir(parents=True, exist_ok=True)
@@ -425,7 +447,8 @@ def merge_side_signals(long_rows: dict[str, list[dict]], short_rows: dict[str, l
 
 
 def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hits, stops, stops_by_symbol, s1s2,
-                           out, sell_hits: dict | None = None, h4_state: dict | None = None, repo=None) -> None:
+                           out, sell_hits: dict | None = None, h4_state: dict | None = None, repo=None,
+                           regime: dict | None = None, gate_grade: dict | None = None) -> None:
     """自选影子账本 (v4, 不占资金): 全部规则在自选上的 +1 卡 + 同票基线卡; 同时落当日自选信号表 (另含只观察的看空卡)。
     失败只记日志。"""
     try:
@@ -458,7 +481,9 @@ def _watchlist_v4_snapshot(data_dir: Path, as_of: date, *, watchlist, frames, hi
             logger.warning("rank lab scan skipped: %s", type(e).__name__)
         wv.save_signals(data_dir, as_of, table, watchlist=watchlist, frames=frames,
                         lineage=lineage, row_extra=row_extra, extra_rows=_evo_rows(data_dir, as_of, watchlist, out),
-                        h4_state=h4_state, atr=_atr_map(frames, watchlist), rank_values=rank_values)
+                        h4_state=h4_state, atr=_atr_map(frames, watchlist), rank_values=rank_values,
+                        **({"regime": regime} if regime else {}),
+                        **({"gate_grade": gate_grade} if gate_grade else {}))
         out.summary["watchlist_v4"] = {"recorded": sum(added.values()), "rules_with_signal": sorted(sig),
                                        "short_signals": sum(len(v) for v in short.values())}
     except Exception as e:  # noqa: BLE001

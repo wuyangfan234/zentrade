@@ -222,6 +222,12 @@ def save_strategies(data_dir: Path, long_ids: list[str], short_ids: list[str]) -
         "updated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "note": "swing-desk 3+3; 可手动改",
     }
+    try:   # 齿轮保存 3+3 不得抹掉方向门 / regime 开关 (P1-A: 切换与回滚都靠这两个字段)
+        prev = json.loads(swing_config_path(data_dir).read_text(encoding="utf-8"))
+        if isinstance(prev, dict):
+            out.update({k: prev[k] for k in ("gate", "regime", "regime_limits") if k in prev})
+    except (OSError, ValueError):
+        pass
     dl, ds = _available_defaults()
     if not out["long"]:
         out["long"] = list(dl)
@@ -347,6 +353,10 @@ def compose_boards(
     rank_values: dict | None = None,
     tiebreak: str = TIEBREAK,
     shadow: bool = False,
+    max_long: int | None = None,
+    max_short: int | None = None,
+    observe: set[str] | None = None,
+    short_observe: bool = False,
 ) -> dict[str, Any]:
     """纯函数: 信号快照 → LONG/SHORT 板。
 
@@ -357,6 +367,10 @@ def compose_boards(
     0.52.0 排序因子 (多头 3 条里的 rank_*): 在 4h 门同向、能出紧几何卡的自选里按当天值取前 5 当作命中
     (与验收合同 rank-lab-v2 同一选法); 只勾排序因子时, 板 = 这 5 只。
     short_ok: SPY 收盘 < 50 日线 (True) / 不满足 (False) / 数据缺 (None, fail-closed 不出空)。
+        P1-A regime 生效时由 board_for_day 改为「regime == 防守」。
+    max_long / max_short: 每侧卡数上限 (P1-A regime 决定); 缺省 = max_per_side。
+    observe: 方向门只放行到「观察级」的票 (多尺度门慢中冲突); short_observe: 空头卡一律观察级。
+        观察级卡带 "grade": "observe" (只追加新键), 纸面下单簿 (watchlist_book) 不收。
     atr 缺的票不出卡 (旧信号表没有 atr → 板为空, 等下一次盘后扫描)。
     """
     ph_l, ph_s = _phantom_maps(signals)
@@ -406,10 +420,16 @@ def compose_boards(
         skipped += [{"symbol": s, "reason": "direction_conflict"} for s in sorted(both)]
     long_ok = [c for c in long_all if c["symbol"] not in both]
     short_ok_cards = [c for c in short_all if c["symbol"] not in both]
-    long_cards, short_cards = long_ok[:max_per_side], short_ok_cards[:max_per_side]
+    n_long = max_per_side if max_long is None else max(0, min(int(max_long), max_per_side))
+    n_short = max_per_side if max_short is None else max(0, min(int(max_short), max_per_side))
+    observe = observe or set()
+    for c in long_ok + short_ok_cards:
+        if c["symbol"] in observe or (short_observe and c["side"] == "short"):
+            c["grade"] = "observe"
+    long_cards, short_cards = long_ok[:n_long], short_ok_cards[:n_short]
     extra: dict[str, Any] = {}
     if shadow:
-        extra["shadow"] = ([{**c, "shadow": "cut"} for c in long_ok[max_per_side:] + short_ok_cards[max_per_side:]]
+        extra["shadow"] = ([{**c, "shadow": "cut"} for c in long_ok[n_long:] + short_ok_cards[n_short:]]
                            + sorted(gate_blocked, key=lambda c: (c["side"], c["symbol"])))
     return {
         "contract": CONTRACT,
@@ -475,7 +495,11 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
     long_rules, short_rules = rules_for_day(data_dir, day)
     short_ok = None
     gate_info = None
-    if repo is not None:
+    reg = regime_for_snapshot(data_dir, snap, day)
+    if reg is not None:
+        # P1-A: 空头只在防守态开 (取代 SPY < MA50 单条件); 每侧卡数上限随 regime
+        short_ok = reg["state"] == "防守"
+    elif repo is not None:
         try:
             from app.services import watchlist_v4 as wv
             gate_info = wv.short_gate(repo, day)
@@ -486,14 +510,45 @@ def board_for_day(data_dir: Path, day: date, repo=None, *, shadow: bool = False)
     atr = {k: float(v) for k, v in (snap.get("atr") or {}).items() if isinstance(v, (int, float))}
     h4 = {k: v for k, v in (snap.get("h4_state") or {}).items() if v in ("long", "short")}
     rv = snap.get("rank_values") if isinstance(snap.get("rank_values"), dict) else None
+    grades = snap.get("gate_grade") if isinstance(snap.get("gate_grade"), dict) else {}
+    observe = {s for s, g in grades.items() if g == "observe"}
     boards = compose_boards(signals=list(snap.get("signals") or []), closes=closes, as_of=day,
                             long_rules=long_rules, short_rules=short_rules, atr=atr, h4_state=h4, short_ok=short_ok,
-                            rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow)
+                            rank_values=rv, tiebreak=tiebreak_for_day(data_dir, day), shadow=shadow,
+                            max_long=reg["caps"]["long"] if reg else None,
+                            max_short=reg["caps"]["short"] if reg else None,
+                            observe=observe, short_observe=reg is not None)
+    if reg is not None:
+        boards["meta"]["regime"] = reg
     if gate_info is not None:
         boards["meta"]["spy"] = {"close": gate_info.get("close"), "ma50": gate_info.get("ma50")}
     if not atr:
         boards["meta"]["reason"] = "snapshot_without_atr"
     return boards
+
+
+def regime_for_snapshot(data_dir: Path, snap: dict, day: date | None = None) -> dict | None:
+    """P1-A: 快照里的 regime 三态 → {"state", "as_of", "reasons", "caps", "source", "snapshot_state"}。
+    rules/swing.json 的 "regime": false (回滚到 tight-v1) 或旧快照没有 regime_state → None (走 SPY < MA50 旧口径)。
+
+    盘中整点快层: 若 data/rules/regime_state.json 是该快照的板生效当天 (快照日的下一个交易日) 由整点评估写入,
+    取 min(快照态, 盘中态) —— 只降不升; 前一交易日 / 盘后写入的状态不影响 (regime.intraday_override)。"""
+    from app.opportunity import regime
+    if not regime.enabled(data_dir):
+        return None
+    st = snap.get("regime_state") if isinstance(snap, dict) else None
+    if st not in regime.RANK:
+        return None
+    out = {"state": st, "as_of": snap.get("regime_as_of"), "reasons": list(snap.get("regime_reasons") or []),
+           "source": "snapshot", "snapshot_state": st}
+    live = regime.intraday_override(data_dir, day) if day is not None else None
+    if live is not None:
+        low = regime.lower(st, live.get("state"))
+        if low != st:
+            out.update(state=low, as_of=live.get("updated_at"), source="intraday",
+                       reasons=list(live.get("reasons") or []), slot=live.get("slot"))
+    out["caps"] = regime.caps(out["state"], data_dir)
+    return out
 
 
 def build(data_dir: Path, *, day: date | None = None, repo=None) -> dict[str, Any]:

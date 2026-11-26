@@ -173,6 +173,10 @@ def build_swing_day(data_dir: Path, repo, day: date, *, as_of_close: date, watch
             return out
     for c in cards:
         sym, side = c["symbol"], c["side"]
+        if c.get("grade") == "observe":
+            # P1-A: 观察级卡 (空头过渡期 / 多尺度门慢中冲突) 只上板展示, 不进纸面下单簿 (RULE_ID 路径)
+            out["skipped"].append({"symbol": sym, "side": side, "reason": "observe_only"})
+            continue
         ok, risk, tier = wv.rule_permission(pm, sd.RULE_ID, side)
         if not ok:
             out["skipped"].append({"symbol": sym, "side": side, "reason": "not_permitted"})
@@ -413,7 +417,9 @@ def ensure(data_dir: Path, repo, *, today: date, as_of_close: date, watch: set[s
 
     def sig_key():   # 输入签名 (含簿文件自身: 写入后签名变化, 所以缓存一律在写完之后取)
         from app.services import swing_desk as _sd
+        from app.opportunity import regime as _rg   # 盘中 regime 降级 → 重算后续追加 (只降不升)
         return (today, as_of_close, tuple(sorted(watch)), wv._sig(_sd.swing_config_path(data_dir)),
+                wv._sig(Path(data_dir) / "rules" / _rg.STATE_FILE),
                 tuple(sorted(pm.get("tradable") or [])),
                 tuple(sorted(pm.get("short_tradable") or [])),
                 tuple((d, wv._sig(wv.signals_dir(data_dir) / f"{d.isoformat()}.json"), wv._sig(book_path(data_dir, d)))
