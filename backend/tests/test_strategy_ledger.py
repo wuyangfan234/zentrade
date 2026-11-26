@@ -270,3 +270,60 @@ def test_reconcile_skips_pre_ledger_book(tmp_path, monkeypatch, cal):  # noqa: F
     out = ss.reconcile(tmp_path, object(), day=SIG_DAY, notify=False, replay=lambda d, syms, rules: {})
     assert out.get("board_check") == "skipped_pre_ledger_book"
     assert not any(x["kind"] == "book_card_not_recomputed" for x in out["issues"])
+
+
+# ── 7. 95% 区间进切片 (#11): ledger_view / 空切片 / 板 meta / 簿落盘读回 ───────────
+
+CI_KEYS = ("ci_low", "ci_high")
+
+
+def test_ledger_view_every_cell_has_ci_keys():
+    rec = {"month": "2026-11", "cells": sl.review_cells({
+        "ra|long": {"n": 300, "excess": 0.14, "ci_low": 0.02, "ci_high": 0.27},
+        "rb|short": {"n": 10, "excess": None, "ci_low": None, "ci_high": None}}, None)}
+    v = sl.ledger_view(rec, "进攻", 50.0)
+    assert set(v["cells"]) == {"ra|long", "rb|short"}
+    for c in v["cells"].values():
+        assert set(c) == {"n", "excess", "tier", *CI_KEYS}                  # 只追加, 旧三键仍在
+    assert v["cells"]["rb|short"]["ci_low"] is None and v["cells"]["rb|short"]["ci_high"] is None
+
+
+def test_ledger_view_passes_real_ci_without_precision_loss():
+    lo, hi = -0.012345678901234567, 0.27182818284590453
+    rec = {"month": "2026-11", "cells": sl.review_cells(
+        {"ra|long": {"n": 300, "excess": 0.05, "ci_low": lo, "ci_high": hi}}, None)}
+    c = sl.ledger_view(rec, "震荡", 50.0)["cells"]["ra|long"]
+    assert c["ci_low"] == lo and c["ci_high"] == hi
+    assert (c["n"], c["excess"], c["tier"]) == (300, 0.05, sl.OBSERVE)     # 旧字段语义不变
+    rt = json.loads(json.dumps(c))
+    assert rt["ci_low"] == lo and rt["ci_high"] == hi                       # JSON 往返同精度
+
+
+def test_empty_views_have_ci_shape(tmp_path, monkeypatch):
+    """三种空/无格状态: disabled / unavailable / ok 但复核无格 → cells 为空, 不伪造格; 单格形状共用 _cell_view。"""
+    for st in (sl.STATUS_DISABLED, sl.STATUS_UNAVAILABLE):
+        v = sl._empty_view(st, DAY, "进攻", 50.0)
+        assert v["status"] == st and v["cells"] == {}
+    v = sl.ledger_view({"month": "2026-11", "cells": {}}, None, 50.0)
+    assert v["status"] == sl.STATUS_OK and v["cells"] == {}
+    shape = sl._cell_view({})
+    assert all(shape[k] is None for k in CI_KEYS) and set(shape) == {"n", "excess", "tier", *CI_KEYS}
+
+
+def test_board_meta_and_frozen_book_keep_ci(tmp_path, monkeypatch, cal):  # noqa: F811
+    lo, hi = 0.0123456789, 0.2345678901
+    stats = {"cells": {"macd_golden|long": {"n": 200, "excess": 0.1, "ci_low": lo, "ci_high": hi}},
+             "window": None, "data_end": None}
+    monkeypatch.setattr(sl, "artifact_stats", lambda config_dir=None: stats)
+    monkeypatch.setattr(sl, "_today", lambda: SIG_DAY)
+    watch = _setup(tmp_path, monkeypatch, regime_state="震荡", spy_ok=True)
+    mc = sd.board_for_day(tmp_path, SIG_DAY, repo=object())["meta"]["ledger"]["cells"]["macd_golden|long"]
+    assert (mc["ci_low"], mc["ci_high"]) == (lo, hi)                        # 板接口 meta.ledger
+    built = wb.build_day(tmp_path, _empty_repo(tmp_path), SIG_DAY, as_of_close=SIG_DAY, watch=watch,
+                         pm=wv.permission(tmp_path))
+    wb.save_day(tmp_path, built)
+    raw = json.loads(wb.book_path(tmp_path, SIG_DAY).read_text())
+    bc = raw["ledger"]["cells"]["macd_golden|long"]
+    assert (bc["ci_low"], bc["ci_high"]) == (lo, hi)                        # 簿落盘读回仍在
+    fc = sd.ledger_for_day(tmp_path, SIG_DAY, "震荡")["cells"]["macd_golden|long"]
+    assert (fc["ci_low"], fc["ci_high"]) == (lo, hi)                        # 冻结簿读点
