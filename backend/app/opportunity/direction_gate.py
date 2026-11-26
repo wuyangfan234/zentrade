@@ -206,7 +206,8 @@ register(DirectionGate(id=DEFAULT_GATE_ID, name="日线趋势门 (收盘相对 5
                        states=_daily_ma50_states, matrix=_daily_ma50_matrix))
 
 
-PLUGINS = ("app.services.phantom_4h_gate",)
+# multi_scale_v1 (P1-A 多尺度门) 是核心内置但不默认生效 (preferred=False, 只经 swing.json 的 gate 字段启用)
+PLUGINS = ("app.opportunity.multi_scale_gate", "app.services.phantom_4h_gate")
 
 
 def load_plugins() -> None:
